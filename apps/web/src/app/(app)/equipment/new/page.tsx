@@ -19,10 +19,7 @@ export default async function NewEquipmentPage() {
           description="Name the asset to get started — it saves as you type and opens the full editor. Leave without typing and nothing is created."
           back={{ href: '/equipment', label: 'Back to equipment' }}
         />
-        <LazyRecordProvider
-          createDraft={createEquipmentDraft}
-          recordHref="/equipment/{id}?tab=edit"
-        >
+        <LazyRecordProvider createDraft={createEquipmentDraft} recordHref="/equipment/{id}">
           <Card>
             <CardContent className="pt-6">
               <LiveField

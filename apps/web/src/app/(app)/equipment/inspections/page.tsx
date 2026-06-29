@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { asc, count, desc, eq, sql, type AnyColumn } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, or, type AnyColumn, type SQL } from 'drizzle-orm'
 import { ClipboardCheck, Plus } from 'lucide-react'
 import {
   Badge,
@@ -24,6 +24,8 @@ import { requireRequestContext } from '@/lib/auth'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
+import { SearchInput } from '@/components/search-input'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { SortableTh } from '@/components/sortable-th'
 
@@ -76,12 +78,37 @@ export default async function EquipmentInspectionsPage({
     status: equipmentInspectionRecords.status,
   }
   const orderBy = params.dir === 'asc' ? asc(sortCol[params.sort]) : desc(sortCol[params.sort])
-  const where = statusFilter
-    ? eq(equipmentInspectionRecords.status, statusFilter as 'draft' | 'in_progress' | 'submitted')
-    : undefined
+  const filters: SQL<unknown>[] = []
+  if (statusFilter) {
+    filters.push(
+      eq(
+        equipmentInspectionRecords.status,
+        statusFilter as 'draft' | 'in_progress' | 'submitted',
+      ),
+    )
+  }
+  if (params.q) {
+    const term = `%${params.q}%`
+    const cond = or(
+      ilike(equipmentInspectionRecords.reference, term),
+      ilike(equipmentItems.name, term),
+      ilike(equipmentItems.assetTag, term),
+      ilike(equipmentInspectionTypes.name, term),
+    )
+    if (cond) filters.push(cond)
+  }
+  const where = filters.length > 0 ? and(...filters) : undefined
 
   const { rows, total } = await ctx.db(async (tx) => {
-    const [tot] = await tx.select({ n: count() }).from(equipmentInspectionRecords).where(where)
+    const [tot] = await tx
+      .select({ n: count() })
+      .from(equipmentInspectionRecords)
+      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId))
+      .leftJoin(
+        equipmentInspectionTypes,
+        eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+      )
+      .where(where)
     const rows = await tx
       .select({
         id: equipmentInspectionRecords.id,
@@ -131,24 +158,27 @@ export default async function EquipmentInspectionsPage({
             }
           />
           <EquipmentSubNav active="inspections" />
-          <div className="flex flex-wrap items-center gap-1.5">
-            {STATUS_FILTERS.map((f) => {
-              const active = statusFilter === f.value
-              return (
-                <Link
-                  key={f.value || 'all'}
-                  href={mergeHref(BASE, sp, { status: f.value || undefined, page: 1 }) as never}
-                  className={
-                    active
-                      ? 'rounded-full bg-teal-600 px-3 py-1 text-xs font-medium text-white'
-                      : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }
-                >
-                  {f.label}
-                </Link>
-              )
-            })}
-          </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search reference, equipment, type…" />
+            <div className="flex flex-wrap items-center gap-1.5">
+              {STATUS_FILTERS.map((f) => {
+                const active = statusFilter === f.value
+                return (
+                  <Link
+                    key={f.value || 'all'}
+                    href={mergeHref(BASE, sp, { status: f.value || undefined, page: 1 }) as never}
+                    className={
+                      active
+                        ? 'rounded-full bg-teal-600 px-3 py-1 text-xs font-medium text-white'
+                        : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }
+                  >
+                    {f.label}
+                  </Link>
+                )
+              })}
+            </div>
+          </TableToolbar>
         </>
       }
     >

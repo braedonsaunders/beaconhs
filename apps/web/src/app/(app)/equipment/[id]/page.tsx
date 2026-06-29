@@ -10,7 +10,6 @@ import {
   LogIn,
   LogOut,
   MapPin,
-  Pencil,
   Plus,
   QrCode,
   Search,
@@ -45,6 +44,7 @@ import {
   UrlDrawer,
 } from '@beaconhs/ui'
 import { pickString } from '@/lib/list-params'
+import { LiveField, LivePersonSelect, LiveSelect, LiveToggle } from '@/components/live-field'
 import {
   attachments,
   equipmentCheckouts,
@@ -61,36 +61,94 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
 import { upsertVehicleLogEntry } from '../vehicle-log/_service'
-import { EquipmentEditTab } from './equipment-edit-tab'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = [
   'overview',
-  'maintenance',
-  'work_orders',
   'location',
-  'certificates',
   'inspections',
+  'work_orders',
   'log',
-  'checkouts',
+  'certificates',
   'activity',
-  'edit',
 ] as const
 type Tab = (typeof TABS)[number]
 
+const EQUIPMENT_STATUSES = ['in_service', 'out_of_service', 'in_repair', 'lost', 'retired'] as const
+
 // ---------------- Server actions ----------------
+
+// Inline field editor — the single-page form's workhorse. Each Live* field
+// posts {id, field, value}; this validates the field against an allowlist,
+// coerces it for its column, persists, audits, and revalidates. Editing any
+// field commits a draft item (clears the Draft badge), mirroring the old save.
+async function updateEquipmentField(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  const id = String(formData.get('id') ?? '')
+  const field = String(formData.get('field') ?? '')
+  const raw = formData.get('value')
+  const value = typeof raw === 'string' ? raw : ''
+  if (!id || !field) throw new Error('Missing id/field')
+
+  const TEXT = new Set(['name', 'assetTag', 'serialNumber', 'description', 'notes'])
+  const TEXT_NOTNULL = new Set(['name', 'assetTag'])
+  const DATE_ONLY = new Set(['purchaseDate', 'warrantyExpiresOn'])
+  const NULLABLE_IDS = new Set(['typeId', 'currentSiteOrgUnitId', 'currentHolderPersonId'])
+  const BOOLS = new Set(['requiresPreUseInspection', 'requiresAnnualInspection'])
+  const ENUMS: Record<string, readonly string[]> = { status: EQUIPMENT_STATUSES }
+
+  const allowed =
+    field in ENUMS ||
+    TEXT.has(field) ||
+    DATE_ONLY.has(field) ||
+    NULLABLE_IDS.has(field) ||
+    BOOLS.has(field)
+  if (!allowed) throw new Error('Field not allowed')
+
+  let val: unknown
+  if (field in ENUMS) {
+    if (!ENUMS[field]!.includes(value)) throw new Error('Invalid value')
+    val = value
+  } else if (DATE_ONLY.has(field) || NULLABLE_IDS.has(field)) {
+    val = value || null
+  } else if (BOOLS.has(field)) {
+    val = value === 'true' || value === 'on' || value === '1'
+  } else {
+    const trimmed = value.trim()
+    if (TEXT_NOTNULL.has(field) && trimmed === '') throw new Error('This field is required')
+    val = trimmed === '' ? null : trimmed
+  }
+
+  await ctx.db((tx) =>
+    tx
+      .update(equipmentItems)
+      // Editing the asset commits a draft (clears the Draft badge).
+      .set({ [field]: val, isDraft: false } as any)
+      .where(eq(equipmentItems.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'equipment',
+    entityId: id,
+    action: 'update',
+    summary: `Updated ${field}`,
+    after: { [field]: val },
+  })
+  revalidatePath(`/equipment/${id}`)
+  revalidatePath('/equipment')
+}
 
 async function reportMissing(formData: FormData) {
   'use server'
@@ -210,49 +268,6 @@ async function transferLocation(formData: FormData) {
   revalidatePath(`/equipment/${id}`)
 }
 
-async function createWorkOrder(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.workorder.create')
-  const itemId = String(formData.get('itemId') ?? '')
-  const summary = String(formData.get('summary') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const status = String(formData.get('status') ?? 'open') as
-    | 'open'
-    | 'assigned'
-    | 'in_progress'
-    | 'awaiting_parts'
-    | 'repaired'
-    | 'verified'
-    | 'closed'
-    | 'cancelled'
-  if (!itemId || !summary) return
-
-  const ref = await ctx.db(async (tx) => {
-    const [agg] = await tx.select({ n: sql<number>`count(*)::int` }).from(equipmentWorkOrders)
-    const next = ((agg?.n ?? 0) + 1).toString().padStart(4, '0')
-    const reference = `WO-${new Date().getFullYear()}-${next}`
-    await tx.insert(equipmentWorkOrders).values({
-      tenantId: ctx.tenantId,
-      itemId,
-      reference,
-      status,
-      summary,
-      description,
-      openedByTenantUserId: ctx.membership?.id,
-    })
-    return reference
-  })
-  await recordAudit(ctx, {
-    entityType: 'equipment',
-    entityId: itemId,
-    action: 'create',
-    summary: `Opened work order ${ref}`,
-    after: { reference: ref, summary, status },
-  })
-  revalidatePath(`/equipment/${itemId}`)
-}
-
 async function addLogEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -338,7 +353,7 @@ async function checkOutFromItem(formData: FormData) {
     after: { itemId, holderPersonId, destinationOrgUnitId, expectedReturnOn },
   })
   revalidatePath(`/equipment/${itemId}`)
-  redirect(`/equipment/${itemId}?tab=checkouts`)
+  redirect(`/equipment/${itemId}?tab=location`)
 }
 
 async function checkInFromItem(formData: FormData) {
@@ -377,7 +392,7 @@ async function checkInFromItem(formData: FormData) {
     after: { condition, returnedNotes },
   })
   revalidatePath(`/equipment/${itemId}`)
-  redirect(`/equipment/${itemId}?tab=checkouts`)
+  redirect(`/equipment/${itemId}?tab=location`)
 }
 
 // ---------------- Typed server actions (drawer-friendly) ----------------
@@ -544,6 +559,7 @@ export default async function EquipmentDetailPage({
       inspectionRecords,
       logRows,
       checkoutRows,
+      allTypes,
     ] = await Promise.all([
       tx
         .select({ history: equipmentLocationHistory, site: orgUnits, holder: people })
@@ -615,6 +631,11 @@ export default async function EquipmentDetailPage({
         .where(eq(equipmentCheckouts.equipmentItemId, id))
         .orderBy(desc(equipmentCheckouts.checkedOutAt))
         .limit(100),
+      // Full type list for the Overview type picker.
+      tx
+        .select({ id: equipmentTypes.id, name: equipmentTypes.name })
+        .from(equipmentTypes)
+        .orderBy(asc(equipmentTypes.name)),
     ])
 
     return {
@@ -628,6 +649,7 @@ export default async function EquipmentDetailPage({
       inspectionRecords,
       logEntries: logRows,
       checkouts: checkoutRows,
+      allTypes,
     }
   })
 
@@ -647,8 +669,24 @@ export default async function EquipmentDetailPage({
     inspectionRecords,
     logEntries,
     checkouts,
+    allTypes,
   } = data
   const openCheckout = checkouts.find((c) => c.co.returnedAt === null) ?? null
+
+  // Read-only unless the viewer can manage equipment. The autosave action
+  // re-asserts the permission server-side; this only gates the inputs.
+  const locked = !can(ctx, 'equipment.manage')
+
+  // Live* option lists.
+  const siteOptions = sites
+    .filter((s) => s.level === 'site')
+    .map((s) => ({ value: s.id, label: s.name }))
+  const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
+  const personOptions = holders.map((p) => ({
+    value: p.id,
+    label: `${p.lastName}, ${p.firstName}`,
+    hint: p.employeeNo ?? undefined,
+  }))
 
   const openWOs = workOrders.filter((w) => !['closed', 'cancelled'].includes(w.status))
   const basePath = `/equipment/${id}`
@@ -678,12 +716,6 @@ export default async function EquipmentDetailPage({
           }
           actions={
             <>
-              <Link href={`${basePath}?tab=edit` as any}>
-                <Button variant="outline">
-                  <Pencil size={14} />
-                  Edit
-                </Button>
-              </Link>
               <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
                 <Button variant="outline">
                   <Wrench size={14} />
@@ -789,21 +821,19 @@ export default async function EquipmentDetailPage({
               basePath={basePath}
               currentParams={sp}
               active={active}
+              variant="pills"
               tabs={[
                 { key: 'overview', label: 'Overview' },
-                { key: 'maintenance', label: 'Maintenance' },
-                { key: 'work_orders', label: 'Work orders', count: openWOs.length },
-                { key: 'location', label: 'Location', count: history.length },
-                { key: 'certificates', label: 'Certificates', count: certAttachments.length },
+                { key: 'location', label: 'Location & custody', count: checkouts.length },
                 {
                   key: 'inspections',
                   label: 'Inspections',
                   count: inspectionRecords.length,
                 },
+                { key: 'work_orders', label: 'Work orders', count: openWOs.length },
                 { key: 'log', label: 'Log', count: logEntries.length },
-                { key: 'checkouts', label: 'Check-outs', count: checkouts.length },
+                { key: 'certificates', label: 'Certificates', count: certAttachments.length },
                 { key: 'activity', label: 'Activity' },
-                { key: 'edit', label: 'Edit' },
               ]}
             />
 
@@ -814,91 +844,165 @@ export default async function EquipmentDetailPage({
              */}
             <TabContent tabKey={active}>
               {active === 'overview' ? (
-                <Section title="General">
-                  <DetailGrid
-                    rows={[
-                      { label: 'Name', value: item.name },
-                      {
-                        label: 'Asset tag',
-                        value: <span className="font-mono">{item.assetTag}</span>,
-                      },
-                      { label: 'Serial #', value: item.serialNumber ?? '—' },
-                      { label: 'Type', value: type?.name ?? '—' },
-                      { label: 'Category', value: type?.category ?? '—' },
-                      { label: 'Description', value: item.description ?? '—' },
-                      { label: 'Current site', value: site?.name ?? '—' },
-                      {
-                        label: 'Current holder',
-                        value: holder ? (
-                          <Link
-                            href={`/people/${holder.id}`}
-                            className="text-teal-700 hover:underline"
-                          >
-                            {holder.firstName} {holder.lastName}
-                          </Link>
-                        ) : (
-                          '—'
-                        ),
-                      },
-                      { label: 'Purchased', value: item.purchaseDate ?? '—' },
-                      { label: 'Warranty expires', value: item.warrantyExpiresOn ?? '—' },
-                      {
-                        label: 'Last seen',
-                        value: item.lastSeenAt ? new Date(item.lastSeenAt).toLocaleString() : '—',
-                      },
-                    ]}
-                  />
-                </Section>
-              ) : null}
-
-              {active === 'maintenance' ? (
                 <div className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Inspection settings</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <DetailGrid
-                        rows={[
-                          {
-                            label: 'Requires pre-use inspection',
-                            value: item.requiresPreUseInspection ? (
-                              <Badge variant="success">Yes</Badge>
-                            ) : (
-                              <Badge variant="secondary">No</Badge>
-                            ),
-                          },
-                          {
-                            label: 'Last pre-use inspection',
-                            value: item.lastPreUseInspectionAt
-                              ? new Date(item.lastPreUseInspectionAt).toLocaleString()
-                              : '—',
-                          },
-                          {
-                            label: 'Requires annual inspection',
-                            value: item.requiresAnnualInspection ? (
-                              <Badge variant="success">Yes</Badge>
-                            ) : (
-                              <Badge variant="secondary">No</Badge>
-                            ),
-                          },
-                          { label: 'Last annual', value: item.lastAnnualInspectionOn ?? '—' },
-                          { label: 'Next annual due', value: item.nextAnnualInspectionDue ?? '—' },
-                        ]}
+                  <Section title="General">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <LiveField
+                        id={id}
+                        field="name"
+                        label="Name"
+                        initialValue={item.name}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
                       />
-                    </CardContent>
-                  </Card>
-                  <Section title="Start a new inspection">
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Run an inspection from one of this asset&apos;s checklist types. The
-                        completed record appears under the Inspections tab.
-                      </p>
-                      <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                        <Button>
-                          <ClipboardCheck size={14} /> New inspection
-                        </Button>
-                      </Link>
+                      <LiveField
+                        id={id}
+                        field="assetTag"
+                        label="Asset tag"
+                        initialValue={item.assetTag}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LiveField
+                        id={id}
+                        field="serialNumber"
+                        label="Serial #"
+                        initialValue={item.serialNumber}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LiveSelect
+                        id={id}
+                        field="typeId"
+                        label="Type"
+                        initialValue={item.typeId}
+                        options={typeOptions}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LiveSelect
+                        id={id}
+                        field="status"
+                        label="Status"
+                        initialValue={item.status}
+                        allowEmpty={false}
+                        options={EQUIPMENT_STATUSES.map((s) => ({
+                          value: s,
+                          label: s.replace('_', ' '),
+                        }))}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <div className="sm:col-span-2">
+                        <LiveField
+                          id={id}
+                          field="description"
+                          label="Description"
+                          initialValue={item.description}
+                          multiline
+                          disabled={locked}
+                          updateAction={updateEquipmentField}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <LiveField
+                          id={id}
+                          field="notes"
+                          label="Notes"
+                          initialValue={item.notes}
+                          multiline
+                          placeholder="Maintenance / status notes"
+                          disabled={locked}
+                          updateAction={updateEquipmentField}
+                        />
+                      </div>
+                    </div>
+                  </Section>
+
+                  <Section title="Assignment">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <LiveSelect
+                        id={id}
+                        field="currentSiteOrgUnitId"
+                        label="Current site"
+                        initialValue={item.currentSiteOrgUnitId}
+                        options={siteOptions}
+                        emptyLabel="— Unassigned —"
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LivePersonSelect
+                        id={id}
+                        field="currentHolderPersonId"
+                        label="Current holder"
+                        initialValue={item.currentHolderPersonId}
+                        options={personOptions}
+                        placeholder="Select a holder…"
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                    </div>
+                  </Section>
+
+                  <Section title="Purchase & warranty">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <LiveField
+                        id={id}
+                        field="purchaseDate"
+                        label="Purchase date"
+                        type="date"
+                        initialValue={item.purchaseDate}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LiveField
+                        id={id}
+                        field="warrantyExpiresOn"
+                        label="Warranty expires"
+                        type="date"
+                        initialValue={item.warrantyExpiresOn}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                    </div>
+                  </Section>
+
+                  <Section title="Inspection requirements">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <LiveToggle
+                        id={id}
+                        field="requiresPreUseInspection"
+                        label="Requires pre-use inspection"
+                        initialValue={item.requiresPreUseInspection}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LiveToggle
+                        id={id}
+                        field="requiresAnnualInspection"
+                        label="Requires annual inspection"
+                        initialValue={item.requiresAnnualInspection}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3">
+                        <ReadOnlyStat
+                          label="Last pre-use inspection"
+                          value={
+                            item.lastPreUseInspectionAt
+                              ? new Date(item.lastPreUseInspectionAt).toLocaleString()
+                              : '—'
+                          }
+                        />
+                        <ReadOnlyStat
+                          label="Last annual inspection"
+                          value={item.lastAnnualInspectionOn ?? '—'}
+                        />
+                        <ReadOnlyStat
+                          label="Next annual due"
+                          value={item.nextAnnualInspectionDue ?? '—'}
+                        />
+                      </div>
                     </div>
                   </Section>
                 </div>
@@ -907,15 +1011,27 @@ export default async function EquipmentDetailPage({
               {active === 'work_orders' ? (
                 <div className="space-y-4">
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                       <CardTitle>Work orders ({workOrders.length})</CardTitle>
+                      <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
+                        <Button size="sm">
+                          <Wrench size={14} /> New work order
+                        </Button>
+                      </Link>
                     </CardHeader>
                     <CardContent>
                       {workOrders.length === 0 ? (
                         <EmptyState
                           icon={<Wrench size={24} />}
                           title="No work orders"
-                          description="Open a work order below to track repairs or scheduled service."
+                          description="Open a work order to track repairs or scheduled service."
+                          action={
+                            <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
+                              <Button size="sm" variant="outline">
+                                <Wrench size={14} /> New work order
+                              </Button>
+                            </Link>
+                          }
                         />
                       ) : (
                         <Table>
@@ -957,45 +1073,34 @@ export default async function EquipmentDetailPage({
                       )}
                     </CardContent>
                   </Card>
-                  <Section title="Open a new work order">
-                    <form
-                      action={createWorkOrder}
-                      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                    >
-                      <input type="hidden" name="itemId" value={id} />
-                      <Field label="Summary" required className="sm:col-span-2">
-                        <Input
-                          name="summary"
-                          required
-                          placeholder="e.g. Brake lights inoperative"
-                        />
-                      </Field>
-                      <Field label="Initial status">
-                        <Select name="status" defaultValue="open">
-                          <option value="open">Open</option>
-                          <option value="assigned">Assigned</option>
-                          <option value="in_progress">In progress</option>
-                          <option value="awaiting_parts">Awaiting parts</option>
-                        </Select>
-                      </Field>
-                      <Field label="Description" className="sm:col-span-2">
-                        <Textarea name="description" rows={3} placeholder="What's wrong?" />
-                      </Field>
-                      <div className="flex justify-end sm:col-span-2">
-                        <Button type="submit">
-                          <Wrench size={14} /> Create work order
-                        </Button>
-                      </div>
-                    </form>
-                  </Section>
                 </div>
               ) : null}
 
               {active === 'location' ? (
                 <div className="space-y-4">
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Current location</CardTitle>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>Current custody</CardTitle>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href={`${basePath}?tab=location&drawer=transfer` as any}>
+                          <Button size="sm" variant="outline">
+                            <ArrowLeftRight size={14} /> Transfer
+                          </Button>
+                        </Link>
+                        {openCheckout ? (
+                          <Link href={`${basePath}?tab=location&drawer=check-in` as any}>
+                            <Button size="sm">
+                              <LogIn size={14} /> Check in
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href={`${basePath}?tab=location&drawer=check-out` as any}>
+                            <Button size="sm">
+                              <LogOut size={14} /> Check out
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-1 text-sm">
                       <div className="flex items-center gap-2">
@@ -1003,25 +1108,119 @@ export default async function EquipmentDetailPage({
                         {site?.name ?? 'Unassigned'}
                       </div>
                       {holder ? (
-                        <div className="text-slate-600">
+                        <div className="text-slate-600 dark:text-slate-400">
                           Held by{' '}
                           <Link
                             href={`/people/${holder.id}`}
-                            className="text-teal-700 hover:underline"
+                            className="text-teal-700 hover:underline dark:text-teal-400"
                           >
                             {holder.firstName} {holder.lastName}
                           </Link>
                         </div>
                       ) : null}
+                      {openCheckout ? (
+                        <div className="text-slate-600 dark:text-slate-400">
+                          Currently checked out
+                          {openCheckout.co.expectedReturnOn
+                            ? ` · expected back ${openCheckout.co.expectedReturnOn}`
+                            : ''}
+                          .
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Check-out history ({checkouts.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {checkouts.length === 0 ? (
+                        <EmptyState
+                          icon={<LogOut size={24} />}
+                          title="No checkout history"
+                          description="This item has never been checked out. Use Check out to issue it to a person or site."
+                          action={
+                            <Link href={`${basePath}?tab=location&drawer=check-out` as any}>
+                              <Button size="sm" variant="outline">
+                                <LogOut size={14} /> Check out
+                              </Button>
+                            </Link>
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Held by</TableHead>
+                              <TableHead>Destination</TableHead>
+                              <TableHead>Out</TableHead>
+                              <TableHead>Expected</TableHead>
+                              <TableHead>Returned</TableHead>
+                              <TableHead>Condition</TableHead>
+                              <TableHead>Notes</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {checkouts.map(({ co, holder, dest }) => (
+                              <TableRow key={co.id}>
+                                <TableCell>
+                                  {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  {dest?.name ?? '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  {new Date(co.checkedOutAt).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  {co.expectedReturnOn ?? '—'}
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  {co.returnedAt
+                                    ? new Date(co.returnedAt).toLocaleDateString()
+                                    : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  {co.returnedCondition ? (
+                                    <Badge
+                                      variant={
+                                        co.returnedCondition === 'damaged' ||
+                                        co.returnedCondition === 'unusable'
+                                          ? 'destructive'
+                                          : co.returnedCondition === 'fair'
+                                            ? 'warning'
+                                            : 'success'
+                                      }
+                                    >
+                                      {co.returnedCondition}
+                                    </Badge>
+                                  ) : co.returnedAt ? (
+                                    '—'
+                                  ) : (
+                                    <Badge variant="warning">out</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="max-w-xs truncate text-xs text-slate-600 dark:text-slate-300">
+                                  {co.returnedNotes ?? co.notes ?? '—'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+
                   <Card>
                     <CardHeader>
                       <CardTitle>Location history ({history.length})</CardTitle>
                     </CardHeader>
                     <CardContent>
                       {history.length === 0 ? (
-                        <p className="text-sm text-slate-500">No movement recorded.</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          No movement recorded.
+                        </p>
                       ) : (
                         <Table>
                           <TableHeader>
@@ -1044,7 +1243,7 @@ export default async function EquipmentDetailPage({
                                     ? `${row.holder.firstName} ${row.holder.lastName}`
                                     : '—'}
                                 </TableCell>
-                                <TableCell className="text-slate-600">
+                                <TableCell className="text-slate-600 dark:text-slate-300">
                                   {row.history.note ?? '—'}
                                 </TableCell>
                               </TableRow>
@@ -1054,46 +1253,6 @@ export default async function EquipmentDetailPage({
                       )}
                     </CardContent>
                   </Card>
-                  <Section title="Transfer to a new location or holder">
-                    <form
-                      action={transferLocation}
-                      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                    >
-                      <input type="hidden" name="id" value={id} />
-                      <Field label="Move to site">
-                        <Select name="siteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
-                          <option value="">— Unassigned —</option>
-                          {sites.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
-                      <Field label="Assign to person">
-                        <PersonSelectField
-                          name="holderPersonId"
-                          defaultValue={item.currentHolderPersonId ?? ''}
-                          options={holders.map((p) => ({
-                            value: p.id,
-                            label: `${p.lastName}, ${p.firstName}`,
-                            hint: p.employeeNo ?? undefined,
-                          }))}
-                          placeholder="Select a person…"
-                          clearable
-                          emptyLabel="— No holder —"
-                        />
-                      </Field>
-                      <Field label="Note" className="sm:col-span-2">
-                        <Input name="note" placeholder="Optional context for the audit log" />
-                      </Field>
-                      <div className="flex justify-end sm:col-span-2">
-                        <Button type="submit">
-                          <ArrowLeftRight size={14} /> Record transfer
-                        </Button>
-                      </div>
-                    </form>
-                  </Section>
                 </div>
               ) : null}
 
@@ -1150,8 +1309,13 @@ export default async function EquipmentDetailPage({
 
               {active === 'inspections' ? (
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                     <CardTitle>Inspection history ({inspectionRecords.length})</CardTitle>
+                    <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                      <Button size="sm">
+                        <ClipboardCheck size={14} /> New inspection
+                      </Button>
+                    </Link>
                   </CardHeader>
                   <CardContent>
                     {inspectionRecords.length === 0 ? (
@@ -1305,121 +1469,6 @@ export default async function EquipmentDetailPage({
                 </div>
               ) : null}
 
-              {active === 'checkouts' ? (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Check-out history ({checkouts.length})</CardTitle>
-                      <div className="flex items-center gap-2">
-                        {openCheckout ? (
-                          <Link href={`${basePath}?tab=checkouts&drawer=check-in` as any}>
-                            <Button size="sm">
-                              <LogIn size={14} /> Check in
-                            </Button>
-                          </Link>
-                        ) : (
-                          <Link href={`${basePath}?tab=checkouts&drawer=check-out` as any}>
-                            <Button size="sm">
-                              <LogOut size={14} /> Check out
-                            </Button>
-                          </Link>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {checkouts.length === 0 ? (
-                        <EmptyState
-                          title="No checkout history"
-                          description="This item has never been checked out. Use Check out to issue it to a person or site."
-                          action={
-                            <Link href={`${basePath}?tab=checkouts&drawer=check-out` as any}>
-                              <Button size="sm" variant="outline">
-                                <LogOut size={14} /> Check out
-                              </Button>
-                            </Link>
-                          }
-                        />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Held by</TableHead>
-                              <TableHead>Destination</TableHead>
-                              <TableHead>Out</TableHead>
-                              <TableHead>Expected</TableHead>
-                              <TableHead>Returned</TableHead>
-                              <TableHead>Condition</TableHead>
-                              <TableHead>Notes</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {checkouts.map(({ co, holder, dest }) => (
-                              <TableRow key={co.id}>
-                                <TableCell>
-                                  {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600">
-                                  {dest?.name ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600">
-                                  {new Date(co.checkedOutAt).toLocaleDateString()}
-                                </TableCell>
-                                <TableCell className="text-slate-600">
-                                  {co.expectedReturnOn ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600">
-                                  {co.returnedAt
-                                    ? new Date(co.returnedAt).toLocaleDateString()
-                                    : '—'}
-                                </TableCell>
-                                <TableCell>
-                                  {co.returnedCondition ? (
-                                    <Badge
-                                      variant={
-                                        co.returnedCondition === 'damaged' ||
-                                        co.returnedCondition === 'unusable'
-                                          ? 'destructive'
-                                          : co.returnedCondition === 'fair'
-                                            ? 'warning'
-                                            : 'success'
-                                      }
-                                    >
-                                      {co.returnedCondition}
-                                    </Badge>
-                                  ) : co.returnedAt ? (
-                                    '—'
-                                  ) : (
-                                    <Badge variant="warning">out</Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="max-w-xs truncate text-xs text-slate-600">
-                                  {co.returnedNotes ?? co.notes ?? '—'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </CardContent>
-                  </Card>
-                  {openCheckout ? (
-                    <Alert>
-                      <AlertTitle>Currently checked out</AlertTitle>
-                      <AlertDescription>
-                        Held by{' '}
-                        {openCheckout.holder
-                          ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
-                          : '—'}
-                        {openCheckout.co.expectedReturnOn
-                          ? ` · expected back ${openCheckout.co.expectedReturnOn}`
-                          : ''}
-                        . Use the Check in button above to record the return.
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                </div>
-              ) : null}
-
               {active === 'activity' ? (
                 <Card>
                   <CardHeader>
@@ -1432,8 +1481,6 @@ export default async function EquipmentDetailPage({
                   </CardContent>
                 </Card>
               ) : null}
-
-              {active === 'edit' ? <EquipmentEditTab itemId={id} /> : null}
             </TabContent>
           </div>
         </div>
@@ -1614,6 +1661,54 @@ export default async function EquipmentDetailPage({
         </form>
       </UrlDrawer>
 
+      <UrlDrawer
+        open={drawerKey === 'transfer'}
+        closeHref={closeHref}
+        title="Transfer"
+        description="Move this asset to a new site or holder. The change is recorded in the location history."
+        size="md"
+        footer={
+          <Button type="submit" form="equipment-transfer-form">
+            <ArrowLeftRight size={14} /> Record transfer
+          </Button>
+        }
+      >
+        <form
+          id="equipment-transfer-form"
+          action={transferLocation}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <input type="hidden" name="id" value={id} />
+          <Field label="Move to site">
+            <Select name="siteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
+              <option value="">— Unassigned —</option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Assign to person">
+            <PersonSelectField
+              name="holderPersonId"
+              defaultValue={item.currentHolderPersonId ?? ''}
+              options={holders.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Select a person…"
+              clearable
+              emptyLabel="— No holder —"
+            />
+          </Field>
+          <Field label="Note" className="sm:col-span-2">
+            <Input name="note" placeholder="Optional context for the audit log" />
+          </Field>
+        </form>
+      </UrlDrawer>
+
       <NewWorkOrderDrawer
         open={drawerKey === 'new-work-order'}
         closeHref={closeHref}
@@ -1694,6 +1789,18 @@ function SidebarRow({ label, children }: { label: string; children: React.ReactN
     <div className="flex items-center justify-between text-sm">
       <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
       <span>{children}</span>
+    </div>
+  )
+}
+
+// Read-only system-maintained stat (inspection timestamps the user can't edit).
+function ReadOnlyStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-800/40">
+      <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </div>
+      <div className="mt-0.5 text-sm text-slate-700 dark:text-slate-200">{value}</div>
     </div>
   )
 }

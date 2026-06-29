@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Tags, Trash2 } from 'lucide-react'
-import { asc, count, eq } from 'drizzle-orm'
+import { asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -18,9 +18,12 @@ import { equipmentCategories, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { clamp, mergeHref, pickString } from '@/lib/list-params'
+import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
+import { SearchInput } from '@/components/search-input'
+import { SortableTh } from '@/components/sortable-th'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentCategoryDrawer, type CategoryEditing } from './_drawers'
 
@@ -28,6 +31,7 @@ export const metadata = { title: 'Equipment categories' }
 export const dynamic = 'force-dynamic'
 
 const BASE = '/equipment/categories'
+const SORTS = ['name', 'slug', 'order'] as const
 
 function slugify(s: string): string {
   return s
@@ -107,16 +111,39 @@ export default async function EquipmentCategoriesPage({
 }) {
   const sp = await searchParams
   const drawerParam = pickString(sp.drawer)
-  const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
-  const perPage = 25
+  const params = parseListParams(sp, {
+    sort: 'order',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const page = params.page
+  const perPage = params.perPage
   const ctx = await requireModuleManage('equipment')
 
   const { categories, total, typeCounts, editingRow } = await ctx.db(async (tx) => {
-    const [tot] = await tx.select({ c: count() }).from(equipmentCategories)
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(equipmentCategories.name, `%${params.q}%`),
+          ilike(equipmentCategories.slug, `%${params.q}%`),
+          ilike(equipmentCategories.description, `%${params.q}%`),
+        )
+      : undefined
+
+    const dirFn = params.dir === 'asc' ? asc : desc
+    const orderBy =
+      params.sort === 'name'
+        ? [dirFn(equipmentCategories.name)]
+        : params.sort === 'slug'
+          ? [dirFn(equipmentCategories.slug)]
+          : [dirFn(equipmentCategories.sortOrder), asc(equipmentCategories.name)]
+
+    const [tot] = await tx.select({ c: count() }).from(equipmentCategories).where(search)
     const c = await tx
       .select()
       .from(equipmentCategories)
-      .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name))
+      .where(search)
+      .orderBy(...orderBy)
       .limit(perPage)
       .offset((page - 1) * perPage)
     const tally = await tx
@@ -173,13 +200,16 @@ export default async function EquipmentCategoriesPage({
             }
           />
           <EquipmentSubNav active="categories" />
+          <TableToolbar>
+            <SearchInput placeholder="Search name, slug, description…" />
+          </TableToolbar>
         </>
       }
     >
       {categories.length === 0 ? (
         <EmptyState
           icon={<Tags size={32} />}
-          title="No categories"
+          title={params.q ? 'No categories match your search' : 'No categories'}
           description="Create a category to organise equipment types in the rate matrix."
           action={
             <Link href={newHref as never} scroll={false}>
@@ -192,9 +222,35 @@ export default async function EquipmentCategoriesPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead className="text-right">Order</TableHead>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="name"
+                  active={params.sort === 'name'}
+                >
+                  Name
+                </SortableTh>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="slug"
+                  active={params.sort === 'slug'}
+                >
+                  Slug
+                </SortableTh>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="order"
+                  active={params.sort === 'order'}
+                  align="right"
+                  className="text-right"
+                >
+                  Order
+                </SortableTh>
                 <TableHead className="text-right">Types</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -262,15 +318,13 @@ export default async function EquipmentCategoriesPage({
         </div>
       )}
 
-      {total > perPage ? (
-        <Pagination
-          basePath={BASE}
-          currentParams={sp}
-          total={total}
-          page={page}
-          perPage={perPage}
-        />
-      ) : null}
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={total}
+        page={page}
+        perPage={perPage}
+      />
 
       <EquipmentCategoryDrawer
         mode={mode}
