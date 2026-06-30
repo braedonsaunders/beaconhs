@@ -70,6 +70,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
+import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { upsertVehicleLogEntry } from '../vehicle-log/_service'
 
 export const dynamic = 'force-dynamic'
@@ -1005,6 +1006,15 @@ export default async function EquipmentDetailPage({
                       </div>
                     </div>
                   </Section>
+
+                  <CustomFieldsSection
+                    ctx={ctx}
+                    entityKind="equipment"
+                    recordId={id}
+                    subtypeId={item.typeId}
+                    metadata={item.metadata}
+                    locked={locked}
+                  />
                 </div>
               ) : null}
 

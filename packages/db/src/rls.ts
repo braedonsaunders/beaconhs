@@ -291,4 +291,8 @@ export const TENANT_SCOPED_TABLES = [
   // Tenant-managed PDF document template library (paper-size builder) attached by
   // the send_email flow action.
   'pdf_templates',
+  // Tenant-defined custom fields for native entities (equipment/ppe/people/
+  // locations). Values live on each record's metadata jsonb; this table holds
+  // the field definitions.
+  'custom_field_definitions',
 ] as const

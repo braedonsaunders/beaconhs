@@ -50,7 +50,8 @@ export default async function LocationsPage({
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status) ?? 'active'
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'admin.org.manage')
+  const canManage = can(ctx, 'admin.org.manage')
+  const canExport = can(ctx, 'admin.data.export') && canManage
   const hierarchy = await getTenantHierarchy(ctx.tenantId)
 
   const { rows, total, activeCount, archivedCount } = await ctx.db(async (tx) => {
@@ -171,6 +172,11 @@ export default async function LocationsPage({
             description="Your locations, plus the projects and sites beneath them. Add on-site contacts (non-employee site managers, client reps) here."
             actions={
               <div className="flex items-center gap-2">
+                {canManage ? (
+                  <Link href="/locations/custom-fields">
+                    <Button variant="outline">Custom fields</Button>
+                  </Link>
+                ) : null}
                 {canExport ? (
                   <Link href={buildExportHref('/locations/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>

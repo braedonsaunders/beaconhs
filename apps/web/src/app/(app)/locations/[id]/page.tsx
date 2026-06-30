@@ -44,6 +44,7 @@ import { recentActivityForEntity } from '@/lib/audit'
 import { getTenantHierarchy, levelLabel, type TenantHierarchy } from '@/lib/org-hierarchy'
 import { ActivityFeed } from '@/components/activity-feed'
 import { LiveField } from '@/components/live-field'
+import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -335,7 +336,7 @@ async function renderCustomer({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} /> : null}
+      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
       {active === 'projects' ? (
         <ProjectsTab unit={unit} projects={projects} canManage={canManage} />
       ) : null}
@@ -439,7 +440,7 @@ async function renderProject({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} /> : null}
+      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
       {active === 'sites' ? <SitesTab sites={sites} /> : null}
       {active === 'contacts' ? (
         <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
@@ -532,7 +533,7 @@ async function renderSite({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} /> : null}
+      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
       {active === 'contacts' ? (
         <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
       ) : null}
@@ -575,12 +576,14 @@ function resolveEditContact(
   }
 }
 
-function OverviewTab({
+async function OverviewTab({
   unit,
   canManage,
+  ctx,
 }: {
   unit: typeof orgUnits.$inferSelect
   canManage: boolean
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>
 }) {
   const addr = unit.address ?? {}
   const mapsHref =
@@ -700,6 +703,15 @@ function OverviewTab({
           />
         </div>
       </Section>
+
+      <CustomFieldsSection
+        ctx={ctx}
+        entityKind="location"
+        recordId={unit.id}
+        subtypeId={null}
+        metadata={unit.metadata}
+        locked={!canManage}
+      />
 
       <Card>
         <CardHeader>

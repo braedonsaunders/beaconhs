@@ -65,6 +65,7 @@ import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { PersonSelectField } from '@/components/person-select-field'
 import { LiveField, LiveSelect } from '@/components/live-field'
+import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { recordAudit } from '@/lib/audit'
 import { CertificateDrawer, type CertificateInput } from './_certificate-drawer'
 import { PpeInspectionForm } from './_inspection-form'
@@ -918,6 +919,15 @@ export default async function PpeDetailPage({
                 ]}
               />
             </Section>
+
+            <CustomFieldsSection
+              ctx={ctx}
+              entityKind="ppe"
+              recordId={item.id}
+              subtypeId={item.typeId}
+              metadata={item.metadata}
+              locked={!canManage}
+            />
           </div>
         ) : null}
 

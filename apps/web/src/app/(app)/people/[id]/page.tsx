@@ -75,6 +75,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
 import { getPersonSyncOrigin, SYNC_OWNED_PERSON_FIELDS } from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
@@ -924,6 +925,15 @@ export default async function PersonDetailPage({
                     updateAction={updatePersonField}
                   />
                 </Section>
+
+                <CustomFieldsSection
+                  ctx={ctx}
+                  entityKind="person"
+                  recordId={person.id}
+                  subtypeId={null}
+                  metadata={person.metadata}
+                  locked={!canEdit}
+                />
               </div>
             ) : null}
 
