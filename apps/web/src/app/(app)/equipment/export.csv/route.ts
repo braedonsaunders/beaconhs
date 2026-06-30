@@ -1,6 +1,12 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
-import { equipmentItems, equipmentTypes, orgUnits, people } from '@beaconhs/db/schema'
+import {
+  equipmentCategories,
+  equipmentItems,
+  equipmentTypes,
+  orgUnits,
+  people,
+} from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
@@ -71,8 +77,15 @@ export async function GET(req: NextRequest) {
                   ]
 
     return tx
-      .select({ item: equipmentItems, type: equipmentTypes, site: orgUnits, holder: people })
+      .select({
+        item: equipmentItems,
+        category: equipmentCategories,
+        type: equipmentTypes,
+        site: orgUnits,
+        holder: people,
+      })
       .from(equipmentItems)
+      .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
@@ -91,6 +104,7 @@ export async function GET(req: NextRequest) {
   const columns = csvColumns([
     'Asset tag',
     'Name',
+    'Category',
     'Type',
     'Serial #',
     'Status',
@@ -104,10 +118,11 @@ export async function GET(req: NextRequest) {
   return csvResponse({
     filename: csvFilename('equipment'),
     headers: selection.headers,
-    rows: rows.map(({ item, type, site, holder }) =>
+    rows: rows.map(({ item, category, type, site, holder }) =>
       selection.project([
         item.assetTag,
         item.name,
+        category?.name ?? '',
         type?.name ?? '',
         item.serialNumber ?? '',
         item.status,

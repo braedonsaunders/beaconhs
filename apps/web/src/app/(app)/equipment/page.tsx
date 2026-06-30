@@ -25,7 +25,16 @@ import { EquipmentTypeCategoryFilters } from './_filters'
 
 export const metadata = { title: 'Equipment' }
 
-const SORTS = ['asset_tag', 'name', 'type', 'status', 'site', 'holder', 'purchase_date'] as const
+const SORTS = [
+  'asset_tag',
+  'name',
+  'category',
+  'type',
+  'status',
+  'site',
+  'holder',
+  'purchase_date',
+] as const
 
 const STATUS_OPTIONS = [
   { value: 'in_service', label: 'In service' },
@@ -106,22 +115,31 @@ export default async function EquipmentPage({
       const orderBy =
         params.sort === 'name'
           ? [dirFn(equipmentItems.name)]
-          : params.sort === 'type'
-            ? [dirFn(equipmentTypes.name)]
-            : params.sort === 'status'
-              ? [dirFn(equipmentItems.status)]
-              : params.sort === 'site'
-                ? [dirFn(orgUnits.name)]
-                : params.sort === 'holder'
-                  ? [dirFn(people.lastName)]
-                  : params.sort === 'purchase_date'
-                    ? [dirFn(equipmentItems.purchaseDate)]
-                    : [dirFn(equipmentItems.assetTag)]
+          : params.sort === 'category'
+            ? [dirFn(equipmentCategories.name)]
+            : params.sort === 'type'
+              ? [dirFn(equipmentTypes.name)]
+              : params.sort === 'status'
+                ? [dirFn(equipmentItems.status)]
+                : params.sort === 'site'
+                  ? [dirFn(orgUnits.name)]
+                  : params.sort === 'holder'
+                    ? [dirFn(people.lastName)]
+                    : params.sort === 'purchase_date'
+                      ? [dirFn(equipmentItems.purchaseDate)]
+                      : [dirFn(equipmentItems.assetTag)]
 
       const [tot] = await tx.select({ c: count() }).from(equipmentItems).where(whereClause)
       const data = await tx
-        .select({ item: equipmentItems, type: equipmentTypes, site: orgUnits, holder: people })
+        .select({
+          item: equipmentItems,
+          category: equipmentCategories,
+          type: equipmentTypes,
+          site: orgUnits,
+          holder: people,
+        })
         .from(equipmentItems)
+        .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
         .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
         .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
         .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
@@ -158,10 +176,11 @@ export default async function EquipmentPage({
   const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
   const categoryOptions = allCats.map((c) => ({ value: c.id, label: c.name }))
 
-  const tableRows: EquipmentTableRow[] = rows.map(({ item, type, site, holder }) => ({
+  const tableRows: EquipmentTableRow[] = rows.map(({ item, category, type, site, holder }) => ({
     id: item.id,
     assetTag: item.assetTag,
     name: item.name,
+    categoryName: category?.name ?? null,
     typeName: type?.name ?? null,
     status: item.status,
     siteName: site?.name ?? null,

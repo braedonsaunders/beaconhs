@@ -17,6 +17,7 @@ export type EquipmentTableRow = {
   id: string
   assetTag: string
   name: string
+  categoryName: string | null
   typeName: string | null
   status: 'in_service' | 'out_of_service' | 'in_repair' | 'lost' | 'retired'
   siteName: string | null
@@ -88,7 +89,7 @@ export function EquipmentRecordsTable({
               </Badge>
             }
             title={r.name}
-            meta={[r.typeName, r.siteName].filter(Boolean).join(' · ') || undefined}
+            meta={[r.categoryName, r.typeName, r.siteName].filter(Boolean).join(' · ') || undefined}
             footer={
               r.isMissing || r.isDraft ? (
                 <>
@@ -114,6 +115,9 @@ export function EquipmentRecordsTable({
               </SortTh>
               <SortTh column="name" {...sortProps}>
                 Name
+              </SortTh>
+              <SortTh column="category" {...sortProps}>
+                Category
               </SortTh>
               <SortTh column="type" {...sortProps}>
                 Type
@@ -156,6 +160,9 @@ export function EquipmentRecordsTable({
                     >
                       {r.name}
                     </Link>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.categoryName ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.typeName ?? '—'}
