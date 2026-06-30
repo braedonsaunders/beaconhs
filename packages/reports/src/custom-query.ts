@@ -30,7 +30,7 @@ import {
   type ReportMeasure,
   type ReportTemporalBin,
 } from '@beaconhs/db/schema'
-import { REPORT_ENTITY_MAP, entityColumnSql, type ReportEntity } from './entities'
+import { REPORT_ENTITY_MAP, columnRef, entityColumnSql, type ReportEntity } from './entities'
 import { compileCustomFilters } from './filters'
 import { formatLabel, type ReportChartSpec, type ReportGroup, type ReportRunResult } from './types'
 
@@ -79,14 +79,13 @@ async function runRowQuery(
   const limit = resolveLimit(q.limit, opts.maxRows)
 
   const selectList = sql.raw(
-    requestedColumns
-      .map((c) => `"${entity.table}"."${entityColumnSql(entity, c)}" AS "${c}"`)
-      .join(', '),
+    requestedColumns.map((c) => `${columnRef(entity, c)} AS "${c}"`).join(', '),
   )
   const whereSql = where ? sql.join([sql.raw('WHERE'), where], sql.raw(' ')) : sql.raw('')
-  const orderSql = sortCol
-    ? sql.raw(`ORDER BY "${entity.table}"."${sortCol}" ${sortDir}`)
-    : sql.raw('')
+  const orderSql =
+    q.sort?.column && sortCol
+      ? sql.raw(`ORDER BY ${columnRef(entity, q.sort.column)} ${sortDir}`)
+      : sql.raw('')
 
   const queryText = sql.join(
     [
@@ -262,8 +261,7 @@ async function runAggregateQuery(
 /** SQL for a group-by dimension, with optional temporal bucketing. The bin is
  *  re-validated against the whitelist before interpolation (defence in depth). */
 function dimExpr(entity: ReportEntity, b: ReportBreakout): string {
-  const col = entityColumnSql(entity, b.column)!
-  const ref = `"${entity.table}"."${col}"`
+  const ref = columnRef(entity, b.column)!
   const bin = b.bin && REPORT_TEMPORAL_BINS.includes(b.bin) ? b.bin : null
   return bin ? `date_trunc('${bin}', ${ref})` : ref
 }
@@ -271,8 +269,7 @@ function dimExpr(entity: ReportEntity, b: ReportBreakout): string {
 /** SQL for an aggregate measure. Identifiers come from the whitelist only. */
 function measureExpr(entity: ReportEntity, m: ReportMeasure): string {
   if (m.fn === 'count') return 'COUNT(*)::int'
-  const col = entityColumnSql(entity, m.column ?? '')!
-  const ref = `"${entity.table}"."${col}"`
+  const ref = columnRef(entity, m.column ?? '')!
   switch (m.fn) {
     case 'count_distinct':
       return `COUNT(DISTINCT ${ref})::int`
@@ -362,8 +359,7 @@ async function runChartAggregate(
   chart: ReportChartConfig,
   where: SQL | null,
 ): Promise<ReportChartSpec | null> {
-  const dim = entityColumnSql(entity, chart.dimension)!
-  const dimSql = sql.raw(`"${entity.table}"."${dim}"`)
+  const dimSql = sql.raw(columnRef(entity, chart.dimension)!)
   const kind = entity.columns.find((c) => c.key === chart.dimension)?.kind
   // Bucket timestamps/dates by day so a time dimension charts sensibly.
   const keyExpr =

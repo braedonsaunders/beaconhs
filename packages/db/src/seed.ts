@@ -15,7 +15,11 @@ import {
   documentCategories,
   documentReferenceTypes,
   documentReferenceCategories,
+  customFieldDefinitions,
   equipmentCategories,
+  equipmentInspectionCriteria,
+  equipmentInspectionGroups,
+  equipmentInspectionTypes,
   equipmentItems,
   equipmentLogEntries,
   equipmentTypes,
@@ -1909,6 +1913,9 @@ async function main() {
     // --- Equipment categories + sample log entries ----------------------
     await seedEquipmentCategoriesAndLogs(tx, tenant.id)
 
+    // --- Atmospheric gas-detector pilot (custom fields + Calibration type) ---
+    await seedAtmosphericGasDetectorPilot(tx, tenant.id)
+
     // --- HazID / JSHA library (hazards, sets, tasks, assessment types) --
     await seedHazidLibraries(tx, tenant.id)
 
@@ -2408,6 +2415,206 @@ async function seedEquipmentCategoriesAndLogs(tx: any, tenantId: string): Promis
   }
 
   console.log(`  · equipment categories + ${logsCreated} sample log entries`)
+}
+
+/**
+ * Atmospheric gas-detector pilot — the worked example of the custom-field
+ * system replacing the legacy `AtmosphericEquipment` flag + sensor columns.
+ * Idempotently seeds, for the tenant:
+ *   1. a "Portable Gas Detector" equipment type;
+ *   2. a subtype-scoped custom-field group on that type (detector model, the
+ *      active sensor channels, calibration dates, bump-test interval) — values
+ *      live on each item's metadata.custom;
+ *   3. a "Calibration" equipment inspection type (quarterly) whose criteria are
+ *      the per-channel response checks, so calibration HISTORY is tracked by the
+ *      existing inspection engine (due dates / pass-fail / WO spawn) rather than
+ *      a bespoke atmospheric table; and
+ *   4. one sample detector item with custom values filled in.
+ * Skipped cleanly when the type already exists.
+ */
+export async function seedAtmosphericGasDetectorPilot(tx: any, tenantId: string): Promise<void> {
+  const TYPE_NAME = 'Portable Gas Detector'
+  const existingType = await tx
+    .select({ id: equipmentTypes.id })
+    .from(equipmentTypes)
+    .where(and(eq(equipmentTypes.tenantId, tenantId), eq(equipmentTypes.name, TYPE_NAME)))
+    .limit(1)
+  if (existingType.length > 0) {
+    console.log('  · atmospheric gas-detector pilot: already seeded, skipping')
+    return
+  }
+
+  // 1. Equipment type.
+  const [gasType] = await tx
+    .insert(equipmentTypes)
+    .values({
+      tenantId,
+      name: TYPE_NAME,
+      category: 'safety',
+      description: 'Portable multi-gas atmospheric monitor (confined-space entry, hot work).',
+    })
+    .returning({ id: equipmentTypes.id })
+  if (!gasType) return
+
+  // 2. Subtype-scoped custom fields (the gas-detector configuration).
+  const fields = [
+    {
+      key: 'detector_model',
+      label: 'Detector model',
+      fieldType: 'text',
+      config: null,
+      required: true,
+    },
+    {
+      key: 'sensor_channels',
+      label: 'Active sensor channels',
+      fieldType: 'multi_select',
+      config: {
+        options: [
+          { value: 'o2', label: 'O₂ (Oxygen)' },
+          { value: 'lel', label: 'LEL (Combustibles)' },
+          { value: 'h2s', label: 'H₂S (Hydrogen sulfide)' },
+          { value: 'co', label: 'CO (Carbon monoxide)' },
+        ],
+      },
+      required: true,
+    },
+    {
+      key: 'last_calibration_on',
+      label: 'Last calibration',
+      fieldType: 'date',
+      config: null,
+      required: false,
+    },
+    {
+      key: 'calibration_due_on',
+      label: 'Calibration due',
+      fieldType: 'date',
+      config: null,
+      required: false,
+    },
+    {
+      key: 'bump_test_interval_days',
+      label: 'Bump-test interval',
+      fieldType: 'number',
+      config: { unit: 'days', min: 1, max: 365 },
+      required: false,
+    },
+  ] as const
+
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i]!
+    await tx.insert(customFieldDefinitions).values({
+      tenantId,
+      entityKind: 'equipment',
+      subtypeId: gasType.id,
+      key: f.key,
+      label: f.label,
+      fieldType: f.fieldType,
+      config: f.config ?? null,
+      required: f.required,
+      groupLabel: 'Gas detector',
+      sortOrder: i,
+      isActive: true,
+    })
+  }
+
+  // 3. "Calibration" inspection type + per-channel criteria.
+  const [calType] = await tx
+    .insert(equipmentInspectionTypes)
+    .values({
+      tenantId,
+      appliesToTypeId: gasType.id,
+      name: 'Calibration',
+      description:
+        'Quarterly calibration against certified test gas. A failed channel forces a work order.',
+      interval: 'quarterly',
+      allowPassAll: false,
+      failsSpawnWorkOrders: true,
+      isActive: true,
+    })
+    .returning({ id: equipmentInspectionTypes.id })
+
+  if (calType) {
+    const [channelGroup] = await tx
+      .insert(equipmentInspectionGroups)
+      .values({
+        tenantId,
+        inspectionTypeId: calType.id,
+        sequence: 0,
+        label: 'Sensor channels',
+        description: 'Response of each active channel to certified test gas.',
+      })
+      .returning({ id: equipmentInspectionGroups.id })
+
+    const criteria = [
+      { question: 'O₂ reads 20.9% ± 0.5 on fresh air', kind: 'pass_fail' as const, critical: true },
+      {
+        question: 'LEL channel responds within ±5% of test gas',
+        kind: 'pass_fail' as const,
+        critical: true,
+      },
+      {
+        question: 'H₂S channel responds within ±10% of test gas',
+        kind: 'pass_fail' as const,
+        critical: true,
+      },
+      {
+        question: 'CO channel responds within ±10% of test gas',
+        kind: 'pass_fail' as const,
+        critical: true,
+      },
+      {
+        question: 'Bump-test record saved to the unit',
+        kind: 'pass_fail' as const,
+        critical: false,
+      },
+    ]
+    for (let i = 0; i < criteria.length; i++) {
+      const c = criteria[i]!
+      await tx.insert(equipmentInspectionCriteria).values({
+        tenantId,
+        inspectionTypeId: calType.id,
+        groupId: channelGroup?.id ?? null,
+        sequence: i,
+        question: c.question,
+        kind: c.kind,
+        severity: c.critical ? 'critical' : 'medium',
+        requiresPhoto: false,
+        requiresComment: false,
+        isRequired: true,
+        isCritical: c.critical,
+      })
+    }
+  }
+
+  // 4. One sample detector item with custom values populated.
+  await tx
+    .insert(equipmentItems)
+    .values({
+      tenantId,
+      typeId: gasType.id,
+      assetTag: 'GD-001',
+      serialNumber: 'BW-GA-0001',
+      name: 'Gas Detector GD-001',
+      qrToken: `bhs-eq-${randomUUID()}`,
+      status: 'in_service',
+      requiresAnnualInspection: true,
+      metadata: {
+        custom: {
+          detector_model: 'BW MicroClip XL',
+          sensor_channels: ['o2', 'lel', 'h2s', 'co'],
+          last_calibration_on: '2026-05-01',
+          calibration_due_on: '2026-08-01',
+          bump_test_interval_days: 1,
+        },
+      },
+    })
+    .onConflictDoNothing()
+
+  console.log(
+    '  · atmospheric gas-detector pilot (type + custom fields + Calibration inspection + sample item)',
+  )
 }
 
 /**

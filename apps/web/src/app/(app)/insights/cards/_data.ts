@@ -8,7 +8,7 @@ import {
   type InsightCardConfig,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { discoverEntities, scopedFormAppEntity } from '@beaconhs/analytics/server'
+import { discoverEntitiesWithCustomFields, scopedFormAppEntity } from '@beaconhs/analytics/server'
 import type { AnalyticsEntity } from '@beaconhs/analytics'
 import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
 
@@ -139,5 +139,6 @@ export async function loadStudioEntities(ctx: RequestContext): Promise<Analytics
   const appEntities = apps
     .map((a) => scopedFormAppEntity(a.id, a.name))
     .filter((e): e is AnalyticsEntity => e != null)
-  return [...discoverEntities(), ...appEntities]
+  const base = await ctx.db((tx) => discoverEntitiesWithCustomFields(tx))
+  return [...base, ...appEntities]
 }

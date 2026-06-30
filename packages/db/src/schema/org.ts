@@ -56,6 +56,7 @@ export const orgUnits = pgTable(
     parentIdx: index('org_units_parent_idx').on(t.parentId),
     tenantLevelIdx: index('org_units_tenant_level_idx').on(t.tenantId, t.level),
     tenantCodeUx: uniqueIndex('org_units_tenant_code_ux').on(t.tenantId, t.code),
+    metadataGin: index('org_units_metadata_gin').using('gin', t.metadata),
   }),
 )
 
@@ -166,6 +167,7 @@ export const people = pgTable(
     tenantIdx: index('people_tenant_idx').on(t.tenantId),
     tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux').on(t.tenantId, t.employeeNo),
     nameIdx: index('people_name_idx').on(t.tenantId, t.lastName, t.firstName),
+    metadataGin: index('people_metadata_gin').using('gin', t.metadata),
   }),
 )
 

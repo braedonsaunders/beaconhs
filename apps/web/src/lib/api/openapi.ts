@@ -3,7 +3,12 @@
 // objects (no extra dependency): every path, schema and filter parameter is
 // derived from REPORT_ENTITIES.
 
-import { REPORT_ENTITIES, type ReportColumnKind, type ReportEntity } from '@beaconhs/reports'
+import {
+  REPORT_ENTITIES,
+  type ReportColumnKind,
+  type ReportEntity,
+  type ReportEntityColumn,
+} from '@beaconhs/reports'
 import { DEFAULT_LIMIT, MAX_LIMIT } from './query'
 import { readPermissionForEntity } from './permissions'
 import { isRecordable } from './records'
@@ -725,7 +730,13 @@ function builderResponseRecordPath(options: {
 
 export function buildOpenApiDocument(
   origin: string,
-  options: { builderApps?: BuilderAppOpenApiEntity[] } = {},
+  options: {
+    builderApps?: BuilderAppOpenApiEntity[]
+    /** Per-entity tenant custom-field columns (keyed by entity key) to fold into
+     *  the documented schema + query params. Supplied only on authenticated
+     *  requests; the anonymous spec stays generic. */
+    customColumns?: Record<string, ReportEntityColumn[]>
+  } = {},
 ): Json {
   const schemas: Json = {
     Pagination: {
@@ -792,7 +803,11 @@ export function buildOpenApiDocument(
     }),
   }
   const paths: Json = {}
-  for (const entity of REPORT_ENTITIES) {
+  for (const baseEntity of REPORT_ENTITIES) {
+    const extra = options.customColumns?.[baseEntity.key] ?? []
+    const entity: ReportEntity = extra.length
+      ? { ...baseEntity, columns: [...baseEntity.columns, ...extra] }
+      : baseEntity
     schemas[pascalCase(entity.key)] = entitySchema(entity)
     paths[`/api/v1/${entity.key}`] = entityPath(entity)
     if (isRecordable(entity.key)) {

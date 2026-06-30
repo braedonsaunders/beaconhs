@@ -162,6 +162,8 @@ export const equipmentItems = pgTable(
     siteIdx: index('equipment_items_site_idx').on(t.tenantId, t.currentSiteOrgUnitId),
     availableIdx: index('equipment_items_available_idx').on(t.tenantId, t.isAvailableForCheckout),
     categoryIdx: index('equipment_items_category_idx').on(t.tenantId, t.categoryId),
+    // Accelerate jsonb containment over custom-field values (metadata.custom).
+    metadataGin: index('equipment_items_metadata_gin').using('gin', t.metadata),
   }),
 )
 

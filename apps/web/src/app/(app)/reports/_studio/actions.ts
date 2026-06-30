@@ -11,7 +11,13 @@ import { eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
-import { computeRangeFor, runReport, type ReportRunResult } from '@beaconhs/reports'
+import {
+  augmentEntityMapWithCustomFields,
+  computeRangeFor,
+  runReport,
+  type ReportEntity,
+  type ReportRunResult,
+} from '@beaconhs/reports'
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -29,7 +35,7 @@ function buildSlug(name: string): string {
   return `custom__${base}__${suffix}`
 }
 
-function parseStudioForm(formData: FormData) {
+function parseStudioForm(formData: FormData, entityMap: Record<string, ReportEntity>) {
   const name = String(formData.get('name') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
   const customQueryRaw = String(formData.get('customQuery') ?? '').trim()
@@ -41,13 +47,24 @@ function parseStudioForm(formData: FormData) {
   } catch (err) {
     throw new Error(`Invalid customQuery JSON: ${err instanceof Error ? err.message : String(err)}`)
   }
-  return { name, description, customQuery: validateCustomQuery(parsed) }
+  return { name, description, customQuery: validateCustomQuery(parsed, entityMap) }
+}
+
+/** Discovered catalog augmented with the tenant's custom-field columns, so the
+ *  studio can save/validate `cf_*` columns. */
+async function resolveStudioEntityMap(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+): Promise<Record<string, ReportEntity>> {
+  return ctx.db((tx) => augmentEntityMapWithCustomFields(tx, discoverEntityMap()))
 }
 
 export async function createCustomDefinition(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.builder')
-  const { name, description, customQuery } = parseStudioForm(formData)
+  const { name, description, customQuery } = parseStudioForm(
+    formData,
+    await resolveStudioEntityMap(ctx),
+  )
   const cloneFromIdRaw = String(formData.get('cloneFromId') ?? '').trim()
 
   // If cloning, copy source category onto the new row.
@@ -104,7 +121,10 @@ export async function updateCustomDefinition(
 ): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.builder')
-  const { name, description, customQuery } = parseStudioForm(formData)
+  const { name, description, customQuery } = parseStudioForm(
+    formData,
+    await resolveStudioEntityMap(ctx),
+  )
 
   await withSuperAdmin(db, async (tx) => {
     const [d] = await tx
@@ -147,18 +167,19 @@ export async function previewCustomReport(payload: unknown): Promise<StudioPrevi
   try {
     const ctx = await requireRequestContext()
     assertCan(ctx, 'reports.builder')
-    const customQuery = validateCustomQuery(payload)
     const range = computeRangeFor('custom_query', {})
-    const result = await ctx.db((tx) =>
-      runReport(tx, {
+    const result = await ctx.db(async (tx) => {
+      const entityMap = await augmentEntityMapWithCustomFields(tx, discoverEntityMap())
+      const customQuery = validateCustomQuery(payload, entityMap)
+      return runReport(tx, {
         queryKind: 'custom_query',
         filters: {},
         range,
         customQuery,
         maxRows: PREVIEW_MAX_ROWS,
-        entityMap: discoverEntityMap(),
-      }),
-    )
+        entityMap,
+      })
+    })
     return { ok: true, result, rangeLabel: range.label }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

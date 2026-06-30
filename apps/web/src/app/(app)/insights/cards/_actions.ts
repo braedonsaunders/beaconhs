@@ -9,7 +9,7 @@ import {
   type ResultColumn,
   type VizKey,
 } from '@beaconhs/analytics'
-import { runBhql, validateBhql } from '@beaconhs/analytics/server'
+import { runBhql, validateBhqlWithCustomFields } from '@beaconhs/analytics/server'
 import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
@@ -36,8 +36,10 @@ export async function previewCard(payload: {
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
   try {
-    const query = validateBhql(payload.query)
-    const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 1000 }))
+    const result = await ctx.db(async (tx) => {
+      const query = await validateBhqlWithCustomFields(tx, payload.query)
+      return runBhql(tx, query, { maxRows: 1000 })
+    })
     const cols = columnsForSuggest(result)
     const suggestedViz = suggestViz(
       resultShapeOf(result),
@@ -103,7 +105,7 @@ export async function createCard(input: {
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
   let query
   try {
-    query = validateBhql(input.query)
+    query = await ctx.db((tx) => validateBhqlWithCustomFields(tx, input.query))
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }
@@ -155,7 +157,7 @@ export async function updateCard(input: {
   }
   let query
   try {
-    query = validateBhql(input.query)
+    query = await ctx.db((tx) => validateBhqlWithCustomFields(tx, input.query))
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }

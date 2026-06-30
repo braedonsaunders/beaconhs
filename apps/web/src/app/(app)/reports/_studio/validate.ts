@@ -28,19 +28,28 @@ const MAX_RULES = 60
 const MAX_BREAKOUTS = 6
 const MAX_MEASURES = 8
 
-/** Resolve an entity key against the discovered catalog, falling back to the
- *  static registry for legacy keys. */
-function resolveEntity(key: string): ReportEntity | null {
-  return discoverEntityMap()[key] ?? REPORT_ENTITY_MAP[key] ?? null
+/** Resolve an entity key against the provided catalog (the caller may pass a
+ *  catalog already augmented with tenant custom-field columns), falling back to
+ *  the discovered catalog then the static registry for legacy keys. */
+function resolveEntity(key: string, entityMap: Record<string, ReportEntity>): ReportEntity | null {
+  return entityMap[key] ?? REPORT_ENTITY_MAP[key] ?? null
 }
 
-export function validateCustomQuery(raw: unknown): ReportCustomQuery {
+/**
+ * @param entityMap Catalog to validate columns against. Pass a catalog
+ *   augmented via `augmentEntityMapWithCustomFields` so custom-field columns
+ *   (`cf_*`) survive validation; defaults to the base discovered catalog.
+ */
+export function validateCustomQuery(
+  raw: unknown,
+  entityMap: Record<string, ReportEntity> = discoverEntityMap(),
+): ReportCustomQuery {
   if (!raw || typeof raw !== 'object') {
     throw new Error('Custom query is required')
   }
   const q = raw as Record<string, unknown>
   const entity = String(q.entity ?? '')
-  const entityMeta = resolveEntity(entity)
+  const entityMeta = resolveEntity(entity, entityMap)
   if (!entityMeta) {
     throw new Error(`Invalid entity: ${entity}`)
   }

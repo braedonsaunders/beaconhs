@@ -1,6 +1,6 @@
 import { DetailHeader } from '@beaconhs/ui'
 import { REPORT_OPERATORS } from '@beaconhs/reports'
-import { discoverEntities } from '@beaconhs/analytics/server'
+import { discoverEntitiesWithCustomFields } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../_definitions'
@@ -26,7 +26,7 @@ export default async function NewCustomDefinitionPage({
   const cloneFrom = cloneFromId ? await loadDefinitionById(ctx.tenantId!, cloneFromId) : null
   const seed = cloneFrom ? (cloneFrom.customQuery ?? builtInSeedQuery(cloneFrom.queryKind)) : null
 
-  const entities = discoverEntities()
+  const entities = await ctx.db((tx) => discoverEntitiesWithCustomFields(tx))
 
   return (
     <DetailPageLayout

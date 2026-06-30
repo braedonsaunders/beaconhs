@@ -7,7 +7,7 @@ import {
   loadInsightsData,
   type CardRender,
 } from './_data'
-import { discoverEntities } from '@beaconhs/analytics/server'
+import { discoverEntitiesWithCustomFields } from '@beaconhs/analytics/server'
 import { loadCardsForPalette, type CardRow } from './cards/_data'
 import { resolveParamValues } from './_params'
 import { ensureSystemCards } from './_system-cards'
@@ -84,7 +84,7 @@ export default async function InsightsPage({
       paletteCards={paletteCards}
       cardRenders={cardRenders}
       canCreate={canCreateInsights(ctx)}
-      entities={discoverEntities()}
+      entities={await ctx.db((tx) => discoverEntitiesWithCustomFields(tx))}
     />
   )
 }

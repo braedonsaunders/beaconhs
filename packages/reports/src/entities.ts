@@ -16,6 +16,14 @@ export type ReportEntityColumn = {
   kind: ReportColumnKind
   /** Physical column name. Defaults to `key` when omitted. */
   sql?: string
+  /**
+   * Raw, already-table-qualified SQL expression used VERBATIM as the column
+   * reference instead of `"table"."col"`. Server-generated only (never from
+   * user input) — used for synthetic columns such as tenant custom fields
+   * read out of a jsonb `metadata` column. When set, takes precedence over
+   * `sql`/`key` everywhere a physical reference is built.
+   */
+  expr?: string
 }
 
 export type ReportEntity = {
@@ -355,6 +363,21 @@ export function entityColumn(entity: ReportEntity, key: string): ReportEntityCol
 export function entityColumnSql(entity: ReportEntity, key: string): string | null {
   const col = entityColumn(entity, key)
   return col ? (col.sql ?? col.key) : null
+}
+
+/**
+ * The full SQL reference for a whitelisted column — either its server-generated
+ * `expr` (used verbatim) or the default `"table"."col"`. This is the single
+ * place every executor (reports, BHQL, the public API) must build a column
+ * reference, so synthetic expression columns (custom fields) work everywhere
+ * without weakening the injection guarantee: `expr` is only ever set by trusted
+ * server code, and physical identifiers still come from the whitelist.
+ */
+export function columnRef(entity: ReportEntity, key: string): string | null {
+  const col = entityColumn(entity, key)
+  if (!col) return null
+  if (col.expr) return col.expr
+  return `"${entity.table}"."${col.sql ?? col.key}"`
 }
 
 // --- Operators --------------------------------------------------------------

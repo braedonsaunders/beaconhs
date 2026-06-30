@@ -11,6 +11,7 @@
 
 import { sql, type SQL } from 'drizzle-orm'
 import {
+  columnRef,
   entityColumn,
   entityColumnSql,
   type ReportColumnKind,
@@ -93,8 +94,10 @@ function colSqlOf(ctx: CompileCtx, ref: string): SQL | null {
   if (ctx.resolve) return ctx.resolve(ref)
   const segs = ref.split('.')
   if (segs.length === 1) {
-    const col = entityColumnSql(ctx.entity, ref)
-    return col ? sql.raw(`"${ctx.entity.table}"."${col}"`) : null
+    // columnRef returns the synthetic `expr` for custom-field columns, else the
+    // default `"table"."col"`.
+    const r = columnRef(ctx.entity, ref)
+    return r ? sql.raw(r) : null
   }
   // Multi-hop: walk each "via" segment, following a relation on the CURRENT
   // entity and registering one LEFT JOIN per path prefix (so j_a then j_a__b),

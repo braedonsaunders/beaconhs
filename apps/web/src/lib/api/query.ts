@@ -8,6 +8,8 @@ import { sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { ReportCustomFilter, ReportFilterOperator } from '@beaconhs/db/schema'
 import {
+  augmentReportEntityWithCustomFields,
+  columnRef,
   compileFlatFilters,
   entityColumnSql,
   extractRows,
@@ -108,9 +110,12 @@ function formatValue(value: unknown, kind: ReportColumnKind | undefined): unknow
 
 export async function readEntityRows(
   ctx: RequestContext,
-  entity: ReportEntity,
+  baseEntity: ReportEntity,
   params: URLSearchParams,
 ): Promise<EntityPage> {
+  // Append the tenant's custom-field columns so they're selectable, filterable
+  // and sortable through the public API like any other column.
+  const entity = await ctx.db((tx) => augmentReportEntityWithCustomFields(tx, baseEntity))
   const limit = clampInt(params.get('limit'), DEFAULT_LIMIT, 1, MAX_LIMIT)
   const offset = clampInt(params.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER)
   const fields = resolveFields(entity, params)
@@ -119,10 +124,11 @@ export async function readEntityRows(
   const idCol = recordIdColumn(entity)
 
   const sortReq = params.get('sort')
-  const sortCol =
-    (sortReq && entityColumnSql(entity, sortReq)) ||
-    (entity.defaultSort && entityColumnSql(entity, entity.defaultSort.column)) ||
-    null
+  const sortKey =
+    (sortReq && entityColumnSql(entity, sortReq) ? sortReq : null) ??
+    (entity.defaultSort && entityColumnSql(entity, entity.defaultSort.column)
+      ? entity.defaultSort.column
+      : null)
   const orderReq = params.get('order')
   const dir =
     orderReq === 'asc' || orderReq === 'desc' ? orderReq : (entity.defaultSort?.direction ?? 'desc')
@@ -131,13 +137,10 @@ export async function readEntityRows(
   const whereSql = where ? sql.join([sql.raw('WHERE'), where], sql.raw(' ')) : sql.raw('')
   const idSelect = idCol ? [`"${entity.table}"."${idCol}" AS "id"`] : []
   const selectList = sql.raw(
-    [
-      ...idSelect,
-      ...fields.map((c) => `"${entity.table}"."${entityColumnSql(entity, c)}" AS "${c}"`),
-    ].join(', '),
+    [...idSelect, ...fields.map((c) => `${columnRef(entity, c)} AS "${c}"`)].join(', '),
   )
-  const orderSql = sortCol
-    ? sql.raw(`ORDER BY "${entity.table}"."${sortCol}" ${dir === 'asc' ? 'ASC' : 'DESC'}`)
+  const orderSql = sortKey
+    ? sql.raw(`ORDER BY ${columnRef(entity, sortKey)} ${dir === 'asc' ? 'ASC' : 'DESC'}`)
     : sql.raw('')
 
   const dataQuery = sql.join(
@@ -184,16 +187,17 @@ export async function readEntityRows(
  */
 export async function getEntityRecord(
   ctx: RequestContext,
-  entity: ReportEntity,
+  baseEntity: ReportEntity,
   id: string,
 ): Promise<Record<string, unknown> | null> {
-  const idCol = recordIdColumn(entity)
+  const idCol = recordIdColumn(baseEntity)
   if (!idCol) return null
+  const entity = await ctx.db((tx) => augmentReportEntityWithCustomFields(tx, baseEntity))
   const fields = entity.columns.map((c) => c.key)
   const selectList = sql.raw(
     [
       `"${entity.table}"."${idCol}" AS "id"`,
-      ...fields.map((c) => `"${entity.table}"."${entityColumnSql(entity, c)}" AS "${c}"`),
+      ...fields.map((c) => `${columnRef(entity, c)} AS "${c}"`),
     ].join(', '),
   )
   const query = sql.join(

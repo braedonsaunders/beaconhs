@@ -3,7 +3,13 @@
 // scheduled PDFs, so what you see in the viewer is exactly what subscribers
 // get emailed.
 
-import { computeRangeFor, rangeModeFor, runReport, type ReportRunResult } from '@beaconhs/reports'
+import {
+  augmentEntityMapWithCustomFields,
+  computeRangeFor,
+  rangeModeFor,
+  runReport,
+  type ReportRunResult,
+} from '@beaconhs/reports'
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { ReportDefinitionRow } from './_definitions'
@@ -39,14 +45,14 @@ export async function runReportForViewer(
   const range = computeRangeFor(definition.queryKind, filters)
 
   try {
-    const result = await ctx.db((tx) =>
+    const result = await ctx.db(async (tx) =>
       runReport(tx, {
         queryKind: definition.queryKind,
         filters,
         range,
         customQuery: definition.customQuery,
         maxRows: opts.maxRows ?? VIEWER_MAX_ROWS,
-        entityMap: discoverEntityMap(),
+        entityMap: await augmentEntityMapWithCustomFields(tx, discoverEntityMap()),
       }),
     )
     return { result, rangeLabel: range.label, rangeMode: mode, days, error: null }

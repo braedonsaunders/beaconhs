@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { DetailHeader } from '@beaconhs/ui'
 import { REPORT_OPERATORS } from '@beaconhs/reports'
-import { discoverEntities } from '@beaconhs/analytics/server'
+import { discoverEntitiesWithCustomFields } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../../_definitions'
@@ -27,7 +27,7 @@ export default async function EditCustomDefinitionPage({
   }
 
   const action = updateCustomDefinition.bind(null, id)
-  const entities = discoverEntities()
+  const entities = await ctx.db((tx) => discoverEntitiesWithCustomFields(tx))
 
   return (
     <DetailPageLayout

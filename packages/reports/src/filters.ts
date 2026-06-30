@@ -11,7 +11,7 @@
 
 import { sql, type SQL } from 'drizzle-orm'
 import type { ReportCustomFilter, ReportRule, ReportRuleGroup } from '@beaconhs/db/schema'
-import { entityColumnSql, type ReportEntity } from './entities'
+import { columnRef, type ReportEntity } from './entities'
 
 const MAX_TREE_DEPTH = 5
 const MAX_TREE_RULES = 60
@@ -28,10 +28,12 @@ function joinParams(values: (string | number)[]): SQL {
   )
 }
 
-/** Default physical ref for a whitelisted column on the entity's own table. */
+/** Default physical ref for a whitelisted column on the entity's own table.
+ *  Routes through columnRef so synthetic expression columns (custom fields)
+ *  filter correctly. */
 function defaultColumnSql(entity: ReportEntity, column: string): SQL | null {
-  const col = entityColumnSql(entity, column)
-  return col ? sql.raw(`"${entity.table}"."${col}"`) : null
+  const ref = columnRef(entity, column)
+  return ref ? sql.raw(ref) : null
 }
 
 /** Compile one leaf clause. Returns null when the clause is invalid or a

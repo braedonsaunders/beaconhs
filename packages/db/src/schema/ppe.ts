@@ -88,6 +88,8 @@ export const ppeItems = pgTable(
     typeIdx: index('ppe_items_type_idx').on(t.typeId),
     holderIdx: index('ppe_items_holder_idx').on(t.tenantId, t.currentHolderPersonId),
     tenantSerialUx: uniqueIndex('ppe_items_tenant_serial_ux').on(t.tenantId, t.serialNumber),
+    // Accelerate jsonb containment over custom-field values (metadata.custom).
+    metadataGin: index('ppe_items_metadata_gin').using('gin', t.metadata),
   }),
 )
 
