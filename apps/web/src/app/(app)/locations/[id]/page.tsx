@@ -192,7 +192,17 @@ export default async function LocationDetailPage({
   const { unit, parent, children } = data
 
   if (unit.level === 'customer') {
-    return renderCustomer({ unit, children, sp, drawer, editContactId, id, ctx, hierarchy, canManage })
+    return renderCustomer({
+      unit,
+      children,
+      sp,
+      drawer,
+      editContactId,
+      id,
+      ctx,
+      hierarchy,
+      canManage,
+    })
   }
   if (unit.level === 'project') {
     return renderProject({

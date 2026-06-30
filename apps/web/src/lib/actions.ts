@@ -105,10 +105,7 @@ export async function setActiveRole(
       .select({ id: roleAssignments.id })
       .from(roleAssignments)
       .where(
-        and(
-          eq(roleAssignments.tenantUserId, membershipId),
-          eq(roleAssignments.roleId, roleId),
-        ),
+        and(eq(roleAssignments.tenantUserId, membershipId), eq(roleAssignments.roleId, roleId)),
       )
       .limit(1)
     return !!r

@@ -302,13 +302,7 @@ export default async function EquipmentTypesPage({
         </div>
       )}
 
-      <Pagination
-        basePath={BASE}
-        currentParams={sp}
-        total={total}
-        page={page}
-        perPage={perPage}
-      />
+      <Pagination basePath={BASE} currentParams={sp} total={total} page={page} perPage={perPage} />
 
       <EquipmentTypeDrawer
         mode={mode}

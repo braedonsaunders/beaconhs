@@ -461,8 +461,7 @@ export default async function PersonDetailPage({
   const synced = syncOrigin != null
   // A field's input is read-only when the viewer lacks edit permission, OR the
   // person is synced and this is a sync-owned field.
-  const fieldDisabled = (field: string) =>
-    !canEdit || (synced && SYNC_OWNED_FIELDS.has(field))
+  const fieldDisabled = (field: string) => !canEdit || (synced && SYNC_OWNED_FIELDS.has(field))
   const ackByTaskId = new Map(titleTaskAcks.map((a) => [a.taskId, a]))
 
   const today = new Date()
@@ -1322,10 +1321,7 @@ export default async function PersonDetailPage({
                           {ackedDocs.map((row) => (
                             <TableRow key={row.ack.id}>
                               <TableCell className="font-medium">
-                                <Link
-                                  href={`/documents/${row.doc.id}`}
-                                  className="hover:underline"
-                                >
+                                <Link href={`/documents/${row.doc.id}`} className="hover:underline">
                                   {row.doc.title}
                                 </Link>
                               </TableCell>

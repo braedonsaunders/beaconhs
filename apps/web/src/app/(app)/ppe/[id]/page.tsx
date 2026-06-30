@@ -677,7 +677,10 @@ export default async function PpeDetailPage({
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {canIssue ? (
-                <Link href={`${basePath}?tab=${active}&drawer=issue-to-person` as any} scroll={false}>
+                <Link
+                  href={`${basePath}?tab=${active}&drawer=issue-to-person` as any}
+                  scroll={false}
+                >
                   <Button>
                     <UserPlus size={14} /> Issue to person
                   </Button>
@@ -1274,7 +1277,6 @@ export default async function PpeDetailPage({
             )}
           </Section>
         ) : null}
-
       </div>
 
       <GenericSendEmailDialog

@@ -81,10 +81,7 @@ export default async function EquipmentInspectionsPage({
   const filters: SQL<unknown>[] = []
   if (statusFilter) {
     filters.push(
-      eq(
-        equipmentInspectionRecords.status,
-        statusFilter as 'draft' | 'in_progress' | 'submitted',
-      ),
+      eq(equipmentInspectionRecords.status, statusFilter as 'draft' | 'in_progress' | 'submitted'),
     )
   }
   if (params.q) {
