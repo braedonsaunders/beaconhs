@@ -880,12 +880,23 @@ export default async function EquipmentDetailPage({
             <Card>
               <CardContent className="space-y-3 p-5 text-sm">
                 {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photoUrl}
-                    alt={item.name}
-                    className="h-32 w-full rounded-md object-cover"
-                  />
+                  <a
+                    href={photoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                    title="View full size"
+                  >
+                    {/* object-contain + a capped height shows portrait and
+                        landscape photos in full without cropping; the neutral
+                        backdrop fills the letterbox gap. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrl}
+                      alt={item.name}
+                      className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
+                    />
+                  </a>
                 ) : (
                   <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                     <Truck size={48} />
