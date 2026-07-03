@@ -11,6 +11,7 @@
 // canonical single-page-form recipe.
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   Input,
   RichTextEditor,
@@ -22,20 +23,29 @@ import {
 } from '@beaconhs/ui'
 import { useLazyRecord } from './lazy-record'
 
-type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
-function useAutoSave({
-  id,
-  field,
+/**
+ * Generic auto-save queue: one in-flight write at a time, follow-up edits chase
+ * the in-flight save, failures surface as an actionable `error` state with a
+ * working `retry`. `prepare` builds the FormData for a value (return null to
+ * fail, e.g. when a record id can't be resolved); `onSaved` fires after every
+ * successful write with the persisted value — advance your baseline there, so
+ * a failed save never pretends the value was persisted.
+ */
+export function useAutoSave({
+  prepare,
   updateAction,
+  onSaved,
+  onSettled,
 }: {
-  // Absent on a lazy "new record" page — the id is created on first save via
-  // the LazyRecordProvider context.
-  id?: string
-  field: string
+  prepare: (value: string) => FormData | null | Promise<FormData | null>
   updateAction: (formData: FormData) => Promise<void>
+  /** Called after each successful write with the value that was persisted. */
+  onSaved?: (value: string) => void
+  /** Called once the queue settles on a successful save (no follow-up pending). */
+  onSettled?: () => void
 }) {
-  const lazy = useLazyRecord()
   const [state, setState] = useState<SaveState>('idle')
   const [, start] = useTransition()
   const latest = useRef<string>('')
@@ -48,40 +58,93 @@ function useAutoSave({
     setState('saving')
     start(async () => {
       try {
-        // Existing record: use the given id. New record: create the draft row
-        // on the first save (once), then write against it.
-        const rid = id ?? (lazy ? await lazy.ensureId() : null)
-        if (!rid) {
+        const fd = await prepare(value)
+        if (!fd) {
           inFlight.current = false
           setState('error')
           return
         }
-        const fd = new FormData()
-        fd.set('id', rid)
-        fd.set('field', field)
-        fd.set('value', value)
         await updateAction(fd)
+        onSaved?.(value)
         inFlight.current = false
         if (latest.current !== value) {
           save(latest.current) // user kept typing while we saved
         } else {
           setState('saved')
           setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
-          // Lazy record: hand off to the real record URL after the first save.
-          if (!id && lazy) lazy.notifySaved()
+          onSettled?.()
         }
       } catch {
         inFlight.current = false
-        setState('error')
+        if (latest.current !== value) {
+          save(latest.current) // a newer edit is queued — attempt it before surfacing the error
+        } else {
+          setState('error')
+        }
       }
     })
   }
 
-  return { state, setState, save }
+  return {
+    state,
+    setState,
+    save,
+    /** Re-attempt the last requested save (rendered as the error-state action). */
+    retry: () => save(latest.current),
+    /** True while a save is in flight or queued behind one. */
+    hasPending: () => inFlight.current,
+  }
 }
 
-function SaveDot({ state }: { state: SaveState }) {
+/** Record-field flavour: id + field + value FormData, with lazy-record support. */
+function useFieldAutoSave({
+  id,
+  field,
+  updateAction,
+  onSaved,
+}: {
+  // Absent on a lazy "new record" page — the id is created on first save via
+  // the LazyRecordProvider context.
+  id?: string
+  field: string
+  updateAction: (formData: FormData) => Promise<void>
+  onSaved?: (value: string) => void
+}) {
+  const lazy = useLazyRecord()
+  return useAutoSave({
+    prepare: async (value) => {
+      // Existing record: use the given id. New record: create the draft row
+      // on the first save (once), then write against it.
+      const rid = id ?? (lazy ? await lazy.ensureId() : null)
+      if (!rid) return null
+      const fd = new FormData()
+      fd.set('id', rid)
+      fd.set('field', field)
+      fd.set('value', value)
+      return fd
+    },
+    updateAction,
+    onSaved,
+    // Lazy record: hand off to the real record URL after the first save.
+    onSettled: () => {
+      if (!id && lazy) lazy.notifySaved()
+    },
+  })
+}
+
+export function SaveDot({ state, onRetry }: { state: SaveState; onRetry?: () => void }) {
   if (state === 'idle') return null
+  if (state === 'error' && onRetry) {
+    return (
+      <button
+        type="button"
+        onClick={onRetry}
+        className="text-[11px] font-medium text-red-600 hover:underline"
+      >
+        Not saved — retry
+      </button>
+    )
+  }
   return (
     <span
       className={cn(
@@ -103,13 +166,21 @@ function SaveDot({ state }: { state: SaveState }) {
   )
 }
 
-function FieldLabel({ label, state }: { label: string; state: SaveState }) {
+function FieldLabel({
+  label,
+  state,
+  onRetry,
+}: {
+  label: string
+  state: SaveState
+  onRetry?: () => void
+}) {
   return (
     <div className="flex items-center justify-between gap-2">
       <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
         {label}
       </label>
-      <SaveDot state={state} />
+      <SaveDot state={state} onRetry={onRetry} />
     </div>
   )
 }
@@ -139,9 +210,18 @@ export function LiveField({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const [value, setValue] = useState(initialValue ?? '')
-  const { state, setState, save } = useAutoSave({ id, field, updateAction })
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Last successfully persisted value — only advanced when a save succeeds, so
+  // a failed save keeps the field dirty and the advertised retry actually works.
   const baseline = useRef(initialValue ?? '')
+  const { state, setState, save, retry, hasPending } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v
+    },
+  })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Server revalidation (another section saved) refreshes props; adopt the
   // new value unless the user has unsaved edits in this exact field.
@@ -165,11 +245,12 @@ export function LiveField({
       clearTimeout(timer.current)
       timer.current = null
     }
-    if (next === baseline.current) {
+    // While a save is in flight the latest value must chase it, even when it
+    // matches the persisted baseline (a revert of the in-flight edit).
+    if (next === baseline.current && !hasPending()) {
       setState('idle')
       return
     }
-    baseline.current = next
     save(next)
   }
 
@@ -184,7 +265,7 @@ export function LiveField({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} />
+      <FieldLabel label={label} state={state} onRetry={retry} />
       {multiline ? <Textarea rows={rows} {...shared} /> : <Input type={type} {...shared} />}
     </div>
   )
@@ -213,11 +294,29 @@ export function LiveSelect({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const [value, setValue] = useState(initialValue ?? '')
-  const { state, save } = useAutoSave({ id, field, updateAction })
+  const baseline = useRef(initialValue ?? '')
+  const { state, save, retry } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v
+    },
+  })
+
+  // Adopt the server value on revalidation while idle (another section saved,
+  // or another user edited the record).
+  useEffect(() => {
+    const next = initialValue ?? ''
+    if (state === 'idle' && next !== baseline.current) {
+      baseline.current = next
+      setValue(next)
+    }
+  }, [initialValue, state])
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} />
+      <FieldLabel label={label} state={state} onRetry={retry} />
       <Select
         value={value}
         disabled={disabled}
@@ -261,11 +360,28 @@ export function LivePersonSelect({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const [value, setValue] = useState(initialValue ?? '')
-  const { state, save } = useAutoSave({ id, field, updateAction })
+  const baseline = useRef(initialValue ?? '')
+  const { state, save, retry } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v
+    },
+  })
+
+  // Adopt the server value on revalidation while idle.
+  useEffect(() => {
+    const next = initialValue ?? ''
+    if (state === 'idle' && next !== baseline.current) {
+      baseline.current = next
+      setValue(next)
+    }
+  }, [initialValue, state])
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} />
+      <FieldLabel label={label} state={state} onRetry={retry} />
       <SearchSelect
         value={value}
         onChange={(next) => {
@@ -302,19 +418,58 @@ export function LiveDateTime({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const [value, setValue] = useState(initialValue)
-  const { state, save } = useAutoSave({ id, field, updateAction })
+  const baseline = useRef(initialValue)
+  const { state, setState, save, retry, hasPending } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v
+    },
+  })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Adopt the server value on revalidation while idle.
+  useEffect(() => {
+    if (state === 'idle' && initialValue !== baseline.current) {
+      baseline.current = initialValue
+      setValue(initialValue)
+    }
+  }, [initialValue, state])
+
+  // Commit on blur (plus a debounce while keyboard edits settle) rather than on
+  // every change: datetime-local inputs emit '' for incomplete keyboard edits,
+  // and committing immediately would clear the column mid-edit. An empty commit
+  // IS saved — nullable timestamp columns are cleared server-side; required
+  // ones reject and surface the error state.
+  function onChange(next: string) {
+    setValue(next)
+    setState('dirty')
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => commit(next), 1200)
+  }
+
+  function commit(next: string) {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    if (next === baseline.current && !hasPending()) {
+      setState('idle')
+      return
+    }
+    save(next)
+  }
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} />
+      <FieldLabel label={label} state={state} onRetry={retry} />
       <Input
         type="datetime-local"
         value={value}
         disabled={disabled}
-        onChange={(e) => {
-          setValue(e.target.value)
-          if (e.target.value) save(e.target.value)
-        }}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => commit(value)}
       />
     </div>
   )
@@ -341,8 +496,15 @@ export function LiveToggle({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const [on, setOn] = useState(initialValue)
-  const { state, save } = useAutoSave({ id, field, updateAction })
   const baseline = useRef(initialValue)
+  const { state, save, retry } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v === 'true'
+    },
+  })
 
   useEffect(() => {
     if (state === 'idle' && initialValue !== baseline.current) {
@@ -355,7 +517,6 @@ export function LiveToggle({
     if (disabled) return
     const next = !on
     setOn(next)
-    baseline.current = next
     save(next ? 'true' : 'false')
   }
 
@@ -368,7 +529,13 @@ export function LiveToggle({
         ) : state === 'saved' ? (
           <span className="text-[11px] text-emerald-600">Saved ✓</span>
         ) : state === 'error' ? (
-          <span className="text-[11px] text-red-600">Retry</span>
+          <button
+            type="button"
+            onClick={retry}
+            className="text-[11px] font-medium text-red-600 hover:underline"
+          >
+            Not saved — retry
+          </button>
         ) : null}
       </span>
       <button
@@ -411,9 +578,8 @@ const SEVERITY_ACTIVE: Record<number, string> = {
 }
 
 /**
- * Editable 1–5 severity picker (the auto-save counterpart of the read-only
- * `SeverityRating`). Tap a cell to set; tap the active cell again to clear.
- * Saves the number as a string (empty clears the column to null).
+ * Editable 1–5 severity picker. Tap a cell to set; tap the active cell again
+ * to clear. Saves the number as a string (empty clears the column to null).
  */
 export function LiveSeverityRating({
   id,
@@ -431,8 +597,15 @@ export function LiveSeverityRating({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const [value, setValue] = useState<number | null>(initialValue)
-  const { state, save } = useAutoSave({ id, field, updateAction })
   const baseline = useRef(initialValue)
+  const { state, save, retry } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v === '' ? null : Number(v)
+    },
+  })
 
   useEffect(() => {
     if (state === 'idle' && initialValue !== baseline.current) {
@@ -445,13 +618,12 @@ export function LiveSeverityRating({
     if (disabled) return
     const next = value === n ? null : n
     setValue(next)
-    baseline.current = next
     save(next == null ? '' : String(next))
   }
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} />
+      <FieldLabel label={label} state={state} onRetry={retry} />
       <div className="flex items-center gap-1.5">
         {[1, 2, 3, 4, 5].map((n) => {
           const active = value === n
@@ -519,9 +691,16 @@ export function LiveRichText({
 }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(initialValue ?? '')
-  const { state, setState, save } = useAutoSave({ id, field, updateAction })
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const baseline = useRef(initialValue ?? '')
+  const { state, setState, save, retry, hasPending } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v
+    },
+  })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Adopt the server value on revalidation, unless we're editing this field.
   useEffect(() => {
@@ -544,11 +723,10 @@ export function LiveRichText({
       clearTimeout(timer.current)
       timer.current = null
     }
-    if (html === baseline.current) {
+    if (html === baseline.current && !hasPending()) {
       setState('idle')
       return
     }
-    baseline.current = html
     save(html)
   }
 
@@ -559,7 +737,7 @@ export function LiveRichText({
           {label}
         </label>
         <div className="flex items-center gap-2">
-          <SaveDot state={state} />
+          <SaveDot state={state} onRetry={retry} />
           {disabled ? null : editing ? (
             <button
               type="button"
@@ -613,7 +791,9 @@ export function LiveRichText({
           ) : (
             <div
               className="prose prose-sm prose-slate dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: value }}
+              // Stored narrative HTML is user-supplied — sanitize before
+              // rendering (defense-in-depth alongside write-side sanitization).
+              dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(value) }}
             />
           )}
         </div>

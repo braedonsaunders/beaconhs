@@ -165,18 +165,19 @@ export function GlobalSearch() {
         signal: ctrl.signal,
         cache: 'no-store',
       })
+      if (ctrl.signal.aborted) return
       if (!res.ok) {
         setGroups([])
         return
       }
       const body = (await res.json()) as SearchResponse
-      setGroups(body.groups ?? [])
-    } catch (err: unknown) {
-      if ((err as { name?: string })?.name !== 'AbortError') {
-        setGroups([])
-      }
+      if (!ctrl.signal.aborted) setGroups(body.groups ?? [])
+    } catch {
+      if (!ctrl.signal.aborted) setGroups([])
     } finally {
-      setLoading(false)
+      // An aborted request must not touch loading/results — its replacement
+      // is still in flight and owns the spinner.
+      if (!ctrl.signal.aborted) setLoading(false)
     }
   }, [])
 

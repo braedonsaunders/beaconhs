@@ -26,6 +26,7 @@ import { mergeHref, pickString } from '@/lib/list-params'
 import { entityConfig } from '@/lib/custom-fields/config'
 import { loadAllCustomFieldDefs, loadSubtypeOptions } from '@/lib/custom-fields/queries'
 import { deleteCustomFieldDefAction, saveCustomFieldDefAction } from '@/lib/custom-fields/actions'
+import { ConfirmButton } from '@/components/confirm-button'
 import { CustomFieldsDesignerDrawer, type DesignerEditing } from './custom-fields-designer-drawer'
 
 export async function CustomFieldsAdminPage({
@@ -172,13 +173,15 @@ export async function CustomFieldsAdminPage({
                         <form action={deleteCustomFieldDefAction} className="inline">
                           <input type="hidden" name="kind" value={kind} />
                           <input type="hidden" name="id" value={d.id} />
-                          <button
-                            type="submit"
-                            title="Delete field"
-                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                          <ConfirmButton
+                            variant="ghost"
+                            size="icon"
+                            message={`Delete the "${d.label}" field? Captured values stay in record metadata but will no longer be shown.`}
+                            className="h-7 w-7 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                           >
                             <Trash2 size={14} />
-                          </button>
+                            <span className="sr-only">Delete field</span>
+                          </ConfirmButton>
                         </form>
                       </div>
                     </TableCell>

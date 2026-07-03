@@ -5,7 +5,7 @@
 // `updateCustomFieldValueAction` (entityKind + id + key + value). Renders the
 // right control per field type; a status dot mirrors the rest of the app.
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Input, Select, Textarea, cn } from '@beaconhs/ui'
 import {
   CUSTOM_FIELD_TYPE_META,
@@ -13,8 +13,7 @@ import {
   type CustomFieldEntityKind,
   type CustomFieldType,
 } from '@beaconhs/forms-core'
-
-type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+import { SaveDot, useAutoSave, type SaveState } from '@/components/live-field'
 
 export type CustomFieldInputDef = {
   key: string
@@ -40,37 +39,27 @@ export function CustomFieldInput({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
-  const [state, setState] = useState<SaveState>('idle')
-  const [, start] = useTransition()
-  const latest = useRef<string>('')
-  const inFlight = useRef(false)
-
-  function persist(value: string) {
-    latest.current = value
-    if (inFlight.current) return
-    inFlight.current = true
-    setState('saving')
-    start(async () => {
-      try {
-        const fd = new FormData()
-        fd.set('entityKind', entityKind)
-        fd.set('id', recordId)
-        fd.set('key', def.key)
-        fd.set('value', value)
-        await updateAction(fd)
-        inFlight.current = false
-        if (latest.current !== value) {
-          persist(latest.current)
-        } else {
-          setState('saved')
-          setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
-        }
-      } catch {
-        inFlight.current = false
-        setState('error')
-      }
-    })
-  }
+  // Last successfully persisted value (text-like controls only) — advanced in
+  // onSaved so a failed save keeps the field dirty and retry works.
+  const baseline = useRef(
+    typeof initialValue === 'string' || typeof initialValue === 'number'
+      ? String(initialValue)
+      : '',
+  )
+  const { state, setState, save, retry, hasPending } = useAutoSave({
+    prepare: (value) => {
+      const fd = new FormData()
+      fd.set('entityKind', entityKind)
+      fd.set('id', recordId)
+      fd.set('key', def.key)
+      fd.set('value', value)
+      return fd
+    },
+    updateAction,
+    onSaved: (v) => {
+      baseline.current = v
+    },
+  })
 
   const meta = CUSTOM_FIELD_TYPE_META[def.fieldType]
 
@@ -81,7 +70,7 @@ export function CustomFieldInput({
           {def.label}
           {def.required ? <span className="text-red-600"> *</span> : null}
         </label>
-        <SaveDot state={state} />
+        <SaveDot state={state} onRetry={retry} />
       </div>
       <Control
         def={def}
@@ -89,7 +78,9 @@ export function CustomFieldInput({
         disabled={disabled}
         initialValue={initialValue}
         setState={setState}
-        persist={persist}
+        persist={save}
+        baseline={baseline}
+        hasPending={hasPending}
       />
       {def.helpText ? (
         <p className="text-xs text-slate-400 dark:text-slate-500">{def.helpText}</p>
@@ -107,6 +98,8 @@ function Control({
   initialValue,
   setState,
   persist,
+  baseline,
+  hasPending,
 }: {
   def: CustomFieldInputDef
   meta: (typeof CUSTOM_FIELD_TYPE_META)[CustomFieldType]
@@ -114,6 +107,8 @@ function Control({
   initialValue: unknown
   setState: (s: SaveState) => void
   persist: (value: string) => void
+  baseline: { current: string }
+  hasPending: () => boolean
 }) {
   switch (def.fieldType) {
     case 'select':
@@ -156,6 +151,8 @@ function Control({
           }
           setState={setState}
           persist={persist}
+          baseline={baseline}
+          hasPending={hasPending}
         />
       )
   }
@@ -282,6 +279,8 @@ function TextLikeControl({
   initialValue,
   setState,
   persist,
+  baseline,
+  hasPending,
 }: {
   def: CustomFieldInputDef
   meta: (typeof CUSTOM_FIELD_TYPE_META)[CustomFieldType]
@@ -289,10 +288,11 @@ function TextLikeControl({
   initialValue: string
   setState: (s: SaveState) => void
   persist: (value: string) => void
+  baseline: { current: string }
+  hasPending: () => boolean
 }) {
   const [value, setValue] = useState(initialValue)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const baseline = useRef(initialValue)
 
   useEffect(() => {
     return () => {
@@ -305,11 +305,12 @@ function TextLikeControl({
       clearTimeout(timer.current)
       timer.current = null
     }
-    if (next === baseline.current) {
+    // Baseline only advances after a successful save (in the parent's onSaved),
+    // so a failed save stays retryable instead of dead-ending on this check.
+    if (next === baseline.current && !hasPending()) {
       setState('idle')
       return
     }
-    baseline.current = next
     persist(next)
   }
 
@@ -372,26 +373,4 @@ function TextLikeControl({
     )
   }
   return input
-}
-
-function SaveDot({ state }: { state: SaveState }) {
-  if (state === 'idle') return null
-  return (
-    <span
-      className={cn(
-        'text-[11px] font-medium',
-        (state === 'saving' || state === 'dirty') && 'text-slate-400',
-        state === 'saved' && 'text-emerald-600',
-        state === 'error' && 'text-red-600',
-      )}
-    >
-      {state === 'saving'
-        ? 'Saving…'
-        : state === 'dirty'
-          ? '…'
-          : state === 'saved'
-            ? 'Saved ✓'
-            : 'Not saved — retry'}
-    </span>
-  )
 }

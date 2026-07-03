@@ -24,6 +24,10 @@ export function SearchInput({
 
   useEffect(() => {
     const handle = setTimeout(() => {
+      // No-op when the input already matches the URL (mount, external URL
+      // change) — navigating anyway would strip the page param and reset
+      // deep-linked/refreshed pagination back to page 1.
+      if (value === (search.get(paramKey) ?? '')) return
       const next = new URLSearchParams(search.toString())
       if (value) next.set(paramKey, value)
       else next.delete(paramKey)

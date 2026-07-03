@@ -1,30 +1,48 @@
 'use client'
 
-// Client-side filter bar for the SMS log list: recipient (phone) text input +
-// from/to date pickers. Pushes updates to the URL via router.replace so the
-// list page (server component) re-renders. Route-agnostic — works under both
-// /admin/sms-log and /platform/sms-log. Mirrors the email-log filters.
+// Client-side filter controls shared by the email-log and SMS-log list views:
+// a debounced text param filter (recipient address / phone) and from/to date
+// pickers. Updates push to the URL via router.replace so the list page (server
+// component) re-renders. Route-agnostic — they push to the current pathname,
+// so they work under both the /admin and /platform log routes.
 
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Input, Label } from '@beaconhs/ui'
 
-export function PhoneFilter() {
+export function TextParamFilter({
+  paramKey,
+  label,
+  type = 'text',
+  placeholder,
+  className = 'h-8 w-56',
+}: {
+  paramKey: string
+  label: string
+  type?: 'text' | 'tel'
+  placeholder?: string
+  className?: string
+}) {
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
-  const [value, setValue] = useState(search.get('recipient') ?? '')
+  const [value, setValue] = useState(search.get(paramKey) ?? '')
 
   useEffect(() => {
+    // Re-sync the input when the URL changes externally (back/forward, chip clear).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setValue(search.get('recipient') ?? '')
-  }, [search])
+    setValue(search.get(paramKey) ?? '')
+  }, [search, paramKey])
 
   useEffect(() => {
     const handle = setTimeout(() => {
+      // No-op when the input already matches the URL (mount, external URL
+      // change) — navigating anyway would strip the page param and reset
+      // deep-linked/refreshed pagination back to page 1.
+      if (value === (search.get(paramKey) ?? '')) return
       const next = new URLSearchParams(search.toString())
-      if (value) next.set('recipient', value)
-      else next.delete('recipient')
+      if (value) next.set(paramKey, value)
+      else next.delete(paramKey)
       next.delete('page')
       const qs = next.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname)
@@ -35,16 +53,16 @@ export function PhoneFilter() {
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="recipient" className="text-xs">
-        Recipient
+      <Label htmlFor={paramKey} className="text-xs">
+        {label}
       </Label>
       <Input
-        id="recipient"
-        type="tel"
-        className="h-8 w-48"
+        id={paramKey}
+        type={type}
+        className={className}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="+15551234567"
+        placeholder={placeholder}
       />
     </div>
   )
@@ -58,6 +76,7 @@ export function DateRangeFilter() {
   const [to, setTo] = useState(search.get('to') ?? '')
 
   useEffect(() => {
+    // Re-sync the inputs when the URL changes externally (back/forward, chip clear).
     /* eslint-disable react-hooks/set-state-in-effect */
     setFrom(search.get('from') ?? '')
     setTo(search.get('to') ?? '')

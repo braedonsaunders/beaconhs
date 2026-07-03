@@ -160,7 +160,7 @@ export function AiAssistant({
                   key={c.id}
                   className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
                     c.id === conversationId
-                      ? 'bg-violet-50'
+                      ? 'bg-violet-50 dark:bg-violet-950/40'
                       : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                   }`}
                 >

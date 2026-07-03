@@ -29,7 +29,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { DateRangeFilter, RecipientFilter } from './filters'
+import { DateRangeFilter, TextParamFilter } from '@/components/log-filters'
 
 export type EmailLogScope = 'tenant' | 'platform'
 
@@ -116,17 +116,18 @@ export async function EmailLogListView({
     if (recipientFilter) {
       filters.push(ilike(emailLog.recipientPrimary, `%${recipientFilter}%`))
     }
+    // Ignore malformed date params — new Date('garbage') doesn't throw, it
+    // returns an Invalid Date that blows up during query serialization.
     if (fromDate) {
-      try {
-        filters.push(gte(emailLog.createdAt, new Date(fromDate)))
-      } catch {}
+      const start = new Date(fromDate)
+      if (!Number.isNaN(start.getTime())) filters.push(gte(emailLog.createdAt, start))
     }
     if (toDate) {
-      try {
-        const end = new Date(toDate)
+      const end = new Date(toDate)
+      if (!Number.isNaN(end.getTime())) {
         end.setHours(23, 59, 59, 999)
         filters.push(lte(emailLog.createdAt, end))
-      } catch {}
+      }
     }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
@@ -200,7 +201,11 @@ export async function EmailLogListView({
           />
           <TableToolbar>
             <SearchInput placeholder="Search subject, recipient, category" />
-            <RecipientFilter />
+            <TextParamFilter
+              paramKey="recipient"
+              label="Recipient"
+              placeholder="user@example.com"
+            />
             <DateRangeFilter />
             <FilterChips
               basePath={basePath}

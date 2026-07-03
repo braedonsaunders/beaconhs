@@ -140,7 +140,7 @@ export function TabNav({
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-xs leading-none transition-colors duration-150',
                     isActive
-                      ? 'bg-teal-100 text-teal-900 dark:text-teal-300'
+                      ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
                       : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
                   )}
                 >

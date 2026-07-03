@@ -24,29 +24,33 @@ export function Section({
   const [open, setOpen] = useState(defaultOpen)
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60"
-        aria-expanded={open}
-      >
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
-            <ChevronDown
-              size={16}
-              className={cn(
-                'text-slate-400 transition-transform dark:text-slate-500',
-                open ? '' : '-rotate-90',
-              )}
-            />
-            {title}
+      {/* Actions sit beside (not inside) the toggle button — consumers pass
+          real links/buttons, and nested interactive elements are invalid HTML. */}
+      <div className="flex items-center gap-3 pr-5">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-3 px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60"
+          aria-expanded={open}
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
+              <ChevronDown
+                size={16}
+                className={cn(
+                  'text-slate-400 transition-transform dark:text-slate-500',
+                  open ? '' : '-rotate-90',
+                )}
+              />
+              {title}
+            </div>
+            {subtitle ? (
+              <div className="ml-6 text-xs text-slate-500 dark:text-slate-400">{subtitle}</div>
+            ) : null}
           </div>
-          {subtitle ? (
-            <div className="ml-6 text-xs text-slate-500 dark:text-slate-400">{subtitle}</div>
-          ) : null}
-        </div>
-        {actions ? <div onClick={(e) => e.stopPropagation()}>{actions}</div> : null}
-      </button>
+        </button>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
       {open ? (
         <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-800">{children}</div>
       ) : null}

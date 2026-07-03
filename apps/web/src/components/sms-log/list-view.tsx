@@ -28,7 +28,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { DateRangeFilter, PhoneFilter } from './filters'
+import { DateRangeFilter, TextParamFilter } from '@/components/log-filters'
 
 export type SmsLogScope = 'tenant' | 'platform'
 
@@ -112,17 +112,18 @@ export async function SmsLogListView({
     if (recipientFilter) {
       filters.push(ilike(smsLog.recipient, `%${recipientFilter}%`))
     }
+    // Ignore malformed date params — new Date('garbage') doesn't throw, it
+    // returns an Invalid Date that blows up during query serialization.
     if (fromDate) {
-      try {
-        filters.push(gte(smsLog.createdAt, new Date(fromDate)))
-      } catch {}
+      const start = new Date(fromDate)
+      if (!Number.isNaN(start.getTime())) filters.push(gte(smsLog.createdAt, start))
     }
     if (toDate) {
-      try {
-        const end = new Date(toDate)
+      const end = new Date(toDate)
+      if (!Number.isNaN(end.getTime())) {
         end.setHours(23, 59, 59, 999)
         filters.push(lte(smsLog.createdAt, end))
-      } catch {}
+      }
     }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
@@ -194,7 +195,13 @@ export async function SmsLogListView({
           />
           <TableToolbar>
             <SearchInput placeholder="Search number, message, category" />
-            <PhoneFilter />
+            <TextParamFilter
+              paramKey="recipient"
+              label="Recipient"
+              type="tel"
+              placeholder="+15551234567"
+              className="h-8 w-48"
+            />
             <DateRangeFilter />
             <FilterChips
               basePath={basePath}
