@@ -2,7 +2,7 @@
 // into `compliance_status` (the scoreboard the hub reads + the worker keeps
 // fresh). Idempotent upsert keyed on (obligationId, subjectKey) + delete-stale.
 
-import { and, eq, isNull, notInArray } from 'drizzle-orm'
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { complianceAudience, complianceObligations, complianceStatus } from '@beaconhs/db/schema'
 import { type AudienceItem } from './audience'
@@ -86,14 +86,17 @@ export async function materializeObligation(
     }
   }
 
-  for (const r of result.rows) {
+  // Batched upsert: per-record adapters can return thousands of rows per
+  // obligation. Insert in chunks with a single onConflictDoUpdate using
+  // `excluded.*` references instead of one round-trip per subject.
+  const valueRows = result.rows.map((r) => {
     const percent =
       r.status === 'completed'
         ? 100
         : r.expected
           ? Math.round(((r.count ?? 0) / r.expected) * 100)
           : 0
-    const values = {
+    return {
       tenantId,
       obligationId: ob.id,
       personId: r.personId,
@@ -107,21 +110,24 @@ export async function materializeObligation(
       percent,
       computedAt: now,
     }
+  })
+  const CHUNK = 500
+  for (let i = 0; i < valueRows.length; i += CHUNK) {
     await tx
       .insert(complianceStatus)
-      .values(values)
+      .values(valueRows.slice(i, i + CHUNK))
       .onConflictDoUpdate({
         target: [complianceStatus.obligationId, complianceStatus.subjectKey],
         set: {
-          personId: values.personId,
-          subjectRef: values.subjectRef,
-          dueOn: values.dueOn,
-          status: values.status,
-          completedOn: values.completedOn,
-          count: values.count,
-          expected: values.expected,
-          percent: values.percent,
-          computedAt: now,
+          personId: sql`excluded.person_id`,
+          subjectRef: sql`excluded.subject_ref`,
+          dueOn: sql`excluded.due_on`,
+          status: sql`excluded.status`,
+          completedOn: sql`excluded.completed_on`,
+          count: sql`excluded.count`,
+          expected: sql`excluded.expected`,
+          percent: sql`excluded.percent`,
+          computedAt: sql`excluded.computed_at`,
         },
       })
   }

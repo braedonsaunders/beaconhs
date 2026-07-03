@@ -4,15 +4,17 @@
 // `compliance_obligations` row + its audience and returns one status row per
 // SUBJECT — a person (per_person), a record (per_record), or a task×person
 // (per_task) — by reading each module's OWN completion tables. Pure: takes a
-// `tx`, so the web wraps it in `ctx.db(...)` and the worker in
-// `withTenant(...)` / `withSuperAdmin(...)`.
+// `tx`, so the web wraps it in `ctx.db(...)` and the worker in `withTenant(...)`
+// (the compliance scanner runs per-tenant with RLS applied). Every query still
+// pins tenantId explicitly as defense-in-depth.
 
-import { and, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
   correctiveActions,
   documentAcknowledgments,
+  documentVersions,
   equipmentItems,
   formResponseParticipants,
   hazidAssessmentSignatures,
@@ -95,13 +97,13 @@ function pname(first: string | null, last: string | null): string {
   return `${last ?? ''}${last && first ? ', ' : ''}${first ?? ''}`.trim() || '(unnamed)'
 }
 
-async function loadNames(tx: Tx, ids: string[]): Promise<Map<string, string>> {
+async function loadNames(tx: Tx, tid: string, ids: string[]): Promise<Map<string, string>> {
   const m = new Map<string, string>()
   if (ids.length === 0) return m
   const rows = await tx
     .select({ id: people.id, first: people.firstName, last: people.lastName })
     .from(people)
-    .where(inArray(people.id, ids))
+    .where(and(eq(people.tenantId, tid), inArray(people.id, ids)))
   for (const r of rows) m.set(r.id, pname(r.first, r.last))
   return m
 }
@@ -171,7 +173,7 @@ async function evalTraining(
 ): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
-  const names = await loadNames(tx, ids)
+  const names = await loadNames(tx, tid, ids)
   const ref = ob.targetRef ?? {}
   const done = new Map<string, string>() // personId -> completedOn
 
@@ -261,7 +263,37 @@ async function evalDocument(
 ): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.documentId) return empty()
   const ids = members.map((m) => m.personId)
-  const names = await loadNames(tx, ids)
+  const names = await loadNames(tx, tid, ids)
+  // Acknowledgments are per-version: republishing a document requires everyone to
+  // re-acknowledge. Resolve the document's current published version (latest
+  // published `document_versions` row, matching the module's own _ack-actions
+  // logic) and only count acks for that version so republish resets compliance.
+  const [current] = await tx
+    .select({ id: documentVersions.id })
+    .from(documentVersions)
+    .where(
+      and(
+        eq(documentVersions.tenantId, tid),
+        eq(documentVersions.documentId, ob.targetRef.documentId),
+        isNotNull(documentVersions.publishedAt),
+      ),
+    )
+    .orderBy(desc(documentVersions.version))
+    .limit(1)
+  if (!current) {
+    // No published version yet — nobody can have acknowledged the current one.
+    const dueOnNoVer = ob.recurrence?.dueOn ?? null
+    return tally(
+      ids.map((pid) =>
+        personRow(
+          pid,
+          names.get(pid) ?? '(unnamed)',
+          dueOnNoVer && dueOnNoVer < today ? 'overdue' : 'pending',
+          { dueOn: dueOnNoVer, completedOn: null },
+        ),
+      ),
+    )
+  }
   const acks = await tx
     .select({
       personId: documentAcknowledgments.personId,
@@ -270,7 +302,9 @@ async function evalDocument(
     .from(documentAcknowledgments)
     .where(
       and(
+        eq(documentAcknowledgments.tenantId, tid),
         eq(documentAcknowledgments.documentId, ob.targetRef.documentId),
+        eq(documentAcknowledgments.versionId, current.id),
         inArray(documentAcknowledgments.personId, ids),
       ),
     )
@@ -298,7 +332,7 @@ async function evalJournal(
 ): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
-  const names = await loadNames(tx, ids)
+  const names = await loadNames(tx, tid, ids)
   const since = periodStart(ob.recurrence?.frequency, today)
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
   const counts = await tx
@@ -333,7 +367,7 @@ async function evalForm(
 ): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.formTemplateId) return empty()
   const ids = members.map((m) => m.personId)
-  const names = await loadNames(tx, ids)
+  const names = await loadNames(tx, tid, ids)
   const since = periodStart(ob.recurrence?.frequency ?? 'week', today)
   const parts = await tx
     .select({
@@ -343,6 +377,7 @@ async function evalForm(
     .from(formResponseParticipants)
     .where(
       and(
+        eq(formResponseParticipants.tenantId, tid),
         eq(formResponseParticipants.templateId, ob.targetRef.formTemplateId),
         inArray(formResponseParticipants.personId, ids),
         gte(formResponseParticipants.occurredOn, since),
@@ -369,7 +404,7 @@ async function evalInspection(
 ): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.inspectionTypeId) return empty()
   const ids = members.map((m) => m.personId)
-  const names = await loadNames(tx, ids)
+  const names = await loadNames(tx, tid, ids)
   const since = periodStart(ob.recurrence?.frequency, today)
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
 
@@ -433,7 +468,7 @@ async function evalHazardAssessment(
 ): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
-  const names = await loadNames(tx, ids)
+  const names = await loadNames(tx, tid, ids)
   const since = periodStart(ob.recurrence?.frequency, today)
   const sinceTs = new Date(`${since}T00:00:00Z`)
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
@@ -545,7 +580,6 @@ async function evalEquipment(tx: Tx, tid: string, ob: Ob, today: string): Promis
         isNull(equipmentItems.deletedAt),
       ),
     )
-    .limit(2000)
   return tally(
     rows.map((r) =>
       recordRow(r.id, `${r.name} (${r.tag})`, expiryStatus(r.due, today, remind), r.due),
@@ -573,7 +607,6 @@ async function evalPpe(tx: Tx, tid: string, ob: Ob, today: string): Promise<Eval
         isNull(ppeItems.deletedAt),
       ),
     )
-    .limit(2000)
   return tally(
     rows.map((r) => {
       const due = [r.inspection, r.expiresOn].filter(Boolean).sort()[0] ?? null
@@ -619,7 +652,6 @@ async function evalCorrectiveAction(
         isNull(correctiveActions.deletedAt),
       ),
     )
-    .limit(2000)
   if (rows.length === 0) return empty()
 
   // Resolve each CA owner (tenantUser) → login userId directly. A CA is owned by
@@ -688,6 +720,7 @@ async function evalJobTitle(tx: Tx, tid: string, ob: Ob): Promise<EvalResult> {
     .from(jobTitleTaskAcknowledgments)
     .where(
       and(
+        eq(jobTitleTaskAcknowledgments.tenantId, tid),
         inArray(jobTitleTaskAcknowledgments.taskId, taskIds),
         inArray(jobTitleTaskAcknowledgments.personId, personIds),
       ),

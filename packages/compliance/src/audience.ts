@@ -8,7 +8,7 @@
 // Returns BOTH the person id and the linked user id: the web needs personId for
 // compliance status; the worker needs userId for notifications.
 
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   people,
@@ -36,7 +36,8 @@ export type ResolvedMember = { personId: string; userId: string | null }
 /**
  * Resolve an obligation's audience rows to a deduplicated set of people
  * (id + linked user id). `everyone` short-circuits to all active people.
- * Always pins tenantId explicitly (the worker runs with RLS bypassed).
+ * Callers apply RLS (web `ctx.db`, worker `withTenant`), but every query still
+ * pins tenantId explicitly as defense-in-depth against a future bypass-RLS tx.
  */
 export async function resolveObligationAudience(
   tx: Database,
@@ -93,6 +94,9 @@ export async function resolveObligationAudience(
     )
   }
   if (orgUnitIds.length > 0) {
+    // Only assignments whose validity window covers today count toward the
+    // audience — ended assignments (validTo in the past) age out.
+    const today = sql`current_date`
     add(
       await tx
         .select({ id: people.id, userId: people.userId })
@@ -102,6 +106,8 @@ export async function resolveObligationAudience(
           and(
             eq(peopleAssignments.tenantId, tenantId),
             inArray(peopleAssignments.orgUnitId, orgUnitIds),
+            lte(peopleAssignments.validFrom, today),
+            or(isNull(peopleAssignments.validTo), gte(peopleAssignments.validTo, today)),
             baseActive,
           ),
         ),
