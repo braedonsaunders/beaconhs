@@ -13,11 +13,13 @@ import {
   Plus,
   QrCode,
   Search,
+  Trash2,
   Truck,
   Wrench,
 } from 'lucide-react'
 import { NewWorkOrderDrawer } from './_work-order-drawer'
 import { NewTruckLogEntryDrawer } from './_truck-log-drawer'
+import { EquipmentFileDrawer } from './_files-drawer'
 import {
   Alert,
   AlertDescription,
@@ -60,7 +62,7 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { deleteObject, publicUrl } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
@@ -81,7 +83,7 @@ const TABS = [
   'inspections',
   'work_orders',
   'log',
-  'certificates',
+  'files',
   'activity',
 ] as const
 type Tab = (typeof TABS)[number]
@@ -503,6 +505,84 @@ async function createTruckLogEntryAction(input: {
   return { ok: true }
 }
 
+const EQUIPMENT_FILE_KINDS = ['certificate', 'manual', 'photo', 'receipt', 'warranty', 'other']
+
+// Tag an already-uploaded attachment as a file for this asset. The file is
+// uploaded via the shared FileUploader (which inserts the `attachments` row);
+// this stamps `exif.equipmentId` (plus category + optional label) so it surfaces
+// under the Files tab.
+async function attachEquipmentFile(input: {
+  itemId: string
+  attachmentId: string
+  kind: string
+  label: string | null
+}): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  const itemId = input.itemId.trim()
+  const attachmentId = input.attachmentId.trim()
+  if (!itemId || !attachmentId) return { ok: false, error: 'Missing file.' }
+  const kind = EQUIPMENT_FILE_KINDS.includes(input.kind) ? input.kind : 'other'
+
+  const att = await ctx.db(async (tx) => {
+    const [row] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).limit(1)
+    return row
+  })
+  if (!att) return { ok: false, error: 'Uploaded file not found.' }
+
+  const label = input.label?.trim() || null
+  await ctx.db((tx) =>
+    tx
+      .update(attachments)
+      .set({
+        exif: { ...(att.exif ?? {}), equipmentId: itemId, kind, ...(label ? { label } : {}) },
+      })
+      .where(eq(attachments.id, attachmentId)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'equipment',
+    entityId: itemId,
+    action: 'update',
+    summary: `Uploaded file ${label ?? att.filename}`,
+    after: { attachmentId, filename: att.filename, kind, label },
+  })
+  revalidatePath(`/equipment/${itemId}`)
+  return { ok: true }
+}
+
+async function deleteEquipmentFile(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  const itemId = String(formData.get('itemId') ?? '').trim()
+  const attachmentId = String(formData.get('attachmentId') ?? '').trim()
+  if (!itemId || !attachmentId) return
+
+  const att = await ctx.db(async (tx) => {
+    const [row] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).limit(1)
+    return row
+  })
+  // Only delete a document actually tagged to this asset (defence in depth).
+  if (!att || (att.exif as Record<string, unknown> | null)?.equipmentId !== itemId) return
+
+  await ctx.db((tx) => tx.delete(attachments).where(eq(attachments.id, attachmentId)))
+  // Best-effort removal of the underlying object; the DB row is the record of truth.
+  try {
+    await deleteObject({ key: att.r2Key })
+  } catch {
+    // Orphaned object is harmless; the file no longer appears in the app.
+  }
+  await recordAudit(ctx, {
+    entityType: 'equipment',
+    entityId: itemId,
+    action: 'delete',
+    summary: `Removed file ${att.filename}`,
+    before: { attachmentId, filename: att.filename },
+  })
+  revalidatePath(`/equipment/${itemId}`)
+}
+
 // ---------------- Page ----------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -530,12 +610,14 @@ export default async function EquipmentDetailPage({
         site: orgUnits,
         holder: people,
         missingReporter: { id: user.id, name: user.name },
+        photoKey: attachments.r2Key,
       })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
       .leftJoin(user, eq(user.id, equipmentItems.missingReportedBy))
+      .leftJoin(attachments, eq(attachments.id, equipmentItems.photoAttachmentId))
       .where(eq(equipmentItems.id, id))
       .limit(1)
     if (!row) return null
@@ -641,6 +723,7 @@ export default async function EquipmentDetailPage({
 
     return {
       ...row,
+      photoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
       history,
       workOrders,
       sites,
@@ -661,6 +744,7 @@ export default async function EquipmentDetailPage({
     site,
     holder,
     missingReporter,
+    photoUrl,
     history,
     workOrders,
     sites,
@@ -795,9 +879,18 @@ export default async function EquipmentDetailPage({
           <aside className="space-y-3">
             <Card>
               <CardContent className="space-y-3 p-5 text-sm">
-                <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400">
-                  <Truck size={48} />
-                </div>
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrl}
+                    alt={item.name}
+                    className="h-32 w-full rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                    <Truck size={48} />
+                  </div>
+                )}
                 <div className="text-center">
                   <div className="text-base font-semibold">{item.name}</div>
                   <div className="text-xs text-slate-500">{type?.name ?? '—'}</div>
@@ -833,7 +926,7 @@ export default async function EquipmentDetailPage({
                 },
                 { key: 'work_orders', label: 'Work orders', count: openWOs.length },
                 { key: 'log', label: 'Log', count: logEntries.length },
-                { key: 'certificates', label: 'Certificates', count: certAttachments.length },
+                { key: 'files', label: 'Files', count: certAttachments.length },
                 { key: 'activity', label: 'Activity' },
               ]}
             />
@@ -1266,50 +1359,103 @@ export default async function EquipmentDetailPage({
                 </div>
               ) : null}
 
-              {active === 'certificates' ? (
+              {active === 'files' ? (
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Certificates ({certAttachments.length})</CardTitle>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                    <CardTitle>Files ({certAttachments.length})</CardTitle>
+                    {locked ? null : (
+                      <Link href={`${basePath}?tab=files&drawer=upload-file` as any}>
+                        <Button size="sm">
+                          <Plus size={14} /> Upload file
+                        </Button>
+                      </Link>
+                    )}
                   </CardHeader>
                   <CardContent>
                     {certAttachments.length === 0 ? (
                       <EmptyState
                         icon={<FileText size={24} />}
-                        title="No certificates attached"
-                        description="Upload calibration, inspection, or warranty certificates tagged to this equipment."
+                        title="No files attached"
+                        description="Upload certificates, manuals, photos, receipts, and other documents tagged to this asset."
+                        action={
+                          locked ? undefined : (
+                            <Link href={`${basePath}?tab=files&drawer=upload-file` as any}>
+                              <Button size="sm" variant="outline">
+                                <Plus size={14} /> Upload file
+                              </Button>
+                            </Link>
+                          )
+                        }
                       />
                     ) : (
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>File</TableHead>
-                            <TableHead>Type</TableHead>
+                            <TableHead>Category</TableHead>
                             <TableHead>Size</TableHead>
                             <TableHead>Uploaded</TableHead>
                             <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {certAttachments.map((a) => (
-                            <TableRow key={a.id}>
-                              <TableCell className="font-medium">{a.filename}</TableCell>
-                              <TableCell className="text-slate-600">{a.contentType}</TableCell>
-                              <TableCell className="text-slate-600">
-                                {humanSize(a.sizeBytes)}
-                              </TableCell>
-                              <TableCell>{new Date(a.createdAt).toLocaleDateString()}</TableCell>
-                              <TableCell>
-                                <a
-                                  href={publicUrl(a.r2Key)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-teal-700 hover:underline"
-                                >
-                                  Open →
-                                </a>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {certAttachments.map((a) => {
+                            const exif = a.exif as Record<string, unknown> | null
+                            const fileLabel = exif?.label
+                            const fileKind = typeof exif?.kind === 'string' ? exif.kind : null
+                            return (
+                              <TableRow key={a.id}>
+                                <TableCell className="font-medium">
+                                  {typeof fileLabel === 'string' && fileLabel ? (
+                                    <>
+                                      <div>{fileLabel}</div>
+                                      <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                        {a.filename}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    a.filename
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {(fileKind ?? 'document').replace('_', ' ')}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  {humanSize(a.sizeBytes)}
+                                </TableCell>
+                                <TableCell>
+                                  {new Date(a.createdAt).toLocaleDateString()}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center justify-end gap-3">
+                                    <a
+                                      href={publicUrl(a.r2Key)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                    >
+                                      Open →
+                                    </a>
+                                    {locked ? null : (
+                                      <form action={deleteEquipmentFile} className="inline">
+                                        <input type="hidden" name="itemId" value={id} />
+                                        <input type="hidden" name="attachmentId" value={a.id} />
+                                        <button
+                                          type="submit"
+                                          title="Remove file"
+                                          className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </form>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                         </TableBody>
                       </Table>
                     )}
@@ -1736,6 +1882,13 @@ export default async function EquipmentDetailPage({
         sites={sites.filter((s) => s.level === 'site')}
         defaultDate={new Date().toISOString().slice(0, 10)}
         action={createTruckLogEntryAction}
+      />
+
+      <EquipmentFileDrawer
+        open={drawerKey === 'upload-file' && !locked}
+        closeHref={closeHref}
+        itemId={id}
+        attachAction={attachEquipmentFile}
       />
 
       <UrlDrawer
