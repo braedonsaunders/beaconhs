@@ -1,5 +1,6 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Card, CardContent, DetailHeader } from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { loadScheduleFormData } from '../_data'
@@ -14,6 +15,7 @@ export default async function NewSchedulePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const ctx = await requireRequestContext()
+  if (!can(ctx, 'reports.schedule')) redirect('/reports/schedules')
   const sp = await searchParams
   const presetDefinitionId = typeof sp.definitionId === 'string' ? sp.definitionId : undefined
 

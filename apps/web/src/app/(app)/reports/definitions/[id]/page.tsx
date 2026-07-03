@@ -32,6 +32,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../_definitions'
@@ -87,6 +88,8 @@ export default async function ReportViewerPage({
     return [s, r] as const
   })
 
+  const canSchedule = can(ctx, 'reports.schedule')
+  const canBuild = can(ctx, 'reports.builder')
   const isCustom = definition.kind === 'custom'
   // Every report is editable: custom edits in place; a built-in opens an
   // editable copy you own (the original stays in the catalogue).
@@ -113,24 +116,30 @@ export default async function ReportViewerPage({
           }
           actions={
             <>
-              <form action={runBound}>
-                <Button type="submit" variant="outline" size="sm">
-                  <Mail size={14} className="mr-1.5" />
-                  Email PDF
-                </Button>
-              </form>
-              <Link href={editHref as never}>
-                <Button variant="outline" size="sm">
-                  <Pencil size={14} className="mr-1.5" />
-                  Edit
-                </Button>
-              </Link>
-              <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
-                <Button size="sm">
-                  <Calendar size={14} className="mr-1.5" />
-                  Subscribe
-                </Button>
-              </Link>
+              {canSchedule ? (
+                <form action={runBound}>
+                  <Button type="submit" variant="outline" size="sm">
+                    <Mail size={14} className="mr-1.5" />
+                    Email PDF
+                  </Button>
+                </form>
+              ) : null}
+              {canBuild ? (
+                <Link href={editHref as never}>
+                  <Button variant="outline" size="sm">
+                    <Pencil size={14} className="mr-1.5" />
+                    Edit
+                  </Button>
+                </Link>
+              ) : null}
+              {canSchedule ? (
+                <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
+                  <Button size="sm">
+                    <Calendar size={14} className="mr-1.5" />
+                    Subscribe
+                  </Button>
+                </Link>
+              ) : null}
             </>
           }
         />
@@ -208,13 +217,18 @@ export default async function ReportViewerPage({
             <CardContent>
               {scheduleRows.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  No schedules for this report.{' '}
-                  <Link
-                    href={`/reports/schedules/new?definitionId=${definition.id}`}
-                    className="text-teal-700 hover:underline dark:text-teal-300"
-                  >
-                    Create schedule
-                  </Link>
+                  No schedules for this report.
+                  {canSchedule ? (
+                    <>
+                      {' '}
+                      <Link
+                        href={`/reports/schedules/new?definitionId=${definition.id}`}
+                        className="text-teal-700 hover:underline dark:text-teal-300"
+                      >
+                        Create schedule
+                      </Link>
+                    </>
+                  ) : null}
                 </p>
               ) : (
                 <Table>
@@ -335,28 +349,30 @@ export default async function ReportViewerPage({
               <MetaItem label="Created">{formatDateTime(definition.createdAt)}</MetaItem>
               <MetaItem label="Updated">{formatDateTime(definition.updatedAt)}</MetaItem>
             </dl>
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-              <Link href={editHref as never}>
-                <Button variant="outline" size="sm">
-                  <Pencil size={14} className="mr-1.5" />
-                  {isCustom ? 'Edit report' : 'Edit a copy'}
-                </Button>
-              </Link>
-              <Link href={`/reports/definitions/new?from=${definition.id}` as never}>
-                <Button variant="outline" size="sm">
-                  <Copy size={14} className="mr-1.5" />
-                  Duplicate
-                </Button>
-              </Link>
-              {isCustom ? (
-                <form action={deleteBound}>
-                  <Button type="submit" variant="destructive" size="sm">
-                    <Trash2 size={14} className="mr-1.5" />
-                    Delete
+            {canBuild ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <Link href={editHref as never}>
+                  <Button variant="outline" size="sm">
+                    <Pencil size={14} className="mr-1.5" />
+                    {isCustom ? 'Edit report' : 'Edit a copy'}
                   </Button>
-                </form>
-              ) : null}
-            </div>
+                </Link>
+                <Link href={`/reports/definitions/new?from=${definition.id}` as never}>
+                  <Button variant="outline" size="sm">
+                    <Copy size={14} className="mr-1.5" />
+                    Duplicate
+                  </Button>
+                </Link>
+                {isCustom ? (
+                  <form action={deleteBound}>
+                    <Button type="submit" variant="destructive" size="sm">
+                      <Trash2 size={14} className="mr-1.5" />
+                      Delete
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

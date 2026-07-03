@@ -20,7 +20,7 @@ export type ObligationRow = {
   enabled: boolean
 }
 
-function cadenceLabel(rec: ComplianceRecurrence | null | undefined): string {
+export function cadenceLabel(rec: ComplianceRecurrence | null | undefined): string {
   if (!rec) return '—'
   if (rec.kind === 'frequency') return `${rec.quantity ?? 1}/${rec.frequency ?? 'week'}`
   if (rec.kind === 'cron') return rec.cron ? `cron ${rec.cron}` : '—'
@@ -58,34 +58,38 @@ export async function listObligations(
       .offset((page - 1) * perPage)
 
     const ids = obs.map((o) => o.id)
-    const counts = new Map<string, number>()
+    const counts = new Map<string, { n: number; everyone: boolean }>()
     if (ids.length > 0) {
       const ac = await tx
         .select({
           id: complianceAudience.obligationId,
           n: sql<number>`count(*)`.mapWith(Number),
+          everyone: sql<boolean>`bool_or(${complianceAudience.kind} = 'everyone')`,
         })
         .from(complianceAudience)
         .where(inArray(complianceAudience.obligationId, ids))
         .groupBy(complianceAudience.obligationId)
-      for (const r of ac) counts.set(r.id, r.n)
+      for (const r of ac) counts.set(r.id, { n: r.n, everyone: r.everyone })
     }
 
-    const rows = obs.map((o) => ({
-      kind: o.sourceModule as ObligationKind,
-      id: o.id,
-      title: o.title,
-      audience:
-        o.subjectKind === 'per_record'
-          ? 'Records'
-          : o.subjectKind === 'per_task'
-            ? 'Title holders'
-            : counts.get(o.id)
-              ? `${counts.get(o.id)} target${counts.get(o.id) === 1 ? '' : 's'}`
-              : 'Everyone',
-      cadence: cadenceLabel(o.recurrence),
-      enabled: o.status === 'active',
-    }))
+    const rows = obs.map((o) => {
+      const audienceInfo = counts.get(o.id)
+      return {
+        kind: o.sourceModule as ObligationKind,
+        id: o.id,
+        title: o.title,
+        audience:
+          o.subjectKind === 'per_record'
+            ? 'Records'
+            : o.subjectKind === 'per_task'
+              ? 'Title holders'
+              : !audienceInfo || audienceInfo.everyone || audienceInfo.n === 0
+                ? 'Everyone'
+                : `${audienceInfo.n} target${audienceInfo.n === 1 ? '' : 's'}`,
+        cadence: cadenceLabel(o.recurrence),
+        enabled: o.status === 'active',
+      }
+    })
     return { rows, total }
   })
 }

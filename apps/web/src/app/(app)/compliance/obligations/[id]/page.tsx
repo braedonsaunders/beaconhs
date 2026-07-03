@@ -15,37 +15,15 @@ import { PageContainer } from '@/components/page-layout'
 import { pickString } from '@/lib/list-params'
 import { EVERYONE_KEY, type AudienceItem } from '@/components/audience-picker'
 import { recurrenceValueFromStored } from '@/components/recurrence'
-import { SummaryStrip } from '../../_shared'
+import { StatusBadge, SummaryStrip } from '../../_shared'
 import { KIND_META, kindLabel, type ObligationKind } from '../_meta'
-import { obligationCompliance } from '../_data'
+import { cadenceLabel, obligationCompliance } from '../_data'
 import { loadObligationFormOptions } from '../_form-options'
 import { ObligationDetailActions } from './_detail-actions'
 import { ObligationEditDrawer, type ObligationEditData } from './_edit-drawer'
 
 export const metadata = { title: 'Obligation' }
 export const dynamic = 'force-dynamic'
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'completed') return <Badge variant="success">Completed</Badge>
-  if (status === 'overdue') return <Badge variant="destructive">Overdue</Badge>
-  if (status === 'expiring') return <Badge variant="destructive">Expiring</Badge>
-  if (status === 'in_progress') return <Badge variant="warning">In progress</Badge>
-  return <Badge variant="secondary">Pending</Badge>
-}
-
-function cadence(rec: {
-  kind: string
-  frequency?: string
-  quantity?: number
-  cron?: string
-  dueOn?: string
-}): string {
-  if (rec.kind === 'frequency') return `${rec.quantity ?? 1}/${rec.frequency ?? 'week'}`
-  if (rec.kind === 'cron') return rec.cron ? `cron ${rec.cron}` : '—'
-  if (rec.kind === 'one_time') return rec.dueOn ? `due ${rec.dueOn}` : 'one-off'
-  if (rec.kind === 'expiry') return 'continuous'
-  return rec.kind
-}
 
 export default async function ObligationDetailPage({
   params,
@@ -68,6 +46,11 @@ export default async function ObligationDetailPage({
       : ob.subjectKind === 'per_task'
         ? 'Sign-off'
         : 'Person'
+
+  const audienceLabel =
+    audience.length === 0 || audience.some((a) => a.kind === 'everyone')
+      ? 'Everyone'
+      : `${audience.length} audience target${audience.length === 1 ? '' : 's'}`
 
   const canManage = can(ctx, 'compliance.manage')
   // Only kinds the unified form can author are editable (rules out future
@@ -108,10 +91,8 @@ export default async function ObligationDetailPage({
         <DetailHeader
           back={{ href: '/compliance/obligations', label: 'Back to obligations' }}
           title={ob.title}
-          subtitle={`${kindLabel(ob.sourceModule)} · ${cadence(ob.recurrence)}${
-            ob.subjectKind === 'per_person'
-              ? ` · ${audience.length || 'everyone'} audience target(s)`
-              : ''
+          subtitle={`${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence)}${
+            ob.subjectKind === 'per_person' ? ` · ${audienceLabel}` : ''
           }`}
           actions={
             <ObligationDetailActions

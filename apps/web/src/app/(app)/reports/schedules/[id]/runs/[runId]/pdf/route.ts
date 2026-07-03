@@ -9,6 +9,7 @@ import { and, eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
 import { attachments, reportRuns } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { storedPdfArtifactResponse } from '@/lib/pdf-route'
 
 export const dynamic = 'force-dynamic'
@@ -45,10 +46,18 @@ export async function GET(
   }
 
   try {
-    return await storedPdfArtifactResponse({
+    const response = await storedPdfArtifactResponse({
       r2Key: found.attachment.r2Key,
       filename: found.attachment.filename,
     })
+    await recordAudit(ctx, {
+      entityType: 'report_run',
+      entityId: runId,
+      action: 'export',
+      summary: `Downloaded report run PDF "${found.attachment.filename}"`,
+      metadata: { scheduleId: id, attachmentId: found.attachment.id },
+    })
+    return response
   } catch (error) {
     console.error(`[pdf] report run artifact missing: ${found.attachment.r2Key}`, error)
     return NextResponse.json({ error: 'PDF artifact is missing from storage' }, { status: 410 })

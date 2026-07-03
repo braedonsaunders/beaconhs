@@ -17,6 +17,7 @@ import {
 } from '@beaconhs/ui'
 import { CalendarClock, Pause, Play } from 'lucide-react'
 import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
@@ -35,6 +36,7 @@ export default async function SchedulesListPage({
   const ctx = await requireRequestContext()
   const sp = await searchParams
   const statusFilter = typeof sp.status === 'string' ? sp.status : undefined
+  const canSchedule = can(ctx, 'reports.schedule')
 
   const rows = await ctx.db(async (tx) =>
     tx
@@ -61,9 +63,11 @@ export default async function SchedulesListPage({
             title="Schedules"
             description="Recurring PDF report deliveries."
             actions={
-              <Link href="/reports/schedules/new">
-                <Button>New schedule</Button>
-              </Link>
+              canSchedule ? (
+                <Link href="/reports/schedules/new">
+                  <Button>New schedule</Button>
+                </Link>
+              ) : undefined
             }
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -172,11 +176,18 @@ export default async function SchedulesListPage({
                     )}
                   </TableCell>
                   <TableCell>
-                    <form action={toggleBound}>
-                      <Button type="submit" variant="ghost" size="sm">
-                        {schedule.active ? <Pause size={14} /> : <Play size={14} />}
-                      </Button>
-                    </form>
+                    {canSchedule ? (
+                      <form action={toggleBound}>
+                        <Button
+                          type="submit"
+                          variant="ghost"
+                          size="sm"
+                          aria-label={schedule.active ? 'Pause schedule' : 'Resume schedule'}
+                        >
+                          {schedule.active ? <Pause size={14} /> : <Play size={14} />}
+                        </Button>
+                      </form>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               )

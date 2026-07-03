@@ -51,7 +51,15 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
         ),
       )
       .limit(1)
-    if (existing) return existing.id
+    if (existing) {
+      // The one-shot row is shared per definition; retarget it at the caller
+      // so the PDF is emailed to whoever clicked, not the first-ever runner.
+      await tx
+        .update(reportSchedules)
+        .set({ recipientUserIds: [ctx.userId], recipientEmails: [] })
+        .where(eq(reportSchedules.id, existing.id))
+      return existing.id
+    }
 
     // Otherwise create one. It's marked paused (active=false) so the
     // periodic scheduler never picks it; only this run-now action queues it.

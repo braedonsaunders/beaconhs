@@ -19,10 +19,11 @@ import {
 } from '@beaconhs/ui'
 import { History, Pause, Play, Trash2, Zap } from 'lucide-react'
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../_definitions'
-import { formatDateTime, StatusBadge } from '../../_format'
+import { formatCadence, formatDateTime, StatusBadge } from '../../_format'
 import { loadScheduleFormData } from '../_data'
 import { ScheduleForm } from '../_schedule-form'
 import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions'
@@ -40,9 +41,13 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
   })
   if (!schedule) notFound()
 
+  const canSchedule = can(ctx, 'reports.schedule')
+
   const [definition, { definitions, members }, runs] = await Promise.all([
     loadDefinitionById(ctx.tenantId!, schedule.definitionId),
-    loadScheduleFormData(ctx),
+    canSchedule
+      ? loadScheduleFormData(ctx)
+      : Promise.resolve({ definitions: [] as never[], members: [] as never[] }),
     ctx.db(async (tx) =>
       tx
         .select()
@@ -57,6 +62,8 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
   const toggleBound = setActive.bind(null, id, !schedule.active)
   const deleteBound = deleteSchedule.bind(null, id)
   const updateBound = updateSchedule.bind(null, id)
+  const recipientCount =
+    (schedule.recipientUserIds?.length ?? 0) + (schedule.recipientEmails?.length ?? 0)
 
   return (
     <DetailPageLayout
@@ -85,33 +92,37 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
                   </Button>
                 </Link>
               ) : null}
-              <form action={triggerBound}>
-                <Button type="submit" variant="outline" size="sm">
-                  <Zap size={14} className="mr-1.5" />
-                  Run now
-                </Button>
-              </form>
-              <form action={toggleBound}>
-                <Button type="submit" variant="outline" size="sm">
-                  {schedule.active ? (
-                    <>
-                      <Pause size={14} className="mr-1.5" />
-                      Pause
-                    </>
-                  ) : (
-                    <>
-                      <Play size={14} className="mr-1.5" />
-                      Resume
-                    </>
-                  )}
-                </Button>
-              </form>
-              <form action={deleteBound}>
-                <Button type="submit" variant="destructive" size="sm">
-                  <Trash2 size={14} className="mr-1.5" />
-                  Delete
-                </Button>
-              </form>
+              {canSchedule ? (
+                <>
+                  <form action={triggerBound}>
+                    <Button type="submit" variant="outline" size="sm">
+                      <Zap size={14} className="mr-1.5" />
+                      Run now
+                    </Button>
+                  </form>
+                  <form action={toggleBound}>
+                    <Button type="submit" variant="outline" size="sm">
+                      {schedule.active ? (
+                        <>
+                          <Pause size={14} className="mr-1.5" />
+                          Pause
+                        </>
+                      ) : (
+                        <>
+                          <Play size={14} className="mr-1.5" />
+                          Resume
+                        </>
+                      )}
+                    </Button>
+                  </form>
+                  <form action={deleteBound}>
+                    <Button type="submit" variant="destructive" size="sm">
+                      <Trash2 size={14} className="mr-1.5" />
+                      Delete
+                    </Button>
+                  </form>
+                </>
+              ) : null}
             </>
           }
         />
@@ -123,35 +134,63 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
             <CardTitle className="text-sm">Configuration</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScheduleForm
-              definitions={definitions}
-              members={members}
-              initial={{
-                definitionId: schedule.definitionId,
-                name: schedule.name,
-                cadence: schedule.cadence,
-                dayOfWeek: schedule.dayOfWeek,
-                dayOfMonth: schedule.dayOfMonth,
-                hour: schedule.hour,
-                minute: schedule.minute,
-                timezone: schedule.timezone,
-                recipientUserIds: schedule.recipientUserIds ?? [],
-                recipientEmails: schedule.recipientEmails ?? [],
-                filters: schedule.filters ?? {},
-              }}
-              submitLabel="Save changes"
-              action={updateBound}
-              extraFooter={
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Next run:{' '}
-                  <strong>{schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}</strong> ·
-                  Last run:{' '}
-                  <strong>
-                    {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
-                  </strong>
-                </p>
-              }
-            />
+            {canSchedule ? (
+              <ScheduleForm
+                definitions={definitions}
+                members={members}
+                initial={{
+                  definitionId: schedule.definitionId,
+                  name: schedule.name,
+                  cadence: schedule.cadence,
+                  dayOfWeek: schedule.dayOfWeek,
+                  dayOfMonth: schedule.dayOfMonth,
+                  hour: schedule.hour,
+                  minute: schedule.minute,
+                  timezone: schedule.timezone,
+                  recipientUserIds: schedule.recipientUserIds ?? [],
+                  recipientEmails: schedule.recipientEmails ?? [],
+                  filters: schedule.filters ?? {},
+                }}
+                submitLabel="Save changes"
+                action={updateBound}
+                extraFooter={
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Next run:{' '}
+                    <strong>{schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}</strong>{' '}
+                    · Last run:{' '}
+                    <strong>
+                      {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
+                    </strong>
+                  </p>
+                }
+              />
+            ) : (
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                <ConfigItem label="Report">{definition?.name ?? '—'}</ConfigItem>
+                <ConfigItem label="Cadence">
+                  {formatCadence(
+                    schedule.cadence,
+                    schedule.dayOfWeek,
+                    schedule.dayOfMonth,
+                    schedule.hour,
+                    schedule.minute,
+                    schedule.timezone,
+                  )}
+                </ConfigItem>
+                <ConfigItem label="Recipients">
+                  {recipientCount
+                    ? `${recipientCount} recipient${recipientCount === 1 ? '' : 's'}`
+                    : '—'}
+                </ConfigItem>
+                <ConfigItem label="Timezone">{schedule.timezone}</ConfigItem>
+                <ConfigItem label="Next run">
+                  {schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}
+                </ConfigItem>
+                <ConfigItem label="Last run">
+                  {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
+                </ConfigItem>
+              </dl>
+            )}
           </CardContent>
         </Card>
 
@@ -218,5 +257,16 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
         </Card>
       </div>
     </DetailPageLayout>
+  )
+}
+
+function ConfigItem({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-slate-900 dark:text-slate-100">{children}</dd>
+    </div>
   )
 }

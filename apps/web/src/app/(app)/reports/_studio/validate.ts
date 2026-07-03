@@ -98,11 +98,10 @@ export function validateCustomQuery(
   if (mode === 'rows' && columns.length === 0) {
     throw new Error('Pick at least one column to include')
   }
-  if (mode === 'summarize') {
-    if (measures.length === 0) measures = [{ fn: 'count' }]
-    if (breakouts.length === 0 && measures.length === 0) {
-      throw new Error('Add a group-by or a measure to summarize')
-    }
+  // Summarize is always valid: with no measures the query defaults to a count
+  // (and with no breakouts that count is a single grand total).
+  if (mode === 'summarize' && measures.length === 0) {
+    measures = [{ fn: 'count' }]
   }
 
   // v1 flat filters (kept for backwards compatibility with older clients).

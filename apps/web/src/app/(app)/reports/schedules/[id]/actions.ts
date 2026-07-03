@@ -9,6 +9,8 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { computeNextRunAt } from '@beaconhs/reports'
 import { enqueueReportRun } from '@beaconhs/jobs'
+import { loadDefinitionById } from '../../_definitions'
+import { parseScheduleForm } from '../_parse'
 
 export async function setActive(scheduleId: string, active: boolean): Promise<void> {
   const ctx = await requireRequestContext()
@@ -53,41 +55,25 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
 
-  const name = String(formData.get('name') ?? '').trim()
-  const cadence = String(formData.get('cadence') ?? '') as 'daily' | 'weekly' | 'monthly'
-  const dayOfWeekRaw = String(formData.get('dayOfWeek') ?? '')
-  const dayOfMonthRaw = String(formData.get('dayOfMonth') ?? '')
-  const hour = Number(formData.get('hour') ?? 7)
-  const minute = Number(formData.get('minute') ?? 0)
-  const timezone = String(formData.get('timezone') ?? 'America/Toronto').trim() || 'America/Toronto'
-  const recipientEmailsRaw = String(formData.get('recipientEmails') ?? '')
-  const recipientUserIdsRaw = String(formData.get('recipientUserIds') ?? '')
-  const filtersRaw = String(formData.get('filters') ?? '').trim() || '{}'
+  const definitionId = String(formData.get('definitionId') ?? '').trim()
+  if (!definitionId) throw new Error('Report definition is required')
 
-  if (!name) throw new Error('Name is required')
-  if (!['daily', 'weekly', 'monthly'].includes(cadence)) throw new Error('Invalid cadence')
+  const {
+    name,
+    cadence,
+    dayOfWeek,
+    dayOfMonth,
+    hour,
+    minute,
+    timezone,
+    recipientUserIds,
+    recipientEmails,
+    filters,
+  } = parseScheduleForm(formData)
 
-  const dayOfWeek = cadence === 'weekly' ? Number(dayOfWeekRaw || 1) : null
-  const dayOfMonth = cadence === 'monthly' ? Number(dayOfMonthRaw || 1) : null
-
-  const recipientEmails = recipientEmailsRaw
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  const recipientUserIds = recipientUserIdsRaw
-    .split(/[\n,\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-
-  let filters: Record<string, unknown>
-  try {
-    filters = JSON.parse(filtersRaw)
-    if (typeof filters !== 'object' || filters === null || Array.isArray(filters)) {
-      throw new Error('not an object')
-    }
-  } catch (err) {
-    throw new Error(`Invalid filters JSON: ${err instanceof Error ? err.message : String(err)}`)
-  }
+  // The definition must be visible to this tenant (built-in or owned).
+  const def = await loadDefinitionById(ctx.tenantId!, definitionId)
+  if (!def) throw new Error('Unknown report definition')
 
   const nextRunAt = computeNextRunAt({
     cadence,
@@ -102,6 +88,7 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
     await tx
       .update(reportSchedules)
       .set({
+        definitionId,
         name,
         cadence,
         dayOfWeek,
@@ -124,6 +111,7 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
     summary: `Updated report schedule "${name}"`,
     after: {
       name,
+      definitionId,
       cadence,
       dayOfWeek,
       dayOfMonth,

@@ -2,7 +2,7 @@
 // — target entities for every kind plus the audience option lists. Shared by
 // the create and edit pages.
 
-import { asc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import {
   departments,
   documents,
@@ -48,7 +48,7 @@ export async function loadObligationFormOptions(
       tx
         .select({ id: inspectionTypes.id, name: inspectionTypes.name })
         .from(inspectionTypes)
-        .where(eq(inspectionTypes.isPublished, true))
+        .where(and(eq(inspectionTypes.isPublished, true), isNull(inspectionTypes.deletedAt)))
         .orderBy(asc(inspectionTypes.name)),
       tx
         .select({ id: documents.id, title: documents.title })
@@ -59,6 +59,7 @@ export async function loadObligationFormOptions(
       tx
         .select({ id: trainingCourses.id, code: trainingCourses.code, name: trainingCourses.name })
         .from(trainingCourses)
+        .where(isNull(trainingCourses.deletedAt))
         .orderBy(asc(trainingCourses.name)),
       tx
         .select({ id: trainingAssessmentTypes.id, name: trainingAssessmentTypes.name })
@@ -112,6 +113,7 @@ export async function loadObligationFormOptions(
       tx
         .select({ id: personTitles.id, name: personTitles.name })
         .from(personTitles)
+        .where(isNull(personTitles.deletedAt))
         .orderBy(asc(personTitles.name)),
     ])
     return {

@@ -12,6 +12,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { loadDefinitionById } from '../../../_definitions'
 import { runReportForViewer } from '../../../_run'
 
@@ -37,6 +38,14 @@ export async function GET(
   if (run.error) {
     return NextResponse.json({ error: run.error }, { status: 422 })
   }
+
+  await recordAudit(ctx, {
+    entityType: 'report_definition',
+    entityId: id,
+    action: 'export',
+    summary: `Exported "${definition.name}" to ${format.toUpperCase()} (${run.result.rowCount} rows)`,
+    metadata: { format, rowCount: run.result.rowCount, rangeLabel: run.rangeLabel },
+  })
 
   const stamp = new Date().toISOString().slice(0, 10)
   const base = `${definition.slug}-${stamp}`

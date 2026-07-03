@@ -21,6 +21,7 @@ import {
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { loadDefinitionById } from '../_definitions'
 import { validateCustomQuery } from './validate'
 
 /** Build a stable, URL-safe slug for a custom definition. */
@@ -67,17 +68,11 @@ export async function createCustomDefinition(formData: FormData): Promise<void> 
   )
   const cloneFromIdRaw = String(formData.get('cloneFromId') ?? '').trim()
 
-  // If cloning, copy source category onto the new row.
+  // If cloning, copy source category onto the new row. The lookup enforces
+  // the built-in-or-own-tenant visibility rule; an invisible id is ignored.
   let category: string | null = customQuery.entity
   if (cloneFromIdRaw) {
-    const src = await withSuperAdmin(db, async (tx) => {
-      const [d] = await tx
-        .select()
-        .from(reportDefinitions)
-        .where(eq(reportDefinitions.id, cloneFromIdRaw))
-        .limit(1)
-      return d ?? null
-    })
+    const src = await loadDefinitionById(ctx.tenantId!, cloneFromIdRaw)
     if (src?.category) category = src.category
   }
 

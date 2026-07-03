@@ -12,7 +12,7 @@
 // M3 per-record/expiry completion adapters — when those land, this becomes a
 // single query over `compliance_status`.
 
-import { and, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull, lte, notInArray, or } from 'drizzle-orm'
 import {
   correctiveActions,
   documents,
@@ -83,18 +83,14 @@ const RANK: Record<SignalStatus, number> = { overdue: 0, expired: 1, due_soon: 2
 
 /**
  * Every due / expiring / overdue / open-task compliance signal across modules,
- * within the horizon (or already past). Optionally scoped to one person (Mine).
+ * within the horizon (or already past).
  */
-export async function listDueSignals(
-  ctx: RequestContext,
-  opts: { personId?: string } = {},
-): Promise<ComplianceSignal[]> {
+export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSignal[]> {
   const tid = ctx.tenantId!
   const now = new Date()
   const today = now.toISOString().slice(0, 10)
   const horizonDate = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000)
   const horizonIso = horizonDate.toISOString().slice(0, 10)
-  const onlyPerson = opts.personId ?? null
 
   return ctx.db(async (tx) => {
     const out: ComplianceSignal[] = []
@@ -119,7 +115,6 @@ export async function listDueSignals(
             isNull(trainingRecords.deletedAt),
             isNotNull(trainingRecords.expiresOn),
             lte(trainingRecords.expiresOn, horizonIso),
-            onlyPerson ? eq(trainingRecords.personId, onlyPerson) : undefined,
           ),
         )
         .limit(1000)
@@ -139,7 +134,7 @@ export async function listDueSignals(
     }
 
     // ---- Monitored sessions: overdue check-ins (any monitored Builder app) ----
-    if (!onlyPerson) {
+    {
       const rows = await tx
         .select({
           id: formResponses.id,
@@ -173,7 +168,7 @@ export async function listDueSignals(
     }
 
     // ---- Documents: review cadence due ----
-    if (!onlyPerson) {
+    {
       const rows = await tx
         .select({ id: documents.id, title: documents.title, nextReviewOn: documents.nextReviewOn })
         .from(documents)
@@ -221,7 +216,8 @@ export async function listDueSignals(
         .where(
           and(
             eq(equipmentItems.tenantId, tid),
-            onlyPerson ? eq(equipmentItems.currentHolderPersonId, onlyPerson) : undefined,
+            isNull(equipmentItems.deletedAt),
+            notInArray(equipmentItems.status, ['retired', 'lost']),
             or(
               lte(equipmentItems.nextAnnualInspectionDue, horizonIso),
               lte(equipmentItems.nextOilChangeDue, horizonIso),
@@ -272,7 +268,8 @@ export async function listDueSignals(
         .where(
           and(
             eq(ppeItems.tenantId, tid),
-            onlyPerson ? eq(ppeItems.currentHolderPersonId, onlyPerson) : undefined,
+            isNull(ppeItems.deletedAt),
+            notInArray(ppeItems.status, ['discarded', 'expired']),
             or(
               lte(ppeItems.nextInspectionDue, horizonIso),
               lte(ppeItems.nextAnnualInspectionDue, horizonIso),
@@ -304,7 +301,7 @@ export async function listDueSignals(
     }
 
     // ---- Corrective actions: due / overdue (owner is a tenant-user; person omitted) ----
-    if (!onlyPerson) {
+    {
       const rows = await tx
         .select({
           id: correctiveActions.id,
@@ -358,7 +355,6 @@ export async function listDueSignals(
             inArray(incidentPreventativeSteps.status, ['planned', 'in_progress']),
             isNotNull(incidentPreventativeSteps.targetDate),
             lte(incidentPreventativeSteps.targetDate, horizonIso),
-            onlyPerson ? eq(incidentPreventativeSteps.ownerPersonId, onlyPerson) : undefined,
           ),
         )
         .limit(500)
@@ -378,7 +374,7 @@ export async function listDueSignals(
     }
 
     // ---- Equipment work orders: open (no due date → task) ----
-    if (!onlyPerson) {
+    {
       const rows = await tx
         .select({
           id: equipmentWorkOrders.id,
@@ -426,6 +422,3 @@ export async function listDueSignals(
     return out
   })
 }
-
-// Keep `sql` referenced for future raw filters without churning imports.
-export const _signalsReady = sql`1`

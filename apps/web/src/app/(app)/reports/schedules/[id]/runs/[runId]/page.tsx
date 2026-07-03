@@ -142,7 +142,7 @@ export default async function RunDetailPage({
               <CardTitle>PDF</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 No PDF available for this run.
                 {row.run.status === 'failed'
                   ? ' The run failed before rendering.'
@@ -161,8 +161,10 @@ export default async function RunDetailPage({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs tracking-wide text-slate-500 uppercase">{label}</dt>
-      <dd className="mt-0.5 text-slate-900">{children}</dd>
+      <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-slate-900 dark:text-slate-100">{children}</dd>
     </div>
   )
 }
