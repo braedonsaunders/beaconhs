@@ -3,6 +3,7 @@
 // is disabled so the UI can prompt to configure it.
 
 import { streamDocChat, AIDisabledError, type DocChatMessage } from '@beaconhs/ai'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 
@@ -12,6 +13,9 @@ export const maxDuration = 60
 export async function POST(req: Request): Promise<Response> {
   const ctx = await requireRequestContext().catch(() => null)
   if (!ctx) return new Response('Unauthorized', { status: 401 })
+  // The doc assistant lives on the manage-only editor surface — don't let
+  // arbitrary tenant members stream tenant-billed completions through it.
+  if (!can(ctx, 'documents.manage')) return new Response('Forbidden', { status: 403 })
 
   let body: unknown
   try {

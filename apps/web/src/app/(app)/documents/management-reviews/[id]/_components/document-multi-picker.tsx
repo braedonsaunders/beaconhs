@@ -48,7 +48,9 @@ export function DocumentMultiPicker({
     <div className="space-y-3 text-sm">
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
-          <label className="text-xs tracking-wide text-slate-500 uppercase">Add document</label>
+          <label className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            Add document
+          </label>
           <Select value={pendingValue} onChange={(e) => setPendingValue(e.target.value)}>
             <option value="">— pick —</option>
             {available
@@ -66,7 +68,7 @@ export function DocumentMultiPicker({
       </div>
 
       {selected.length === 0 ? (
-        <p className="text-sm text-slate-500">No documents added.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">No documents added.</p>
       ) : (
         <ul className="space-y-2">
           {selected.map((id) => {
@@ -74,9 +76,11 @@ export function DocumentMultiPicker({
             return (
               <li
                 key={id}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"
+                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
               >
-                <span className="truncate text-slate-900">{o?.label ?? id}</span>
+                <span className="truncate text-slate-900 dark:text-slate-100">
+                  {o?.label ?? id}
+                </span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => remove(id)}>
                   <Trash2 size={14} className="text-red-500" />
                 </Button>
@@ -133,7 +137,7 @@ export function ActionItemsPicker({
     <div className="space-y-3 text-sm">
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
-          <label className="text-xs tracking-wide text-slate-500 uppercase">
+          <label className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
             Link a corrective action
           </label>
           <Select value={pendingValue} onChange={(e) => setPendingValue(e.target.value)}>
@@ -153,7 +157,7 @@ export function ActionItemsPicker({
       </div>
 
       {selected.length === 0 ? (
-        <p className="text-sm text-slate-500">No follow-up actions linked.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">No follow-up actions linked.</p>
       ) : (
         <ul className="space-y-2">
           {selected.map((id) => {
@@ -161,11 +165,13 @@ export function ActionItemsPicker({
             return (
               <li
                 key={id}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"
+                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
               >
                 <span className="flex items-center gap-2">
                   <Badge variant="outline">CA</Badge>
-                  <span className="truncate text-slate-900">{o?.label ?? id}</span>
+                  <span className="truncate text-slate-900 dark:text-slate-100">
+                    {o?.label ?? id}
+                  </span>
                 </span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => remove(id)}>
                   <Trash2 size={14} className="text-red-500" />

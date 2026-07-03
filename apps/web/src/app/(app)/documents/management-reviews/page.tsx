@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { desc, isNull } from 'drizzle-orm'
 import { Gavel } from 'lucide-react'
 import {
@@ -14,6 +15,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { documentManagementReviews } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
@@ -24,6 +26,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function ManagementReviewsPage() {
   const ctx = await requireRequestContext()
+  // Board-level discussion notes and decisions are a manage-only surface —
+  // every write action and the nav entry require documents.manage, and there
+  // is no read-only audience today.
+  if (!can(ctx, 'documents.manage')) notFound()
   const rows = await ctx.db((tx) =>
     tx
       .select()
@@ -77,12 +83,12 @@ export default async function ManagementReviewsPage() {
                 <TableCell>
                   <Link
                     href={`/documents/management-reviews/${r.id}`}
-                    className="font-medium text-slate-900 hover:underline"
+                    className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                   >
                     {r.title}
                   </Link>
                 </TableCell>
-                <TableCell className="text-slate-600">
+                <TableCell className="text-slate-600 dark:text-slate-300">
                   {r.periodStart ? `${r.periodStart} → ` : ''}
                   {r.periodEnd}
                 </TableCell>
@@ -92,7 +98,9 @@ export default async function ManagementReviewsPage() {
                 <TableCell>
                   <Badge variant="secondary">{r.documentsReviewed.length}</Badge>
                 </TableCell>
-                <TableCell className="text-slate-600">{r.nextReviewOn ?? '—'}</TableCell>
+                <TableCell className="text-slate-600 dark:text-slate-300">
+                  {r.nextReviewOn ?? '—'}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

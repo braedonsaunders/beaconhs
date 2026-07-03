@@ -61,6 +61,7 @@ export function AcknowledgmentsPanel({
   acks,
   selfStatus,
   selfAckedAt,
+  canManageSignOff,
 }: {
   documentId: string
   versionId: string | null
@@ -68,6 +69,8 @@ export function AcknowledgmentsPanel({
   acks: AckRow[]
   selfStatus: SelfStatus
   selfAckedAt: string | null
+  /** Group sign-off is a documents.manage surface — hide the entry for readers. */
+  canManageSignOff: boolean
 }) {
   const router = useRouter()
   const [q, setQ] = useState('')
@@ -96,7 +99,7 @@ export function AcknowledgmentsPanel({
     startTransition(async () => {
       try {
         const signatureAttachmentId = sig ? await uploadSignatureDataUrl(sig) : null
-        const res = await acknowledgeDocument({ documentId, versionId, signatureAttachmentId })
+        const res = await acknowledgeDocument({ documentId, signatureAttachmentId })
         if (!res.ok) {
           toast.error(res.error)
           return
@@ -152,8 +155,8 @@ export function AcknowledgmentsPanel({
         </Alert>
       )}
 
-      {/* Group sign-off entry */}
-      {selfStatus !== 'unpublished' ? (
+      {/* Group sign-off entry — the sign-off sheet is manage-only */}
+      {canManageSignOff && selfStatus !== 'unpublished' ? (
         <Link href={signOffHref}>
           <Button type="button" variant="outline" className="w-full">
             <Users size={14} /> Record group sign-off

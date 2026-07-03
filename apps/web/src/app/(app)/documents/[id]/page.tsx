@@ -47,6 +47,7 @@ import { getTenantAiSettings } from '@/lib/ai-config'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
+import { DetailGrid } from '@/components/detail-grid'
 import { DocumentOverview } from './_overview'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
@@ -68,6 +69,19 @@ const TABS = [
   'activity',
 ] as const
 type Tab = (typeof TABS)[number]
+
+// yyyy-mm-dd of an instant in the viewer's IANA timezone. Date columns are
+// entered as local dates, so "today" / auto-computed review dates must be
+// formatted in the same frame of reference — never toISOString().slice(),
+// which converts to UTC and can drift a day.
+function dateIsoInTz(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -145,7 +159,7 @@ async function recordReviewAction(input: {
       if (doc?.months) {
         const next = new Date()
         next.setMonth(next.getMonth() + doc.months)
-        const dateStr = next.toISOString().slice(0, 10)
+        const dateStr = dateIsoInTz(next, ctx.timezone)
         await tx
           .update(documents)
           .set({ nextReviewOn: dateStr })
@@ -292,13 +306,19 @@ export default async function DocumentDetailPage({
   const publishedVersion = versions.find((v) => v.publishedAt) ?? null
   const basePath = `/documents/${id}`
 
-  // Right pane: the live editor for in-app docs, or the PDF for uploaded-file docs.
+  // Right pane: the live editor for in-app docs, or the PDF for uploaded-file
+  // docs. Readers never see the working draft — they get the published PDF
+  // (the document of record) via a read-only pane, so seed editor content from
+  // the draft only for managers.
   const isFileDoc = !draft && !!currentVersion?.contentAttachmentId
-  const initialJson = (draft?.contentJson ?? publishedVersion?.contentJson ?? null) as Record<
-    string,
-    unknown
-  > | null
-  const initialHtml = draft?.contentHtml ?? publishedVersion?.contentMarkdown ?? ''
+  const initialJson = (
+    canManage
+      ? (draft?.contentJson ?? publishedVersion?.contentJson ?? null)
+      : (publishedVersion?.contentJson ?? null)
+  ) as Record<string, unknown> | null
+  const initialHtml = canManage
+    ? (draft?.contentHtml ?? publishedVersion?.contentMarkdown ?? '')
+    : (publishedVersion?.contentMarkdown ?? '')
   const initialLayout = {
     pageSize: (doc.pageSize === 'A4' ? 'A4' : 'Letter') as 'Letter' | 'A4',
     headerText: doc.headerText ?? '',
@@ -306,9 +326,11 @@ export default async function DocumentDetailPage({
     printHeader: doc.printHeader,
     printFooter: doc.printFooter,
   }
-  const comments = isFileDoc ? [] : await listDocumentComments(id)
-  const aiSettings = await getTenantAiSettings(ctx)
-  const aiEnabled = aiSettings.enabled && aiSettings.hasKey
+  // Review comments are internal discussion — only loaded for the manage surface.
+  const comments = isFileDoc || !canManage ? [] : await listDocumentComments(id)
+  const aiSettings = canManage ? await getTenantAiSettings(ctx) : null
+  const aiEnabled = !!aiSettings && aiSettings.enabled && aiSettings.hasKey
+  const canReview = can(ctx, 'documents.review')
 
   // Acknowledgments → flat rows for the panel (with signature thumbnails).
   const ackRows: AckRow[] = acks.map((a) => ({
@@ -343,7 +365,7 @@ export default async function DocumentDetailPage({
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'document', id, 50) : []
 
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = dateIsoInTz(new Date(), ctx.timezone)
   const isOverdue = doc.nextReviewOn ? doc.nextReviewOn < todayIso : false
 
   return (
@@ -373,29 +395,35 @@ export default async function DocumentDetailPage({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <DocumentPdfButton documentId={id} />
-          <Link
-            href={`/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
-            scroll={false}
-          >
-            <Button variant="outline">
-              <Mail size={14} /> Send email
-            </Button>
-          </Link>
-          {doc.status === 'published' ? (
-            <form action={unpublish} className="inline">
-              <input type="hidden" name="id" value={id} />
-              <Button type="submit" variant="outline">
-                Unpublish
-              </Button>
-            </form>
-          ) : (
-            <form action={publish} className="inline">
-              <input type="hidden" name="id" value={id} />
-              <Button type="submit">
-                <Check size={14} /> Publish
-              </Button>
-            </form>
-          )}
+          {canManage ? (
+            <>
+              <Link
+                href={
+                  `/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                }
+                scroll={false}
+              >
+                <Button variant="outline">
+                  <Mail size={14} /> Send email
+                </Button>
+              </Link>
+              {doc.status === 'published' ? (
+                <form action={unpublish} className="inline">
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit" variant="outline">
+                    Unpublish
+                  </Button>
+                </form>
+              ) : (
+                <form action={publish} className="inline">
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit">
+                    <Check size={14} /> Publish
+                  </Button>
+                </form>
+              )}
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -438,38 +466,74 @@ export default async function DocumentDetailPage({
               <Alert variant="warning" className="mb-4">
                 <AlertTitle>Periodic review overdue</AlertTitle>
                 <AlertDescription>
-                  Due on {doc.nextReviewOn}.{' '}
-                  <Link
-                    href={`${basePath}?tab=reviews&drawer=record-review`}
-                    className="font-medium underline-offset-2 hover:underline"
-                  >
-                    Record a review →
-                  </Link>
+                  Due on {doc.nextReviewOn}.
+                  {canReview ? (
+                    <>
+                      {' '}
+                      <Link
+                        href={`${basePath}?tab=reviews&drawer=record-review`}
+                        className="font-medium underline-offset-2 hover:underline"
+                      >
+                        Record a review →
+                      </Link>
+                    </>
+                  ) : null}
                 </AlertDescription>
               </Alert>
             ) : null}
 
             {active === 'overview' ? (
-              <DocumentOverview
-                documentId={id}
-                categories={categories}
-                types={types}
-                initialMeta={{
-                  title: doc.title,
-                  key: doc.key,
-                  categoryId: doc.categoryId ?? '',
-                  typeId: doc.typeId ?? '',
-                  description: doc.description ?? '',
-                  reviewFrequencyMonths:
-                    doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
-                  nextReviewOn: doc.nextReviewOn ?? '',
-                  pageSize: doc.pageSize === 'A4' ? 'A4' : 'Letter',
-                  printHeader: doc.printHeader,
-                  printFooter: doc.printFooter,
-                  headerText: doc.headerText ?? '',
-                  footerText: doc.footerText ?? '',
-                }}
-              />
+              canManage ? (
+                <DocumentOverview
+                  documentId={id}
+                  categories={categories}
+                  types={types}
+                  initialMeta={{
+                    title: doc.title,
+                    key: doc.key,
+                    categoryId: doc.categoryId ?? '',
+                    typeId: doc.typeId ?? '',
+                    description: doc.description ?? '',
+                    reviewFrequencyMonths:
+                      doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
+                    nextReviewOn: doc.nextReviewOn ?? '',
+                    pageSize: doc.pageSize === 'A4' ? 'A4' : 'Letter',
+                    printHeader: doc.printHeader,
+                    printFooter: doc.printFooter,
+                    headerText: doc.headerText ?? '',
+                    footerText: doc.footerText ?? '',
+                  }}
+                />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Document details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <DetailGrid
+                      rows={[
+                        { label: 'Title', value: doc.title },
+                        { label: 'Key', value: doc.key },
+                        {
+                          label: 'Category',
+                          value:
+                            (doc.categoryId
+                              ? categories.find((c) => c.id === doc.categoryId)?.name
+                              : doc.category) ?? '—',
+                        },
+                        {
+                          label: 'Type',
+                          value:
+                            (doc.typeId ? types.find((t) => t.id === doc.typeId)?.name : null) ??
+                            '—',
+                        },
+                        { label: 'Description', value: doc.description ?? '—' },
+                        { label: 'Next review', value: doc.nextReviewOn ?? '—' },
+                      ]}
+                    />
+                  </CardContent>
+                </Card>
+              )
             ) : null}
 
             {active === 'versions' ? (
@@ -515,14 +579,16 @@ export default async function DocumentDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                <div className="flex justify-end">
-                  <form action={publish}>
-                    <input type="hidden" name="id" value={id} />
-                    <Button type="submit">
-                      <Check size={14} /> Publish new version
-                    </Button>
-                  </form>
-                </div>
+                {canManage ? (
+                  <div className="flex justify-end">
+                    <form action={publish}>
+                      <input type="hidden" name="id" value={id} />
+                      <Button type="submit">
+                        <Check size={14} /> Publish new version
+                      </Button>
+                    </form>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -534,6 +600,7 @@ export default async function DocumentDetailPage({
                 acks={ackRows}
                 selfStatus={selfStatus}
                 selfAckedAt={selfAckedAt}
+                canManageSignOff={canManage}
               />
             ) : null}
 
@@ -591,13 +658,15 @@ export default async function DocumentDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                <div className="flex justify-end">
-                  <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
-                    <Button type="button">
-                      <Check size={14} /> Record review
-                    </Button>
-                  </Link>
-                </div>
+                {canReview ? (
+                  <div className="flex justify-end">
+                    <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
+                      <Button type="button">
+                        <Check size={14} /> Record review
+                      </Button>
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -614,10 +683,12 @@ export default async function DocumentDetailPage({
           </div>
         </aside>
 
-        {/* Right pane: the live editor, or the PDF for uploaded-file documents */}
+        {/* Right pane: the live editor for managers, or the published PDF for
+            uploaded-file documents and read-only users */}
         <div className="min-h-0 flex-1">
           <DocumentPane
             documentId={id}
+            canManage={canManage}
             defaultMode={isFileDoc ? 'pdf' : 'write'}
             initialTitle={doc.title}
             initialHtml={initialHtml}
@@ -625,29 +696,37 @@ export default async function DocumentDetailPage({
             initialLayout={initialLayout}
             initialComments={comments}
             aiEnabled={aiEnabled}
+            currentUser={{
+              tenantUserId: ctx.membership?.id ?? null,
+              name: ctx.membership?.displayName || 'You',
+            }}
           />
         </div>
       </div>
 
-      <GenericSendEmailDialog
-        open={pickString(sp.send) === '1'}
-        title="Send document"
-        description="Sends the document content + a link to the in-app view. Defaults to the tenant admin distribution list when no recipients are specified."
-        reference={doc.key}
-        defaultSubjectPrefix="FYI"
-        sendAction={async (fd) => {
-          'use server'
-          fd.set('id', id)
-          await sendEmailAction(fd)
-        }}
-      />
-      <DocumentDrawers
-        documentId={id}
-        openDrawer={pickString(sp.drawer) === 'record-review' ? 'record-review' : null}
-        closeHref={`${basePath}${active === 'overview' ? '' : `?tab=${active}`}`}
-        defaultNextReviewOn={doc.nextReviewOn ?? null}
-        recordReviewAction={recordReviewAction}
-      />
+      {canManage ? (
+        <GenericSendEmailDialog
+          open={pickString(sp.send) === '1'}
+          title="Send document"
+          description="Sends the document content and a link to the in-app view to the recipients you enter below."
+          reference={doc.key}
+          defaultSubjectPrefix="FYI"
+          sendAction={async (fd) => {
+            'use server'
+            fd.set('id', id)
+            await sendEmailAction(fd)
+          }}
+        />
+      ) : null}
+      {canReview ? (
+        <DocumentDrawers
+          documentId={id}
+          openDrawer={pickString(sp.drawer) === 'record-review' ? 'record-review' : null}
+          closeHref={`${basePath}${active === 'overview' ? '' : `?tab=${active}`}`}
+          defaultNextReviewOn={doc.nextReviewOn ?? null}
+          recordReviewAction={recordReviewAction}
+        />
+      ) : null}
     </div>
   )
 }

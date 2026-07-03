@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
-import { and, desc, eq, isNotNull } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { documentDrafts, documentVersions, documents } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
 import { listDocumentComments } from '../_actions'
@@ -17,9 +18,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function DocumentEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireRequestContext()
+  // The editor is a manage-only surface: it exposes the live unpublished draft,
+  // review comments, and write controls (every action it invokes requires
+  // documents.manage). Mirror the server actions so a direct URL can't leak
+  // draft content to read-only users.
+  if (!can(ctx, 'documents.manage')) notFound()
 
   const data = await ctx.db(async (tx) => {
-    const [doc] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+    const [doc] = await tx
+      .select()
+      .from(documents)
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+      .limit(1)
     if (!doc) return null
 
     const [draft] = await tx
@@ -71,6 +81,10 @@ export default async function DocumentEditorPage({ params }: { params: Promise<{
       initialLayout={initialLayout}
       initialComments={comments}
       aiEnabled={aiEnabled}
+      currentUser={{
+        tenantUserId: ctx.membership?.id ?? null,
+        name: ctx.membership?.displayName || 'You',
+      }}
     />
   )
 }

@@ -1,8 +1,9 @@
 'use client'
 
 // Right-pane PDF surface. Shows the document's PDF — either an uploaded source
-// or one generated from the written content — and lets you upload/replace the
-// PDF source. Carries the Write↔PDF switch in its header.
+// or one generated from the written content — and (for managers) lets you
+// upload/replace the PDF source and flip back to Write mode. `readOnly` hides
+// every write affordance for documents.read-only users.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -17,13 +18,15 @@ export function DocumentPdfPane({
   documentId,
   mode,
   onModeChange,
+  readOnly = false,
 }: {
   documentId: string
-  mode: DocumentMode
-  onModeChange: (m: DocumentMode) => void
+  mode?: DocumentMode
+  onModeChange?: (m: DocumentMode) => void
+  readOnly?: boolean
 }) {
   const router = useRouter()
-  const [status, setStatus] = useState<'loading' | 'ready' | 'generating' | 'error'>('loading')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -37,12 +40,8 @@ export function DocumentPdfPane({
       setError(r.error)
       return
     }
-    if ('url' in r) {
-      setUrl(r.url)
-      setStatus('ready')
-    } else {
-      setStatus('generating')
-    }
+    setUrl(r.url)
+    setStatus('ready')
   }, [documentId])
 
   useEffect(() => {
@@ -66,20 +65,26 @@ export function DocumentPdfPane({
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
-        <ModeSwitch mode={mode} onChange={onModeChange} />
+        {!readOnly && mode && onModeChange ? (
+          <ModeSwitch mode={mode} onChange={onModeChange} />
+        ) : (
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Document</span>
+        )}
         <div className="ml-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setUploadOpen((v) => !v)}
-            className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
-              uploadOpen
-                ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-300'
-                : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
-            )}
-          >
-            <Upload size={13} /> Upload PDF
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() => setUploadOpen((v) => !v)}
+              className={cn(
+                'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                uploadOpen
+                  ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-300'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
+              )}
+            >
+              <Upload size={13} /> Upload PDF
+            </button>
+          ) : null}
           {url ? (
             <>
               <a
@@ -102,7 +107,7 @@ export function DocumentPdfPane({
         </div>
       </div>
 
-      {uploadOpen ? (
+      {!readOnly && uploadOpen ? (
         <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
           <FileUploader
             requestUploadAction={requestUpload}
@@ -125,14 +130,6 @@ export function DocumentPdfPane({
                 <p className="text-rose-600">{error ?? 'Could not load the PDF.'}</p>
                 <Button variant="outline" onClick={load}>
                   <RefreshCw size={14} /> Retry
-                </Button>
-              </>
-            ) : status === 'generating' ? (
-              <>
-                <Loader2 size={20} className="animate-spin text-teal-600" />
-                <p>Generating the PDF from the document — this takes a few seconds.</p>
-                <Button variant="outline" onClick={load}>
-                  <RefreshCw size={14} /> Check again
                 </Button>
               </>
             ) : (

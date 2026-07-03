@@ -6,8 +6,11 @@
 // concatenates the per-document bodies into a single letterheaded PDF and we
 // stream the fresh artifact back to the browser.
 
+import { eq } from 'drizzle-orm'
+import { documentBooks } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 
 export const dynamic = 'force-dynamic'
@@ -21,9 +24,37 @@ export async function GET(
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
-  if (!ctx.isSuperAdmin && !can(ctx, 'documents.read')) {
+  if (!can(ctx, 'documents.read')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  return renderOnDemandPdfResponse({ kind: 'document_book', tenantId: ctx.tenantId, bookId: id })
+  // Readers may only render PUBLISHED books — draft books are manage-only,
+  // matching the books list which shows non-managers published books only.
+  const [book] = await ctx.db((tx) =>
+    tx
+      .select({ status: documentBooks.status })
+      .from(documentBooks)
+      .where(eq(documentBooks.id, id))
+      .limit(1),
+  )
+  if (!book) return Response.json({ error: 'Book not found' }, { status: 404 })
+  if (book.status !== 'published' && !can(ctx, 'documents.manage')) {
+    return Response.json({ error: 'Book not found' }, { status: 404 })
+  }
+
+  const res = await renderOnDemandPdfResponse({
+    kind: 'document_book',
+    tenantId: ctx.tenantId,
+    bookId: id,
+  })
+  if (res.ok) {
+    await recordAudit(ctx, {
+      entityType: 'document_book',
+      entityId: id,
+      action: 'export',
+      summary: 'Exported document book to PDF',
+      metadata: { format: 'pdf' },
+    })
+  }
+  return res
 }

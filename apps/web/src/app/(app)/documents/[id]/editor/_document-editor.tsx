@@ -25,7 +25,7 @@ import {
   saveDraft,
   listDocumentComments,
 } from '../_actions'
-import type { EditorComment } from './_lib'
+import type { EditorComment, EditorUser } from './_lib'
 import type { DocumentMode } from '../_mode-switch'
 
 export function DocumentEditor({
@@ -35,6 +35,7 @@ export function DocumentEditor({
   initialJson,
   initialLayout,
   initialComments,
+  currentUser,
   aiEnabled = false,
   embedded = false,
   mode,
@@ -46,6 +47,8 @@ export function DocumentEditor({
   initialJson: Record<string, unknown> | null
   initialLayout: LayoutState
   initialComments: EditorComment[]
+  /** The active member — stamps track-changes suggestions with their author. */
+  currentUser: EditorUser
   aiEnabled?: boolean
   /** Embedded in the manage page's right pane (fills its container) vs full-screen overlay. */
   embedded?: boolean
@@ -116,6 +119,14 @@ export function DocumentEditor({
   useEffect(() => {
     editor?.commands.setSuggesting(suggesting)
   }, [editor, suggesting])
+
+  // Attribute track-changes suggestions to the active member.
+  useEffect(() => {
+    editor?.commands.setSuggestionUser({
+      id: currentUser.tenantUserId ?? '',
+      name: currentUser.name,
+    })
+  }, [editor, currentUser])
 
   // ⌘F / Ctrl-F opens the find bar instead of the browser's.
   useEffect(() => {

@@ -64,15 +64,34 @@ async function updateCategory(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   const parentIdRaw = String(formData.get('parentId') ?? '').trim()
-  const parentId = parentIdRaw && parentIdRaw !== id ? parentIdRaw : null
+  let parentId = parentIdRaw && parentIdRaw !== id ? parentIdRaw : null
   const description = String(formData.get('description') ?? '').trim() || null
   if (!id || !name) return
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    // Reject cycles (A→B→…→A): walk the proposed ancestor chain; if it ever
+    // reaches this category, keep the current parent instead of vanishing the
+    // whole branch from the tree.
+    if (parentId) {
+      const all = await tx
+        .select({ id: documentCategories.id, parentId: documentCategories.parentId })
+        .from(documentCategories)
+      const parentOf = new Map(all.map((c) => [c.id, c.parentId]))
+      const seen = new Set<string>()
+      let cursor: string | null = parentId
+      while (cursor) {
+        if (cursor === id || seen.has(cursor)) {
+          parentId = null
+          break
+        }
+        seen.add(cursor)
+        cursor = parentOf.get(cursor) ?? null
+      }
+    }
+    await tx
       .update(documentCategories)
       .set({ name, parentId, description })
-      .where(eq(documentCategories.id, id)),
-  )
+      .where(eq(documentCategories.id, id))
+  })
   await recordAudit(ctx, {
     entityType: 'document_category',
     entityId: id,
@@ -89,12 +108,24 @@ async function deleteCategory(formData: FormData): Promise<void> {
   assertCanManageModule(ctx, 'documents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ parentId: documentCategories.parentId })
+      .from(documentCategories)
+      .where(eq(documentCategories.id, id))
+      .limit(1)
+    if (!row) return
+    // Re-parent children to the deleted node's parent so they stay visible and
+    // manageable in the tree instead of becoming orphaned ghosts.
+    await tx
+      .update(documentCategories)
+      .set({ parentId: row.parentId })
+      .where(eq(documentCategories.parentId, id))
+    await tx
       .update(documentCategories)
       .set({ deletedAt: new Date() })
-      .where(eq(documentCategories.id, id)),
-  )
+      .where(eq(documentCategories.id, id))
+  })
   await recordAudit(ctx, {
     entityType: 'document_category',
     entityId: id,

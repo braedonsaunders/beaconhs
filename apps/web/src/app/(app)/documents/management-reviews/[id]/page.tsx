@@ -19,6 +19,7 @@ import {
   tenantUsers,
   user as userTable,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -49,6 +50,9 @@ export default async function ManagementReviewDetailPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
+  // Board-level discussion notes, decisions, and the member directory are a
+  // manage-only surface — mirrors the list page and every write action.
+  if (!can(ctx, 'documents.manage')) notFound()
 
   const data = await ctx.db(async (tx) => {
     const [review] = await tx
@@ -251,9 +255,12 @@ export default async function ManagementReviewDetailPage({
                     {reviewedDocs.map((d) => (
                       <li
                         key={d.id}
-                        className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50/40 px-3 py-1.5"
+                        className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50/40 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900/40"
                       >
-                        <Link href={`/documents/${d.id}`} className="text-teal-700 hover:underline">
+                        <Link
+                          href={`/documents/${d.id}`}
+                          className="text-teal-700 hover:underline dark:text-teal-400"
+                        >
                           {d.title}
                         </Link>
                         <Badge variant="outline">{d.status}</Badge>
@@ -301,11 +308,11 @@ export default async function ManagementReviewDetailPage({
                     {reviewedCAs.map((ca) => (
                       <li
                         key={ca.id}
-                        className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50/40 px-3 py-1.5"
+                        className="flex items-center justify-between rounded-md border border-slate-100 bg-slate-50/40 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900/40"
                       >
                         <Link
                           href={`/corrective-actions/${ca.id}`}
-                          className="text-teal-700 hover:underline"
+                          className="text-teal-700 hover:underline dark:text-teal-400"
                         >
                           {ca.reference} · {ca.title}
                         </Link>
@@ -335,24 +342,26 @@ function DecisionsView({
       <div>
         <Label>Discussion notes</Label>
         {discussionNotes ? (
-          <pre className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm whitespace-pre-wrap text-slate-800">
+          <pre className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm whitespace-pre-wrap text-slate-800 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
             {discussionNotes}
           </pre>
         ) : (
-          <p className="text-sm text-slate-500">No discussion notes captured.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No discussion notes captured.
+          </p>
         )}
       </div>
       <div>
         <Label>Decisions / outcomes</Label>
         {decisions ? (
-          <pre className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm whitespace-pre-wrap text-slate-800">
+          <pre className="mt-1 rounded-md border border-slate-200 bg-slate-50/50 p-3 text-sm whitespace-pre-wrap text-slate-800 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
             {decisions}
           </pre>
         ) : (
-          <p className="text-sm text-slate-500">No decisions captured.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">No decisions captured.</p>
         )}
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         Edit discussion notes and decisions from the Overview tab.
       </p>
     </div>

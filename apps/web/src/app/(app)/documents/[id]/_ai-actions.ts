@@ -67,6 +67,17 @@ export async function appendDocMessages(input: {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
   if (!input.conversationId || input.messages.length === 0) return { ok: false }
+  // Ownership: only the conversation's own user may append to it, and only
+  // within this module's scope — a client-supplied id can't write into another
+  // user's thread.
+  const [conv] = await ctx.db((tx) =>
+    tx
+      .select({ userId: aiConversations.userId, scope: aiConversations.scope })
+      .from(aiConversations)
+      .where(eq(aiConversations.id, input.conversationId))
+      .limit(1),
+  )
+  if (!conv || conv.userId !== ctx.userId || conv.scope !== SCOPE) return { ok: false }
   await ctx.db(async (tx) => {
     for (const m of input.messages) {
       await tx.insert(aiMessages).values({

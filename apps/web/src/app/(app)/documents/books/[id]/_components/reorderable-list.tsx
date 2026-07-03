@@ -90,20 +90,26 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
           onDragOver={(e) => onDragOver(e, idx)}
           onDrop={() => onDrop(idx)}
           onDragEnd={onDragEnd}
-          className={`flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2 transition-colors ${
+          className={`flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2 transition-colors dark:bg-slate-900 ${
             overIdx === idx && dragIdx !== idx
-              ? 'border-teal-500 bg-teal-50'
+              ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40'
               : dragIdx === idx
-                ? 'border-slate-300 opacity-60'
-                : 'border-slate-200'
+                ? 'border-slate-300 opacity-60 dark:border-slate-600'
+                : 'border-slate-200 dark:border-slate-800'
           } ${pending ? 'cursor-progress' : 'cursor-grab'}`}
         >
           <div className="flex min-w-0 items-center gap-3">
-            <GripVertical size={14} className="shrink-0 text-slate-400" aria-hidden />
-            <span className="w-6 shrink-0 font-mono text-xs text-slate-400">{idx + 1}.</span>
+            <GripVertical
+              size={14}
+              className="shrink-0 text-slate-400 dark:text-slate-500"
+              aria-hidden
+            />
+            <span className="w-6 shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">
+              {idx + 1}.
+            </span>
             <Link
               href={`/documents/${row.documentId}`}
-              className="truncate font-medium text-slate-900 hover:underline"
+              className="truncate font-medium text-slate-900 hover:underline dark:text-slate-100"
             >
               {row.title}
             </Link>

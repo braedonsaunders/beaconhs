@@ -1,8 +1,7 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, isNull, notInArray, ne, sql } from 'drizzle-orm'
-import { ArrowDown, ArrowUp, Check, FileDown, FileText, Trash2 } from 'lucide-react'
+import { Check, FileDown, FileText } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -24,12 +23,13 @@ import {
   documentTypes,
   documents,
 } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
+import { ReorderableList } from './_components/reorderable-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,116 +78,6 @@ async function addDocumentToBook(formData: FormData) {
     action: 'update',
     summary: 'Added document to book',
     after: { documentId },
-  })
-  revalidatePath(`/documents/books/${bookId}`)
-}
-
-async function removeDocumentFromBook(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  const bookId = String(formData.get('bookId') ?? '')
-  const documentId = String(formData.get('documentId') ?? '')
-  if (!bookId || !documentId) return
-
-  await ctx.db(async (tx) => {
-    await tx
-      .delete(documentBookItems)
-      .where(
-        and(eq(documentBookItems.bookId, bookId), eq(documentBookItems.documentId, documentId)),
-      )
-    // Renumber positions to keep them contiguous.
-    const remaining = await tx
-      .select({ id: documentBookItems.id })
-      .from(documentBookItems)
-      .where(eq(documentBookItems.bookId, bookId))
-      .orderBy(asc(documentBookItems.position))
-    for (let i = 0; i < remaining.length; i++) {
-      await tx
-        .update(documentBookItems)
-        .set({ position: i })
-        .where(eq(documentBookItems.id, remaining[i]!.id))
-    }
-  })
-  await recordAudit(ctx, {
-    entityType: 'document_book',
-    entityId: bookId,
-    action: 'update',
-    summary: 'Removed document from book',
-    before: { documentId },
-  })
-  revalidatePath(`/documents/books/${bookId}`)
-}
-
-async function reorderBookItems(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  const bookId = String(formData.get('bookId') ?? '')
-  const orderedIdsRaw = String(formData.get('orderedIds') ?? '')
-  if (!bookId || !orderedIdsRaw) return
-  const orderedIds = orderedIdsRaw.split(',').filter(Boolean)
-  if (orderedIds.length === 0) return
-
-  await ctx.db(async (tx) => {
-    for (let i = 0; i < orderedIds.length; i++) {
-      await tx
-        .update(documentBookItems)
-        .set({ position: i })
-        .where(
-          and(
-            eq(documentBookItems.bookId, bookId),
-            eq(documentBookItems.documentId, orderedIds[i]!),
-          ),
-        )
-    }
-  })
-  await recordAudit(ctx, {
-    entityType: 'document_book',
-    entityId: bookId,
-    action: 'update',
-    summary: 'Reordered book items',
-    after: { orderedIds },
-  })
-  revalidatePath(`/documents/books/${bookId}`)
-}
-
-async function moveItem(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  const bookId = String(formData.get('bookId') ?? '')
-  const documentId = String(formData.get('documentId') ?? '')
-  const direction = String(formData.get('direction') ?? '') as 'up' | 'down'
-  if (!bookId || !documentId || (direction !== 'up' && direction !== 'down')) return
-
-  await ctx.db(async (tx) => {
-    const items = await tx
-      .select()
-      .from(documentBookItems)
-      .where(eq(documentBookItems.bookId, bookId))
-      .orderBy(asc(documentBookItems.position))
-    const idx = items.findIndex((i) => i.documentId === documentId)
-    if (idx < 0) return
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= items.length) return
-    const a = items[idx]!
-    const b = items[swapIdx]!
-    await tx
-      .update(documentBookItems)
-      .set({ position: b.position })
-      .where(eq(documentBookItems.id, a.id))
-    await tx
-      .update(documentBookItems)
-      .set({ position: a.position })
-      .where(eq(documentBookItems.id, b.id))
-  })
-  await recordAudit(ctx, {
-    entityType: 'document_book',
-    entityId: bookId,
-    action: 'update',
-    summary: `Moved document ${direction}`,
-    after: { documentId, direction },
   })
   revalidatePath(`/documents/books/${bookId}`)
 }
@@ -303,6 +193,10 @@ export default async function DocumentBookPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'contents')
   const ctx = await requireRequestContext()
+  // The book detail page is a manage-only surface (publish/settings/contents
+  // forms). Readers open published books as a PDF from the books library —
+  // mirrors the list page, which limits non-managers to published cards.
+  if (!can(ctx, 'documents.manage')) notFound()
 
   const data = await ctx.db(async (tx) => {
     const [book] = await tx.select().from(documentBooks).where(eq(documentBooks.id, id)).limit(1)
@@ -319,13 +213,19 @@ export default async function DocumentBookPage({
         ? await tx
             .select({ id: documents.id, title: documents.title, status: documents.status })
             .from(documents)
-            .where(and(ne(documents.status, 'archived'), notInArray(documents.id, memberIds)))
+            .where(
+              and(
+                isNull(documents.deletedAt),
+                ne(documents.status, 'archived'),
+                notInArray(documents.id, memberIds),
+              ),
+            )
             .orderBy(asc(documents.title))
             .limit(200)
         : await tx
             .select({ id: documents.id, title: documents.title, status: documents.status })
             .from(documents)
-            .where(ne(documents.status, 'archived'))
+            .where(and(isNull(documents.deletedAt), ne(documents.status, 'archived')))
             .orderBy(asc(documents.title))
             .limit(200)
     const categories = await tx
@@ -412,79 +312,30 @@ export default async function DocumentBookPage({
                     description="Add documents below in the order they should appear in the PDF."
                   />
                 ) : (
-                  <ol className="space-y-2 text-sm">
-                    {items.map((row, idx) => (
-                      <li
-                        key={row.item.id}
-                        className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span className="w-6 shrink-0 font-mono text-xs text-slate-400">
-                            {idx + 1}.
-                          </span>
-                          <Link
-                            href={`/documents/${row.doc.id}`}
-                            className="truncate font-medium text-slate-900 hover:underline"
-                          >
-                            {row.doc.title}
-                          </Link>
-                          {row.doc.status !== 'published' ? (
-                            <Badge variant="warning">{row.doc.status}</Badge>
-                          ) : null}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <form action={moveItem} className="inline">
-                            <input type="hidden" name="bookId" value={id} />
-                            <input type="hidden" name="documentId" value={row.doc.id} />
-                            <input type="hidden" name="direction" value="up" />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                              disabled={idx === 0}
-                              aria-label="Move up"
-                            >
-                              <ArrowUp size={14} />
-                            </Button>
-                          </form>
-                          <form action={moveItem} className="inline">
-                            <input type="hidden" name="bookId" value={id} />
-                            <input type="hidden" name="documentId" value={row.doc.id} />
-                            <input type="hidden" name="direction" value="down" />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                              disabled={idx === items.length - 1}
-                              aria-label="Move down"
-                            >
-                              <ArrowDown size={14} />
-                            </Button>
-                          </form>
-                          <form action={removeDocumentFromBook} className="inline">
-                            <input type="hidden" name="bookId" value={id} />
-                            <input type="hidden" name="documentId" value={row.doc.id} />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                              aria-label="Remove from book"
-                            >
-                              <Trash2 size={14} className="text-red-500" />
-                            </Button>
-                          </form>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
+                  // Keyed by the member set (order-insensitive) so the client
+                  // list remounts with fresh server data when the Add form or
+                  // a removal changes membership, while in-place drag reorders
+                  // keep their optimistic client state.
+                  <ReorderableList
+                    key={items
+                      .map((row) => row.doc.id)
+                      .sort()
+                      .join('|')}
+                    bookId={id}
+                    initial={items.map((row) => ({
+                      documentId: row.doc.id,
+                      title: row.doc.title,
+                      status: row.doc.status,
+                    }))}
+                  />
                 )}
               </CardContent>
             </Card>
 
             <Section title="Add a document to this book">
               {available.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No more documents available — every published document is already in this book.
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Every available document is already in this book.
                 </p>
               ) : (
                 <form action={addDocumentToBook} className="flex items-end gap-2">
@@ -565,7 +416,7 @@ export default async function DocumentBookPage({
                 <Field label="Description">
                   <Textarea name="description" rows={3} defaultValue={book.description ?? ''} />
                 </Field>
-                <div className="flex justify-end border-t border-slate-100 pt-4">
+                <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
                   <Button type="submit">Save settings</Button>
                 </div>
               </form>

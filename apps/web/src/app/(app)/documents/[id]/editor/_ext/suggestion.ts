@@ -280,7 +280,13 @@ function handleSuggestDelete(editor: Editor, dir: 'backward' | 'forward'): boole
     tr.delete(from, to)
     tr.setSelection(TextSelection.create(tr.doc, from))
   } else {
-    const stamp = { createdAt: nowIso() }
+    // Stamp the deletion with the same author attribution as insertions.
+    const user = (editor.storage.suggestion as { user?: { id: string; name: string } })?.user
+    const stamp = {
+      userId: user?.id || null,
+      userName: user?.name || null,
+      createdAt: nowIso(),
+    }
     tr.addMark(from, to, delType.create(stamp))
     // Continue walking in the direction of travel so repeated presses extend.
     const caret = dir === 'backward' ? from : to

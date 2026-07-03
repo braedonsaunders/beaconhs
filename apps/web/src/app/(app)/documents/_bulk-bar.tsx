@@ -1,7 +1,9 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Archive, BookOpen, CheckSquare, Send, Square, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import { bulkAddDocumentsToBook, bulkArchiveDocuments, bulkPublishDocuments } from './_actions'
@@ -22,18 +24,18 @@ export function BulkDocumentsBar({
   const [action, setAction] = useState<'publish' | 'archive' | 'addToBook'>('publish')
   const [bookId, setBookId] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
 
   const label = useMemo(
     () => `${selectedIds.length} document${selectedIds.length === 1 ? '' : 's'} selected`,
     [selectedIds.length],
   )
 
-  if (selectedIds.length === 0) return null
+  if (selectedIds.length === 0 || typeof document === 'undefined') return null
 
   function go() {
     setError(null)
-    setInfo(null)
+    // Success is surfaced via toast — clearing the selection unmounts the bar,
+    // so any inline message would never be seen.
     if (action === 'publish') {
       start(async () => {
         const res = await bulkPublishDocuments({ documentIds: selectedIds })
@@ -41,7 +43,7 @@ export function BulkDocumentsBar({
           setError(res.error)
           return
         }
-        setInfo(`Published ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+        toast.success(`Published ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
         onClear()
         router.refresh()
       })
@@ -55,7 +57,7 @@ export function BulkDocumentsBar({
           setError(res.error)
           return
         }
-        setInfo(`Archived ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+        toast.success(`Archived ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
         onClear()
         router.refresh()
       })
@@ -75,24 +77,26 @@ export function BulkDocumentsBar({
         setError(res.error)
         return
       }
-      setInfo(`Added ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+      toast.success(`Added ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
       onClear()
       router.refresh()
     })
   }
 
-  return (
+  // Portaled to <body>: ancestors with CSS transforms (e.g. the page fade-in
+  // wrapper) would otherwise capture position:fixed and mis-pin the bar.
+  return createPortal(
     <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
         <button
           type="button"
           onClick={onClear}
           aria-label="Clear selection"
-          className="rounded p-1 text-slate-500 hover:bg-slate-100"
+          className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
 
         <Select
           value={action}
@@ -141,10 +145,10 @@ export function BulkDocumentsBar({
             </span>
           )}
         </Button>
-        {error ? <span className="text-xs text-red-600">{error}</span> : null}
-        {info ? <span className="text-xs text-emerald-700">{info}</span> : null}
+        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -165,9 +169,13 @@ export function SelectionCheckbox({
         onToggle(id)
       }}
       aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
     >
-      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {selected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }
@@ -184,9 +192,13 @@ export function HeaderSelectAll({
       type="button"
       onClick={onToggleAll}
       aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
     >
-      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {allSelected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }

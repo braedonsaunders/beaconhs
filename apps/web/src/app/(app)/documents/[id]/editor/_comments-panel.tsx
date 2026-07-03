@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import type { Editor } from '@tiptap/react'
+import { toast } from 'sonner'
 import { Check, CornerDownRight, MessageSquarePlus, Trash2, X, RotateCcw } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { addComment, deleteComment, replyToComment, resolveComment } from '../_actions'
@@ -80,40 +81,76 @@ export function CommentsPanel({
   async function submitNew() {
     if (!body.trim() || !hasSelection || busy) return
     setBusy(true)
-    const anchorId = crypto.randomUUID()
-    editor.chain().focus().setComment(anchorId).run()
-    await addComment({ documentId, anchorId, quotedText: quoted.slice(0, 2000), body: body.trim() })
-    setBody('')
-    await onChanged()
-    setBusy(false)
+    try {
+      // Optimistic anchor mark on the current selection; rolled back if the
+      // server rejects the comment so no orphaned highlight gets autosaved.
+      const anchorId = crypto.randomUUID()
+      editor.chain().focus().setComment(anchorId).run()
+      const res = await addComment({
+        documentId,
+        anchorId,
+        quotedText: quoted.slice(0, 2000),
+        body: body.trim(),
+      })
+      if (!res.ok) {
+        editor.commands.unsetComment(anchorId)
+        toast.error(res.error)
+        return
+      }
+      setBody('')
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function submitReply(threadId: string) {
     if (!replyBody.trim() || busy) return
     setBusy(true)
-    await replyToComment({ documentId, threadId, body: replyBody.trim() })
-    setReplyBody('')
-    setReplyFor(null)
-    await onChanged()
-    setBusy(false)
+    try {
+      const res = await replyToComment({ documentId, threadId, body: replyBody.trim() })
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      setReplyBody('')
+      setReplyFor(null)
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function toggleResolve(root: EditorComment) {
     setBusy(true)
-    const resolved = !root.resolvedAt
-    await resolveComment({ id: root.id, resolved })
-    if (root.anchorId) editor.commands.resolveCommentMark(root.anchorId, resolved)
-    await onChanged()
-    setBusy(false)
+    try {
+      const resolved = !root.resolvedAt
+      const res = await resolveComment({ id: root.id, resolved })
+      if (!res.ok) {
+        toast.error('The comment could not be updated.')
+        return
+      }
+      if (root.anchorId) editor.commands.resolveCommentMark(root.anchorId, resolved)
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function del(root: EditorComment) {
     if (!window.confirm('Delete this comment thread?')) return
     setBusy(true)
-    await deleteComment({ id: root.id })
-    if (root.anchorId) editor.commands.unsetComment(root.anchorId)
-    await onChanged()
-    setBusy(false)
+    try {
+      const res = await deleteComment({ id: root.id })
+      if (!res.ok) {
+        toast.error('Only the comment author or a document manager can delete this thread.')
+        return
+      }
+      if (root.anchorId) editor.commands.unsetComment(root.anchorId)
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
   }
 
   function renderThread(root: EditorComment, detached = false) {

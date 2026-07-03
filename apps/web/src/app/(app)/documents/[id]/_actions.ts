@@ -11,7 +11,7 @@
 // continues toward the next version (never a blank page).
 
 import { revalidatePath } from 'next/cache'
-import { asc, desc, eq, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm'
 import {
   attachments,
   documentComments,
@@ -30,7 +30,7 @@ import {
   publicUrl,
   putObject,
 } from '@beaconhs/storage'
-import { assertCan, can } from '@beaconhs/tenant'
+import { ForbiddenError, assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -84,8 +84,23 @@ export type DocumentPdfUrlResult = { ok: true; url: string } | { ok: false; erro
 // renders the document on demand.
 export async function getDocumentPdfUrl(documentId: string): Promise<DocumentPdfUrlResult> {
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.read')
   if (!documentId) return { ok: false, error: 'Missing document id' }
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+
+  // Readers may only view published documents — the same rule the list and
+  // detail pages apply. Managers can preview any live document.
+  const [doc] = await ctx.db((tx) =>
+    tx
+      .select({ status: documents.status })
+      .from(documents)
+      .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+      .limit(1),
+  )
+  if (!doc) return { ok: false, error: 'Document not found.' }
+  if (doc.status !== 'published' && !can(ctx, 'documents.manage')) {
+    return { ok: false, error: 'This document is not published.' }
+  }
 
   // 1. Uploaded-PDF document — the latest version that points at a PDF
   //    attachment (published or not, so a just-uploaded source shows at once).
@@ -105,24 +120,6 @@ export async function getDocumentPdfUrl(documentId: string): Promise<DocumentPdf
   }
 
   return { ok: true, url: `/documents/${documentId}/pdf?render=${Date.now()}` }
-}
-
-// Resolves a public URL for an uploaded image attachment (for in-editor embeds
-// + PDF rendering). Matches the publicUrl pattern used by the email composer.
-export async function getImageUrl(
-  attachmentId: string,
-): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const ctx = await requireRequestContext()
-  if (!attachmentId) return { ok: false, error: 'Missing attachment id' }
-  const [row] = await ctx.db((tx) =>
-    tx
-      .select({ key: attachments.r2Key })
-      .from(attachments)
-      .where(eq(attachments.id, attachmentId))
-      .limit(1),
-  )
-  if (!row) return { ok: false, error: 'Attachment not found' }
-  return { ok: true, url: publicUrl(row.key) }
 }
 
 function slugify(s: string): string {
@@ -465,6 +462,11 @@ export type DocumentCommentRow = {
 
 export async function listDocumentComments(documentId: string): Promise<DocumentCommentRow[]> {
   const ctx = await requireRequestContext()
+  // Comments are internal review discussion — restricted to the review/manage
+  // surface, never exposed to read-only library users.
+  if (!can(ctx, 'documents.review') && !can(ctx, 'documents.manage')) {
+    throw new ForbiddenError('documents.review')
+  }
   if (!documentId) return []
   const rows = await ctx.db((tx) =>
     tx
@@ -557,36 +559,6 @@ export async function replyToComment(input: {
   )
   revalidatePath(`/documents/${input.documentId}/editor`)
   return row ? { ok: true, id: row.id } : { ok: false, error: 'Insert failed' }
-}
-
-export async function editComment(input: {
-  id: string
-  body: string
-}): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.review')
-  const body = input.body.trim()
-  if (!input.id || !body) return { ok: false, error: 'Missing fields' }
-
-  // Author-ownership: only the comment's author (or a documents.manage holder)
-  // may rewrite it — a reviewer can't edit someone else's comment.
-  const [existing] = await ctx.db((tx) =>
-    tx
-      .select({ authorTenantUserId: documentComments.authorTenantUserId })
-      .from(documentComments)
-      .where(eq(documentComments.id, input.id))
-      .limit(1),
-  )
-  if (!existing) return { ok: false, error: 'Comment not found' }
-  const isAuthor = !!ctx.membership?.id && existing.authorTenantUserId === ctx.membership.id
-  if (!isAuthor && !can(ctx, 'documents.manage')) {
-    return { ok: false, error: 'You can only edit your own comments' }
-  }
-
-  await ctx.db((tx) =>
-    tx.update(documentComments).set({ body }).where(eq(documentComments.id, input.id)),
-  )
-  return { ok: true }
 }
 
 export async function resolveComment(input: {

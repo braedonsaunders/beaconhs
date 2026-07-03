@@ -34,7 +34,8 @@ const SORTS = ['title', 'category', 'status', 'updated_at'] as const
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'published', label: 'Published' },
-]
+] as const
+type BookStatus = (typeof STATUS_OPTIONS)[number]['value']
 
 export default async function DocumentBooksPage({
   searchParams,
@@ -48,7 +49,12 @@ export default async function DocumentBooksPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Validate the status param before it hits the enum cast — a crafted value
+  // is ignored rather than 500ing the page.
+  const statusRaw = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw)
+    ? (statusRaw as BookStatus)
+    : undefined
   const ctx = await requireRequestContext()
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
 
@@ -60,7 +66,7 @@ export default async function DocumentBooksPage({
       const cond = or(ilike(documentBooks.title, term), ilike(documentBooks.description, term))
       if (cond) filters.push(cond)
     }
-    if (canManage && statusFilter) filters.push(eq(documentBooks.status, statusFilter as any))
+    if (canManage && statusFilter) filters.push(eq(documentBooks.status, statusFilter))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -211,12 +217,14 @@ export default async function DocumentBooksPage({
                     <TableCell>
                       <Link
                         href={`/documents/books/${b.id}`}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {display}
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-600">{b.category ?? '—'}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-300">
+                      {b.category ?? '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={b.status === 'published' ? 'success' : 'secondary'}>
                         {b.status}
@@ -227,7 +235,7 @@ export default async function DocumentBooksPage({
                         {memberCount} {memberCount === 1 ? 'document' : 'documents'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-300">
                       {new Date(b.updatedAt).toLocaleDateString()}
                     </TableCell>
                   </TableRow>

@@ -9,7 +9,7 @@ import { Download, ExternalLink, FileText, Loader2, RefreshCw, X } from 'lucide-
 import { Button } from '@beaconhs/ui'
 import { getDocumentPdfUrl } from './_actions'
 
-type Status = 'idle' | 'loading' | 'ready' | 'generating' | 'error'
+type Status = 'idle' | 'loading' | 'ready' | 'error'
 
 export function DocumentPdfButton({ documentId }: { documentId: string }) {
   const [open, setOpen] = useState(false)
@@ -26,12 +26,8 @@ export function DocumentPdfButton({ documentId }: { documentId: string }) {
       setError(r.error)
       return
     }
-    if ('url' in r) {
-      setUrl(r.url)
-      setStatus('ready')
-    } else {
-      setStatus('generating')
-    }
+    setUrl(r.url)
+    setStatus('ready')
   }, [documentId])
 
   function openViewer() {
@@ -92,16 +88,6 @@ export function DocumentPdfButton({ documentId }: { documentId: string }) {
             <div className="min-h-0 flex-1 bg-slate-100 dark:bg-slate-950">
               {status === 'ready' && url ? (
                 <iframe src={url} title="Document PDF" className="h-full w-full" />
-              ) : status === 'generating' ? (
-                <Centered>
-                  <Loader2 size={20} className="animate-spin text-teal-600" />
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    Generating the PDF — this takes a few seconds.
-                  </p>
-                  <Button variant="outline" onClick={load}>
-                    <RefreshCw size={14} /> Check again
-                  </Button>
-                </Centered>
               ) : status === 'error' ? (
                 <Centered>
                   <p className="text-sm text-rose-600">{error ?? 'Could not load the PDF.'}</p>

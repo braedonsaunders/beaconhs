@@ -36,15 +36,36 @@ function computeMatches(doc: PMNode, term: string, caseSensitive: boolean): Matc
   if (!term) return matches
   const needle = caseSensitive ? term : term.toLowerCase()
   doc.descendants((node, pos) => {
-    if (!node.isTextblock) return
-    const text = node.textContent
+    if (!node.isTextblock) return true
+    // Collect the block's text leaves with their absolute document positions.
+    // String offsets can't be mapped straight onto positions: inline non-text
+    // nodes (hard breaks, images) occupy positions but contribute nothing to
+    // the text, and mark boundaries split text into multiple leaves — so each
+    // match endpoint is translated through this segment table instead.
+    const segments: { start: number; pos: number; len: number }[] = []
+    let text = ''
+    node.forEach((child, offset) => {
+      if (child.isText && child.text) {
+        segments.push({ start: text.length, pos: pos + 1 + offset, len: child.text.length })
+        text += child.text
+      }
+    })
+    if (!text) return false
+    const toPos = (strOffset: number): number => {
+      for (const s of segments) {
+        if (strOffset < s.start + s.len) return s.pos + (strOffset - s.start)
+      }
+      // Offset past the final character — one past the last segment's end.
+      const last = segments[segments.length - 1]!
+      return last.pos + last.len
+    }
     const hay = caseSensitive ? text : text.toLowerCase()
     let idx = 0
     while ((idx = hay.indexOf(needle, idx)) !== -1) {
-      matches.push({ from: pos + 1 + idx, to: pos + 1 + idx + term.length })
+      matches.push({ from: toPos(idx), to: toPos(idx + term.length - 1) + 1 })
       idx += Math.max(term.length, 1)
     }
-    return true
+    return false
   })
   return matches
 }

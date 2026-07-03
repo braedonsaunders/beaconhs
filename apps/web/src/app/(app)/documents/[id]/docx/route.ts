@@ -5,11 +5,11 @@
 // stream the file (mirrors the CSV export route) rather than queueing a job.
 
 import { NextResponse } from 'next/server'
-import { and, desc, eq, isNotNull } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import HTMLtoDOCX from '@turbodocx/html-to-docx'
 import { documentDrafts, documentVersions, documents } from '@beaconhs/db/schema'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
@@ -41,10 +41,20 @@ export async function GET(
   const { id } = await params
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
+  const canManage = can(ctx, 'documents.manage')
   const useDraft = new URL(req.url).searchParams.get('draft') === '1'
+  // The live draft (and any non-published document) is manage-only — a
+  // read-only user must not be able to pull unpublished content by URL.
+  if (useDraft && !canManage) {
+    return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+  }
 
   const data = await ctx.db(async (tx) => {
-    const [doc] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+    const [doc] = await tx
+      .select()
+      .from(documents)
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+      .limit(1)
     if (!doc) return null
     let html = ''
     let label = 'draft'
@@ -69,6 +79,10 @@ export async function GET(
   })
 
   if (!data) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+  // Readers may only export PUBLISHED documents — the same rule the detail page applies.
+  if (!canManage && data.doc.status !== 'published') {
+    return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+  }
 
   const body = sanitizeDocumentHtml(flattenForExport(data.html)) || '<p></p>'
   const full = `<!doctype html><html><head><meta charset="utf-8"/></head><body>

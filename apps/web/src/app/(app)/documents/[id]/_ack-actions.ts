@@ -8,10 +8,11 @@
 //    exactly as for self-service acks.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq, isNotNull } from 'drizzle-orm'
 import {
   documentAcknowledgmentSessions,
   documentAcknowledgments,
+  documentVersions,
   people,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
@@ -32,13 +33,29 @@ type Err = { ok: false; error: string }
 /** Self-service acknowledgment of the current published version, optional signature. */
 export async function acknowledgeDocument(input: {
   documentId: string
-  versionId: string
   signatureAttachmentId?: string | null
 }): Promise<Ok<unknown> | Err> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.acknowledge')
-  const { documentId, versionId } = input
-  if (!documentId || !versionId) return { ok: false, error: 'Missing document or version' }
+  const { documentId } = input
+  if (!documentId) return { ok: false, error: 'Missing document' }
+
+  // The acknowledged version is resolved server-side to the document's current
+  // published version — a client-supplied id could point at a mismatched or
+  // unpublished version and record an acknowledgment for content the user
+  // never read.
+  const versionId = await ctx.db(async (tx) => {
+    const [v] = await tx
+      .select({ id: documentVersions.id })
+      .from(documentVersions)
+      .where(
+        and(eq(documentVersions.documentId, documentId), isNotNull(documentVersions.publishedAt)),
+      )
+      .orderBy(desc(documentVersions.version))
+      .limit(1)
+    return v?.id ?? null
+  })
+  if (!versionId) return { ok: false, error: 'This document has no published version yet' }
 
   const person = await ctx.db(async (tx) => {
     const [p] = await tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1)

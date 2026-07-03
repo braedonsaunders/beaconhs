@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
 import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
@@ -25,7 +26,10 @@ const STATUS_OPTIONS = [
   { value: 'published', label: 'Published' },
   { value: 'archived', label: 'Archived' },
   { value: 'under_review', label: 'Under review' },
-]
+] as const
+type DocumentStatus = (typeof STATUS_OPTIONS)[number]['value']
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export default async function DocumentsPage({
   searchParams,
@@ -39,13 +43,22 @@ export default async function DocumentsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
-  const categoryFilter = pickString(sp.category)
-  const typeFilter = pickString(sp.type)
+  // Validate query-string filters before they hit enum/uuid casts — a crafted
+  // value is ignored rather than 500ing the page.
+  const statusRaw = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw)
+    ? (statusRaw as DocumentStatus)
+    : undefined
+  const categoryRaw = pickString(sp.category)
+  const categoryFilter = categoryRaw && UUID_RE.test(categoryRaw) ? categoryRaw : undefined
+  const typeRaw = pickString(sp.type)
+  const typeFilter = typeRaw && UUID_RE.test(typeRaw) ? typeRaw : undefined
   const ctx = await requireRequestContext()
   // Administration + Health & Safety (documents.manage) get the management table;
-  // everyone else gets a read-only card library of published documents.
+  // documents.read holders get a read-only card library of published documents.
+  // Mirrors the detail page so users without any documents permission see nothing.
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
+  if (!canManage && !can(ctx, 'documents.read')) notFound()
   const canExport = canManage && can(ctx, 'admin.data.export')
 
   const { rows, total, statusCounts, categoryCounts, typeCounts, categories, types } = await ctx.db(
@@ -57,7 +70,7 @@ export default async function DocumentsPage({
         const cond = or(ilike(documents.title, term), ilike(documents.description, term))
         if (cond) filters.push(cond)
       }
-      if (canManage && statusFilter) filters.push(eq(documents.status, statusFilter as any))
+      if (canManage && statusFilter) filters.push(eq(documents.status, statusFilter))
       if (categoryFilter) filters.push(eq(documents.categoryId, categoryFilter))
       if (typeFilter) filters.push(eq(documents.typeId, typeFilter))
       const whereClause = and(...filters)
