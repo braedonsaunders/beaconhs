@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
@@ -37,7 +37,8 @@ export async function GET(req: NextRequest) {
   }
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    // Mirror the /incidents list page: archived (soft-deleted) rows never export.
+    const filters: SQL<unknown>[] = [isNull(incidents.deletedAt)]
     const vis = await moduleScopeWhere(ctx, tx, {
       prefix: 'incidents',
       ownerCols: [incidents.reportedByTenantUserId],

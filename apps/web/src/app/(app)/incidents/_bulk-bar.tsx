@@ -25,14 +25,22 @@ export function BulkIncidentsBar({
   selectedIds,
   onClear,
   classifications,
+  canUpdate,
+  canExport,
 }: {
   selectedIds: string[]
   onClear: () => void
   classifications: IncidentClassificationOption[]
+  /** Archive / classification mutate rows — hidden without incidents.update. */
+  canUpdate: boolean
+  /** Bulk CSV export needs admin.data.export — hidden without it. */
+  canExport: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'archive' | 'classification' | 'export'>('archive')
+  const [action, setAction] = useState<'archive' | 'classification' | 'export'>(
+    canUpdate ? 'archive' : 'export',
+  )
   const [classificationId, setClassificationId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -43,6 +51,7 @@ export function BulkIncidentsBar({
   )
 
   if (selectedIds.length === 0) return null
+  if (!canUpdate && !canExport) return null
 
   function go() {
     setError(null)
@@ -109,16 +118,16 @@ export function BulkIncidentsBar({
 
   return (
     <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
         <button
           type="button"
           onClick={onClear}
           aria-label="Clear selection"
-          className="rounded p-1 text-slate-500 hover:bg-slate-100"
+          className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
 
         <Select
           value={action}
@@ -126,9 +135,9 @@ export function BulkIncidentsBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <option value="archive">Archive</option>
-          <option value="classification">Set classification</option>
-          <option value="export">Export selected to CSV</option>
+          {canUpdate ? <option value="archive">Archive</option> : null}
+          {canUpdate ? <option value="classification">Set classification</option> : null}
+          {canExport ? <option value="export">Export selected to CSV</option> : null}
         </Select>
 
         {action === 'classification' ? (
@@ -168,8 +177,10 @@ export function BulkIncidentsBar({
             </span>
           )}
         </Button>
-        {error ? <span className="text-xs text-red-600">{error}</span> : null}
-        {info ? <span className="text-xs text-emerald-700">{info}</span> : null}
+        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
+        {info ? (
+          <span className="text-xs text-emerald-700 dark:text-emerald-400">{info}</span>
+        ) : null}
       </div>
     </div>
   )
@@ -192,9 +203,13 @@ export function SelectionCheckbox({
         onToggle(id)
       }}
       aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
     >
-      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {selected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }
@@ -211,9 +226,13 @@ export function HeaderSelectAll({
       type="button"
       onClick={onToggleAll}
       aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
     >
-      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {allSelected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }

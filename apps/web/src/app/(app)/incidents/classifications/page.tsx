@@ -10,7 +10,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Trash2, Archive, ArchiveRestore } from 'lucide-react'
-import { asc, eq, count, sql } from 'drizzle-orm'
+import { asc, eq, count, inArray, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -172,33 +172,52 @@ async function deleteClassification(formData: FormData): Promise<void> {
   assertCanManageModule(ctx, 'incidents')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  // Refuse a hard delete if any incidents reference this classification — fall
-  // back to archive. Cheaper than a soft delete + tombstone migration.
-  const [{ usage } = { usage: 0 }] = await ctx.db((tx) =>
-    tx.select({ usage: count() }).from(incidents).where(eq(incidents.classificationId, id)),
-  )
-  if (Number(usage ?? 0) > 0) {
+  // The subtree stands or falls together: deleting a parent must never orphan
+  // its children (parentId has no FK, and orphans vanish from this admin table
+  // while staying selectable on incidents). Refuse a hard delete if any
+  // incident references the node OR one of its children — fall back to
+  // archiving the whole subtree. Cheaper than a soft delete + tombstone
+  // migration.
+  const { targetIds, usage } = await ctx.db(async (tx) => {
+    const children = await tx
+      .select({ id: incidentClassifications.id })
+      .from(incidentClassifications)
+      .where(eq(incidentClassifications.parentId, id))
+    const targetIds = [id, ...children.map((c) => c.id)]
+    const [row] = await tx
+      .select({ usage: count() })
+      .from(incidents)
+      .where(inArray(incidents.classificationId, targetIds))
+    return { targetIds, usage: Number(row?.usage ?? 0) }
+  })
+  const childCount = targetIds.length - 1
+  if (usage > 0) {
     await ctx.db((tx) =>
       tx
         .update(incidentClassifications)
         .set({ isActive: 0 })
-        .where(eq(incidentClassifications.id, id)),
+        .where(inArray(incidentClassifications.id, targetIds)),
     )
     await recordAudit(ctx, {
       entityType: 'incident_classification',
       entityId: id,
       action: 'archive',
       summary: 'Archived (referenced by existing incidents — hard delete refused)',
+      metadata: { archivedIds: targetIds, childCount },
     })
   } else {
     await ctx.db((tx) =>
-      tx.delete(incidentClassifications).where(eq(incidentClassifications.id, id)),
+      tx.delete(incidentClassifications).where(inArray(incidentClassifications.id, targetIds)),
     )
     await recordAudit(ctx, {
       entityType: 'incident_classification',
       entityId: id,
       action: 'delete',
-      summary: 'Deleted classification',
+      summary:
+        childCount > 0
+          ? `Deleted classification and ${childCount} child categor${childCount === 1 ? 'y' : 'ies'}`
+          : 'Deleted classification',
+      metadata: { deletedIds: targetIds, childCount },
     })
   }
   revalidatePath(BASE)
@@ -354,6 +373,7 @@ function ClassificationRows({
         node={node}
         depth={0}
         usage={usageById[node.id] ?? 0}
+        childCount={childNodes.length}
         sp={sp}
         toggleArchive={toggleArchive}
         deleteClassification={deleteClassification}
@@ -364,6 +384,7 @@ function ClassificationRows({
           node={c}
           depth={1}
           usage={usageById[c.id] ?? 0}
+          childCount={0}
           sp={sp}
           toggleArchive={toggleArchive}
           deleteClassification={deleteClassification}
@@ -377,6 +398,7 @@ function ClassificationRow({
   node,
   depth,
   usage,
+  childCount,
   sp,
   toggleArchive,
   deleteClassification,
@@ -384,6 +406,7 @@ function ClassificationRow({
   node: ClassificationRow
   depth: number
   usage: number
+  childCount: number
   sp: Record<string, string | string[] | undefined>
   toggleArchive: (formData: FormData) => Promise<void>
   deleteClassification: (formData: FormData) => Promise<void>
@@ -473,7 +496,13 @@ function ClassificationRow({
             <button
               type="submit"
               className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-              title={usage > 0 ? `${usage} incidents — will archive instead` : 'Delete'}
+              title={
+                usage > 0
+                  ? `${usage} incidents — will archive instead`
+                  : childCount > 0
+                    ? `Delete (includes ${childCount} child categor${childCount === 1 ? 'y' : 'ies'})`
+                    : 'Delete'
+              }
             >
               <Trash2 size={14} />
             </button>

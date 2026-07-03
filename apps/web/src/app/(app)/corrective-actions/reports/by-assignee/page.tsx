@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { Users } from 'lucide-react'
-import { asc, count, eq, sql } from 'drizzle-orm'
+import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 
@@ -34,8 +35,15 @@ export default async function ByAssigneeReport() {
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
 
-  const rows = await ctx.db((tx) =>
-    tx
+  const rows = await ctx.db(async (tx) => {
+    // Per-user record visibility — same predicate as the /corrective-actions
+    // list page, so a self/site-tier user only aggregates their slice here too.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'ca',
+      ownerCols: [correctiveActions.ownerTenantUserId],
+      siteCol: correctiveActions.siteOrgUnitId,
+    })
+    return tx
       .select({
         ownerId: correctiveActions.ownerTenantUserId,
         ownerDisplayName: tenantUsers.displayName,
@@ -72,9 +80,10 @@ export default async function ByAssigneeReport() {
       .from(correctiveActions)
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .where(and(isNull(correctiveActions.deletedAt), vis))
       .groupBy(correctiveActions.ownerTenantUserId, tenantUsers.displayName, user.name, user.email)
-      .orderBy(sql`COUNT(*) DESC`),
-  )
+      .orderBy(sql`COUNT(*) DESC`)
+  })
 
   const stats: AssigneeStat[] = rows.map((r) => {
     const total = Number(r.total ?? 0)

@@ -53,7 +53,14 @@ export default async function IncidentsPage({
   const statusFilter = pickString(sp.status)
 
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'incidents.read.self')
+  // The export route accepts any read tier — mirror that here so read.all /
+  // read.site-only roles still see the button.
+  const canExport =
+    can(ctx, 'admin.data.export') &&
+    (can(ctx, 'incidents.read.all') ||
+      can(ctx, 'incidents.read.site') ||
+      can(ctx, 'incidents.read.self'))
+  const canUpdate = can(ctx, 'incidents.update')
 
   const { rows, total, typeCounts, statusCounts, involved } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -226,6 +233,8 @@ export default async function IncidentsPage({
           <IncidentsRecordsTable
             rows={tableRows}
             classifications={classifications}
+            canUpdate={canUpdate}
+            canExport={canExport}
             basePath="/incidents"
             currentParams={sp}
             sort={params.sort}

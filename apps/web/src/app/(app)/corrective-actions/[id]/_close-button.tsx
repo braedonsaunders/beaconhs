@@ -1,48 +1,14 @@
 'use client'
 
-import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2 } from 'lucide-react'
-import { Alert, AlertDescription, Button, Input, Label, Textarea } from '@beaconhs/ui'
+import { Alert, AlertDescription, Input, Label, Textarea } from '@beaconhs/ui'
 import { closeCorrectiveAction } from '../_actions'
 
 /**
- * Header trigger for the close-and-lock drawer. The actual cost-impact prompt
- * lives in the `CloseBody` widget mounted inside `?drawer=close`.
- */
-export function CloseButton({
-  caId,
-  verificationRequired,
-  verifiedAt,
-}: {
-  caId: string
-  reference?: string
-  verificationRequired: boolean
-  verifiedAt: Date | null
-}) {
-  const blocked = verificationRequired && !verifiedAt
-  if (blocked) {
-    return (
-      <Button variant="default" type="button" disabled title="Complete verification before closing">
-        <CheckCircle2 size={14} />
-        Close + lock
-      </Button>
-    )
-  }
-  return (
-    <Link href={`/corrective-actions/${caId}?drawer=close`}>
-      <Button variant="default" type="button">
-        <CheckCircle2 size={14} />
-        Close + lock
-      </Button>
-    </Link>
-  )
-}
-
-/**
- * Body of the close-and-lock drawer. Prompts for the cost-impact figure +
- * optional close note before invoking the server action.
+ * Body of the close-and-lock drawer (opened via `?drawer=close` from
+ * CaHeaderActions). Prompts for the cost-impact figure + optional close note
+ * before invoking the server action.
  */
 export function CloseBody({
   caId,

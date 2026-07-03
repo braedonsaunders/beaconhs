@@ -28,6 +28,8 @@ export type IncidentsTableRow = {
 export function IncidentsRecordsTable({
   rows,
   classifications,
+  canUpdate,
+  canExport,
   basePath,
   currentParams,
   sort,
@@ -35,12 +37,18 @@ export function IncidentsRecordsTable({
 }: {
   rows: IncidentsTableRow[]
   classifications: IncidentClassificationOption[]
+  /** Archive / classification mutate rows — hidden without incidents.update. */
+  canUpdate: boolean
+  /** Bulk CSV export needs admin.data.export — hidden without it. */
+  canExport: boolean
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // No permitted bulk action → no selection UI at all.
+  const selectable = canUpdate || canExport
 
   const allSelected = useMemo(
     () => rows.length > 0 && rows.every((r) => selected.has(r.id)),
@@ -76,7 +84,9 @@ export function IncidentsRecordsTable({
             key={r.id}
             href={`/incidents/${r.id}`}
             leading={
-              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              selectable ? (
+                <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              ) : undefined
             }
             person={
               r.involved.length
@@ -100,9 +110,11 @@ export function IncidentsRecordsTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-              <th className="w-8 px-3 py-2">
-                <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
-              </th>
+              {selectable ? (
+                <th className="w-8 px-3 py-2">
+                  <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
+                </th>
+              ) : null}
               <SortTh column="reference" {...sortProps}>
                 Ref
               </SortTh>
@@ -138,9 +150,11 @@ export function IncidentsRecordsTable({
                       : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
                   }
                 >
-                  <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
-                  </td>
+                  {selectable ? (
+                    <td className="w-8 px-3 py-2">
+                      <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                     <Link href={`/incidents/${r.id}` as any} className="hover:underline">
                       {r.reference}
@@ -175,11 +189,15 @@ export function IncidentsRecordsTable({
           </tbody>
         </table>
       </div>
-      <BulkIncidentsBar
-        selectedIds={Array.from(selected)}
-        onClear={clear}
-        classifications={classifications}
-      />
+      {selectable ? (
+        <BulkIncidentsBar
+          selectedIds={Array.from(selected)}
+          onClear={clear}
+          classifications={classifications}
+          canUpdate={canUpdate}
+          canExport={canExport}
+        />
+      ) : null}
     </>
   )
 }

@@ -1,17 +1,16 @@
 // Server-only helper for sending an incident recap email.
-// Mirrors apps/web/src/app/(app)/toolbox/[id]/_send-email.ts — same
-// admin-recipient strategy (every active tenantUser with an email).
+//
+// Explicit recipients only — no silent blast to every active tenant user. The
+// body carries injury, hospital, and insurance details, so the sender must
+// name who receives it (matches the hazard-assessment / document senders).
 
-import { and, eq, sql } from 'drizzle-orm'
-import { sendEmail } from '@beaconhs/emails'
+import { eq } from 'drizzle-orm'
 import {
   departments,
   incidentInjuries,
   incidents,
   orgUnits,
   people,
-  tenantUsers,
-  users,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
@@ -19,7 +18,7 @@ import { recordAudit } from '@/lib/audit'
 export async function sendIncidentEmail(
   ctx: RequestContext,
   incidentId: string,
-  options?: { extraRecipients?: string[]; subjectPrefix?: string; messageOverride?: string },
+  options?: { recipients?: string[]; subjectPrefix?: string; messageOverride?: string },
 ): Promise<{ recipientCount: number } | null> {
   const data = await ctx.db(async (tx) => {
     const [inc] = await tx
@@ -43,24 +42,11 @@ export async function sendIncidentEmail(
       .leftJoin(people, eq(people.id, incidentInjuries.personId))
       .where(eq(incidentInjuries.incidentId, incidentId))
 
-    const recipients = await tx
-      .select({ email: users.email, name: users.name })
-      .from(tenantUsers)
-      .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(
-        and(
-          eq(tenantUsers.tenantId, inc.i.tenantId),
-          eq(tenantUsers.status, 'active'),
-          sql`${users.email} IS NOT NULL`,
-        ),
-      )
-
-    return { ...inc, injuries, recipients }
+    return { ...inc, injuries }
   })
   if (!data) return null
 
-  const adminEmails = data.recipients.map((r) => r.email).filter((s): s is string => !!s)
-  const to = Array.from(new Set([...adminEmails, ...(options?.extraRecipients ?? [])]))
+  const to = Array.from(new Set((options?.recipients ?? []).filter((s) => /@/.test(s))))
   if (to.length === 0) return null
 
   const supervisorName = data.supervisor
@@ -193,13 +179,27 @@ export async function sendIncidentEmail(
     </div>
   `
 
-  await sendEmail({ to, subject, html, text })
+  // Enqueue via BullMQ so the worker captures an email_log row + retries on
+  // failure (mirrors the hazard-assessment / document send helpers).
+  const { enqueueEmail } = await import('@beaconhs/jobs')
+  await enqueueEmail({
+    to,
+    subject,
+    html,
+    text,
+    meta: {
+      tenantId: ctx.tenantId,
+      category: 'incident_send',
+      userId: ctx.userId,
+    },
+  })
+
   await recordAudit(ctx, {
     entityType: 'incident',
     entityId: incidentId,
-    action: 'update',
-    summary: `Emailed ${to.length} recipient${to.length === 1 ? '' : 's'}`,
-    after: { recipientCount: to.length, extraRecipients: options?.extraRecipients ?? [] },
+    action: 'export',
+    summary: `Emailed incident to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
+    after: { recipientCount: to.length, recipients: to },
   })
   return { recipientCount: to.length }
 }

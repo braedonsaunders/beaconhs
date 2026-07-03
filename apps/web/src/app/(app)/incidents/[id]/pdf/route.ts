@@ -2,10 +2,11 @@
 //
 // Render a fresh incident PDF on demand and stream it back to the browser.
 
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { incidents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
+import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +30,7 @@ export async function GET(
         siteOrgUnitId: incidents.siteOrgUnitId,
       })
       .from(incidents)
-      .where(eq(incidents.id, id))
+      .where(and(eq(incidents.id, id), isNull(incidents.deletedAt)))
       .limit(1)
     if (!row) return false
     return canSeeRecord(ctx, tx, {
@@ -41,6 +42,14 @@ export async function GET(
   if (!visible) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
+
+  await recordAudit(ctx, {
+    entityType: 'incident',
+    entityId: id,
+    action: 'export',
+    summary: 'Exported PDF',
+    metadata: { format: 'pdf' },
+  })
 
   return renderModulePdfResponse(ctx, {
     moduleKey: 'incidents',

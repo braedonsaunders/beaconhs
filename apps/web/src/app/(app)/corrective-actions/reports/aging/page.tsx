@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { Hourglass } from 'lucide-react'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 
@@ -70,8 +71,15 @@ export default async function AgingReport() {
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
 
-  const rows = await ctx.db((tx) =>
-    tx
+  const rows = await ctx.db(async (tx) => {
+    // Per-user record visibility — same predicate as the /corrective-actions
+    // list page, so a self/site-tier user only sees their slice here too.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'ca',
+      ownerCols: [correctiveActions.ownerTenantUserId],
+      siteCol: correctiveActions.siteOrgUnitId,
+    })
+    return tx
       .select({
         ca: correctiveActions,
         owner: tenantUsers,
@@ -82,9 +90,15 @@ export default async function AgingReport() {
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
-      .where(inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']))
-      .orderBy(asc(correctiveActions.assignedOn)),
-  )
+      .where(
+        and(
+          isNull(correctiveActions.deletedAt),
+          inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
+          vis,
+        ),
+      )
+      .orderBy(asc(correctiveActions.assignedOn))
+  })
 
   const enriched: Row[] = rows.map((r) => {
     const baseline = r.ca.assignedOn

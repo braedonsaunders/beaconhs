@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { correctiveActions, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   }
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
     const vis = await moduleScopeWhere(ctx, tx, {
       prefix: 'ca',
       ownerCols: [correctiveActions.ownerTenantUserId],

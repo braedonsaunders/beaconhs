@@ -59,16 +59,16 @@ export function BulkReassignBar({
 
   return (
     <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
         <button
           type="button"
           onClick={onClear}
           aria-label="Clear selection"
-          className="rounded p-1 text-slate-500 hover:bg-slate-100"
+          className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
         <div className="flex items-center gap-2">
           <UserCog size={14} className="text-slate-500" />
           <SearchSelect
@@ -89,7 +89,7 @@ export function BulkReassignBar({
         <Button size="sm" onClick={go} disabled={pending}>
           {pending ? 'Reassigning…' : 'Reassign'}
         </Button>
-        {error ? <span className="text-xs text-red-600">{error}</span> : null}
+        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
       </div>
     </div>
   )
@@ -116,9 +116,13 @@ export function SelectionCheckbox({
         onToggle(id)
       }}
       aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
     >
-      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {selected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }
@@ -135,9 +139,13 @@ export function HeaderSelectAll({
       type="button"
       onClick={onToggleAll}
       aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
     >
-      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {allSelected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }

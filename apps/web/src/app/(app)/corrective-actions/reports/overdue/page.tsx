@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { AlertTriangle, Clock } from 'lucide-react'
-import { and, asc, eq, inArray, lt, ne, sql } from 'drizzle-orm'
-import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { and, asc, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 
@@ -34,8 +35,15 @@ export default async function OverdueReport() {
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
 
-  const rows = await ctx.db((tx) =>
-    tx
+  const rows = await ctx.db(async (tx) => {
+    // Per-user record visibility — same predicate as the /corrective-actions
+    // list page, so a self/site-tier user only sees their slice here too.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'ca',
+      ownerCols: [correctiveActions.ownerTenantUserId],
+      siteCol: correctiveActions.siteOrgUnitId,
+    })
+    return tx
       .select({
         ca: correctiveActions,
         site: orgUnits,
@@ -48,12 +56,14 @@ export default async function OverdueReport() {
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .where(
         and(
+          isNull(correctiveActions.deletedAt),
           lt(correctiveActions.dueOn, today),
           inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
+          vis,
         ),
       )
-      .orderBy(asc(correctiveActions.dueOn)),
-  )
+      .orderBy(asc(correctiveActions.dueOn))
+  })
 
   const groups: AssigneeGroup[] = []
   const byOwner = new Map<string, AssigneeGroup>()

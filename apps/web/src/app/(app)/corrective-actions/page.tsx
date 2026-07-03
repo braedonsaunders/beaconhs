@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -63,7 +63,12 @@ export default async function CorrectiveActionsPage({
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const sevFilter = pickString(sp.severity)
   const ctx = await requireRequestContext()
-  const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ca.read.self')
+  // The export route accepts any read tier — mirror that here so read.all /
+  // read.site-only roles still see the button.
+  const canExport =
+    can(ctx, 'admin.data.export') &&
+    (can(ctx, 'ca.read.all') || can(ctx, 'ca.read.site') || can(ctx, 'ca.read.self'))
+  const canUpdate = can(ctx, 'ca.update')
 
   const { rows, total, statusCounts, sevCounts } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -73,7 +78,7 @@ export default async function CorrectiveActionsPage({
       ownerCols: [correctiveActions.ownerTenantUserId],
       siteCol: correctiveActions.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
     if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
@@ -86,7 +91,7 @@ export default async function CorrectiveActionsPage({
     }
     if (statusFilter) filters.push(eq(correctiveActions.status, statusFilter as any))
     if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
@@ -125,15 +130,16 @@ export default async function CorrectiveActionsPage({
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
 
+    const facetWhere = and(isNull(correctiveActions.deletedAt), vis)
     const ss = await tx
       .select({ s: correctiveActions.status, c: count() })
       .from(correctiveActions)
-      .where(vis)
+      .where(facetWhere)
       .groupBy(correctiveActions.status)
     const sv = await tx
       .select({ s: correctiveActions.severity, c: count() })
       .from(correctiveActions)
-      .where(vis)
+      .where(facetWhere)
       .groupBy(correctiveActions.severity)
     return {
       rows: data,
@@ -228,6 +234,7 @@ export default async function CorrectiveActionsPage({
             rows={tableRows}
             owners={owners}
             today={today}
+            canUpdate={canUpdate}
             basePath="/corrective-actions"
             currentParams={sp}
             sort={params.sort}

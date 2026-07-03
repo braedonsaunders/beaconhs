@@ -14,10 +14,11 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { incidentClassifications, incidents, orgUnits } from '@beaconhs/db/schema'
-import { assertCan, can } from '@beaconhs/tenant'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
+import { moduleScopeWhere } from '@/lib/visibility'
 
 export type BulkActionResult =
   | { ok: true; updated: number; skipped: number }
@@ -41,12 +42,22 @@ export async function bulkArchiveIncidents(args: {
   incidentIds: string[]
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  if (!can(ctx, 'incidents.update')) {
+    return { ok: false, error: 'You do not have permission to update incidents.' }
+  }
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
 
   const result = await ctx.db(async (tx) => {
+    // Re-scope to the caller's read tier so a self/site-tier user can't drive
+    // incidents they cannot see by posting guessed ids (mirrors the detail
+    // page's assertCanSeeIncident guard).
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'incidents',
+      ownerCols: [incidents.reportedByTenantUserId],
+      siteCol: incidents.siteOrgUnitId,
+    })
     const rows = await tx
       .select({
         id: incidents.id,
@@ -54,10 +65,12 @@ export async function bulkArchiveIncidents(args: {
         deletedAt: incidents.deletedAt,
       })
       .from(incidents)
-      .where(inArray(incidents.id, ids))
+      .where(and(inArray(incidents.id, ids), vis))
 
     const editable = rows.filter((r) => !r.locked && r.deletedAt === null).map((r) => r.id)
-    const skipped = rows.length - editable.length
+    // Out-of-scope / unknown ids never come back from the scoped select, so
+    // count everything that wasn't updated as skipped.
+    const skipped = ids.length - editable.length
 
     if (editable.length === 0) return { updated: 0, skipped }
 
@@ -97,7 +110,9 @@ export async function bulkSetIncidentClassification(args: {
   classificationId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'incidents.update')
+  if (!can(ctx, 'incidents.update')) {
+    return { ok: false, error: 'You do not have permission to update incidents.' }
+  }
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
   if (!args.classificationId) return { ok: false, error: 'Select a classification.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
@@ -117,6 +132,14 @@ export async function bulkSetIncidentClassification(args: {
   }
 
   const result = await ctx.db(async (tx) => {
+    // Re-scope to the caller's read tier so a self/site-tier user can't drive
+    // incidents they cannot see by posting guessed ids (mirrors the detail
+    // page's assertCanSeeIncident guard).
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'incidents',
+      ownerCols: [incidents.reportedByTenantUserId],
+      siteCol: incidents.siteOrgUnitId,
+    })
     const rows = await tx
       .select({
         id: incidents.id,
@@ -124,9 +147,11 @@ export async function bulkSetIncidentClassification(args: {
         deletedAt: incidents.deletedAt,
       })
       .from(incidents)
-      .where(inArray(incidents.id, ids))
+      .where(and(inArray(incidents.id, ids), vis))
     const editable = rows.filter((r) => !r.locked && r.deletedAt === null).map((r) => r.id)
-    const skipped = rows.length - editable.length
+    // Out-of-scope / unknown ids never come back from the scoped select, so
+    // count everything that wasn't updated as skipped.
+    const skipped = ids.length - editable.length
 
     if (editable.length === 0) return { updated: 0, skipped }
 
@@ -175,25 +200,39 @@ export async function bulkExportIncidentsCsv(args: {
   incidentIds: string[]
 }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
+  // Match the /incidents/export.csv route: the tenant-level export permission,
+  // a read tier, and no exporting while impersonating another user.
   if (
-    !can(ctx, 'incidents.read.all') &&
-    !can(ctx, 'incidents.read.site') &&
-    !can(ctx, 'incidents.read.self')
+    !can(ctx, 'admin.data.export') ||
+    (!can(ctx, 'incidents.read.all') &&
+      !can(ctx, 'incidents.read.site') &&
+      !can(ctx, 'incidents.read.self'))
   ) {
     return { ok: false, error: 'Not authorized.' }
+  }
+  if (ctx.impersonation) {
+    return { ok: false, error: 'Exports are disabled while viewing as another user.' }
   }
   if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
   const ids = args.incidentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
 
-  const rows = await ctx.db((tx) =>
-    tx
+  const rows = await ctx.db(async (tx) => {
+    // Scope the ids to the caller's read tier so a self/site-tier user can't
+    // export incidents they cannot see by posting guessed ids.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'incidents',
+      ownerCols: [incidents.reportedByTenantUserId],
+      siteCol: incidents.siteOrgUnitId,
+    })
+    return tx
       .select({ incident: incidents, site: orgUnits })
       .from(incidents)
       .leftJoin(orgUnits, eq(orgUnits.id, incidents.siteOrgUnitId))
-      .where(inArray(incidents.id, ids))
-      .orderBy(asc(incidents.reference)),
-  )
+      .where(and(inArray(incidents.id, ids), isNull(incidents.deletedAt), vis))
+      .orderBy(asc(incidents.reference))
+  })
+  if (rows.length === 0) return { ok: false, error: 'No exportable incidents in the selection.' }
 
   const headers = [
     'Reference',

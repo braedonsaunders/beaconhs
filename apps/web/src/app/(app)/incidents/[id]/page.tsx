@@ -391,10 +391,19 @@ async function updateTextField(formData: FormData) {
     val = trimmed === '' ? null : value
   }
 
+  // Keep the migrated legacy columns in lockstep with their canonical field.
+  // The UI displays `emsCalled || emsNotified` (etc.) so ETL-migrated rows show
+  // their data, but writes only touch the canonical column — without the sync a
+  // toggled-off value would snap back on from the stale legacy column.
+  const updates: Record<string, unknown> = { [field]: val }
+  if (field === 'emsCalled') updates.emsNotified = val
+  if (field === 'firstAidGiven') updates.firstAidReceived = val
+  if (field === 'hospitalName') updates.treatedAtHospital = null
+
   await ctx.db((tx) =>
     tx
       .update(incidents)
-      .set({ [field]: val } as any)
+      .set(updates as any)
       .where(eq(incidents.id, id)),
   )
   await recordAudit(ctx, {
@@ -449,14 +458,12 @@ async function sendEmailAction(formData: FormData) {
   await assertCanSeeIncident(ctx, id)
   const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
   const messageOverride = String(formData.get('message') ?? '').trim() || undefined
-  const extraRaw = String(formData.get('extraRecipients') ?? '').trim()
-  const extraRecipients = extraRaw
-    ? extraRaw
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
-    : undefined
-  await sendIncidentEmail(ctx, id, { subjectPrefix, messageOverride, extraRecipients })
+  const recipients = String(formData.get('recipients') ?? '')
+    .split(/[,;\s]+/g)
+    .map((s) => s.trim())
+    .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  if (recipients.length === 0) throw new Error('Add at least one valid email address')
+  await sendIncidentEmail(ctx, id, { subjectPrefix, messageOverride, recipients })
   revalidatePath(`/incidents/${id}`)
 }
 
@@ -2845,7 +2852,7 @@ export default async function IncidentDetailPage({
         open={drawer === 'send-email'}
         closeHref={basePath}
         title={`Send incident email · ${incident.reference}`}
-        description="Sends a structured incident summary email to every active tenant admin. Add extra comma-separated email addresses below to copy specific recipients."
+        description="Emails a structured incident summary to the recipients you list below."
         size="md"
         footer={
           <>
@@ -2880,13 +2887,15 @@ export default async function IncidentDetailPage({
             <p className="text-xs text-slate-500">Prepended to the auto-generated subject.</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inc-se-extra">Extra recipients</Label>
+            <Label htmlFor="inc-se-recipients">Recipients</Label>
             <Input
-              id="inc-se-extra"
-              name="extraRecipients"
+              id="inc-se-recipients"
+              name="recipients"
               type="text"
+              required
               placeholder="ceo@example.com, hse@example.com"
             />
+            <p className="text-xs text-slate-500">Comma-separate multiple addresses.</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inc-se-message">Personal note (optional)</Label>

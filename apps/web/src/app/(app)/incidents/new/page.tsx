@@ -22,6 +22,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { PageContainer } from '@/components/page-layout'
+import { OccurredAtField } from './_occurred-at-field'
 
 export const metadata = { title: 'Report incident' }
 
@@ -121,8 +122,6 @@ export default async function NewIncidentPage() {
       .where(eq(orgUnits.level, 'site'))
       .orderBy(asc(orgUnits.name)),
   )
-  const nowLocal = new Date().toISOString().slice(0, 16)
-
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
@@ -160,7 +159,7 @@ export default async function NewIncidentPage() {
                   </Select>
                 </Field>
                 <Field label="Occurred at" required className="sm:col-span-1">
-                  <Input name="occurredAt" type="datetime-local" required defaultValue={nowLocal} />
+                  <OccurredAtField name="occurredAt" />
                 </Field>
                 <Field label="Site">
                   <Select name="siteOrgUnitId" defaultValue="">

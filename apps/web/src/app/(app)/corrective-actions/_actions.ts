@@ -17,6 +17,7 @@ import {
   caCompleteSteps,
   caPhotos,
   correctiveActions,
+  orgUnits,
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
@@ -26,7 +27,7 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { storeSignatureValue } from '@/lib/signature-storage'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
@@ -247,6 +248,12 @@ export async function verifyCorrectiveAction(args: {
 
   const verifierId = safeTenantUserId(ctx)
 
+  // Verifying a CA that is still open/in-progress is a real status transition,
+  // so it must fire the same flows + completed event the header status dropdown
+  // fires. A CA already sitting at pending_verification keeps its status
+  // untouched (no double-fired automations).
+  const transitioning = ca.status !== 'pending_verification'
+
   await ctx.db((tx) =>
     tx
       .update(correctiveActions)
@@ -254,10 +261,20 @@ export async function verifyCorrectiveAction(args: {
         verifiedAt: new Date(),
         verifiedByTenantUserId: verifierId,
         verificationNotes: args.notes.trim() || null,
-        status: 'pending_verification',
+        ...(transitioning ? { status: 'pending_verification' as const } : {}),
       })
       .where(eq(correctiveActions.id, args.caId)),
   )
+
+  if (transitioning) {
+    await runModuleFlows(ctx, {
+      moduleKey: 'corrective-actions',
+      event: 'status_change',
+      subjectId: args.caId,
+      toStatus: 'pending_verification',
+    })
+    await emitCorrectiveActionCompleted(ctx, { caId: args.caId, completerUserId: ctx.userId })
+  }
 
   // Persist the verification step + optional signature on the timeline so it
   // shows up in the CA "Complete steps" panel.
@@ -276,6 +293,7 @@ export async function verifyCorrectiveAction(args: {
     after: { verifiedAt: new Date().toISOString(), verifierId, verificationNotes: args.notes },
   })
   revalidatePath(`/corrective-actions/${args.caId}`)
+  if (transitioning) revalidatePath('/corrective-actions')
   return { ok: true }
 }
 
@@ -391,10 +409,10 @@ export async function reopenCorrectiveAction(caId: string): Promise<ActionResult
 // ---------- Email --------------------------------------------------------
 
 /**
- * Send a notification email containing a link to the CA detail page. Returns
- * `ok: true` even if no recipients were resolved — the audit log captures
- * the attempt either way. The actual delivery is best-effort via the events
- * package; if no SMTP is configured this is effectively a no-op.
+ * Email a corrective-action summary (with a link to the detail page) to an
+ * explicit list of recipients. Delivery goes through the BullMQ email queue so
+ * the worker captures an email_log row and retries on failure; the audit row
+ * records the queued send.
  */
 export async function sendCorrectiveActionEmail(args: {
   caId: string
@@ -408,7 +426,7 @@ export async function sendCorrectiveActionEmail(args: {
   const ca = await loadCA(ctx, args.caId)
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
 
-  const cleaned = Array.from(
+  const to = Array.from(
     new Set(
       args.recipients
         .flatMap((r) => r.split(/[,;\s]+/g))
@@ -416,23 +434,137 @@ export async function sendCorrectiveActionEmail(args: {
         .filter((r) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r)),
     ),
   )
+  if (to.length === 0) return { ok: false, error: 'Add at least one valid email address.' }
+
+  const names = await ctx.db(async (tx) => {
+    const [siteRow] = ca.siteOrgUnitId
+      ? await tx
+          .select({ name: orgUnits.name })
+          .from(orgUnits)
+          .where(eq(orgUnits.id, ca.siteOrgUnitId))
+          .limit(1)
+      : []
+    const [ownerRow] = ca.ownerTenantUserId
+      ? await tx
+          .select({ displayName: tenantUsers.displayName, name: user.name })
+          .from(tenantUsers)
+          .leftJoin(user, eq(user.id, tenantUsers.userId))
+          .where(eq(tenantUsers.id, ca.ownerTenantUserId))
+          .limit(1)
+      : []
+    return {
+      site: siteRow?.name ?? null,
+      owner: ownerRow?.name ?? ownerRow?.displayName ?? null,
+    }
+  })
+
+  const appUrl = process.env.APP_URL ?? ''
+  const caUrl = `${appUrl}/corrective-actions/${args.caId}`
+  const subject = `Corrective action ${ca.reference} · ${ca.title}`
+  const message = args.message?.trim() || null
+
+  const text = [
+    `CORRECTIVE ACTION`,
+    `${ca.reference} · ${ca.title}`,
+    ``,
+    `Severity: ${ca.severity}`,
+    `Status: ${ca.status.replace(/_/g, ' ')}`,
+    `Owner: ${names.owner ?? '—'}`,
+    `Site: ${names.site ?? '—'}`,
+    `Assigned on: ${ca.assignedOn ?? '—'}`,
+    `Due on: ${ca.dueOn ?? '—'}`,
+    ``,
+    message ? `Note: ${message}\n` : '',
+    `Description:`,
+    ca.description ?? '(none)',
+    ``,
+    ca.rootCause ? `Root cause:\n${ca.rootCause}\n` : '',
+    ca.actionTaken ? `Action taken:\n${ca.actionTaken}\n` : '',
+    `View the record: ${caUrl}`,
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
+
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:720px;">
+      <h2 style="margin:0 0 4px;font-size:18px;">${escapeHtml(ca.title)}</h2>
+      <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
+        ${escapeHtml(ca.reference)} ·
+        severity ${escapeHtml(ca.severity)} ·
+        status ${escapeHtml(ca.status.replace(/_/g, ' '))}
+      </div>
+      ${
+        message
+          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(message)}</div>`
+          : ''
+      }
+      <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Owner</td>
+            <td style="padding:4px 0;">${escapeHtml(names.owner ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Site</td>
+            <td style="padding:4px 0;">${escapeHtml(names.site ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Assigned on</td>
+            <td style="padding:4px 0;">${escapeHtml(ca.assignedOn ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Due on</td>
+            <td style="padding:4px 0;">${escapeHtml(ca.dueOn ?? '—')}</td></tr>
+      </table>
+      <h3 style="margin:18px 0 4px;font-size:14px;">Description</h3>
+      <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ca.description ?? '(none)')}</div>
+      ${
+        ca.rootCause
+          ? `<h3 style="margin:18px 0 4px;font-size:14px;">Root cause</h3>
+             <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ca.rootCause)}</div>`
+          : ''
+      }
+      ${
+        ca.actionTaken
+          ? `<h3 style="margin:18px 0 4px;font-size:14px;">Action taken</h3>
+             <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ca.actionTaken)}</div>`
+          : ''
+      }
+      <p style="margin:18px 0 0;font-size:13px;">
+        <a href="${escapeHtml(caUrl)}" style="color:#0f766e;">Open the corrective action</a>
+      </p>
+    </div>
+  `
+
+  // Enqueue via BullMQ so the worker captures an email_log row + retries on
+  // failure (mirrors the hazard-assessment / document send helpers).
+  const { enqueueEmail } = await import('@beaconhs/jobs')
+  await enqueueEmail({
+    to,
+    subject,
+    html,
+    text,
+    meta: {
+      tenantId: ctx.tenantId,
+      category: 'corrective_action_send',
+      userId: ctx.userId,
+    },
+  })
 
   await recordAudit(ctx, {
     entityType: 'corrective_action',
     entityId: args.caId,
     action: 'export',
-    summary:
-      cleaned.length > 0
-        ? `Sent email to ${cleaned.length} recipient${cleaned.length === 1 ? '' : 's'}`
-        : 'Email send requested (no valid recipients)',
+    summary: `Emailed corrective action to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
     metadata: {
-      recipients: cleaned,
-      message: args.message ?? null,
+      recipients: to,
+      message,
       link: `/corrective-actions/${args.caId}`,
     },
   })
   revalidatePath(`/corrective-actions/${args.caId}`)
   return { ok: true }
+}
+
+function escapeHtml(s: string | null | undefined): string {
+  if (s == null) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 // ---------- Bulk reassign ------------------------------------------------
@@ -447,7 +579,9 @@ export async function bulkReassignCorrectiveActions(args: {
   newOwnerTenantUserId: string
 }): Promise<{ ok: true; updated: number; skipped: number } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'ca.update')
+  if (!can(ctx, 'ca.update')) {
+    return { ok: false, error: 'You do not have permission to update corrective actions.' }
+  }
   if (args.caIds.length === 0) return { ok: false, error: 'No actions selected.' }
   if (!args.newOwnerTenantUserId) return { ok: false, error: 'Pick an owner.' }
 
@@ -465,18 +599,28 @@ export async function bulkReassignCorrectiveActions(args: {
   if (!ownerExists) return { ok: false, error: 'Owner is not a member of this tenant.' }
 
   const ids = args.caIds.slice(0, 500)
-  const rows = await ctx.db((tx) =>
-    tx
+  const rows = await ctx.db(async (tx) => {
+    // Re-scope to the caller's read tier so a self/site-tier user can't drive
+    // corrective actions they cannot see by posting guessed ids (mirrors the
+    // loadCA guard on the single-record mutations).
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'ca',
+      ownerCols: [correctiveActions.ownerTenantUserId],
+      siteCol: correctiveActions.siteOrgUnitId,
+    })
+    return tx
       .select({
         id: correctiveActions.id,
         locked: correctiveActions.locked,
         ownerTenantUserId: correctiveActions.ownerTenantUserId,
       })
       .from(correctiveActions)
-      .where(inArray(correctiveActions.id, ids)),
-  )
+      .where(and(inArray(correctiveActions.id, ids), vis))
+  })
   const editable = rows.filter((r) => !r.locked).map((r) => r.id)
-  const skipped = rows.length - editable.length
+  // Out-of-scope / unknown ids never come back from the scoped select, so
+  // count everything that wasn't updated as skipped.
+  const skipped = ids.length - editable.length
 
   if (editable.length === 0) {
     return { ok: true, updated: 0, skipped }
@@ -497,6 +641,12 @@ export async function bulkReassignCorrectiveActions(args: {
       summary: 'Bulk reassigned',
       after: { ownerTenantUserId: args.newOwnerTenantUserId },
     })
+    // Notify the new owner the same way the single-record create path does.
+    await emitCorrectiveActionAssigned(ctx, {
+      caId: id,
+      assigneeUserId: null,
+      assignerUserId: null,
+    })
   }
   await recordAudit(ctx, {
     entityType: 'corrective_action',
@@ -512,35 +662,6 @@ export async function bulkReassignCorrectiveActions(args: {
   revalidatePath('/corrective-actions')
   revalidatePath('/corrective-actions/reports/by-assignee')
   return { ok: true, updated: editable.length, skipped }
-}
-
-// ---------- Misc edits --------------------------------------------------
-
-export async function setVerificationRequired(
-  caId: string,
-  required: boolean,
-): Promise<ActionResult> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'ca.update')
-  const ca = await loadCA(ctx, caId)
-  if (!ca) return { ok: false, error: 'Corrective action not found.' }
-  const lockErr = assertNotLocked(ca)
-  if (lockErr) return lockErr
-  await ctx.db((tx) =>
-    tx
-      .update(correctiveActions)
-      .set({ verificationRequired: required })
-      .where(eq(correctiveActions.id, caId)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: caId,
-    action: 'update',
-    summary: required ? 'Verification required' : 'Verification waived',
-    after: { verificationRequired: required },
-  })
-  revalidatePath(`/corrective-actions/${caId}`)
-  return { ok: true }
 }
 
 // ---------- Lookups (used by bulk-reassign + verification UI) -----------

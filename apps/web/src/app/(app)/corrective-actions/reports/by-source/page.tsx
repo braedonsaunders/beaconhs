@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { LinkIcon, ListChecks } from 'lucide-react'
-import { and, asc, count, eq, inArray, isNotNull, sql, sum } from 'drizzle-orm'
+import { and, count, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 
@@ -30,8 +31,15 @@ type SourceRow = {
 export default async function BySourceReport() {
   const ctx = await requireRequestContext()
 
-  const grouped = await ctx.db((tx) =>
-    tx
+  const grouped = await ctx.db(async (tx) => {
+    // Per-user record visibility — same predicate as the /corrective-actions
+    // list page, so a self/site-tier user only aggregates their slice here too.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'ca',
+      ownerCols: [correctiveActions.ownerTenantUserId],
+      siteCol: correctiveActions.siteOrgUnitId,
+    })
+    return tx
       .select({
         sourceEntityType: correctiveActions.sourceEntityType,
         sourceEntityId: correctiveActions.sourceEntityId,
@@ -46,22 +54,35 @@ export default async function BySourceReport() {
         costImpact: sql<string>`COALESCE(SUM(${correctiveActions.costImpact}), 0)`,
       })
       .from(correctiveActions)
-      .where(isNotNull(correctiveActions.sourceEntityType))
+      .where(
+        and(
+          isNull(correctiveActions.deletedAt),
+          isNotNull(correctiveActions.sourceEntityType),
+          vis,
+        ),
+      )
       .groupBy(correctiveActions.sourceEntityType, correctiveActions.sourceEntityId)
-      .orderBy(sql`COUNT(*) DESC`),
-  )
+      .orderBy(sql`COUNT(*) DESC`)
+  })
 
   const incidentIds = grouped
     .filter((g) => g.sourceEntityType === 'incident' && g.sourceEntityId)
     .map((g) => g.sourceEntityId as string)
   const incidentLookup = new Map<string, { reference: string; title: string }>()
   if (incidentIds.length > 0) {
-    const incRows = await ctx.db((tx) =>
-      tx
+    const incRows = await ctx.db(async (tx) => {
+      // Incident references/titles are themselves tier-scoped: an incident the
+      // caller cannot see falls back to the anonymous "Incident <id>" label.
+      const incVis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'incidents',
+        ownerCols: [incidents.reportedByTenantUserId],
+        siteCol: incidents.siteOrgUnitId,
+      })
+      return tx
         .select({ id: incidents.id, reference: incidents.reference, title: incidents.title })
         .from(incidents)
-        .where(inArray(incidents.id, incidentIds)),
-    )
+        .where(and(inArray(incidents.id, incidentIds), isNull(incidents.deletedAt), incVis))
+    })
     for (const i of incRows) incidentLookup.set(i.id, { reference: i.reference, title: i.title })
   }
 

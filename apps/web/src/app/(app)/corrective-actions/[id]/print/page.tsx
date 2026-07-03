@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   attachments,
   caCompleteSteps,
@@ -11,6 +11,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 
 export const metadata = { title: 'Corrective action — print' }
@@ -44,9 +45,19 @@ export default async function CorrectiveActionPrintPage({
       .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(correctiveActions.id, id))
+      .where(and(eq(correctiveActions.id, id), isNull(correctiveActions.deletedAt)))
       .limit(1)
     if (!row) return null
+
+    // Re-scope to the caller's read tier: a self/site-tier user must not be
+    // able to pull a printable copy by guessing the id (mirrors the detail
+    // page + PDF route's canSeeRecord check).
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'ca',
+      ownerIds: [row.ca.ownerTenantUserId],
+      siteId: row.ca.siteOrgUnitId,
+    })
+    if (!visible) return null
 
     const photos = await tx
       .select({ link: caPhotos, attachment: attachments })

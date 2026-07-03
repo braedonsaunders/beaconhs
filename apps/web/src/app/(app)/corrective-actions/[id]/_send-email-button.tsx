@@ -1,32 +1,15 @@
 'use client'
 
-import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail } from 'lucide-react'
-import { Button, Input, Label, Textarea } from '@beaconhs/ui'
+import { Input, Label, Textarea } from '@beaconhs/ui'
 import { sendCorrectiveActionEmail } from '../_actions'
 
 /**
- * "Send email" header trigger. A plain link that opens the send-email
- * drawer for this corrective action. The body widget used inside the drawer
- * is `SendEmailBody` below.
- */
-export function SendEmailButton({ caId }: { caId: string; reference?: string }) {
-  return (
-    <Link href={`/corrective-actions/${caId}?drawer=send-email`}>
-      <Button variant="outline" type="button">
-        <Mail size={14} />
-        Send email
-      </Button>
-    </Link>
-  )
-}
-
-/**
- * Body of the send-email drawer. Collects recipients + optional message and
- * calls `sendCorrectiveActionEmail`. After success, navigates to closeHref
- * which the parent uses to drop the drawer param.
+ * Body of the send-email drawer (opened via `?drawer=send-email` from
+ * CaHeaderActions). Collects recipients + optional message and calls
+ * `sendCorrectiveActionEmail`. After success, navigates to closeHref which
+ * the parent uses to drop the drawer param.
  */
 export function SendEmailBody({
   caId,
@@ -65,7 +48,7 @@ export function SendEmailBody({
         setError(res.error)
         return
       }
-      setResult(`Sent to ${list.length} recipient${list.length === 1 ? '' : 's'}.`)
+      setResult(`Email queued for ${list.length} recipient${list.length === 1 ? '' : 's'}.`)
       router.push(closeHref as any)
       router.refresh()
     })
