@@ -4,6 +4,7 @@
 
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +19,14 @@ export async function GET(
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
   assertCan(ctx, 'equipment.read.all')
+
+  await recordAudit(ctx, {
+    entityType: 'equipment_work_order',
+    entityId: id,
+    action: 'export',
+    summary: 'Exported PDF',
+    metadata: { format: 'pdf' },
+  })
 
   return renderModulePdfResponse(ctx, {
     moduleKey: 'equipment',

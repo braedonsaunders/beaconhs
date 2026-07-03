@@ -4,6 +4,7 @@
 // for the journals module when one is set, else the generic record summary.
 
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 import { getEntry } from '../../_data'
 
@@ -25,6 +26,14 @@ export async function GET(
   // would otherwise leak the whole tenant to a self-scoped reader.
   const entry = await getEntry(ctx, id)
   if (!entry) return new Response('Not found', { status: 404 })
+
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: id,
+    action: 'export',
+    summary: 'Exported PDF',
+    metadata: { format: 'pdf' },
+  })
 
   return renderModulePdfResponse(ctx, { moduleKey: 'journals', recordId: id })
 }
