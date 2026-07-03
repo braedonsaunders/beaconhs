@@ -11,27 +11,13 @@
 //     {{#each}} loops (what the SEND path renders).
 // design stays {} → the editor seeds the canvas from mjml_source.
 //
-// UPSERTs (re-running refreshes the body/subject/merge fields).
-//
-//   pnpm --filter @beaconhs/db exec tsx --env-file=../../.env \
-//     src/seed-record-email-templates.ts
+// UPSERTs (re-running refreshes the body/subject/merge fields). Invoked by the
+// dev seed (packages/db/src/seed.ts) AFTER seedSubmitEmailFlows: it repoints
+// the seeded submit→email+PDF flows from the generic 'record-notification'
+// template to these per-module report templates, then retires the generic.
 
 import { sql } from 'drizzle-orm'
-import { createClient, withSuperAdmin } from './index'
-
-// Mirror of @beaconhs/email-render's expandRepeatMarkers (inlined to keep the
-// db package dependency-free). data-each row → {{#each}}, data-if → {{#if}}.
-function expandRepeatMarkers(html: string): string {
-  return html.replace(
-    /<tr\b([^>]*)\bdata-(each|if)="([^"]+)"([^>]*)>([\s\S]*?)<\/tr>/gi,
-    (_m, pre: string, kind: string, key: string, post: string, inner: string) => {
-      const attrs = `${pre}${post}`.replace(/\s+/g, ' ').trim()
-      const open = attrs ? `<tr ${attrs}>` : '<tr>'
-      const block = kind === 'each' ? 'each' : 'if'
-      return `{{#${block} ${key}}}${open}${inner}</tr>{{/${block}}}`
-    },
-  )
-}
+import { expandRepeatMarkers } from './expand-repeat-markers'
 
 // --- shared, email-safe building blocks (inline styles) ----------------------
 
@@ -527,103 +513,89 @@ type GraphJson = {
   nodes?: { data?: { action?: { action?: string; templateId?: string } } }[]
 }
 
-async function main() {
-  const { db, sql: pg } = createClient({ max: 4 })
+type DrizzleTx = any
+
+export async function seedRecordEmailTemplates(tx: DrizzleTx, tenantId: string): Promise<void> {
   let created = 0
   let updated = 0
   let repointed = 0
-  let retired = 0
-  try {
-    await withSuperAdmin(db, async (tx) => {
-      const tenants = (await tx.execute(sql`select id from tenants`)) as unknown as {
-        id: string
-      }[]
-      for (const t of tenants) {
-        for (const tpl of TEMPLATES) {
-          const compiled = expandRepeatMarkers(tpl.html)
-          const merge = JSON.stringify(tpl.mergeFields)
-          const found = (await tx.execute(
-            sql`select id from email_templates where tenant_id=${t.id} and key=${tpl.key} and deleted_at is null limit 1`,
-          )) as unknown as { id: string }[]
-          if (found[0]) {
-            await tx.execute(sql`
-              update email_templates set
-                name=${tpl.name}, description=${tpl.description},
-                record_subject_type='module', record_subject_key=${tpl.subjectKey},
-                subject_template=${tpl.subjectTemplate}, compiled_html=${compiled},
-                mjml_source=${tpl.html}, merge_fields=${merge}::jsonb, design='{}'::jsonb,
-                is_active=true, updated_at=now()
-              where id=${found[0].id}
-            `)
-            updated++
-          } else {
-            await tx.execute(sql`
-              insert into email_templates
-                (tenant_id, key, name, description, category, record_subject_type, record_subject_key,
-                 subject_template, compiled_html, mjml_source, merge_fields, is_active)
-              values
-                (${t.id}, ${tpl.key}, ${tpl.name}, ${tpl.description}, 'notification', 'module',
-                 ${tpl.subjectKey}, ${tpl.subjectTemplate}, ${compiled}, ${tpl.html},
-                 ${merge}::jsonb, true)
-            `)
-            created++
-          }
-        }
+  for (const tpl of TEMPLATES) {
+    const compiled = expandRepeatMarkers(tpl.html)
+    const merge = JSON.stringify(tpl.mergeFields)
+    const found = (await tx.execute(
+      sql`select id from email_templates where tenant_id=${tenantId} and key=${tpl.key} and deleted_at is null limit 1`,
+    )) as unknown as { id: string }[]
+    if (found[0]) {
+      await tx.execute(sql`
+        update email_templates set
+          name=${tpl.name}, description=${tpl.description},
+          record_subject_type='module', record_subject_key=${tpl.subjectKey},
+          subject_template=${tpl.subjectTemplate}, compiled_html=${compiled},
+          mjml_source=${tpl.html}, merge_fields=${merge}::jsonb, design='{}'::jsonb,
+          is_active=true, updated_at=now()
+        where id=${found[0].id}
+      `)
+      updated++
+    } else {
+      await tx.execute(sql`
+        insert into email_templates
+          (tenant_id, key, name, description, category, record_subject_type, record_subject_key,
+           subject_template, compiled_html, mjml_source, merge_fields, is_active)
+        values
+          (${tenantId}, ${tpl.key}, ${tpl.name}, ${tpl.description}, 'notification', 'module',
+           ${tpl.subjectKey}, ${tpl.subjectTemplate}, ${compiled}, ${tpl.html},
+           ${merge}::jsonb, true)
+      `)
+      created++
+    }
+  }
 
-        // Repoint the seeded submit→email+PDF module flows from the generic
-        // 'record-notification' template to this module's new report template,
-        // then retire the generic. Only touches actions STILL pointing at the
-        // generic — user customizations are preserved.
-        const [generic] = (await tx.execute(
-          sql`select id from email_templates where tenant_id=${t.id} and key='record-notification' and deleted_at is null limit 1`,
-        )) as unknown as { id: string }[]
-        if (generic) {
-          const reportRows = (await tx.execute(
-            sql`select key, id from email_templates where tenant_id=${t.id} and deleted_at is null and record_subject_type='module'`,
-          )) as unknown as { key: string; id: string }[]
-          const keyToId = new Map(reportRows.map((r) => [r.key, r.id]))
-          const subjectToTemplate = new Map<string, string>()
-          for (const tpl of TEMPLATES) {
-            const id = keyToId.get(tpl.key)
-            if (id) subjectToTemplate.set(tpl.subjectKey, id)
-          }
-          const flows = (await tx.execute(
-            sql`select id, subject_key, graph from form_automations where tenant_id=${t.id} and subject_type='module'`,
-          )) as unknown as { id: string; subject_key: string; graph: GraphJson }[]
-          for (const f of flows) {
-            const tplId = subjectToTemplate.get(f.subject_key)
-            if (!tplId) continue
-            let changed = false
-            for (const node of f.graph?.nodes ?? []) {
-              const action = node?.data?.action
-              if (action?.action === 'send_email' && action.templateId === generic.id) {
-                action.templateId = tplId
-                changed = true
-              }
-            }
-            if (changed) {
-              await tx.execute(
-                sql`update form_automations set graph=${JSON.stringify(f.graph)}::jsonb, updated_at=now() where id=${f.id}`,
-              )
-              repointed++
-            }
-          }
-          await tx.execute(
-            sql`update email_templates set deleted_at=now(), updated_at=now() where id=${generic.id}`,
-          )
-          retired++
+  // Repoint the seeded submit→email+PDF module flows from the generic
+  // 'record-notification' template to this module's new report template, then
+  // retire the generic. Only touches actions STILL pointing at the generic —
+  // user customizations are preserved. The generic lookup deliberately includes
+  // an already-retired row so flows seeded after the first retirement still get
+  // repointed on re-seed.
+  const [generic] = (await tx.execute(
+    sql`select id from email_templates where tenant_id=${tenantId} and key='record-notification' limit 1`,
+  )) as unknown as { id: string }[]
+  if (generic) {
+    const reportRows = (await tx.execute(
+      sql`select key, id from email_templates where tenant_id=${tenantId} and deleted_at is null and record_subject_type='module'`,
+    )) as unknown as { key: string; id: string }[]
+    const keyToId = new Map(reportRows.map((r) => [r.key, r.id]))
+    const subjectToTemplate = new Map<string, string>()
+    for (const tpl of TEMPLATES) {
+      const id = keyToId.get(tpl.key)
+      if (id) subjectToTemplate.set(tpl.subjectKey, id)
+    }
+    const flows = (await tx.execute(
+      sql`select id, subject_key, graph from form_automations where tenant_id=${tenantId} and subject_type='module'`,
+    )) as unknown as { id: string; subject_key: string; graph: GraphJson }[]
+    for (const f of flows) {
+      const tplId = subjectToTemplate.get(f.subject_key)
+      if (!tplId) continue
+      let changed = false
+      for (const node of f.graph?.nodes ?? []) {
+        const action = node?.data?.action
+        if (action?.action === 'send_email' && action.templateId === generic.id) {
+          action.templateId = tplId
+          changed = true
         }
       }
-    })
-    console.log(
-      `✔ record-type email templates: ${created} created, ${updated} updated; ${repointed} flow(s) repointed, ${retired} generic template(s) retired.`,
+      if (changed) {
+        await tx.execute(
+          sql`update form_automations set graph=${JSON.stringify(f.graph)}::jsonb, updated_at=now() where id=${f.id}`,
+        )
+        repointed++
+      }
+    }
+    await tx.execute(
+      sql`update email_templates set deleted_at=now(), updated_at=now() where id=${generic.id} and deleted_at is null`,
     )
-  } finally {
-    await pg.end()
   }
-}
 
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+  console.log(
+    `  · record-type email templates: ${created} created, ${updated} updated, ${repointed} flow(s) repointed`,
+  )
+}

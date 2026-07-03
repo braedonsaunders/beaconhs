@@ -1,13 +1,12 @@
-// Seed: a branded "record notification" email template + per-module Flows that,
-// on submit/sign/finalize, email that styled template WITH a PDF attachment —
-// replicating the legacy Laravel submit→styled-email+PDF behaviour on the
-// applicable native modules. Idempotent (skips templates/flows already present).
-//
-//   pnpm --filter @beaconhs/db exec tsx --env-file=../../.env \
-//     src/seed-submit-email-flows.ts
+// Per-tenant seeder: a branded "record notification" email template +
+// per-module Flows that, on submit/sign/finalize, email that styled template
+// WITH a PDF attachment — replicating the legacy Laravel
+// submit→styled-email+PDF behaviour on the applicable native modules.
+// Idempotent (skips templates/flows already present). Invoked by the dev seed
+// (packages/db/src/seed.ts) BEFORE seedRecordEmailTemplates, which repoints
+// these flows to per-module report templates and retires the generic one.
 
 import { sql } from 'drizzle-orm'
-import { createClient, withSuperAdmin } from './index'
 
 const TEMPLATE_KEY = 'record-notification'
 const TEMPLATE_SUBJECT = 'New submission: {{reference}}'
@@ -123,70 +122,58 @@ function buildGraph(templateId: string, trigger: TriggerData, subjectOverride: s
   }
 }
 
-async function main() {
-  const { db, sql: pg } = createClient({ max: 4 })
+type DrizzleTx = any
+
+export async function seedSubmitEmailFlows(tx: DrizzleTx, tenantId: string): Promise<void> {
   let templatesCreated = 0
   let flowsCreated = 0
-  try {
-    await withSuperAdmin(db, async (tx) => {
-      // Incidents are now native with an on_create seam — retire the earlier
-      // status_change→closed workaround flow.
-      await tx.execute(
-        sql`delete from form_automations where subject_type='module' and subject_key='incidents' and name='Email + PDF when closed'`,
-      )
 
-      const tenants = (await tx.execute(sql`select id, name from tenants`)) as unknown as {
-        id: string
-        name: string
-      }[]
+  // Incidents are now native with an on_create seam — retire the earlier
+  // status_change→closed workaround flow if this tenant still carries it.
+  await tx.execute(
+    sql`delete from form_automations where tenant_id=${tenantId} and subject_type='module' and subject_key='incidents' and name='Email + PDF when closed'`,
+  )
 
-      for (const t of tenants) {
-        // 1. Upsert the branded email template for this tenant.
-        const found = (await tx.execute(
-          sql`select id from email_templates where tenant_id=${t.id} and key=${TEMPLATE_KEY} and deleted_at is null limit 1`,
-        )) as unknown as { id: string }[]
-        let templateId = found[0]?.id
-        if (!templateId) {
-          const ins = (await tx.execute(sql`
-            insert into email_templates
-              (tenant_id, key, name, description, category, subject_template, compiled_html, merge_fields, is_active)
-            values
-              (${t.id}, ${TEMPLATE_KEY}, 'Record notification',
-               'Branded submit notification (PDF attached).', 'notification',
-               ${TEMPLATE_SUBJECT}, ${TEMPLATE_HTML}, ${JSON.stringify(MERGE_FIELDS)}::jsonb, true)
-            returning id
-          `)) as unknown as { id: string }[]
-          templateId = ins[0]?.id
-          if (templateId) templatesCreated++
-        }
-        if (!templateId) continue
-
-        // 2. Seed the per-module flows (skip if a same-named flow already exists).
-        for (const f of FLOWS) {
-          const existing = (await tx.execute(
-            sql`select id from form_automations where tenant_id=${t.id} and subject_type='module' and subject_key=${f.moduleKey} and name=${f.name} limit 1`,
-          )) as unknown as { id: string }[]
-          if (existing[0]) continue
-          const graph = JSON.stringify(buildGraph(templateId, f.trigger, f.subjectOverride))
-          await tx.execute(sql`
-            insert into form_automations
-              (tenant_id, subject_type, subject_key, template_id, name, enabled, graph)
-            values
-              (${t.id}, 'module', ${f.moduleKey}, null, ${f.name}, true, ${graph}::jsonb)
-          `)
-          flowsCreated++
-        }
-      }
-    })
-    console.log(
-      `✔ seeded ${templatesCreated} email template(s) + ${flowsCreated} module flow(s) (submit→email+PDF).`,
-    )
-  } finally {
-    await pg.end()
+  // 1. Upsert the branded email template for this tenant. The lookup includes a
+  //    soft-deleted row on purpose: seedRecordEmailTemplates retires this
+  //    generic template after repointing the flows, and a re-seed must not
+  //    resurrect a fresh copy every run.
+  const found = (await tx.execute(
+    sql`select id from email_templates where tenant_id=${tenantId} and key=${TEMPLATE_KEY} limit 1`,
+  )) as unknown as { id: string }[]
+  let templateId = found[0]?.id
+  if (!templateId) {
+    const ins = (await tx.execute(sql`
+      insert into email_templates
+        (tenant_id, key, name, description, category, subject_template, compiled_html, merge_fields, is_active)
+      values
+        (${tenantId}, ${TEMPLATE_KEY}, 'Record notification',
+         'Branded submit notification (PDF attached).', 'notification',
+         ${TEMPLATE_SUBJECT}, ${TEMPLATE_HTML}, ${JSON.stringify(MERGE_FIELDS)}::jsonb, true)
+      returning id
+    `)) as unknown as { id: string }[]
+    templateId = ins[0]?.id
+    if (templateId) templatesCreated++
   }
-}
+  if (!templateId) return
 
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
+  // 2. Seed the per-module flows (skip if a same-named flow already exists).
+  for (const f of FLOWS) {
+    const existing = (await tx.execute(
+      sql`select id from form_automations where tenant_id=${tenantId} and subject_type='module' and subject_key=${f.moduleKey} and name=${f.name} limit 1`,
+    )) as unknown as { id: string }[]
+    if (existing[0]) continue
+    const graph = JSON.stringify(buildGraph(templateId, f.trigger, f.subjectOverride))
+    await tx.execute(sql`
+      insert into form_automations
+        (tenant_id, subject_type, subject_key, template_id, name, enabled, graph)
+      values
+        (${tenantId}, 'module', ${f.moduleKey}, null, ${f.name}, true, ${graph}::jsonb)
+    `)
+    flowsCreated++
+  }
+
+  console.log(
+    `  · submit→email+PDF: ${templatesCreated} template(s) created, ${flowsCreated} module flow(s) seeded`,
+  )
+}

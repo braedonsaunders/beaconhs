@@ -1,10 +1,6 @@
 // Canonical form templates — first-class library shipped with every tenant.
-//
-// These are the four "big legacy modules" from the original Laravel app
-// (JSHA / Toolbox Talk / Lift Plan / Working-at-Heights Rescue Plan) re-implemented
-// as form templates. They are seeded into the first tenant by the dev seed, and
-// cloned on-demand into any tenant from the "Start from template" gallery
-// at /apps/templates/new.
+// Seeded into the first tenant by the dev seed and cloned on-demand into any
+// tenant from the "Start from template" gallery at /apps/templates/new.
 //
 // Each entry is the persistence shape: { key, name, category, moduleBinding,
 // description, schema }. Add new canonical templates by appending here — the
@@ -31,154 +27,7 @@ const SUBMIT_WORKFLOW: FormSchemaV1['workflow'] = {
   ],
 }
 
-const RISK_OPTIONS = [
-  { value: 'low', label: { en: 'Low' } },
-  { value: 'medium', label: { en: 'Medium' } },
-  { value: 'high', label: { en: 'High' } },
-  { value: 'critical', label: { en: 'Critical' } },
-]
-
-const PPE_OPTIONS = [
-  { value: 'hard_hat', label: { en: 'Hard hat' } },
-  { value: 'safety_glasses', label: { en: 'Safety glasses' } },
-  { value: 'gloves', label: { en: 'Gloves' } },
-  { value: 'cut_gloves', label: { en: 'Cut-resistant gloves' } },
-  { value: 'respirator', label: { en: 'Respirator' } },
-  { value: 'harness', label: { en: 'Fall-arrest harness' } },
-  { value: 'high_vis', label: { en: 'Hi-vis vest' } },
-  { value: 'safety_boots', label: { en: 'Safety boots' } },
-  { value: 'hearing_protection', label: { en: 'Hearing protection' } },
-  { value: 'face_shield', label: { en: 'Face shield' } },
-]
-
-// 1) JSHA / Job Safety Hazard Analysis -------------------------------------
-const jshaSchema: FormSchemaV1 = {
-  schemaVersion: 1,
-  title: { en: 'JSHA — Job Safety Hazard Analysis' },
-  description: {
-    en: 'Identify task steps, hazards, initial risk, controls, and residual risk before work starts. Capture sign-off from supervisor + crew.',
-  },
-  sections: [
-    {
-      id: 'job_details',
-      title: { en: 'Job details' },
-      fields: [
-        { id: 'job_description', type: 'text', label: { en: 'Job description' }, required: true },
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
-        { id: 'date_of_work', type: 'date', label: { en: 'Date of work' }, required: true },
-        { id: 'supervisor', type: 'person_picker', label: { en: 'Supervisor' }, required: true },
-        { id: 'crew_members', type: 'multi_person_picker', label: { en: 'Crew members' } },
-      ],
-    },
-    {
-      id: 'hazards',
-      title: { en: 'Hazards' },
-      description: { en: 'One row per task step. Up to 20 rows.' },
-      repeating: true,
-      fields: [
-        { id: 'task_step', type: 'text', label: { en: 'Task step' }, required: true },
-        { id: 'hazard', type: 'text', label: { en: 'Hazard' }, required: true },
-        {
-          id: 'initial_risk',
-          type: 'select',
-          label: { en: 'Initial risk' },
-          required: true,
-          validation: { options: RISK_OPTIONS },
-        },
-        { id: 'controls', type: 'long_text', label: { en: 'Controls' }, required: true },
-        {
-          id: 'post_control_risk',
-          type: 'select',
-          label: { en: 'Post-control risk' },
-          required: true,
-          validation: { options: RISK_OPTIONS },
-        },
-        {
-          id: 'ppe_required',
-          type: 'multi_select',
-          label: { en: 'PPE required' },
-          validation: { options: PPE_OPTIONS },
-        },
-        { id: 'evidence', type: 'photo_upload', label: { en: 'Evidence (photo)' } },
-      ],
-    },
-    {
-      id: 'sign_off',
-      title: { en: 'Sign-off' },
-      fields: [
-        {
-          id: 'supervisor_signature',
-          type: 'signature',
-          label: { en: 'Supervisor signature' },
-          required: true,
-        },
-        {
-          id: 'worker_signature',
-          type: 'signature',
-          label: { en: 'Worker signature' },
-          required: true,
-        },
-        { id: 'signed_date', type: 'date', label: { en: 'Signed date' }, required: true },
-      ],
-    },
-  ],
-  workflow: SUBMIT_WORKFLOW,
-}
-
-// 2) Toolbox Talk ----------------------------------------------------------
-const toolboxSchema: FormSchemaV1 = {
-  schemaVersion: 1,
-  title: { en: 'Toolbox Talk' },
-  description: {
-    en: 'Pre-shift safety discussion: topic, attendees, key points, action items, photos.',
-  },
-  sections: [
-    {
-      id: 'topic',
-      title: { en: 'Topic' },
-      fields: [
-        { id: 'topic', type: 'text', label: { en: 'Topic' }, required: true },
-        { id: 'date', type: 'date', label: { en: 'Date' }, required: true },
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
-        { id: 'facilitator', type: 'person_picker', label: { en: 'Facilitator' }, required: true },
-      ],
-    },
-    {
-      id: 'discussion',
-      title: { en: 'Discussion' },
-      fields: [
-        {
-          id: 'discussion_notes',
-          type: 'long_text',
-          label: { en: 'Discussion notes' },
-          required: true,
-        },
-        { id: 'questions_raised', type: 'long_text', label: { en: 'Questions raised' } },
-        { id: 'action_items', type: 'long_text', label: { en: 'Action items' } },
-      ],
-    },
-    {
-      id: 'attendees',
-      title: { en: 'Attendees' },
-      description: { en: 'Each attendee signs in.' },
-      repeating: true,
-      fields: [
-        { id: 'attendee', type: 'person_picker', label: { en: 'Attendee' }, required: true },
-        { id: 'attendee_signature', type: 'signature', label: { en: 'Signature' }, required: true },
-      ],
-    },
-    {
-      id: 'photos',
-      title: { en: 'Photos' },
-      fields: [
-        { id: 'photos', type: 'photo_upload', label: { en: 'Photos' }, config: { multiple: true } },
-      ],
-    },
-  ],
-  workflow: SUBMIT_WORKFLOW,
-}
-
-// 3) Working at Heights Rescue Plan ---------------------------------------
+// Working at Heights Rescue Plan -------------------------------------------
 const wahRescueSchema: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Working at Heights Rescue Plan' },
@@ -312,20 +161,16 @@ const wahRescueSchema: FormSchemaV1 = {
   workflow: SUBMIT_WORKFLOW,
 }
 
-// Note: JSHA is NOT a canonical template — there's a real first-class
-// module at /hazard-assessments with multi-section sign-off, hazard library, atmospheric
-// readings, etc. The form-template gallery would have been confusing
-// alongside the native module, so we skipped it. The `jshaSchema` constant
-// is kept above for reference; it isn't exported.
-//
-// Lift Plan is ALSO not a canonical template — it's now a per-tenant built-in
-// template seeded by packages/db/src/seed/lift-plan-template.ts, surfaced at
-// /inspections?bound=lift_plan. The gallery is for "start from a template",
-// which doesn't make sense for a built-in that's already provisioned.
-// Note: Toolbox Talk is NOT a canonical/gallery template — like Lift Plan it's
-// now a per-tenant built-in seeded by packages/db/src/seed/toolbox-template.ts
-// (key 'toolbox-talk') and auto-pinned to the sidebar. The `toolboxSchema`
-// constant above is retained for reference only (mirrors the jshaSchema note).
+// Deliberately NOT canonical templates:
+// • JSHA — a first-class native module at /hazard-assessments (multi-section
+//   sign-off, hazard library, atmospheric readings); a gallery copy would be
+//   confusing alongside it.
+// • Lift Plan — a per-tenant built-in seeded by
+//   packages/db/src/seed/lift-plan-template.ts, surfaced at
+//   /inspections?bound=lift_plan.
+// • Toolbox Talk — a per-tenant built-in seeded by
+//   packages/db/src/seed/toolbox-template.ts (key 'toolbox-talk') and
+//   auto-pinned to the sidebar.
 export const CANONICAL_TEMPLATES: CanonicalTemplate[] = [
   {
     key: 'wah_rescue_v1',

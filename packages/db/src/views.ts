@@ -41,7 +41,9 @@ export const REPORT_VIEWS_SQL: string[] = [
    JOIN training_skill_types t ON t.id = a.skill_type_id
    JOIN training_skill_authorities au ON au.id = t.authority_id
    JOIN people p ON p.id = a.person_id
-   LEFT JOIN trades tr ON tr.id = p.trade_id`,
+   LEFT JOIN trades tr ON tr.id = p.trade_id
+   WHERE a.deleted_at IS NULL
+     AND p.deleted_at IS NULL`,
 
   // Person × course training coverage. The cross product of active people and
   // courses (so "never trained" cells exist) LEFT JOINed to each person's

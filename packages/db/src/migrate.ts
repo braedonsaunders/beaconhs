@@ -82,21 +82,30 @@ async function backfillKioskPinHashes(db: ReturnType<typeof drizzle>) {
     tenantCount++
   }
 
-  const stationRows = (await db.execute(sql`
-    select id, station_pin
-    from equipment_station_settings
-    where station_pin is not null and station_pin <> ''
-  `)) as unknown as StationPinRow[]
+  // equipment_station_settings is tenant-scoped with FORCE ROW LEVEL SECURITY,
+  // and this connection (the table owner, no app.tenant_id set) would see zero
+  // rows through the policy — so lift FORCE for the backfill and restore it
+  // after, same as backfillBuiltinRolePermissions below.
+  await db.execute(sql`alter table "equipment_station_settings" no force row level security`)
   let stationCount = 0
-  for (const row of stationRows) {
-    if (!row.station_pin || isKioskPinHash(row.station_pin)) continue
-    const hashed = await hashKioskPin(row.station_pin)
-    await db.execute(sql`
-      update equipment_station_settings
-      set station_pin = ${hashed}, updated_at = now()
-      where id = ${row.id}
-    `)
-    stationCount++
+  try {
+    const stationRows = (await db.execute(sql`
+      select id, station_pin
+      from equipment_station_settings
+      where station_pin is not null and station_pin <> ''
+    `)) as unknown as StationPinRow[]
+    for (const row of stationRows) {
+      if (!row.station_pin || isKioskPinHash(row.station_pin)) continue
+      const hashed = await hashKioskPin(row.station_pin)
+      await db.execute(sql`
+        update equipment_station_settings
+        set station_pin = ${hashed}, updated_at = now()
+        where id = ${row.id}
+      `)
+      stationCount++
+    }
+  } finally {
+    await db.execute(sql`alter table "equipment_station_settings" force row level security`)
   }
 
   console.log(`✔ Kiosk PIN hashes backfilled (${tenantCount} tenant, ${stationCount} station)`)
@@ -188,34 +197,34 @@ async function main() {
   await backfillBuiltinRolePermissions(db)
 
   console.log('▶ Applying RLS policies…')
-  let newCount = 0
-  let existingCount = 0
-  const realFailures: { table: string; msg: string }[] = []
+  // RLS_POLICY_SQL is fully idempotent (DROP POLICY IF EXISTS), so ANY error
+  // here is real — and a tenant table without FORCE RLS + tenant_isolation has
+  // no tenant isolation at all. Failures must turn the deploy red.
+  let appliedCount = 0
+  const rlsFailures: { table: string; msg: string }[] = []
   for (const table of TENANT_SCOPED_TABLES) {
     try {
       await db.execute(sql.raw(RLS_POLICY_SQL(table)))
-      newCount++
+      appliedCount++
       process.stdout.write('+')
     } catch (err) {
       // drizzle wraps the underlying postgres error in err.cause.
-      // policy may already exist; safe to ignore on idempotent re-runs.
       const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
       const topMsg = err instanceof Error ? err.message : String(err)
-      const combined = `${topMsg} | ${causeMsg}`
-      if (/already exists/.test(combined)) {
-        existingCount++
-        process.stdout.write('.')
-      } else {
-        realFailures.push({ table, msg: causeMsg || topMsg })
-      }
+      rlsFailures.push({ table, msg: causeMsg || topMsg })
+      process.stdout.write('!')
     }
   }
-  console.log(`\n  ${newCount} newly installed, ${existingCount} already existed`)
-  if (realFailures.length > 0) {
-    console.error(`\n  ${realFailures.length} real failures:`)
-    for (const f of realFailures) {
+  console.log(`\n  ${appliedCount}/${TENANT_SCOPED_TABLES.length} applied`)
+  if (rlsFailures.length > 0) {
+    console.error(`  ${rlsFailures.length} failed:`)
+    for (const f of rlsFailures) {
       console.error(`    ✗ ${f.table}: ${f.msg}`)
     }
+    await migrationClient.end()
+    throw new Error(
+      `RLS policy install failed for ${rlsFailures.length} tenant table(s) — refusing to complete the deploy without tenant isolation`,
+    )
   }
   console.log('✔ RLS applied')
 

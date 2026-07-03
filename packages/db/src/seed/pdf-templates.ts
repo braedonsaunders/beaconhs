@@ -1,28 +1,15 @@
-// Seed: the record reports as paper-size PDF DOCUMENT templates (pdf_templates),
-// recreating the legacy Laravel PDFs. Same record subjects + collections as the
-// email report templates, but a full-page document layout (no narrow email card)
-// and page metadata (paper size / orientation / margins / header / footer). The
-// dense tabular reports (hazid, incident) default to landscape.
+// Per-tenant seeder: the record reports as paper-size PDF DOCUMENT templates
+// (pdf_templates), recreating the legacy Laravel PDFs. Same record subjects +
+// collections as the email report templates, but a full-page document layout
+// (no narrow email card) and page metadata (paper size / orientation / margins /
+// header / footer). The dense tabular reports (hazid, incident) default to
+// landscape.
 //
-// UPSERTs. Run after db:migrate (the pdf_templates table must exist + have RLS).
-//
-//   pnpm --filter @beaconhs/db exec tsx --env-file=../../.env src/seed-pdf-templates.ts
+// UPSERTs — re-running refreshes the layout. Invoked by the dev seed
+// (packages/db/src/seed.ts) after the tenant exists.
 
 import { sql } from 'drizzle-orm'
-import { createClient, withSuperAdmin } from './index'
-
-// data-each row → {{#each}} (mirror of @beaconhs/email-render's expandRepeatMarkers).
-function expandRepeatMarkers(html: string): string {
-  return html.replace(
-    /<tr\b([^>]*)\bdata-(each|if)="([^"]+)"([^>]*)>([\s\S]*?)<\/tr>/gi,
-    (_m, pre: string, kind: string, key: string, post: string, inner: string) => {
-      const attrs = `${pre}${post}`.replace(/\s+/g, ' ').trim()
-      const open = attrs ? `<tr ${attrs}>` : '<tr>'
-      const block = kind === 'each' ? 'each' : 'if'
-      return `{{#${block} ${key}}}${open}${inner}</tr>{{/${block}}}`
-    },
-  )
-}
+import { expandRepeatMarkers } from './expand-repeat-markers'
 
 const H1 = 'font-size:22px;font-weight:800;color:#0f172a;margin:0 0 2px'
 const SUB = 'font-size:12px;color:#64748b;margin:0 0 14px'
@@ -398,49 +385,36 @@ const TEMPLATES: Seed[] = [
   },
 ]
 
-async function main() {
-  const { db, sql: pg } = createClient({ max: 4 })
+type DrizzleTx = any
+
+export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise<void> {
   let created = 0
   let updated = 0
-  try {
-    await withSuperAdmin(db, async (tx) => {
-      const tenants = (await tx.execute(sql`select id from tenants`)) as unknown as { id: string }[]
-      for (const t of tenants) {
-        for (const tpl of TEMPLATES) {
-          const compiled = expandRepeatMarkers(tpl.html)
-          const footer = 'Page {{page}} of {{pages}}'
-          const found = (await tx.execute(
-            sql`select id from pdf_templates where tenant_id=${t.id} and key=${tpl.key} and deleted_at is null limit 1`,
-          )) as unknown as { id: string }[]
-          if (found[0]) {
-            await tx.execute(sql`
-              update pdf_templates set name=${tpl.name},
-                record_subject_type='module', record_subject_key=${tpl.subjectKey},
-                orientation=${tpl.orientation}, header_html=${tpl.header}, footer_html=${footer},
-                compiled_html=${compiled}, source_html=${tpl.html}, design='{}'::jsonb,
-                is_active=true, updated_at=now()
-              where id=${found[0].id}`)
-            updated++
-          } else {
-            await tx.execute(sql`
-              insert into pdf_templates
-                (tenant_id, key, name, record_subject_type, record_subject_key, paper_size,
-                 orientation, margin_mm, header_html, footer_html, compiled_html, source_html, is_active)
-              values
-                (${t.id}, ${tpl.key}, ${tpl.name}, 'module', ${tpl.subjectKey}, 'letter',
-                 ${tpl.orientation}, 16, ${tpl.header}, ${footer}, ${compiled}, ${tpl.html}, true)`)
-            created++
-          }
-        }
-      }
-    })
-    console.log(`✔ PDF document templates: ${created} created, ${updated} updated.`)
-  } finally {
-    await pg.end()
+  for (const tpl of TEMPLATES) {
+    const compiled = expandRepeatMarkers(tpl.html)
+    const footer = 'Page {{page}} of {{pages}}'
+    const found = (await tx.execute(
+      sql`select id from pdf_templates where tenant_id=${tenantId} and key=${tpl.key} and deleted_at is null limit 1`,
+    )) as unknown as { id: string }[]
+    if (found[0]) {
+      await tx.execute(sql`
+        update pdf_templates set name=${tpl.name},
+          record_subject_type='module', record_subject_key=${tpl.subjectKey},
+          orientation=${tpl.orientation}, header_html=${tpl.header}, footer_html=${footer},
+          compiled_html=${compiled}, source_html=${tpl.html}, design='{}'::jsonb,
+          is_active=true, updated_at=now()
+        where id=${found[0].id}`)
+      updated++
+    } else {
+      await tx.execute(sql`
+        insert into pdf_templates
+          (tenant_id, key, name, record_subject_type, record_subject_key, paper_size,
+           orientation, margin_mm, header_html, footer_html, compiled_html, source_html, is_active)
+        values
+          (${tenantId}, ${tpl.key}, ${tpl.name}, 'module', ${tpl.subjectKey}, 'letter',
+           ${tpl.orientation}, 16, ${tpl.header}, ${footer}, ${compiled}, ${tpl.html}, true)`)
+      created++
+    }
   }
+  console.log(`  · PDF document templates: ${created} created, ${updated} updated`)
 }
-
-main().catch((err) => {
-  console.error(err)
-  process.exit(1)
-})

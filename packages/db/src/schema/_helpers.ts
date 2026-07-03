@@ -1,4 +1,3 @@
-import { sql } from 'drizzle-orm'
 import { timestamp, uuid } from 'drizzle-orm/pg-core'
 
 // Conventions used across every table.
@@ -24,5 +23,3 @@ export const tenantFk = (refTenants: () => { id: any }) =>
   uuid('tenant_id')
     .notNull()
     .references(() => refTenants().id, { onDelete: 'cascade' })
-
-export const json = <T>() => sql<T>`jsonb`
