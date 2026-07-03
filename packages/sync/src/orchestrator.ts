@@ -14,7 +14,7 @@ import {
   syncRecordChanges,
   syncRuns,
 } from '@beaconhs/db/schema'
-import { unsealSecret } from './crypto'
+import { unsealSecret } from '@beaconhs/crypto'
 import { getConnector } from './registry'
 import {
   archiveMissingRecords,

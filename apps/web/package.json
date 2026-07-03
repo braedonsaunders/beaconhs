@@ -18,6 +18,7 @@
     "@beaconhs/audit": "workspace:*",
     "@beaconhs/auth": "workspace:*",
     "@beaconhs/compliance": "workspace:*",
+    "@beaconhs/crypto": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/design-studio": "workspace:*",
     "@beaconhs/email-render": "workspace:*",

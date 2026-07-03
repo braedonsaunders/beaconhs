@@ -7,7 +7,7 @@
 // the network send, switching on provider. Every provider goes through `fetch`
 // (no SDKs), so the package stays dependency-free and bundles into the worker.
 
-import { decryptSecret } from './crypto'
+import { decryptSecret } from '@beaconhs/crypto'
 import type { SmsProvider } from './providers'
 
 export type SendSmsInput = {

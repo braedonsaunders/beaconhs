@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { encryptSecret } from './crypto'
+import { encryptSecret } from '@beaconhs/crypto'
 import {
   buildSmsTransport,
   resolveEffectiveSmsTransport,

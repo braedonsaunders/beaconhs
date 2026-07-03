@@ -16,7 +16,7 @@ import {
   type RawEmailConfig,
 } from '@beaconhs/emails'
 import type { RequestContext } from '@beaconhs/tenant'
-import { encryptSecret } from './crypto'
+import { encryptSecret } from '@beaconhs/crypto'
 
 const DEFAULT_PROVIDER: EmailProvider = 'resend'
 

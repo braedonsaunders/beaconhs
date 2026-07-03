@@ -1,5 +1,5 @@
 {
-  "name": "@beaconhs/emails",
+  "name": "@beaconhs/crypto",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,13 +13,8 @@
     "test": "vitest run",
     "clean": "rm -rf dist .turbo"
   },
-  "dependencies": {
-    "@beaconhs/crypto": "workspace:*",
-    "nodemailer": "^9.0.1"
-  },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "@types/nodemailer": "^8.0.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",
     "vitest": "^4.1.9"

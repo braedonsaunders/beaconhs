@@ -12,7 +12,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
 import { isAiProvider, type AiConfig, type AiPolicyMode, type AiProvider } from '@beaconhs/ai'
 import type { RequestContext } from '@beaconhs/tenant'
-import { decryptSecret, encryptSecret } from './crypto'
+import { decryptSecret, encryptSecret } from '@beaconhs/crypto'
 
 type RawAi = {
   enabled?: boolean

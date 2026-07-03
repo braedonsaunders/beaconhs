@@ -16,7 +16,7 @@ import {
   type SmsProvider,
 } from '@beaconhs/sms'
 import type { RequestContext } from '@beaconhs/tenant'
-import { encryptSecret } from './crypto'
+import { encryptSecret } from '@beaconhs/crypto'
 
 const DEFAULT_PROVIDER: SmsProvider = 'twilio'
 

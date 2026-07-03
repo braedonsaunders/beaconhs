@@ -8,7 +8,7 @@
 // SDKs); SMTP uses nodemailer (dynamically imported so it never loads unless an
 // SMTP transport is actually used).
 
-import { decryptSecret } from './crypto'
+import { decryptSecret } from '@beaconhs/crypto'
 import type { EmailProvider } from './providers'
 
 export type EmailAttachment = {
