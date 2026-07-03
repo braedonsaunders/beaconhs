@@ -9,7 +9,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ClipboardCheck, Plus, Settings2 } from 'lucide-react'
-import { and, asc, count, desc, eq, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -50,6 +50,7 @@ const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'submitted', label: 'Submitted' },
+  { value: 'non_compliant', label: 'Non-compliant' },
   { value: 'in_review', label: 'In review' },
   { value: 'closed', label: 'Closed' },
   { value: 'rejected', label: 'Rejected' },
@@ -171,7 +172,7 @@ export default async function AppRecordsPage({
         description: formTemplates.description,
       })
       .from(formTemplates)
-      .where(eq(formTemplates.id, id))
+      .where(and(eq(formTemplates.id, id), isNull(formTemplates.deletedAt)))
       .limit(1)
     if (!tmpl) return null
 
@@ -192,7 +193,10 @@ export default async function AppRecordsPage({
       personCol: formResponses.subjectPersonId,
       siteCol: formResponses.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = [eq(formResponses.templateId, id)]
+    const filters: SQL<unknown>[] = [
+      eq(formResponses.templateId, id),
+      isNull(formResponses.deletedAt),
+    ]
     if (vis) filters.push(vis)
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as never))
     const whereClause = and(...filters)
@@ -233,7 +237,7 @@ export default async function AppRecordsPage({
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
-      .where(and(eq(formResponses.templateId, id), vis))
+      .where(and(eq(formResponses.templateId, id), isNull(formResponses.deletedAt), vis))
       .groupBy(formResponses.status)
     return {
       tmpl,
@@ -381,7 +385,8 @@ export default async function AppRecordsPage({
                           variant={
                             response.status === 'closed' || response.status === 'submitted'
                               ? 'success'
-                              : response.status === 'rejected'
+                              : response.status === 'rejected' ||
+                                  response.status === 'non_compliant'
                                 ? 'destructive'
                                 : 'warning'
                           }

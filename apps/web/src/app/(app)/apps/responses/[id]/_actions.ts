@@ -19,7 +19,7 @@
 // template schema.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   formResponseSteps,
   formResponses,
@@ -89,7 +89,7 @@ async function loadResponseWithWorkflow(
       })
       .from(formResponses)
       .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, formResponses.templateVersionId))
-      .where(eq(formResponses.id, responseId))
+      .where(and(eq(formResponses.id, responseId), isNull(formResponses.deletedAt)))
       .limit(1)
     return rows[0] ?? null
   })

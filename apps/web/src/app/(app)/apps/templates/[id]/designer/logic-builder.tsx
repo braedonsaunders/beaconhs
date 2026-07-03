@@ -2,7 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select } from '@beaconhs/ui'
-import type { FormField, LogicRule } from '@beaconhs/forms-core'
+import type { LogicRule } from '@beaconhs/forms-core'
 
 const OPS: {
   value: LogicRule extends infer R ? (R extends { op: string } ? R['op'] : never) : never
@@ -25,6 +25,23 @@ type SimpleRule = {
   op: 'eq' | 'ne' | 'gt' | 'lt' | 'gte' | 'lte' | 'in' | 'notIn' | 'isSet' | 'isNotSet'
   field: string
   value?: unknown
+}
+
+// The forms-core schema requires `in`/`notIn` values to be ARRAYS (the
+// evaluator does `rule.value.includes(v)`; a raw string would silently give
+// substring semantics and fail schema validation on publish). The editor keeps
+// the comma-separated affordance but stores the split array.
+function coerceClauseValue(op: SimpleRule['op'], raw: unknown): unknown {
+  if (op === 'in' || op === 'notIn') {
+    const text = Array.isArray(raw) ? raw.map((v) => String(v)).join(', ') : String(raw ?? '')
+    return text.split(',').map((s) => s.trim())
+  }
+  return Array.isArray(raw) ? raw.map((v) => String(v)).join(', ') : (raw ?? '')
+}
+
+function displayClauseValue(raw: unknown): string {
+  if (Array.isArray(raw)) return raw.map((v) => String(v)).join(', ')
+  return String(raw ?? '')
 }
 
 /**
@@ -115,14 +132,15 @@ export function LogicBuilder({
                 <Select
                   className="h-8 w-28 text-xs"
                   value={clause.op}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const nextOp = e.target.value as SimpleRule['op']
                     updateClause(i, {
-                      op: e.target.value as SimpleRule['op'],
-                      value: OPS.find((o) => o.value === e.target.value)?.takesValue
-                        ? (clause.value ?? '')
+                      op: nextOp,
+                      value: OPS.find((o) => o.value === nextOp)?.takesValue
+                        ? coerceClauseValue(nextOp, clause.value)
                         : undefined,
                     })
-                  }
+                  }}
                 >
                   {OPS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -133,8 +151,10 @@ export function LogicBuilder({
                 {opMeta?.takesValue ? (
                   <Input
                     className="h-8 flex-1 text-xs"
-                    value={String(clause.value ?? '')}
-                    onChange={(e) => updateClause(i, { value: e.target.value })}
+                    value={displayClauseValue(clause.value)}
+                    onChange={(e) =>
+                      updateClause(i, { value: coerceClauseValue(clause.op, e.target.value) })
+                    }
                   />
                 ) : null}
                 <button
@@ -183,7 +203,5 @@ export function describeRule(
   // The remaining cases all carry a `value` (scalar or array). Cast to the
   // value-bearing union so TS picks `value` off either variant.
   const valued = rule as { field: string; op: string; value: unknown }
-  return `${fieldLookup[valued.field] ?? valued.field} ${OPS.find((o) => o.value === valued.op)?.label ?? valued.op} ${String(valued.value ?? '')}`
+  return `${fieldLookup[valued.field] ?? valued.field} ${OPS.find((o) => o.value === valued.op)?.label ?? valued.op} ${displayClauseValue(valued.value)}`
 }
-
-export type { LogicRule, FormField }

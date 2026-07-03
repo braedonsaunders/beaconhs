@@ -13,10 +13,7 @@ import { resolveDefaultValue, type ActionData } from '@beaconhs/forms-core'
 import { formResponses, formTemplateVersions, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { interpolate } from '@beaconhs/email-render'
-import {
-  createCorrectiveActionFromResponse,
-  createIncidentFromResponse,
-} from '@/app/(app)/apps/responses/[id]/_spawn-actions'
+import { spawnCorrectiveActionCore, spawnIncidentCore } from '@/app/(app)/apps/_lib/spawn-core'
 import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
 import type { ExtraActionHelpers, FlowSubjectAdapter } from '@/lib/flows/types'
 
@@ -107,16 +104,22 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
       return { tenantUserId: tuid, email, userId }
     },
 
+    // Flow-initiated spawns are TENANT-AUTHORITATIVE: the automation was
+    // authored by a template admin, so it must not silently no-op when the
+    // submitting user lacks ca.create / incidents.create. The core records
+    // dual attribution (actor = triggering user, initiatedBy = 'flow').
     spawnCorrectiveAction: (i) =>
-      createCorrectiveActionFromResponse({
+      spawnCorrectiveActionCore(ctx, {
         responseId,
         title: i.title,
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        initiatedBy: 'flow',
       }),
 
-    spawnIncident: (i) => createIncidentFromResponse({ responseId, title: i.title }),
+    spawnIncident: (i) =>
+      spawnIncidentCore(ctx, { responseId, title: i.title, initiatedBy: 'flow' }),
 
     async persistAfterRun({ fieldPatch, flagNonCompliant }) {
       await ctx.db(async (tx) => {
@@ -204,7 +207,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           const top = bad[0]
           if (top) {
             const sev = bad.some((h) => h.severity === 'high') ? 'high' : 'medium'
-            const res = await createCorrectiveActionFromResponse({
+            const res = await spawnCorrectiveActionCore(ctx, {
               responseId,
               title: `Photo hazard: ${top.type}`.slice(0, 120),
               description:
@@ -212,6 +215,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
                 '\n\n' +
                 bad.map((h) => `• ${h.type} (${h.severity}) — ${h.detail}`).join('\n'),
               severity: sev as 'low' | 'medium' | 'high' | 'critical',
+              initiatedBy: 'flow',
             })
             ran.push(res.ok ? 'analyze_photos→capa' : 'analyze_photos→capa (failed)')
           }

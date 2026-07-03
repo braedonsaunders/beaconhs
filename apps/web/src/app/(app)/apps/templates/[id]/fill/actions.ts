@@ -19,6 +19,7 @@ import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
 import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { fetchSingleEntityAttrs } from '@/app/(app)/apps/_lib/entity-loader'
+import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { submitFormResponseLifecycle } from '@/lib/forms/form-response-lifecycle'
 import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
 
@@ -53,6 +54,7 @@ async function canFillResponse(ctx: Ctx, responseId: string): Promise<boolean> {
         and(
           eq(formResponses.id, responseId),
           eq(formResponses.tenantId, ctx.tenantId),
+          isNull(formResponses.deletedAt),
           isNull(formTemplates.deletedAt),
         ),
       )
@@ -77,18 +79,6 @@ function canEditResponsePayload(
     (isOwner && (can(ctx, 'forms.response.update.own') || canWorkDraft)) ||
     (row.submittedBy === null && canWorkDraft)
   )
-}
-
-function responsePayload(
-  data: Record<string, unknown> | null,
-  draftData: FormResponseDraftData | null,
-): Record<string, unknown> {
-  if (!draftData) return data ?? {}
-  return {
-    ...(draftData.values ?? {}),
-    ...(draftData.rows ?? {}),
-    ...(data ?? {}),
-  }
 }
 
 export async function submitFormResponse(args: {
@@ -247,7 +237,11 @@ export async function persistDraft(
         })
         .from(formResponses)
         .where(
-          and(eq(formResponses.id, input.responseId), eq(formResponses.tenantId, ctx.tenantId)),
+          and(
+            eq(formResponses.id, input.responseId),
+            eq(formResponses.tenantId, ctx.tenantId),
+            isNull(formResponses.deletedAt),
+          ),
         )
         .limit(1)
 
@@ -413,7 +407,11 @@ export async function updateResponseField(input: {
           eq(formResponses.templateVersionId, formTemplateVersions.id),
         )
         .where(
-          and(eq(formResponses.id, input.responseId), eq(formResponses.tenantId, ctx.tenantId)),
+          and(
+            eq(formResponses.id, input.responseId),
+            eq(formResponses.tenantId, ctx.tenantId),
+            isNull(formResponses.deletedAt),
+          ),
         )
         .limit(1)
 

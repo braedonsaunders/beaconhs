@@ -19,7 +19,9 @@ import {
   type DataSource,
   type DataSourceColumn,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 
 // Hard safety cap on rows pulled into memory for a single query/aggregate.
 const ROW_CAP = 1000
@@ -97,6 +99,16 @@ async function fetchRows(source: DataSource): Promise<DataRow[]> {
     if (source.kind === 'responses') {
       const templateId = source.config?.templateId
       if (!templateId) return []
+      // Response-derived rows carry the full field map of every matching
+      // response, so they must honor the caller's forms.response read tier
+      // (read.all → everything, read.site → my sites, else → my own) exactly
+      // like the response lists and CSV export do.
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'forms.response',
+        ownerCols: [formResponses.submittedBy],
+        personCol: formResponses.subjectPersonId,
+        siteCol: formResponses.siteOrgUnitId,
+      })
       const resp = await tx
         .select({
           id: formResponses.id,
@@ -108,7 +120,14 @@ async function fetchRows(source: DataSource): Promise<DataRow[]> {
         .from(formResponses)
         // submittedAt is stamped on every completed response (submitted +
         // non_compliant both set it), so this cleanly excludes drafts.
-        .where(and(eq(formResponses.templateId, templateId), isNotNull(formResponses.submittedAt)))
+        .where(
+          and(
+            eq(formResponses.templateId, templateId),
+            isNotNull(formResponses.submittedAt),
+            isNull(formResponses.deletedAt),
+            vis,
+          ),
+        )
         .orderBy(desc(formResponses.submittedAt))
         .limit(ROW_CAP)
       let rows: DataRow[] = resp.map((r) => ({
@@ -159,6 +178,9 @@ function applyFilters(
 /** List every data source in the tenant (for the designer binding editor). */
 export async function listDataSources(): Promise<DataSourceSummary[]> {
   const ctx = await requireRequestContext()
+  // Designer-only metadata (source keys, names, column shapes) — gate on the
+  // same permission that opens the designer.
+  if (!can(ctx, 'forms.template.create')) return []
   return ctx.db(async (tx) => {
     const rows = await tx
       .select({

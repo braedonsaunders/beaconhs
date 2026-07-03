@@ -63,6 +63,13 @@ const INCIDENT_SEVERITIES = [
   'no_injury',
 ] as const
 
+// Current LOCAL wall-clock time formatted for <input type="datetime-local">
+// ("YYYY-MM-DDTHH:mm"). `toISOString()` alone is UTC and shows a time hours off
+// the user's clock.
+function localDatetimeValue(d: Date = new Date()): string {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
 export function SpawnDrawers({
   responseId,
   openDrawer,
@@ -256,7 +263,7 @@ function SpawnIncidentDrawer({
   const [description, setDescription] = useState(prefill.incidentDescription)
   const [type, setType] = useState<(typeof INCIDENT_TYPES)[number]>('other')
   const [severity, setSeverity] = useState<(typeof INCIDENT_SEVERITIES)[number]>('no_injury')
-  const [occurredAt, setOccurredAt] = useState<string>(() => new Date().toISOString().slice(0, 16))
+  const [occurredAt, setOccurredAt] = useState<string>(() => localDatetimeValue())
   const [location, setLocation] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -265,7 +272,7 @@ function SpawnIncidentDrawer({
     if (open) {
       setTitle(prefill.incidentTitle)
       setDescription(prefill.incidentDescription)
-      setOccurredAt(new Date().toISOString().slice(0, 16))
+      setOccurredAt(localDatetimeValue())
       setError(null)
     }
   }, [open, prefill.incidentTitle, prefill.incidentDescription])
@@ -277,6 +284,14 @@ function SpawnIncidentDrawer({
       setError('Title is required.')
       return
     }
+    // The datetime-local value is zone-less; parse it in the BROWSER's timezone
+    // and send an unambiguous ISO instant so the server never re-interprets it
+    // in its own timezone.
+    const occurredAtDate = occurredAt ? new Date(occurredAt) : new Date()
+    if (Number.isNaN(occurredAtDate.getTime())) {
+      setError('Enter a valid occurred-at date and time.')
+      return
+    }
     startTransition(async () => {
       const res = await action({
         responseId,
@@ -284,7 +299,7 @@ function SpawnIncidentDrawer({
         description: description.trim() || null,
         type,
         severity,
-        occurredAt,
+        occurredAt: occurredAtDate.toISOString(),
         location: location.trim() || null,
       })
       if (res.ok) {

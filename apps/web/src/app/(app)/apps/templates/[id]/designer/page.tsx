@@ -1,5 +1,5 @@
-import { notFound } from 'next/navigation'
-import { asc, desc, eq } from 'drizzle-orm'
+import { notFound, redirect } from 'next/navigation'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import {
   formAutomations,
@@ -58,9 +58,20 @@ export default async function FormDesignerPage({
   const sp = await searchParams
   const initialSurface = sp.surface === 'flows' ? 'flows' : 'build'
   const ctx = await requireRequestContext()
+  // The designer is a build/admin surface: it exposes the full schema, every
+  // flow graph (which can embed literal recipient emails), tenant role keys,
+  // and recipient options. Non-editors land on the records list instead —
+  // mirrors the /apps/templates/[id] router.
+  if (!can(ctx, 'forms.template.create')) {
+    redirect(`/apps/templates/${id}/records`)
+  }
   const canPin = can(ctx, 'admin.nav.manage')
   const data = await ctx.db(async (tx) => {
-    const [tmpl] = await tx.select().from(formTemplates).where(eq(formTemplates.id, id)).limit(1)
+    const [tmpl] = await tx
+      .select()
+      .from(formTemplates)
+      .where(and(eq(formTemplates.id, id), isNull(formTemplates.deletedAt)))
+      .limit(1)
     if (!tmpl) return null
     // Is this app currently pinned to the sidebar? (admins only — drives the
     // Pin toggle in the Overview panel.)

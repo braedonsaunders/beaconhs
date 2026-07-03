@@ -3,7 +3,7 @@
 // @beaconhs/forms-core; this owns persistence (delete+reinsert on submit) and
 // the per-person transcript read used by the people page + /apps/transcripts.
 
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { formResponseParticipants, formResponses, formTemplates, people } from '@beaconhs/db/schema'
 import { extractParticipants, type FormSchemaV1 } from '@beaconhs/forms-core'
@@ -125,7 +125,7 @@ export async function loadPersonTranscript(
       .from(formResponseParticipants)
       .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
       .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
-      .where(eq(formResponseParticipants.personId, personId))
+      .where(and(eq(formResponseParticipants.personId, personId), isNull(formResponses.deletedAt)))
       .orderBy(desc(formResponseParticipants.occurredOn))
       .limit(500)
 
@@ -157,6 +157,8 @@ export async function listTranscriptPeople(
       })
       .from(formResponseParticipants)
       .innerJoin(people, eq(people.id, formResponseParticipants.personId))
+      .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
+      .where(and(isNull(formResponses.deletedAt), isNull(people.deletedAt)))
       .groupBy(formResponseParticipants.personId, people.firstName, people.lastName)
       .orderBy(desc(sql`count(*)`))
       .limit(500)

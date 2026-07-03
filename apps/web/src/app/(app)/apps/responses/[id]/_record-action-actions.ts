@@ -8,11 +8,12 @@
 // conditions + approval gates. No second automation system.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
-import { planAutomation, type AutomationPlan } from '@beaconhs/forms-core'
-import { formAutomations } from '@beaconhs/db/schema'
+import { and, eq, isNull } from 'drizzle-orm'
+import { evaluateLogicRule, planAutomation, type AutomationPlan } from '@beaconhs/forms-core'
+import { formAutomations, formResponses } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { executeFlowPlan } from '@/app/(app)/apps/_lib/run-automations'
 import { createFormFlowAdapter } from '@/app/(app)/apps/_lib/form-flow-adapter'
@@ -31,6 +32,7 @@ export async function runRecordAction(input: {
       tx
         .select({
           id: formAutomations.id,
+          templateId: formAutomations.templateId,
           graph: formAutomations.graph,
           enabled: formAutomations.enabled,
         })
@@ -43,24 +45,65 @@ export async function runRecordAction(input: {
     if (!flow) return { ok: false, error: 'Action not found' }
     if (!flow.enabled) return { ok: false, error: 'This action is disabled' }
 
-    // Re-check the button's authored permission server-side (the action bar
-    // already hides it, but never trust the client).
+    // Load the target response and re-check server-side that (a) it actually
+    // belongs to the flow's template (a flow must never run against another
+    // app's records) and (b) the caller can SEE it under the per-user record
+    // visibility tiers — this action is network-callable with arbitrary ids.
+    const target = await ctx.db(async (tx) => {
+      const [r] = await tx
+        .select({
+          templateId: formResponses.templateId,
+          submittedBy: formResponses.submittedBy,
+          subjectPersonId: formResponses.subjectPersonId,
+          siteOrgUnitId: formResponses.siteOrgUnitId,
+        })
+        .from(formResponses)
+        .where(and(eq(formResponses.id, input.responseId), isNull(formResponses.deletedAt)))
+        .limit(1)
+      return r ?? null
+    })
+    if (!target || target.templateId !== flow.templateId) {
+      return { ok: false, error: 'Action not found' }
+    }
+    if (
+      !(await ctx.db((tx) =>
+        canSeeRecord(ctx, tx, {
+          prefix: 'forms.response',
+          ownerIds: [target.submittedBy],
+          personId: target.subjectPersonId,
+          siteId: target.siteOrgUnitId,
+        }),
+      ))
+    ) {
+      return { ok: false, error: 'Action not found' }
+    }
+
+    // Re-check the button's authored gates server-side (the action bar already
+    // hides it, but never trust the client): the required permission AND the
+    // showIf display condition, evaluated against the record's current values.
     const node = flow.graph.nodes.find(
       (n) =>
         n.data.kind === 'trigger' &&
         n.data.trigger.trigger === 'manual' &&
         n.data.trigger.buttonId === input.buttonId,
     )
+    const adapter = createFormFlowAdapter(ctx, input.responseId)
+    const recordValues = await adapter.loadValues()
     if (node && node.data.kind === 'trigger' && node.data.trigger.trigger === 'manual') {
       const td = node.data.trigger
       if (td.requirePermission && !can(ctx, td.requirePermission)) {
         return { ok: false, error: 'You do not have permission to run this action' }
       }
+      if (
+        td.showIf &&
+        !evaluateLogicRule(td.showIf, { values: recordValues, rows: {}, entities: {} })
+      ) {
+        return { ok: false, error: 'This action is not available for this record' }
+      }
     }
 
-    const adapter = createFormFlowAdapter(ctx, input.responseId)
     const values: Record<string, unknown> = {
-      ...(await adapter.loadValues()),
+      ...recordValues,
       ...(input.inputs ?? {}),
     }
 

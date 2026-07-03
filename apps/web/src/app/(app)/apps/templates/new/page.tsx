@@ -25,6 +25,7 @@ import { PageContainer } from '@/components/page-layout'
 import { eq } from 'drizzle-orm'
 import { AppTypePicker } from './_app-type-picker'
 import { formCategoryLabel } from '../../_lib/category-label'
+import { slugify } from '../../_lib/slug'
 
 export const metadata = { title: 'New app' }
 
@@ -35,16 +36,6 @@ const CANONICAL_ICONS: Record<
   jsha_v1: HardHat,
   toolbox_v1: MessageSquare,
   wah_rescue_v1: CheckCircle2,
-}
-
-function slugify(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_\-\s]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 60)
 }
 
 async function pickAvailableKey(
@@ -78,9 +69,14 @@ async function createTemplate(formData: FormData): Promise<void> {
   const description = String(formData.get('description') ?? '').trim() || null
   const customKey = String(formData.get('key') ?? '').trim() || null
   if (!name) return
+  // Custom keys invite stable slugs like "toolbox-talk", which may already
+  // exist in the tenant (form_templates has a unique (tenant_id, key) index) —
+  // run every candidate through the collision-safe picker. An all-symbols input
+  // slugifies to '' and falls back to the name (then a generic base).
+  const base = (customKey ? slugify(customKey) : '') || slugify(name) || 'app'
   const key = customKey
-    ? slugify(customKey)
-    : `${slugify(name)}_${Math.random().toString(36).slice(2, 6)}`
+    ? await pickAvailableKey(ctx, base)
+    : `${base}_${Math.random().toString(36).slice(2, 6)}`
 
   const initialSchema: FormSchemaV1 = {
     schemaVersion: 1,
@@ -227,21 +223,25 @@ function CanonicalCard({
       <input type="hidden" name="canonicalKey" value={canonicalKey} />
       <button
         type="submit"
-        className="group block w-full rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-teal-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+        className="group block w-full rounded-lg border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-teal-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-900"
       >
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700 group-hover:bg-teal-100">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700 group-hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:group-hover:bg-teal-900/50">
             <Icon size={20} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="truncate text-base font-semibold text-slate-900">{name}</h3>
+              <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                {name}
+              </h3>
               <ArrowRight
                 size={16}
                 className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-700"
               />
             </div>
-            <p className="mt-1 line-clamp-3 text-xs text-slate-600">{description}</p>
+            <p className="mt-1 line-clamp-3 text-xs text-slate-600 dark:text-slate-400">
+              {description}
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <Badge variant="secondary">{formCategoryLabel(category)}</Badge>
               <Badge variant="outline">
@@ -277,8 +277,10 @@ export default function NewTemplatePage() {
         {/* App-type picker (primary) */}
         <section className="space-y-3">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Choose an app type</h2>
-            <p className="text-sm text-slate-600">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Choose an app type
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Form, multi-step Wizard, Checklist, tabular Register, or a composed Mini-app.
             </p>
           </div>
@@ -289,8 +291,10 @@ export default function NewTemplatePage() {
         <section className="space-y-3">
           <div className="flex items-end justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Start from a template</h2>
-              <p className="text-sm text-slate-600">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Start from a template
+              </h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
                 The four big modules from the legacy app — now shipped as form templates. Pick one
                 and tweak.
               </p>
@@ -315,8 +319,10 @@ export default function NewTemplatePage() {
         {/* Blank-form fallback (secondary) */}
         <section className="space-y-3">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Or build from scratch</h2>
-            <p className="text-sm text-slate-600">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Or build from scratch
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Create an empty template and add sections, fields, and conditional logic in the
               designer.
             </p>

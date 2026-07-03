@@ -10,10 +10,10 @@ import {
   people,
   tenantUsers,
   user,
-  type FormResponseDraftData,
   type FormSchemaV1,
 } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
+import { responsePayload } from '../../_lib/response-payload'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       personCol: formResponses.subjectPersonId,
       siteCol: formResponses.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(formResponses.deletedAt)]
     if (vis) filters.push(vis)
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
     if (templateFilter) filters.push(eq(formResponses.templateId, templateFilter))
@@ -145,18 +145,6 @@ export async function GET(req: NextRequest) {
     headers: selection.headers,
     rows: rows.rows.map((row) => selection.project(responseRow(row, rows.columns))),
   })
-}
-
-function responsePayload(
-  data: Record<string, unknown> | null,
-  draftData: FormResponseDraftData | null,
-): Record<string, unknown> {
-  if (!draftData) return data ?? {}
-  return {
-    ...(draftData.values ?? {}),
-    ...(draftData.rows ?? {}),
-    ...(data ?? {}),
-  }
 }
 
 function personName(first: string | null, last: string | null): string | null {

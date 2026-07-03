@@ -15,16 +15,7 @@ import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { appendMessage, createConversation } from '@/lib/ai-conversations'
 import { generateAppEdit, generateAppFromPrompt, generateFlowFromPrompt } from './_lib/ai-generate'
-
-function slugify(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '')
-      .slice(0, 48) || 'app'
-  )
-}
+import { slugify } from './_lib/slug'
 
 // One conversational turn of the App builder assistant. The AI can BUILD a new
 // app or EDIT the current one (it always receives the live schema). Persists the
@@ -85,14 +76,10 @@ export async function runAppBuilderChat(args: {
     data: { schema: gen.value },
   })
 
-  await recordAudit(ctx, {
-    entityType: 'form_template',
-    entityId: args.templateId,
-    action: 'update',
-    summary: 'AI builder chat turn',
-    after: { mode: 'ai-chat', prompt: prompt.slice(0, 200) },
-  })
-
+  // No audit here: a chat turn mutates nothing on the template (the exchange is
+  // already persisted to ai_conversations, and applying/publishing the proposed
+  // schema audits through the designer's save/publish actions). Logging an
+  // 'update' per turn would pollute the template's audit trail.
   return { ok: true, conversationId, reply, schema: gen.value, warnings: gen.warnings }
 }
 
@@ -116,7 +103,7 @@ export async function generateAppDraft(
   const name = schema.title?.en?.trim() || 'AI app'
 
   const templateId = await ctx.db(async (tx) => {
-    const key = `${slugify(name)}_${Math.random().toString(36).slice(2, 6)}`
+    const key = `${slugify(name) || 'app'}_${Math.random().toString(36).slice(2, 6)}`
     const [tmpl] = await tx
       .insert(formTemplates)
       .values({
@@ -168,14 +155,17 @@ export async function generateFlowDraft(
     return { ok: false, error: 'AI is not configured. Set a provider + key under Admin → AI.' }
 
   // Resolve the flow → its template → field ids (power condition/field refs).
-  const fieldIds = await ctx.db(async (tx) => {
+  const resolved = await ctx.db(async (tx) => {
     const [flow] = await tx
       .select({ templateId: formAutomations.templateId })
       .from(formAutomations)
       .where(eq(formAutomations.id, flowId))
       .limit(1)
     if (!flow) return null
-    if (!flow.templateId) return [] // module flow — no template schema to read
+    if (!flow.templateId) {
+      // module flow — no template schema to read
+      return { templateId: null, fieldIds: [] as string[] }
+    }
     const [v] = await tx
       .select({ schema: formTemplateVersions.schema })
       .from(formTemplateVersions)
@@ -184,9 +174,10 @@ export async function generateFlowDraft(
       .limit(1)
     const ids: string[] = []
     for (const sec of v?.schema?.sections ?? []) for (const f of sec.fields) ids.push(f.id)
-    return ids
+    return { templateId: flow.templateId, fieldIds: ids }
   })
-  if (fieldIds === null) return { ok: false, error: 'Flow not found.' }
+  if (resolved === null) return { ok: false, error: 'Flow not found.' }
+  const { templateId, fieldIds } = resolved
 
   const gen = await generateFlowFromPrompt(aiConfig, trimmed, fieldIds)
   if (!gen.ok) return { ok: false, error: gen.error }
@@ -198,11 +189,12 @@ export async function generateFlowDraft(
       .where(eq(formAutomations.id, flowId)),
   )
   await recordAudit(ctx, {
-    entityType: 'form_template',
+    entityType: 'form_automation',
     entityId: flowId,
     action: 'update',
     summary: 'AI-generated flow',
     after: { mode: 'ai', prompt: trimmed.slice(0, 200) },
+    metadata: { templateId },
   })
   return { ok: true, warnings: gen.warnings, graph: gen.value }
 }

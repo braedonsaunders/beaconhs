@@ -138,12 +138,12 @@ function WorkflowStepCard({
       className={
         'rounded-md border p-3 ' +
         (isCurrent
-          ? 'border-amber-300 bg-amber-50/40'
+          ? 'border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/30'
           : step.status === 'signed'
-            ? 'border-emerald-200 bg-emerald-50/30'
+            ? 'border-emerald-200 bg-emerald-50/30 dark:border-emerald-900 dark:bg-emerald-950/30'
             : step.status === 'rejected'
-              ? 'border-red-200 bg-red-50/30'
-              : 'border-slate-200 bg-white')
+              ? 'border-red-200 bg-red-50/30 dark:border-red-900 dark:bg-red-950/30'
+              : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900')
       }
     >
       <header className="flex items-start justify-between gap-3">
@@ -151,7 +151,7 @@ function WorkflowStepCard({
           <div className="text-xs tracking-wide text-slate-500 uppercase">
             Step {step.sequence + 1} of {totalSteps}
           </div>
-          <div className="text-sm font-medium text-slate-900">{step.title}</div>
+          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{step.title}</div>
           <div className="mt-0.5 text-xs text-slate-500">
             Assignee:{' '}
             <span className="font-mono">
@@ -162,7 +162,7 @@ function WorkflowStepCard({
                   : step.assigneeLabel}
             </span>
             {step.signatureRequired ? (
-              <span className="ml-2 text-amber-700">· signature required</span>
+              <span className="ml-2 text-amber-700 dark:text-amber-400">· signature required</span>
             ) : null}
           </div>
         </div>
@@ -172,12 +172,12 @@ function WorkflowStepCard({
       {/* Signed-step body — signer + signature thumbnail */}
       {step.status === 'signed' ? (
         <div className="mt-3 space-y-2 text-sm">
-          <div className="text-slate-700">
+          <div className="text-slate-700 dark:text-slate-300">
             Signed by <strong>{step.signedBy ?? '—'}</strong>
             {step.signedAt ? <> · {new Date(step.signedAt).toLocaleString()}</> : null}
           </div>
           {step.signatureDataUrl ? (
-            <div className="rounded border border-slate-200 bg-white p-1.5">
+            <div className="rounded border border-slate-200 bg-white p-1.5 dark:border-slate-700">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={step.signatureDataUrl}
@@ -192,12 +192,12 @@ function WorkflowStepCard({
 
       {/* Rejected-step body — reason + when */}
       {step.status === 'rejected' ? (
-        <div className="mt-3 space-y-1 rounded-md border border-red-200 bg-white p-2 text-sm">
-          <div className="text-red-800">
+        <div className="mt-3 space-y-1 rounded-md border border-red-200 bg-white p-2 text-sm dark:border-red-900 dark:bg-slate-900">
+          <div className="text-red-800 dark:text-red-300">
             Rejected by <strong>{step.rejectedBy ?? '—'}</strong>
             {step.rejectedAt ? <> · {new Date(step.rejectedAt).toLocaleString()}</> : null}
           </div>
-          <div className="text-slate-700">
+          <div className="text-slate-700 dark:text-slate-300">
             <span className="text-xs tracking-wide text-slate-500 uppercase">Reason:</span>{' '}
             {step.rejectionReason}
           </div>
@@ -336,7 +336,7 @@ function ActiveStepActions({
           Reject step
         </Button>
         {mode === 'reject' ? (
-          <div className="w-full space-y-2 rounded-md border border-red-200 bg-white p-2">
+          <div className="w-full space-y-2 rounded-md border border-red-200 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
             <Textarea
               rows={2}
               value={reason}
@@ -378,7 +378,7 @@ function ActiveStepActions({
       ) : null}
       {/* SIGN sub-form */}
       {mode === 'sign' ? (
-        <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2">
+        <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
           <SignaturePad value={signature} onChange={setSignature} />
           <Textarea
             rows={1}
@@ -414,7 +414,7 @@ function ActiveStepActions({
 
       {/* REJECT sub-form */}
       {mode === 'reject' ? (
-        <div className="space-y-2 rounded-md border border-red-200 bg-white p-2">
+        <div className="space-y-2 rounded-md border border-red-200 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
           <Textarea
             rows={3}
             value={reason}

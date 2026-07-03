@@ -9,7 +9,8 @@
 // tier, or the record owner). Super-admins always pass.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { redirect } from 'next/navigation'
+import { and, eq, isNull } from 'drizzle-orm'
 import {
   formResponses,
   formTemplateVersions,
@@ -17,12 +18,14 @@ import {
   people,
   type FormResponseDraftData,
 } from '@beaconhs/db/schema'
+import { validateResponse } from '@beaconhs/forms-core'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
+import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { runOnSubmitAutomations } from '@/app/(app)/apps/_lib/run-automations'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
@@ -54,18 +57,6 @@ function hasAnyRole(roleKeys: ReadonlySet<string>, allowed: string[] | null | un
 }
 
 type LockGateRec = { submittedBy: string | null; recordConfig: unknown }
-
-function responsePayload(
-  data: Record<string, unknown> | null,
-  draftData: FormResponseDraftData | null,
-): Record<string, unknown> {
-  if (!draftData) return data ?? {}
-  return {
-    ...(draftData.values ?? {}),
-    ...(draftData.rows ?? {}),
-    ...(data ?? {}),
-  }
-}
 
 // Lock is restricted to the app's configured `lockRoles` when any are set
 // (super-admins always pass); otherwise it falls back to the coarse manage tier.
@@ -105,7 +96,13 @@ async function loadRecord(ctx: Ctx, responseId: string) {
       .from(formResponses)
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
       .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, formResponses.templateVersionId))
-      .where(and(eq(formResponses.id, responseId), eq(formResponses.tenantId, ctx.tenantId)))
+      .where(
+        and(
+          eq(formResponses.id, responseId),
+          eq(formResponses.tenantId, ctx.tenantId),
+          isNull(formResponses.deletedAt),
+        ),
+      )
       .limit(1)
     return row ?? null
   })
@@ -167,8 +164,22 @@ export async function finalizeResponse(formData: FormData) {
   if (!responseId) return
   const rec = await loadRecord(ctx, responseId)
   if (!rec || rec.locked || !canManageRecord(ctx, rec.submittedBy)) return
+  // Only live records can be finalized — invoking this action against a
+  // submitted / in_review / closed response would silently rewrite its status
+  // and re-fire the on-submit flows (duplicate CAPAs / emails).
+  if (rec.status !== 'draft' && rec.status !== 'in_progress') return
 
   const data = responsePayload(rec.data ?? {}, rec.draftData as FormResponseDraftData | null)
+
+  // Enforce required fields exactly like the guided wizard's submit path —
+  // Finalize must never commit a record whose status says "submitted" while
+  // required signatures/fields are empty. Errors bounce back to the record
+  // page as a banner.
+  const validationErrors = validateResponse(rec.schema, data, 'submit')
+  if (validationErrors.length > 0) {
+    redirect(`/apps/responses/${responseId}?finalizeError=${validationErrors.length}`)
+  }
+
   const rows: Record<string, Array<Record<string, unknown>>> = {}
   for (const sec of rec.schema.sections) {
     if (!sec.repeating) continue

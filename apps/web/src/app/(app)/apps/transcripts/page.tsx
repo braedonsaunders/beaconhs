@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { Users } from 'lucide-react'
 import {
   Badge,
@@ -9,17 +10,20 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
-import { pickString } from '@/lib/list-params'
+import { SortableTh } from '@/components/sortable-th'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { listTranscriptPeople } from '../_lib/participants'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Form transcripts' }
+
+const SORTS = ['count', 'name'] as const
 
 export default async function FormTranscriptsIndexPage({
   searchParams,
@@ -29,9 +33,21 @@ export default async function FormTranscriptsIndexPage({
   const sp = await searchParams
   const rawQ = pickString(sp.q) ?? ''
   const q = rawQ.trim().toLowerCase()
+  const params = parseListParams(sp, { sort: 'count', dir: 'desc', allowedSorts: SORTS })
   const ctx = await requireRequestContext()
+  // Transcripts are inherently cross-record (every person's full form history),
+  // so they require the reviewer read tier. Workers see their own history via
+  // their workspace, not this admin surface.
+  if (!can(ctx, 'forms.response.read.all')) notFound()
   const all = await listTranscriptPeople(ctx)
-  const rows = q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all
+  const rows = (q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all).sort((a, b) => {
+    const cmp =
+      params.sort === 'name'
+        ? a.name.localeCompare(b.name)
+        : a.count - b.count || a.name.localeCompare(b.name)
+    return params.dir === 'asc' ? cmp : -cmp
+  })
+  const sortProps = { basePath: '/apps/transcripts', currentParams: sp, dir: params.dir }
 
   return (
     <ListPageLayout
@@ -66,8 +82,18 @@ export default async function FormTranscriptsIndexPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Person</TableHead>
-              <TableHead className="text-right">Forms participated in</TableHead>
+              <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                Person
+              </SortableTh>
+              <SortableTh
+                {...sortProps}
+                column="count"
+                active={params.sort === 'count'}
+                align="right"
+                className="text-right"
+              >
+                Forms participated in
+              </SortableTh>
             </TableRow>
           </TableHeader>
           <TableBody>

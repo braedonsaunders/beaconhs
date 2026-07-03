@@ -63,6 +63,7 @@ export default async function FormsPage({
         last: max(formResponses.submittedAt),
       })
       .from(formResponses)
+      .where(isNull(formResponses.deletedAt))
       .groupBy(formResponses.templateId)
 
     const [tot] = await tx
@@ -73,7 +74,10 @@ export default async function FormsPage({
       .select({ c: count() })
       .from(formTemplates)
       .where(and(isNull(formTemplates.deletedAt), eq(formTemplates.status, 'published')))
-    const [resp] = await tx.select({ c: count() }).from(formResponses)
+    const [resp] = await tx
+      .select({ c: count() })
+      .from(formResponses)
+      .where(isNull(formResponses.deletedAt))
 
     return {
       templates,

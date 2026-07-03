@@ -24,6 +24,7 @@ import {
 } from '@beaconhs/forms-core'
 import { toast } from '@/lib/toast'
 import { createFlow, deleteFlow, saveFlow, setFlowEnabled } from '@/lib/flows/flow-crud'
+import { slugify } from '@/app/(app)/apps/_lib/slug'
 import type { FlowSummary } from '../flows/_flows-canvas'
 
 type ButtonVariant = NonNullable<Extract<TriggerData, { trigger: 'manual' }>['variant']>
@@ -92,11 +93,8 @@ function defaultAction(kind: ActionData['action']): ActionData {
 }
 
 // A url-safe, stable button id derived from the label.
-function slugify(label: string): string {
-  const base = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+function buttonIdFromLabel(label: string): string {
+  const base = slugify(label)
   return `btn_${base || Math.random().toString(36).slice(2, 8)}`
 }
 
@@ -124,7 +122,7 @@ function buildButtonGraph(input: {
 }): AutomationGraph {
   const trigger: TriggerData = {
     trigger: 'manual',
-    buttonId: slugify(input.label),
+    buttonId: buttonIdFromLabel(input.label),
     label: input.label.trim(),
     variant: input.variant,
     order: input.order,

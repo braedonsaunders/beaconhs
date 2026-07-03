@@ -738,7 +738,10 @@ const GROUPS: { kind: OpDef['group']; label: string }[] = [
   { kind: 'entity', label: 'Entity attribute' },
 ]
 
-const ALWAYS_TRUE: LogicRule = { op: 'isSet', field: '__never_set__' }
+// Tautology sentinel: `isNotSet` on a field that never exists always evaluates
+// TRUE, so a fresh/cleared `if` takes its THEN branch (an `isSet` here would
+// silently always take the ELSE branch).
+const ALWAYS_TRUE: LogicRule = { op: 'isNotSet', field: '__never_set__' }
 
 function makeDefault(kind: FormulaExpression['kind']): FormulaExpression {
   switch (kind) {

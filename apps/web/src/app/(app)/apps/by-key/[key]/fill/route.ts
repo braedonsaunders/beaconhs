@@ -6,7 +6,7 @@
 // a new entry there via the prefetch-safe server action.
 
 import { NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { formTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 
@@ -25,7 +25,7 @@ export async function GET(
     const [t] = await tx
       .select({ id: formTemplates.id })
       .from(formTemplates)
-      .where(eq(formTemplates.key, key))
+      .where(and(eq(formTemplates.key, key), isNull(formTemplates.deletedAt)))
       .limit(1)
     return t?.id ?? null
   })

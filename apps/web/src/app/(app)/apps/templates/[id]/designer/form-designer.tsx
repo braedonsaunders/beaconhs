@@ -1830,9 +1830,6 @@ function MatrixConfigEditor({
 
 // --- Data-bound element binding editor -------------------------------------
 
-// Module-cached list of the tenant's data sources, shared by every binding
-// editor instance so we hit the server action once per editor session.
-let _dataSourcesPromise: Promise<DataSourceSummary[]> | null = null
 function useDataSources(): {
   sources: DataSourceSummary[]
   loading: boolean
@@ -1859,9 +1856,10 @@ function useDataSources(): {
     }
   }, [])
 
+  // Fetched per mount (NOT module-cached): a module-level promise would keep
+  // serving the previous tenant's source list after a tenant switch.
   useEffect(() => {
-    if (!_dataSourcesPromise) _dataSourcesPromise = listDataSources()
-    const cleanup = applySourcePromise(_dataSourcesPromise)
+    const cleanup = applySourcePromise(listDataSources())
     activeLoadRef.current = cleanup
     return cleanup
   }, [applySourcePromise])
@@ -1872,8 +1870,7 @@ function useDataSources(): {
     refresh: () => {
       activeLoadRef.current?.()
       setLoading(true)
-      _dataSourcesPromise = listDataSources()
-      activeLoadRef.current = applySourcePromise(_dataSourcesPromise)
+      activeLoadRef.current = applySourcePromise(listDataSources())
     },
   }
 }

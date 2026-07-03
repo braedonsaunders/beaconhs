@@ -75,7 +75,7 @@ export function AiGenerateButton() {
                 key={ex}
                 type="button"
                 onClick={() => setPrompt(ex)}
-                className="block w-full rounded-md border border-slate-200 px-3 py-2 text-left text-xs text-slate-600 transition-colors hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700"
+                className="block w-full rounded-md border border-slate-200 px-3 py-2 text-left text-xs text-slate-600 transition-colors hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700 dark:border-slate-800 dark:text-slate-400 dark:hover:border-teal-600 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
               >
                 {ex}
               </button>

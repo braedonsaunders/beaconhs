@@ -3,7 +3,7 @@
 // Render a fresh form-response PDF on demand and stream it back to the browser.
 
 import { notFound } from 'next/navigation'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { formResponses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
@@ -32,7 +32,7 @@ export async function GET(
         siteOrgUnitId: formResponses.siteOrgUnitId,
       })
       .from(formResponses)
-      .where(eq(formResponses.id, id))
+      .where(and(eq(formResponses.id, id), isNull(formResponses.deletedAt)))
       .limit(1)
     return r ?? null
   })

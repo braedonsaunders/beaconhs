@@ -7,7 +7,7 @@
 // See docs/monitored-sessions-design.md.
 
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { formResponseCheckins, formResponses } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -53,7 +53,7 @@ async function loadSession(ctx: Ctx, id: string) {
         siteOrgUnitId: formResponses.siteOrgUnitId,
       })
       .from(formResponses)
-      .where(eq(formResponses.id, id))
+      .where(and(eq(formResponses.id, id), isNull(formResponses.deletedAt)))
       .limit(1)
     if (!r) return null
     const visible = await canSeeRecord(ctx, tx, {

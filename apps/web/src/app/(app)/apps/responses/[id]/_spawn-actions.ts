@@ -2,44 +2,44 @@
 
 // Spawn-from-response server actions.
 //
-// Both actions reuse the same loader (computeFormScore output) so prefill
-// fields stay in sync with the Failed-checks panel on the response viewer.
-// They mirror the signatures of corrective-actions/new and incidents/new
-// createCorrectiveAction / reportIncident actions, but as typed-object
-// inputs (per the spec) instead of FormData so they can be called from a
-// client-rendered drawer.
+// These are the USER-initiated entry points (the Create CAPA / Create incident
+// drawers and per-failed-field buttons). They authorize the caller — assertCan
+// on the module create permission plus the per-user record-visibility re-check —
+// then delegate the actual write to the shared core in _lib/spawn-core.ts,
+// which the Flows executor also uses (tenant-authoritatively, without the
+// caller-permission gate). One insert/audit/event path, two authorization
+// policies.
 
-import { revalidatePath } from 'next/cache'
-import { count, eq, sql } from 'drizzle-orm'
-import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
-import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
+import { and, eq, isNull } from 'drizzle-orm'
+import { formResponses } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
-import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { spawnCorrectiveActionCore, spawnIncidentCore } from '@/app/(app)/apps/_lib/spawn-core'
 
-// -- Shared loader ---------------------------------------------------------
+// -- Shared visibility gate --------------------------------------------------
 
-async function loadResponseForSpawn(
+async function canSpawnFromResponse(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   responseId: string,
-): Promise<
-  { ok: true; response: typeof formResponses.$inferSelect } | { ok: false; error: string }
-> {
+): Promise<boolean> {
   const row = await ctx.db(async (tx) => {
     const [r] = await tx
-      .select()
+      .select({
+        submittedBy: formResponses.submittedBy,
+        subjectPersonId: formResponses.subjectPersonId,
+        siteOrgUnitId: formResponses.siteOrgUnitId,
+      })
       .from(formResponses)
-      .where(eq(formResponses.id, responseId))
+      .where(and(eq(formResponses.id, responseId), isNull(formResponses.deletedAt)))
       .limit(1)
     return r ?? null
   })
-  if (!row) return { ok: false, error: 'Form response not found' }
+  if (!row) return false
   // Per-user record visibility re-check: incident/CA creation is intentionally
-  // broad (no dedicated permission to cite), but the caller must at least be
-  // able to SEE the source response before spawning from it by id.
-  const visible = await ctx.db((tx) =>
+  // broad, but the caller must at least be able to SEE the source response
+  // before spawning from it by id.
+  return ctx.db((tx) =>
     canSeeRecord(ctx, tx, {
       prefix: 'forms.response',
       ownerIds: [row.submittedBy],
@@ -47,8 +47,6 @@ async function loadResponseForSpawn(
       siteId: row.siteOrgUnitId,
     }),
   )
-  if (!visible) return { ok: false, error: 'Form response not found' }
-  return { ok: true, response: row }
 }
 
 // -- 1. Create CAPA from response ------------------------------------------
@@ -76,80 +74,10 @@ export async function createCorrectiveActionFromResponse(
     return { ok: false, error: 'You do not have permission to create corrective actions.' }
   }
   if (!input.responseId) return { ok: false, error: 'Missing responseId' }
-  const title = input.title?.trim()
-  if (!title) return { ok: false, error: 'Title is required' }
-
-  const loaded = await loadResponseForSpawn(ctx, input.responseId)
-  if (!loaded.ok) return loaded
-
-  const severity = input.severity ?? 'medium'
-  const assignedOn = new Date().toISOString().slice(0, 10)
-
-  const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
-    const [inserted] = await tx
-      .insert(correctiveActions)
-      .values({
-        tenantId: ctx.tenantId,
-        reference,
-        title,
-        description: input.description?.trim() || null,
-        severity,
-        status: 'open',
-        source: 'inspection', // form-response-driven CAPAs are inspection-shaped
-        sourceEntityType: 'form_response',
-        sourceEntityId: input.responseId,
-        sourceFormResponseId: input.responseId,
-        siteOrgUnitId: input.siteOrgUnitId ?? loaded.response.siteOrgUnitId ?? null,
-        assignedOn,
-        dueOn: input.dueOn ?? null,
-        assignedByTenantUserId: ctx.membership?.id,
-        ownerTenantUserId: ctx.membership?.id,
-      })
-      .returning()
-    return inserted
-  })
-
-  if (!row) return { ok: false, error: 'Failed to create corrective action' }
-
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: row.id,
-    action: 'create',
-    summary: `Spawned ${row.reference} from form response ${input.responseId.slice(0, 8)}`,
-    after: {
-      reference: row.reference,
-      severity,
-      sourceFormResponseId: input.responseId,
-      failedFieldKey: input.failedFieldKey ?? null,
-    },
-  })
-  await recordAudit(ctx, {
-    entityType: 'form_response',
-    entityId: input.responseId,
-    action: 'update',
-    summary: `Spawned corrective action ${row.reference}`,
-    metadata: {
-      caId: row.id,
-      failedFieldKey: input.failedFieldKey ?? null,
-    },
-  })
-  await emitCorrectiveActionAssigned(ctx, {
-    caId: row.id,
-    assigneeUserId: null,
-    assignerUserId: null,
-  })
-
-  revalidatePath(`/apps/responses/${input.responseId}`)
-  revalidatePath('/corrective-actions')
-  return { ok: true, caId: row.id, reference: row.reference }
+  if (!(await canSpawnFromResponse(ctx, input.responseId))) {
+    return { ok: false, error: 'Form response not found' }
+  }
+  return spawnCorrectiveActionCore(ctx, { ...input, initiatedBy: 'user' })
 }
 
 // -- 2. Create incident from response --------------------------------------
@@ -183,67 +111,8 @@ export async function createIncidentFromResponse(
     return { ok: false, error: 'You do not have permission to report incidents.' }
   }
   if (!input.responseId) return { ok: false, error: 'Missing responseId' }
-  const title = input.title?.trim()
-  if (!title) return { ok: false, error: 'Title is required' }
-
-  const loaded = await loadResponseForSpawn(ctx, input.responseId)
-  if (!loaded.ok) return loaded
-
-  const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date()
-  if (Number.isNaN(occurredAt.getTime())) {
-    return { ok: false, error: 'Invalid occurred date' }
+  if (!(await canSpawnFromResponse(ctx, input.responseId))) {
+    return { ok: false, error: 'Form response not found' }
   }
-
-  const row = await ctx.db(async (tx) => {
-    const year = occurredAt.getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(incidents)
-      .where(sql`extract(year from ${incidents.occurredAt}) = ${year}`)
-    const reference = `INC-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
-    const [inserted] = await tx
-      .insert(incidents)
-      .values({
-        tenantId: ctx.tenantId,
-        reference,
-        type: input.type ?? 'other',
-        severity: input.severity ?? 'no_injury',
-        status: 'reported',
-        title,
-        description: input.description?.trim() || null,
-        occurredAt,
-        siteOrgUnitId: input.siteOrgUnitId ?? loaded.response.siteOrgUnitId ?? null,
-        location: input.location?.trim() || null,
-        reportedByTenantUserId: ctx.membership?.id ?? null,
-        sourceFormResponseId: input.responseId,
-      })
-      .returning()
-    return inserted
-  })
-
-  if (!row) return { ok: false, error: 'Failed to create incident' }
-
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: row.id,
-    action: 'create',
-    summary: `Spawned ${row.reference} from form response ${input.responseId.slice(0, 8)}`,
-    after: {
-      reference: row.reference,
-      sourceFormResponseId: input.responseId,
-    },
-  })
-  await recordAudit(ctx, {
-    entityType: 'form_response',
-    entityId: input.responseId,
-    action: 'update',
-    summary: `Spawned incident ${row.reference}`,
-    metadata: { incidentId: row.id },
-  })
-  await emitIncidentReported(ctx, { incidentId: row.id })
-  await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
-
-  revalidatePath(`/apps/responses/${input.responseId}`)
-  revalidatePath('/incidents')
-  return { ok: true, incidentId: row.id, reference: row.reference }
+  return spawnIncidentCore(ctx, { ...input, initiatedBy: 'user' })
 }

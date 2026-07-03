@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import {
   formResponses,
   formTemplateVersions,
@@ -38,7 +38,11 @@ export default async function FillTemplatePage({
 
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
-    const [tmpl] = await tx.select().from(formTemplates).where(eq(formTemplates.id, id)).limit(1)
+    const [tmpl] = await tx
+      .select()
+      .from(formTemplates)
+      .where(and(eq(formTemplates.id, id), isNull(formTemplates.deletedAt)))
+      .limit(1)
     if (!tmpl) return null
     const [version] = await tx
       .select()
@@ -72,7 +76,13 @@ export default async function FillTemplatePage({
           templateId: formResponses.templateId,
         })
         .from(formResponses)
-        .where(and(eq(formResponses.id, responseIdParam), eq(formResponses.tenantId, ctx.tenantId)))
+        .where(
+          and(
+            eq(formResponses.id, responseIdParam),
+            eq(formResponses.tenantId, ctx.tenantId),
+            isNull(formResponses.deletedAt),
+          ),
+        )
         .limit(1)
       if (row && row.templateId === id) {
         responseRow = {
@@ -90,7 +100,7 @@ export default async function FillTemplatePage({
       tx
         .select({ id: orgUnits.id, name: orgUnits.name })
         .from(orgUnits)
-        .where(eq(orgUnits.level, 'site'))
+        .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
         .orderBy(asc(orgUnits.name)),
       tx
         .select({

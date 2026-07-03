@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { aliasedTable, and, asc, desc, eq } from 'drizzle-orm'
+import { aliasedTable, and, asc, desc, eq, isNull } from 'drizzle-orm'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -49,6 +49,7 @@ import {
 } from '@beaconhs/db/schema'
 import { evaluateLogicRule } from '@beaconhs/forms-core'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
+import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -82,18 +83,6 @@ export const dynamic = 'force-dynamic'
 const TABS = ['response', 'comments', 'audit'] as const
 type Tab = (typeof TABS)[number]
 
-function responsePayload(
-  data: Record<string, unknown> | null,
-  draftData: FormResponseDraftData | null,
-): Record<string, unknown> {
-  if (!draftData) return data ?? {}
-  return {
-    ...(draftData.values ?? {}),
-    ...(draftData.rows ?? {}),
-    ...(data ?? {}),
-  }
-}
-
 function hasAnyRole(roleKeys: ReadonlySet<string>, allowed: string[] | null | undefined): boolean {
   return !!allowed && allowed.length > 0 && allowed.some((r) => roleKeys.has(r))
 }
@@ -123,7 +112,7 @@ async function addComment(formData: FormData) {
         siteOrgUnitId: formResponses.siteOrgUnitId,
       })
       .from(formResponses)
-      .where(eq(formResponses.id, responseId))
+      .where(and(eq(formResponses.id, responseId), isNull(formResponses.deletedAt)))
       .limit(1)
     return r ?? null
   })
@@ -191,7 +180,7 @@ export default async function FormResponsePage({
       .leftJoin(people, eq(people.id, formResponses.subjectPersonId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, formResponses.submittedBy))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(formResponses.id, id))
+      .where(and(eq(formResponses.id, id), isNull(formResponses.deletedAt)))
       .limit(1)
     if (!row) return null
     // Aliased joins so we can attach signer + rejector display names to each
@@ -271,7 +260,7 @@ export default async function FormResponsePage({
       tx
         .select({ id: orgUnits.id, name: orgUnits.name })
         .from(orgUnits)
-        .where(eq(orgUnits.level, 'site'))
+        .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
         .orderBy(asc(orgUnits.name)),
       tx
         .select({
@@ -472,6 +461,9 @@ export default async function FormResponsePage({
     failedFieldKeys,
   })
 
+  // Set by finalizeResponse when required-field validation blocks the finalize.
+  const finalizeErrorCount = Number(pickString(sp.finalizeError) ?? '0')
+
   const drawerParam = pickString(sp.drawer)
   const openDrawer: SpawnDrawerKind =
     drawerParam === 'spawn-ca'
@@ -624,9 +616,19 @@ export default async function FormResponsePage({
       }
       alerts={
         (reviewEnabled && (complianceStatus === 'non_compliant' || flagsFollowup)) ||
+        finalizeErrorCount > 0 ||
         locked ||
         !canEditRecord ? (
           <div className="space-y-3">
+            {finalizeErrorCount > 0 ? (
+              <Alert variant="destructive">
+                <AlertTitle>Record not finalized</AlertTitle>
+                <AlertDescription>
+                  {finalizeErrorCount} field{finalizeErrorCount === 1 ? ' is' : 's are'} incomplete
+                  or invalid. Complete the required fields, then finalize again.
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {reviewEnabled && complianceStatus === 'non_compliant' ? (
               <Alert variant="destructive">
                 <AlertTitle>Non-compliant response</AlertTitle>
@@ -718,11 +720,13 @@ export default async function FormResponsePage({
                     return (
                       <li
                         key={key}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50/60 px-3 py-2"
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50/60 px-3 py-2 dark:border-rose-900 dark:bg-rose-950/40"
                       >
                         <div className="min-w-0">
-                          <div className="font-medium text-rose-900">{label}</div>
-                          <div className="text-xs text-rose-700">
+                          <div className="font-medium text-rose-900 dark:text-rose-200">
+                            {label}
+                          </div>
+                          <div className="text-xs text-rose-700 dark:text-rose-300">
                             Answer: <strong>{displayValue}</strong>
                           </div>
                         </div>
@@ -753,13 +757,15 @@ export default async function FormResponsePage({
                           <li key={ca.id}>
                             <Link
                               href={`/corrective-actions/${ca.id}`}
-                              className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                              className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
                             >
                               <span className="flex items-center gap-2">
                                 <span className="font-mono text-xs text-slate-500">
                                   {ca.reference}
                                 </span>
-                                <span className="text-slate-900">{ca.title}</span>
+                                <span className="text-slate-900 dark:text-slate-100">
+                                  {ca.title}
+                                </span>
                               </span>
                               <Badge variant="secondary">{ca.status}</Badge>
                             </Link>
@@ -778,13 +784,15 @@ export default async function FormResponsePage({
                           <li key={inc.id}>
                             <Link
                               href={`/incidents/${inc.id}`}
-                              className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                              className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
                             >
                               <span className="flex items-center gap-2">
                                 <span className="font-mono text-xs text-slate-500">
                                   {inc.reference}
                                 </span>
-                                <span className="text-slate-900">{inc.title}</span>
+                                <span className="text-slate-900 dark:text-slate-100">
+                                  {inc.title}
+                                </span>
                               </span>
                               <Badge variant="secondary">{inc.status}</Badge>
                             </Link>
@@ -894,7 +902,7 @@ export default async function FormResponsePage({
                     {comments.map((c) => (
                       <li
                         key={c.comment.id}
-                        className="rounded-md border border-slate-200 bg-white p-3"
+                        className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-medium">
@@ -904,7 +912,9 @@ export default async function FormResponsePage({
                             {new Date(c.comment.createdAt).toLocaleString()}
                           </span>
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap text-slate-800">{c.comment.body}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-slate-800 dark:text-slate-200">
+                          {c.comment.body}
+                        </p>
                       </li>
                     ))}
                   </ul>
@@ -977,20 +987,20 @@ function ComplianceBadge({
 }) {
   if (status === 'compliant') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900">
         <CheckCircle2 size={12} /> Compliant · {score.toFixed(0)}%
       </span>
     )
   }
   if (status === 'non_compliant') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-800 ring-1 ring-rose-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-800 ring-1 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900">
         <AlertTriangle size={12} /> Non-compliant · {score.toFixed(0)}%
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
       <Clock size={12} /> Pending review
     </span>
   )

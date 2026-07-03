@@ -78,7 +78,6 @@ import {
   type FormSection,
   type FormulaExpression,
   type DefaultValueExpression,
-  type LogicRule,
   type TableColumn,
   type TableConfig,
 } from '@beaconhs/forms-core'
@@ -132,6 +131,15 @@ const SECTION_TONES = [
 // disabled <fieldset> can't reach (signature/sketch canvases, the rich-text
 // contentEditable) render static. Provided by FormRenderer in record/view mode.
 const FillReadOnlyContext = createContext(false)
+
+// Per-MOUNT cache of org-unit picker options, keyed by level. Deliberately
+// React state (provided by FormRenderer), never module scope: a tenant switch
+// remounts the page subtree, so a fresh mount refetches instead of serving the
+// previous tenant's org units.
+const OrgUnitOptionsCacheContext = createContext<Record<
+  string,
+  OrgUnitOption[] | undefined
+> | null>(null)
 
 export function FormRenderer({
   templateId,
@@ -193,6 +201,9 @@ export function FormRenderer({
 }) {
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
+  // Per-mount org-unit options cache shared by every org-unit picker in this
+  // render tree (see OrgUnitOptionsCacheContext).
+  const [orgUnitOptionsCache] = useState<Record<string, OrgUnitOption[] | undefined>>(() => ({}))
   const [stepIndex, setStepIndex] = useState(initialStepIndex)
   // Presentational tabs (single-step apps only). activeTabId drives which tab's
   // sections render; validation still spans every tab.
@@ -820,97 +831,101 @@ export function FormRenderer({
 
     return (
       <FillReadOnlyContext.Provider value={readOnly}>
-        <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-          {inlineTabbed ? (
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-              {appTabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setActiveTabId(t.id)}
-                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                    t.id === activeTabId
-                      ? 'border-teal-600 bg-teal-600 text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                  }`}
+        <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
+          <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+            {inlineTabbed ? (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+                {appTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTabId(t.id)}
+                    className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                      t.id === activeTabId
+                        ? 'border-teal-600 bg-teal-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    {t.title?.en ?? t.id}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {inlineSections.map((sec) => {
+              if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+              return (
+                <Section
+                  key={sec.id}
+                  title={sec.title?.en ?? sec.id}
+                  subtitle={
+                    sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)
+                  }
                 >
-                  {t.title?.en ?? t.id}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {inlineSections.map((sec) => {
-            if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-            return (
-              <Section
-                key={sec.id}
-                title={sec.title?.en ?? sec.id}
-                subtitle={sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)}
-              >
-                <div className="space-y-4">
-                  {sec.repeating ? (
-                    <RepeatingSection
-                      section={sec}
-                      rows={rowsByStep[sec.id] ?? []}
-                      onAdd={() => {
-                        addRow(sec)
-                        // addRow mutates state async; persist the resulting array.
-                        const existing = rowsByStep[sec.id] ?? []
-                        if (sec.maxRows !== undefined && existing.length >= sec.maxRows) return
-                        const next: Record<string, unknown> = {}
-                        for (const f of sec.fields) {
-                          if (!f.defaultValue) continue
-                          const dv = resolveDefaultValue(
-                            f.defaultValue as DefaultValueExpression,
-                            evalCtx,
+                  <div className="space-y-4">
+                    {sec.repeating ? (
+                      <RepeatingSection
+                        section={sec}
+                        rows={rowsByStep[sec.id] ?? []}
+                        onAdd={() => {
+                          addRow(sec)
+                          // addRow mutates state async; persist the resulting array.
+                          const existing = rowsByStep[sec.id] ?? []
+                          if (sec.maxRows !== undefined && existing.length >= sec.maxRows) return
+                          const next: Record<string, unknown> = {}
+                          for (const f of sec.fields) {
+                            if (!f.defaultValue) continue
+                            const dv = resolveDefaultValue(
+                              f.defaultValue as DefaultValueExpression,
+                              evalCtx,
+                            )
+                            if (dv !== undefined && dv !== null) next[f.id] = dv
+                          }
+                          void saveArray(sec.id, [...existing, next])
+                        }}
+                        onRemove={(i) => {
+                          removeRow(sec, i)
+                          const arr = (rowsByStep[sec.id] ?? []).filter((_, idx) => idx !== i)
+                          void saveArray(sec.id, arr)
+                        }}
+                        onUpdate={(i, patch) => {
+                          updateRow(sec, i, patch)
+                          const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
+                            idx === i ? { ...r, ...patch } : r,
                           )
-                          if (dv !== undefined && dv !== null) next[f.id] = dv
-                        }
-                        void saveArray(sec.id, [...existing, next])
-                      }}
-                      onRemove={(i) => {
-                        removeRow(sec, i)
-                        const arr = (rowsByStep[sec.id] ?? []).filter((_, idx) => idx !== i)
-                        void saveArray(sec.id, arr)
-                      }}
-                      onUpdate={(i, patch) => {
-                        updateRow(sec, i, patch)
-                        const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
-                          idx === i ? { ...r, ...patch } : r,
+                          void saveArray(sec.id, arr)
+                        }}
+                        people={people}
+                        evalCtx={evalCtx}
+                        errors={errors}
+                        sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                      />
+                    ) : (
+                      sec.fields.map((f) => {
+                        if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                        return (
+                          <InlineFieldRow
+                            key={f.id}
+                            field={f}
+                            value={values[f.id]}
+                            onChange={(v) => setValue(f.id, v)}
+                            setFieldValue={setValue}
+                            error={errors.get(f.id)}
+                            people={people}
+                            evalCtx={evalCtx}
+                            loading={pickerLoading.has(f.id)}
+                            readOnly={readOnly}
+                            saveField={saveField}
+                            saveArray={saveArray}
+                          />
                         )
-                        void saveArray(sec.id, arr)
-                      }}
-                      people={people}
-                      evalCtx={evalCtx}
-                      errors={errors}
-                      sectionError={errors.get(`__section_${sec.id}`) ?? null}
-                    />
-                  ) : (
-                    sec.fields.map((f) => {
-                      if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                      return (
-                        <InlineFieldRow
-                          key={f.id}
-                          field={f}
-                          value={values[f.id]}
-                          onChange={(v) => setValue(f.id, v)}
-                          setFieldValue={setValue}
-                          error={errors.get(f.id)}
-                          people={people}
-                          evalCtx={evalCtx}
-                          loading={pickerLoading.has(f.id)}
-                          readOnly={readOnly}
-                          saveField={saveField}
-                          saveArray={saveArray}
-                        />
-                      )
-                    })
-                  )}
-                </div>
-              </Section>
-            )
-          })}
-        </fieldset>
+                      })
+                    )}
+                  </div>
+                </Section>
+              )
+            })}
+          </fieldset>
+        </OrgUnitOptionsCacheContext.Provider>
       </FillReadOnlyContext.Provider>
     )
   }
@@ -929,39 +944,73 @@ export function FormRenderer({
 
   return (
     <FillReadOnlyContext.Provider value={readOnly}>
-      <WizardLayout
-        className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
-        wide={readOnly}
-        header={
-          recordLayout ? (
-            <DetailHeader
-              back={{
-                href: returnTo ?? `/apps/templates/${templateId}/records`,
-                label: returnTo ? 'Back to assessment' : 'Back',
-              }}
-              title={templateName}
-              subtitle={
-                initialResponseId ? `${initialResponseId.slice(0, 8)} · v${version}` : `v${version}`
-              }
-              badge={
-                readOnly ? (
-                  responseStatus ? (
-                    <Badge variant="secondary">{responseStatus.replace(/_/g, ' ')}</Badge>
-                  ) : null
-                ) : (
-                  <SaveStatus
-                    status={saveStatus}
-                    lastSavedAt={lastSavedAt}
-                    error={saveError}
-                    onRetry={() => {
-                      void persistDraft({ values, rows: rowsByStep, stepIndex })
-                    }}
-                  />
-                )
-              }
-              actions={
-                <>
-                  {!readOnly ? (
+      <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
+        <WizardLayout
+          className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
+          wide={readOnly}
+          header={
+            recordLayout ? (
+              <DetailHeader
+                back={{
+                  href: returnTo ?? `/apps/templates/${templateId}/records`,
+                  label: returnTo ? 'Back to assessment' : 'Back',
+                }}
+                title={templateName}
+                subtitle={
+                  initialResponseId
+                    ? `${initialResponseId.slice(0, 8)} · v${version}`
+                    : `v${version}`
+                }
+                badge={
+                  readOnly ? (
+                    responseStatus ? (
+                      <Badge variant="secondary">{responseStatus.replace(/_/g, ' ')}</Badge>
+                    ) : null
+                  ) : (
+                    <SaveStatus
+                      status={saveStatus}
+                      lastSavedAt={lastSavedAt}
+                      error={saveError}
+                      onRetry={() => {
+                        void persistDraft({ values, rows: rowsByStep, stepIndex })
+                      }}
+                    />
+                  )
+                }
+                actions={
+                  <>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        onClick={toggleFieldMode}
+                        aria-pressed={fieldMode}
+                        title="High-contrast field mode"
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                          fieldMode
+                            ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                        }`}
+                      >
+                        <Sun size={15} />
+                      </button>
+                    ) : null}
+                    {reviewLink}
+                  </>
+                }
+              />
+            ) : (
+              <div className="space-y-3">
+                <Link
+                  href={returnTo ?? `/apps/templates/${templateId}/records`}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  <ChevronLeft size={13} /> {returnTo ? 'Back to assessment' : 'Back'}
+                </Link>
+                <div className="flex items-center justify-between gap-2">
+                  <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
+                    {templateName}
+                  </h1>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={toggleFieldMode}
@@ -975,253 +1024,255 @@ export function FormRenderer({
                     >
                       <Sun size={15} />
                     </button>
-                  ) : null}
-                  {reviewLink}
-                </>
-              }
-            />
-          ) : (
-            <div className="space-y-3">
-              <Link
-                href={returnTo ?? `/apps/templates/${templateId}/records`}
-                className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
-              >
-                <ChevronLeft size={13} /> {returnTo ? 'Back to assessment' : 'Back'}
-              </Link>
-              <div className="flex items-center justify-between gap-2">
-                <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
-                  {templateName}
-                </h1>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleFieldMode}
-                    aria-pressed={fieldMode}
-                    title="High-contrast field mode"
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
-                      fieldMode
-                        ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
-                        : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-                    }`}
-                  >
-                    <Sun size={15} />
-                  </button>
-                  <SaveStatus
-                    status={saveStatus}
-                    lastSavedAt={lastSavedAt}
-                    error={saveError}
-                    onRetry={() => {
-                      void persistDraft({ values, rows: rowsByStep, stepIndex })
-                    }}
-                  />
-                  <Badge variant="outline">v{version}</Badge>
-                  {reviewLink}
+                    <SaveStatus
+                      status={saveStatus}
+                      lastSavedAt={lastSavedAt}
+                      error={saveError}
+                      onRetry={() => {
+                        void persistDraft({ values, rows: rowsByStep, stepIndex })
+                      }}
+                    />
+                    <Badge variant="outline">v{version}</Badge>
+                    {reviewLink}
+                  </div>
                 </div>
-              </div>
-              {/* Progress strip — every workflow step as a clickable pill. Hidden
+                {/* Progress strip — every workflow step as a clickable pill. Hidden
               on single-step apps (e.g. the Lift Plan), where a one-pill strip
               + progress bar is just noise and makes the header needlessly tall. */}
-              {totalSteps > 1 ? (
-                <>
-                  <ol className="flex flex-wrap items-center gap-1 text-xs">
-                    {steps.map((s, i) => {
-                      const isCurrent = i === stepIndex
-                      const isCompleted = completedSteps.has(s.key)
-                      const isClickable = i <= stepIndex || isCompleted
-                      return (
-                        <li key={s.key}>
-                          <button
-                            type="button"
-                            disabled={!isClickable}
-                            onClick={() => jumpTo(i)}
-                            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
-                              isCurrent
-                                ? 'border-teal-600 bg-teal-600 text-white'
-                                : isCompleted
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                            } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
-                          >
-                            <span
-                              className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
-                                isCurrent
-                                  ? 'bg-white text-teal-700'
-                                  : isCompleted
-                                    ? 'bg-emerald-500 text-white'
-                                    : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                              }`}
-                            >
-                              {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
-                            </span>
-                            <span className="truncate">{s.title?.en ?? s.key}</span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ol>
-                  <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                    <div
-                      className="h-full rounded-full bg-teal-600 transition-all"
-                      style={{ width: `${Math.max(8, completion)}%` }}
-                    />
-                  </div>
-                </>
-              ) : null}
-            </div>
-          )
-        }
-        footer={
-          readOnly ? undefined : (
-            <div className="space-y-2">
-              {serverError ? (
-                <Alert variant="destructive">
-                  <AlertTitle>Submit failed</AlertTitle>
-                  <AlertDescription>{serverError}</AlertDescription>
-                </Alert>
-              ) : null}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={back}
-                  disabled={stepIndex === 0}
-                  className="h-12 px-4"
-                >
-                  <ChevronLeft size={16} />
-                  Back
-                </Button>
-                {stepIndex < totalSteps - 1 ? (
-                  <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
-                    Next <ChevronRight size={16} />
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={submit}
-                    disabled={pending}
-                    size="lg"
-                    className="h-12 flex-1 text-base"
-                  >
-                    <Check size={16} />
-                    {pending ? 'Submitting…' : 'Submit'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )
-        }
-      >
-        {readOnly ? (
-          <Alert variant="warning">
-            <AlertTitle>View only</AlertTitle>
-            <AlertDescription>
-              {responseStatus
-                ? `This entry is ${responseStatus.replace(/_/g, ' ')}. You don't have permission to edit it.`
-                : "You don't have permission to edit this entry."}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-          {stepIndex === 0 ? (
-            <PremiumSection
-              title="Site"
-              subtitle="Where this is being recorded"
-              icon={<MapPin size={20} />}
-              tone="teal"
-            >
-              <div className="space-y-1">
-                <Label>Site</Label>
-                <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-                  <option value="">— select —</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </PremiumSection>
-          ) : null}
-
-          {tabbed ? (
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-              {appTabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setActiveTabId(t.id)}
-                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                    t.id === activeTabId
-                      ? 'border-teal-600 bg-teal-600 text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                  }`}
-                >
-                  {t.title?.en ?? t.id}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {renderedSections.length === 0 ? (
-            <PremiumSection
-              title={step.title?.en ?? step.key}
-              icon={<ClipboardList size={20} />}
-              tone="slate"
-            >
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {tabbed
-                  ? 'This tab has no sections.'
-                  : 'No sections bound to this step. Submit to finalise.'}
-              </p>
-            </PremiumSection>
-          ) : (
-            renderedSections.map((sec, i) => {
-              // Section-level visibility — completely hide the section if showIf
-              // is false against the current values.
-              if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-              return (
-                <PremiumSection
-                  key={sec.id}
-                  title={sec.title?.en ?? sec.id}
-                  subtitle={
-                    sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)
-                  }
-                  icon={<ClipboardList size={20} />}
-                  tone={SECTION_TONES[i % SECTION_TONES.length]}
-                  count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
-                >
-                  <div className="space-y-4">
-                    {sec.repeating ? (
-                      <RepeatingSection
-                        section={sec}
-                        rows={rowsByStep[sec.id] ?? []}
-                        onAdd={() => addRow(sec)}
-                        onRemove={(i) => removeRow(sec, i)}
-                        onUpdate={(i, patch) => updateRow(sec, i, patch)}
-                        people={people}
-                        evalCtx={evalCtx}
-                        errors={errors}
-                        sectionError={errors.get(`__section_${sec.id}`) ?? null}
-                      />
-                    ) : sec.canvas ? (
-                      (() => {
-                        const cls = gridClass(sec.id)
-                        const canvas = sec.canvas
-                        const visible = sec.fields.filter(
-                          (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                        )
-                        const { order, byId } = resolveCanvas(
-                          visible.map((f) => f.id),
-                          canvas.items,
-                          canvas.cols,
-                        )
-                        const byField = new Map(visible.map((f) => [f.id, f]))
+                {totalSteps > 1 ? (
+                  <>
+                    <ol className="flex flex-wrap items-center gap-1 text-xs">
+                      {steps.map((s, i) => {
+                        const isCurrent = i === stepIndex
+                        const isCompleted = completedSteps.has(s.key)
+                        const isClickable = i <= stepIndex || isCompleted
                         return (
-                          <div className={cls}>
-                            <style>{canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}</style>
-                            {order.map((id) => {
-                              const f = byField.get(id)!
-                              return (
-                                <div key={id} data-ci={id}>
+                          <li key={s.key}>
+                            <button
+                              type="button"
+                              disabled={!isClickable}
+                              onClick={() => jumpTo(i)}
+                              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
+                                isCurrent
+                                  ? 'border-teal-600 bg-teal-600 text-white'
+                                  : isCompleted
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                              } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
+                            >
+                              <span
+                                className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                                  isCurrent
+                                    ? 'bg-white text-teal-700'
+                                    : isCompleted
+                                      ? 'bg-emerald-500 text-white'
+                                      : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
+                              </span>
+                              <span className="truncate">{s.title?.en ?? s.key}</span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                    <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-teal-600 transition-all"
+                        style={{ width: `${Math.max(8, completion)}%` }}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            )
+          }
+          footer={
+            readOnly ? undefined : (
+              <div className="space-y-2">
+                {serverError ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>Submit failed</AlertTitle>
+                    <AlertDescription>{serverError}</AlertDescription>
+                  </Alert>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={back}
+                    disabled={stepIndex === 0}
+                    className="h-12 px-4"
+                  >
+                    <ChevronLeft size={16} />
+                    Back
+                  </Button>
+                  {stepIndex < totalSteps - 1 ? (
+                    <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
+                      Next <ChevronRight size={16} />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={submit}
+                      disabled={pending}
+                      size="lg"
+                      className="h-12 flex-1 text-base"
+                    >
+                      <Check size={16} />
+                      {pending ? 'Submitting…' : 'Submit'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          }
+        >
+          {readOnly ? (
+            <Alert variant="warning">
+              <AlertTitle>View only</AlertTitle>
+              <AlertDescription>
+                {responseStatus
+                  ? `This entry is ${responseStatus.replace(/_/g, ' ')}. You don't have permission to edit it.`
+                  : "You don't have permission to edit this entry."}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+            {stepIndex === 0 ? (
+              <PremiumSection
+                title="Site"
+                subtitle="Where this is being recorded"
+                icon={<MapPin size={20} />}
+                tone="teal"
+              >
+                <div className="space-y-1">
+                  <Label>Site</Label>
+                  <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+                    <option value="">— select —</option>
+                    {sites.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </PremiumSection>
+            ) : null}
+
+            {tabbed ? (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+                {appTabs.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTabId(t.id)}
+                    className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                      t.id === activeTabId
+                        ? 'border-teal-600 bg-teal-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    {t.title?.en ?? t.id}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {renderedSections.length === 0 ? (
+              <PremiumSection
+                title={step.title?.en ?? step.key}
+                icon={<ClipboardList size={20} />}
+                tone="slate"
+              >
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {tabbed
+                    ? 'This tab has no sections.'
+                    : 'No sections bound to this step. Submit to finalise.'}
+                </p>
+              </PremiumSection>
+            ) : (
+              renderedSections.map((sec, i) => {
+                // Section-level visibility — completely hide the section if showIf
+                // is false against the current values.
+                if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                return (
+                  <PremiumSection
+                    key={sec.id}
+                    title={sec.title?.en ?? sec.id}
+                    subtitle={
+                      sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)
+                    }
+                    icon={<ClipboardList size={20} />}
+                    tone={SECTION_TONES[i % SECTION_TONES.length]}
+                    count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
+                  >
+                    <div className="space-y-4">
+                      {sec.repeating ? (
+                        <RepeatingSection
+                          section={sec}
+                          rows={rowsByStep[sec.id] ?? []}
+                          onAdd={() => addRow(sec)}
+                          onRemove={(i) => removeRow(sec, i)}
+                          onUpdate={(i, patch) => updateRow(sec, i, patch)}
+                          people={people}
+                          evalCtx={evalCtx}
+                          errors={errors}
+                          sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                        />
+                      ) : sec.canvas ? (
+                        (() => {
+                          const cls = gridClass(sec.id)
+                          const canvas = sec.canvas
+                          const visible = sec.fields.filter(
+                            (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                          )
+                          const { order, byId } = resolveCanvas(
+                            visible.map((f) => f.id),
+                            canvas.items,
+                            canvas.cols,
+                          )
+                          const byField = new Map(visible.map((f) => [f.id, f]))
+                          return (
+                            <div className={cls}>
+                              <style>{canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}</style>
+                              {order.map((id) => {
+                                const f = byField.get(id)!
+                                return (
+                                  <div key={id} data-ci={id}>
+                                    <FieldRow
+                                      field={f}
+                                      value={values[f.id]}
+                                      onChange={(v) => setValue(f.id, v)}
+                                      setFieldValue={setValue}
+                                      error={errors.get(f.id)}
+                                      people={people}
+                                      evalCtx={evalCtx}
+                                      loading={pickerLoading.has(f.id)}
+                                    />
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()
+                      ) : sec.layout && sec.layout.columns > 1 ? (
+                        (() => {
+                          const cls = gridClass(sec.id)
+                          const cols = sec.layout.columns
+                          const visible = sec.fields.filter(
+                            (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                          )
+                          const css = columnsCss(
+                            cls,
+                            cols,
+                            visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
+                          )
+                          return (
+                            <div className={cls}>
+                              <style>{css}</style>
+                              {visible.map((f) => (
+                                <div key={f.id} data-cs={f.id}>
                                   <FieldRow
                                     field={f}
                                     value={values[f.id]}
@@ -1233,68 +1284,36 @@ export function FormRenderer({
                                     loading={pickerLoading.has(f.id)}
                                   />
                                 </div>
-                              )
-                            })}
-                          </div>
-                        )
-                      })()
-                    ) : sec.layout && sec.layout.columns > 1 ? (
-                      (() => {
-                        const cls = gridClass(sec.id)
-                        const cols = sec.layout.columns
-                        const visible = sec.fields.filter(
-                          (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                        )
-                        const css = columnsCss(
-                          cls,
-                          cols,
-                          visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
-                        )
-                        return (
-                          <div className={cls}>
-                            <style>{css}</style>
-                            {visible.map((f) => (
-                              <div key={f.id} data-cs={f.id}>
-                                <FieldRow
-                                  field={f}
-                                  value={values[f.id]}
-                                  onChange={(v) => setValue(f.id, v)}
-                                  setFieldValue={setValue}
-                                  error={errors.get(f.id)}
-                                  people={people}
-                                  evalCtx={evalCtx}
-                                  loading={pickerLoading.has(f.id)}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      })()
-                    ) : (
-                      sec.fields.map((f) => {
-                        if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                        return (
-                          <FieldRow
-                            key={f.id}
-                            field={f}
-                            value={values[f.id]}
-                            onChange={(v) => setValue(f.id, v)}
-                            setFieldValue={setValue}
-                            error={errors.get(f.id)}
-                            people={people}
-                            evalCtx={evalCtx}
-                            loading={pickerLoading.has(f.id)}
-                          />
-                        )
-                      })
-                    )}
-                  </div>
-                </PremiumSection>
-              )
-            })
-          )}
-        </fieldset>
-      </WizardLayout>
+                              ))}
+                            </div>
+                          )
+                        })()
+                      ) : (
+                        sec.fields.map((f) => {
+                          if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                          return (
+                            <FieldRow
+                              key={f.id}
+                              field={f}
+                              value={values[f.id]}
+                              onChange={(v) => setValue(f.id, v)}
+                              setFieldValue={setValue}
+                              error={errors.get(f.id)}
+                              people={people}
+                              evalCtx={evalCtx}
+                              loading={pickerLoading.has(f.id)}
+                            />
+                          )
+                        })
+                      )}
+                    </div>
+                  </PremiumSection>
+                )
+              })
+            )}
+          </fieldset>
+        </WizardLayout>
+      </OrgUnitOptionsCacheContext.Provider>
     </FillReadOnlyContext.Provider>
   )
 }
@@ -2655,11 +2674,12 @@ function labelForRow(row: DataRow, labelCol?: string): string {
 //
 // One searchable dropdown per org_units level (customer / project / site /
 // area). Self-contained: each fetches its own options via listOrgUnitOptions
-// (mirrors LookupInput), so no prop threading. Options are module-cached per
-// level — many instances / re-renders hit the server at most once per level.
+// (mirrors LookupInput), so no prop threading. Options are cached per level in
+// the per-mount OrgUnitOptionsCacheContext — many instances / re-renders hit
+// the server at most once per level, and a remount (e.g. tenant switch)
+// refetches instead of leaking another tenant's units.
 
 type OrgUnitOption = { id: string; name: string; code: string | null }
-const orgUnitOptionsCache: Record<string, OrgUnitOption[] | undefined> = {}
 const ORG_PICKER_COPY: Record<string, { noun: string; article: string }> = {
   customer: { noun: 'customer', article: 'a' },
   project: { noun: 'project', article: 'a' },
@@ -2676,16 +2696,21 @@ function OrgUnitPickerInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
-  const [options, setOptions] = useState<OrgUnitOption[]>(() => orgUnitOptionsCache[level] ?? [])
-  const [loading, setLoading] = useState(() => orgUnitOptionsCache[level] === undefined)
+  const contextCache = useContext(OrgUnitOptionsCacheContext)
+  // Defensive per-instance fallback for a render outside FormRenderer's
+  // provider. Lazy state (not a ref) so reading it during render is legal.
+  const [fallbackCache] = useState<Record<string, OrgUnitOption[] | undefined>>(() => ({}))
+  const cache = contextCache ?? fallbackCache
+  const [options, setOptions] = useState<OrgUnitOption[]>(() => cache[level] ?? [])
+  const [loading, setLoading] = useState(() => cache[level] === undefined)
 
   useEffect(() => {
     // Cache hit → initial state already correct; no fetch / no setState needed.
-    if (orgUnitOptionsCache[level] !== undefined) return
+    if (cache[level] !== undefined) return
     let alive = true
     listOrgUnitOptions(level)
       .then((rows) => {
-        orgUnitOptionsCache[level] = rows
+        cache[level] = rows
         if (alive) {
           setOptions(rows)
           setLoading(false)
@@ -2697,7 +2722,8 @@ function OrgUnitPickerInput({
     return () => {
       alive = false
     }
-  }, [level])
+    // `cache` is a stable per-mount object (context / lazy state) — safe dep.
+  }, [level, cache])
 
   const { noun, article } = ORG_PICKER_COPY[level] ?? { noun: level, article: 'a' }
   return (
@@ -3856,6 +3882,3 @@ function formatSavedAgo(at: Date): string {
   const hours = Math.floor(mins / 60)
   return `Saved ${hours}h ago`
 }
-
-// Re-export the type so the file is self-contained.
-export type { LogicRule }

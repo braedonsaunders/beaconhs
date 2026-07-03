@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ClipboardCheck } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -42,6 +42,7 @@ const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'submitted', label: 'Submitted' },
+  { value: 'non_compliant', label: 'Non-compliant' },
   { value: 'in_review', label: 'In review' },
   { value: 'closed', label: 'Closed' },
   { value: 'rejected', label: 'Rejected' },
@@ -79,7 +80,7 @@ export default async function FormResponsesPage({
       personCol: formResponses.subjectPersonId,
       siteCol: formResponses.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(formResponses.deletedAt)]
     if (vis) filters.push(vis)
     if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
     if (templateFilter) filters.push(eq(formResponses.templateId, templateFilter))
@@ -132,7 +133,13 @@ export default async function FormResponsesPage({
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
-      .where(and(templateFilter ? eq(formResponses.templateId, templateFilter) : undefined, vis))
+      .where(
+        and(
+          isNull(formResponses.deletedAt),
+          templateFilter ? eq(formResponses.templateId, templateFilter) : undefined,
+          vis,
+        ),
+      )
       .groupBy(formResponses.status)
     // App filter options: every template that has at least one response, most-used
     // first so the dominant apps are easy to find.
@@ -140,7 +147,7 @@ export default async function FormResponsesPage({
       .select({ id: formTemplates.id, name: formTemplates.name, c: count(formResponses.id) })
       .from(formResponses)
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-      .where(vis)
+      .where(and(isNull(formResponses.deletedAt), vis))
       .groupBy(formTemplates.id, formTemplates.name)
       .orderBy(desc(count(formResponses.id)))
     return {
@@ -295,9 +302,11 @@ export default async function FormResponsesPage({
                       <TableCell>
                         <Badge
                           variant={
-                            response.status === 'closed' || response.status === 'submitted'
-                              ? 'success'
-                              : 'warning'
+                            response.status === 'non_compliant' || response.status === 'rejected'
+                              ? 'destructive'
+                              : response.status === 'closed' || response.status === 'submitted'
+                                ? 'success'
+                                : 'warning'
                           }
                         >
                           {response.status.replace('_', ' ')}

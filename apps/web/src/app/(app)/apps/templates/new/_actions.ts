@@ -13,18 +13,9 @@ import { formTemplates, formTemplateVersions } from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { slugify } from '@/app/(app)/apps/_lib/slug'
 
 export type AppKind = 'form' | 'wizard' | 'checklist' | 'register' | 'mini_app'
-
-function slugify(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_\-\s]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 60)
-}
 
 const txt = (id: string, label: string) => ({
   id,
@@ -205,7 +196,7 @@ export async function createApp(input: {
   const category = input.category?.trim() || null
   const moduleBinding = input.moduleBinding?.trim() || null
   const description = input.description?.trim() || null
-  const key = `${slugify(name)}_${Math.random().toString(36).slice(2, 6)}`
+  const key = `${slugify(name) || 'app'}_${Math.random().toString(36).slice(2, 6)}`
 
   const schema = starterSchema(kind, name, description)
 
