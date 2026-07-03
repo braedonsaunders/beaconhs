@@ -12,7 +12,17 @@ if (!databaseUrl) {
 }
 
 const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
-const secret = process.env.BETTER_AUTH_SECRET ?? 'dev-only-secret-rotate-me'
+
+// BETTER_AUTH_SECRET signs sessions AND seals stored provider API keys. Running
+// production on the publicly-known dev fallback would be a silent security
+// hole, so refuse to boot rather than degrade.
+const envSecret = process.env.BETTER_AUTH_SECRET
+if (!envSecret && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    '[auth] BETTER_AUTH_SECRET must be set in production — refusing to start with the dev fallback secret',
+  )
+}
+const secret = envSecret ?? 'dev-only-secret-rotate-me'
 
 export const auth = betterAuth({
   database: new Pool({ connectionString: databaseUrl }),
@@ -56,10 +66,13 @@ export type AuthInstance = typeof auth
 export type Session = Awaited<ReturnType<typeof auth.api.getSession>>
 
 // Shared sender for transactional auth emails (magic link, password reset).
-// Prefers the Resend-backed job queue in production; falls back to SMTP/Mailpit
-// in dev. Delivery failures never throw — the caller (a Better-Auth flow) must
-// not 500 just because mail is misconfigured; we log and the URL stays usable
-// from the server logs in dev.
+// In production (or whenever a Resend env key hints at a real provider) the
+// email is enqueued on the shared job queue: the worker resolves the effective
+// transport per send from the platform/tenant email config (Resend, SendGrid,
+// Mailgun, Postmark, SMTP — see apps/worker resolveEmailDelivery), so no
+// specific provider env var is required here. The direct-SMTP path below is
+// strictly the local-dev fallback that delivers to Mailpit; its failures are
+// logged (with the actionable URL) instead of thrown so dev flows keep working.
 async function sendAuthEmail(args: {
   to: string
   subject: string
@@ -70,8 +83,7 @@ async function sendAuthEmail(args: {
   url?: string
 }) {
   const { to, subject, html, text, label, url } = args
-  const apiKey = process.env.RESEND_API_KEY
-  if (apiKey) {
+  if (process.env.NODE_ENV === 'production' || process.env.RESEND_API_KEY) {
     const { enqueueEmail } = await import('@beaconhs/jobs')
     await enqueueEmail({ to, subject, html, text, meta: { category: 'auth' } })
     return

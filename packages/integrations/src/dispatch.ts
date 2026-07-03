@@ -141,7 +141,12 @@ export async function dispatchOne(
     result = { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 
-  if (result.ok && result.refs) {
+  // Persist refs whenever the destination returned any, even on a partial
+  // failure (ok:false with some items delivered). replaceRefs replaces the
+  // subject's refs atomically, so a subsequent retry can pass priorRefs to skip
+  // the already-delivered items instead of re-sending them, and oncePerRecord
+  // sees the partial delivery.
+  if (result.refs?.length) {
     try {
       await replaceRefs(ctx, automationId, dest.key, event.type, event.subjectId, result.refs)
     } catch {
