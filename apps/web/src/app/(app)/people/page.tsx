@@ -127,9 +127,9 @@ export default async function PeoplePage({
                   <Button variant="outline">Import people</Button>
                 </Link>
                 {canExport ? (
-                  <Link href={buildExportHref('/people/export.csv', sp)}>
+                  <a href={buildExportHref('/people/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  </a>
                 ) : null}
                 <Link href="/people/new">
                   <Button>Add person</Button>

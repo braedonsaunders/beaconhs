@@ -199,11 +199,9 @@ export default async function EquipmentPage({
             actions={
               <div className="flex items-center gap-2">
                 {canExport ? (
-                  <Link
-                    href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}
-                  >
+                  <a href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}>
                     <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  </a>
                 ) : null}
                 <Link href="/equipment/new">
                   <Button>Add equipment</Button>

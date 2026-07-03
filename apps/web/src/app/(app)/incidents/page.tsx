@@ -174,9 +174,9 @@ export default async function IncidentsPage({
             actions={
               <div className="flex items-center gap-2">
                 {canExport ? (
-                  <Link href={buildExportHref('/incidents/export.csv', sp)}>
+                  <a href={buildExportHref('/incidents/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  </a>
                 ) : null}
                 <Link href="/incidents/new">
                   <Button>Report incident</Button>

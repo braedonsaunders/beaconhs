@@ -169,14 +169,14 @@ export default async function CorrectiveActionsPage({
             actions={
               <div className="flex items-center gap-2">
                 {canExport ? (
-                  <Link
+                  <a
                     href={buildExportHref('/corrective-actions/export.csv', {
                       ...sp,
                       status: statusRaw,
                     })}
                   >
                     <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  </a>
                 ) : null}
                 <Link href="/corrective-actions/new">
                   <Button>New action</Button>

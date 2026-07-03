@@ -178,9 +178,9 @@ export default async function LocationsPage({
                   </Link>
                 ) : null}
                 {canExport ? (
-                  <Link href={buildExportHref('/locations/export.csv', sp)}>
+                  <a href={buildExportHref('/locations/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>
-                  </Link>
+                  </a>
                 ) : null}
                 <Link href="/locations/new">
                   <Button>Add location</Button>

@@ -7,7 +7,6 @@
 // tier (read.all → tenant-wide, read.site → your sites + your own, read.self →
 // your own only); the page is gated to managers — self-tier users go to /journals.
 
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { BookText } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
@@ -100,9 +99,9 @@ export default async function JournalRecordsPage({
             description="Browse, filter and read every journal you have access to."
             actions={
               canExport ? (
-                <Link href={buildExportHref('/journals/export.csv', sp)}>
+                <a href={buildExportHref('/journals/export.csv', sp)}>
                   <Button variant="outline">Export CSV</Button>
-                </Link>
+                </a>
               ) : null
             }
           />

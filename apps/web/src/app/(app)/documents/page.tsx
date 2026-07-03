@@ -163,9 +163,9 @@ export default async function DocumentsPage({
               canManage ? (
                 <div className="flex items-center gap-2">
                   {canExport ? (
-                    <Link href={buildExportHref('/documents/export.csv', sp)}>
+                    <a href={buildExportHref('/documents/export.csv', sp)}>
                       <Button variant="outline">Export CSV</Button>
-                    </Link>
+                    </a>
                   ) : null}
                   <Link href="/documents/new">
                     <Button>New document</Button>

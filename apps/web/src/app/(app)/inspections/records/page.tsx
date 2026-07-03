@@ -261,9 +261,9 @@ export default async function InspectionRecordsPage({
               actions={
                 <div className="flex items-center gap-2">
                   {canExport ? (
-                    <Link href={buildExportHref('/inspections/export.csv', sp)}>
+                    <a href={buildExportHref('/inspections/export.csv', sp)}>
                       <Button variant="outline">Export CSV</Button>
-                    </Link>
+                    </a>
                   ) : null}
                   <Link href="/inspections/records?drawer=new">
                     <Button>New inspection</Button>
