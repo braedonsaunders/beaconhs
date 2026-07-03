@@ -8,7 +8,7 @@ import { incidents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
-import { recordVisibilityWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { signProposal, type CaPreview, type IncidentPreview } from './proposals'
 import type { AssistantToolDef, ToolResult } from './types'
 
@@ -41,9 +41,11 @@ async function loadVisibleIncident(
   id: string,
 ): Promise<{ id: string; reference: string; siteOrgUnitId: string | null } | null> {
   const conds: SQL[] = [eq(incidents.id, id), isNull(incidents.deletedAt)]
-  const vis = await recordVisibilityWhere(ctx, tx, {
+  // Same tiered predicate as the /incidents list (moduleScopeWhere).
+  const vis = await moduleScopeWhere(ctx, tx, {
+    prefix: 'incidents',
+    ownerCols: [incidents.reportedByTenantUserId],
     siteCol: incidents.siteOrgUnitId,
-    createdByCol: incidents.reportedByTenantUserId,
   })
   if (vis) conds.push(vis)
   const [row] = await tx

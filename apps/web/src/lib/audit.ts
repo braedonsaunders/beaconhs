@@ -1,5 +1,5 @@
 import { auditLog, user } from '@beaconhs/db/schema'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 
 export type AuditAction =
@@ -91,7 +91,7 @@ export async function recentActivityForEntity(
       .select({ log: auditLog, actor: user })
       .from(auditLog)
       .leftJoin(user, eq(user.id, auditLog.actorUserId))
-      .where(eq(auditLog.entityId, entityId))
+      .where(and(eq(auditLog.entityType, entityType), eq(auditLog.entityId, entityId)))
       .orderBy(desc(auditLog.occurredAt))
       .limit(limit)
     return rows.map((r) => ({

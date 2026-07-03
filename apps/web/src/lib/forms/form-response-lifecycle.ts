@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   formAutomations,
   formResponseScores,
@@ -93,7 +93,6 @@ export async function submitFormResponseLifecycle(
       const [existing] = await tx
         .select({
           id: formResponses.id,
-          status: formResponses.status,
           templateId: formResponses.templateId,
         })
         .from(formResponses)
@@ -107,7 +106,12 @@ export async function submitFormResponseLifecycle(
         }
       }
 
-      if (existing && (existing.status === 'draft' || existing.status === 'in_progress')) {
+      // A response that already left draft/in_progress must never fall through
+      // to the insert branch — a double-click or replayed API POST would
+      // duplicate the record and re-fire every submit side effect. The status
+      // predicate on the UPDATE makes the transition atomic, so concurrent
+      // submits of the same draft can only ever fire the lifecycle once.
+      if (existing) {
         const [updated] = await tx
           .update(formResponses)
           .set({
@@ -123,8 +127,19 @@ export async function submitFormResponseLifecycle(
             draftUpdatedAt: null,
             draftStepIndex: null,
           })
-          .where(eq(formResponses.id, args.responseId))
+          .where(
+            and(
+              eq(formResponses.id, args.responseId),
+              inArray(formResponses.status, ['draft', 'in_progress']),
+            ),
+          )
           .returning({ id: formResponses.id })
+        if (!updated) {
+          return {
+            ok: false as const,
+            errors: [{ fieldId: '', message: 'Response was already submitted' }],
+          }
+        }
         resp = updated
       }
     }

@@ -8,6 +8,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
+  PERMISSION_CATALOGUE,
   roleAssignments,
   roles,
   tenantUsers,
@@ -76,9 +77,44 @@ export async function resolveMembershipPerms(
     .from(userPermissionOverrides)
     .where(eq(userPermissionOverrides.tenantUserId, membershipId))
   for (const o of overrides) if (o.effect === 'grant') permissions.add(o.permission)
-  for (const o of overrides) if (o.effect === 'deny') permissions.delete(o.permission)
+  applyDenyOverrides(
+    permissions,
+    overrides.filter((o) => o.effect === 'deny').map((o) => o.permission),
+  )
 
   return { permissions, scopes, appliedRoleId }
+}
+
+/**
+ * Apply deny overrides to a resolved grant set, wildcard-aware in BOTH
+ * directions so `can()` (which honours the `module.*` convention) cannot
+ * resurrect a denied permission:
+ *  - a wildcard deny (`incidents.*`) revokes every grant under its prefix;
+ *  - a specific deny that a wildcard grant covers first expands that grant to
+ *    the catalogue keys under its prefix, then removes the denied key.
+ * Note: tier implication in `can()` (`x.read.all` covers `x.read.self`) is not
+ * unwound here — denying a lower read tier while a higher one is granted keeps
+ * the higher tier intact.
+ */
+function applyDenyOverrides(permissions: Set<string>, denies: string[]): void {
+  if (denies.length === 0) return
+
+  const specificDenies = denies.filter((d) => !d.endsWith('.*'))
+  for (const grant of [...permissions]) {
+    if (!grant.endsWith('.*')) continue
+    const prefix = grant.slice(0, -1)
+    if (!specificDenies.some((d) => d.startsWith(prefix))) continue
+    permissions.delete(grant)
+    for (const key of PERMISSION_CATALOGUE) if (key.startsWith(prefix)) permissions.add(key)
+  }
+
+  for (const denied of denies) {
+    permissions.delete(denied)
+    if (denied.endsWith('.*')) {
+      const prefix = denied.slice(0, -1)
+      for (const grant of [...permissions]) if (grant.startsWith(prefix)) permissions.delete(grant)
+    }
+  }
 }
 
 /**

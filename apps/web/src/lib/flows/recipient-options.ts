@@ -3,7 +3,7 @@ import 'server-only'
 // Active people / roles / departments for the send_email recipient pickers in
 // the Flows canvas (person, department-managers, role targets). RLS-bound.
 
-import { asc, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { departments, notificationGroups, people, roles } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
@@ -19,7 +19,7 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
     const ppl = await tx
       .select({ id: people.id, first: people.firstName, last: people.lastName })
       .from(people)
-      .where(isNull(people.deletedAt))
+      .where(and(isNull(people.deletedAt), eq(people.status, 'active')))
       .orderBy(asc(people.lastName), asc(people.firstName))
     const rls = await tx
       .select({ key: roles.key, name: roles.name })

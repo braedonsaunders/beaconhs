@@ -1,7 +1,9 @@
-// Read & search tools for the assistant. Every record-bearing tool applies
-// `recordVisibilityWhere` so the agent only ever returns rows the current user
-// could see in a properly-scoped UI — the engines are RLS-tenant-isolated but
-// NOT record-visibility-scoped, so this is the load-bearing safety boundary.
+// Read & search tools for the assistant. Every record-bearing tool applies the
+// SAME permission-tier predicate its module list uses (`moduleScopeWhere`, plus
+// `recordVisibilityWhere` for the people directory picker) so the agent only
+// ever returns rows the current user could see in the UI — the engines are
+// RLS-tenant-isolated but NOT record-visibility-scoped, so this is the
+// load-bearing safety boundary.
 //
 // Row caps are deliberately small; lists report a `total` so the model can
 // answer "how many" and tell the user to narrow rather than paging blindly.
@@ -17,7 +19,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { recordVisibilityWhere } from '@/lib/visibility'
+import { moduleScopeWhere, recordVisibilityWhere } from '@/lib/visibility'
 import { documentReadFilter } from './doc-access'
 import { getDocumentPdfBytes, getDocumentText } from './document-content'
 import { truncateText, type AssistantToolDef, type ToolImage, type ToolResult } from './types'
@@ -124,9 +126,11 @@ const findIncidents: AssistantToolDef = {
       if (a.type) conds.push(eq(incidents.type, a.type))
       if (a.withinDays)
         conds.push(gte(incidents.occurredAt, new Date(Date.now() - a.withinDays * 86_400_000)))
-      const vis = await recordVisibilityWhere(ctx, tx, {
+      // Same tiered predicate as the /incidents list (moduleScopeWhere).
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'incidents',
+        ownerCols: [incidents.reportedByTenantUserId],
         siteCol: incidents.siteOrgUnitId,
-        createdByCol: incidents.reportedByTenantUserId,
       })
       if (vis) conds.push(vis)
       const where = and(...conds)
@@ -183,9 +187,10 @@ const getIncident: AssistantToolDef = {
     const a = raw as { id: string }
     return ctx.db(async (tx) => {
       const conds: SQL[] = [eq(incidents.id, a.id), isNull(incidents.deletedAt)]
-      const vis = await recordVisibilityWhere(ctx, tx, {
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'incidents',
+        ownerCols: [incidents.reportedByTenantUserId],
         siteCol: incidents.siteOrgUnitId,
-        createdByCol: incidents.reportedByTenantUserId,
       })
       if (vis) conds.push(vis)
       const [row] = await tx
@@ -255,9 +260,11 @@ const findCorrectiveActions: AssistantToolDef = {
           inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
         )
       }
-      const vis = await recordVisibilityWhere(ctx, tx, {
+      // Same tiered predicate as the /corrective-actions list (moduleScopeWhere).
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'ca',
+        ownerCols: [correctiveActions.ownerTenantUserId],
         siteCol: correctiveActions.siteOrgUnitId,
-        createdByCol: correctiveActions.ownerTenantUserId,
       })
       if (vis) conds.push(vis)
       const where = and(...conds)
@@ -297,9 +304,10 @@ const getCorrectiveAction: AssistantToolDef = {
     const a = raw as { id: string }
     return ctx.db(async (tx) => {
       const conds: SQL[] = [eq(correctiveActions.id, a.id), isNull(correctiveActions.deletedAt)]
-      const vis = await recordVisibilityWhere(ctx, tx, {
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'ca',
+        ownerCols: [correctiveActions.ownerTenantUserId],
         siteCol: correctiveActions.siteOrgUnitId,
-        createdByCol: correctiveActions.ownerTenantUserId,
       })
       if (vis) conds.push(vis)
       const [row] = await tx
@@ -687,7 +695,11 @@ const findTrainingRecords: AssistantToolDef = {
           .slice(0, 10)
         conds.push(lt(trainingRecords.expiresOn, horizon))
       }
-      const vis = await recordVisibilityWhere(ctx, tx, { personCol: trainingRecords.personId })
+      // Same tiered predicate as the /training/records list (moduleScopeWhere).
+      const vis = await moduleScopeWhere(ctx, tx, {
+        prefix: 'training',
+        personCol: trainingRecords.personId,
+      })
       if (vis) conds.push(vis)
       const where = and(...conds)
       const [rows, totalRow] = await Promise.all([

@@ -27,12 +27,6 @@ export async function getCurrentUserId(): Promise<string | null> {
   }
 }
 
-export async function requireUserId(): Promise<string> {
-  const userId = await getCurrentUserId()
-  if (!userId) throw new UnauthorizedError()
-  return userId
-}
-
 /**
  * The real signed-in user's display name + email, straight from the Better-Auth
  * session. Unlike RequestContext (which carries the EFFECTIVE / impersonated

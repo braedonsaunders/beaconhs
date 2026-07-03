@@ -115,9 +115,7 @@ function optionalObjectSchema(schema: Json): Json {
 }
 
 function safeTenantUserId(ctx: RequestContext): string | null {
-  const id = ctx.membership?.id
-  if (!id || id === 'super-admin') return null
-  return id
+  return ctx.membership?.id ?? null
 }
 
 async function ensureSite(tx: TenantTx, id: string | null | undefined): Promise<void> {

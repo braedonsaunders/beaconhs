@@ -57,6 +57,13 @@ export async function finalizeUpload(
   const parsed = finalizeSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.message }
 
+  // Only keys this tenant minted via requestUpload (newAttachmentKey prefixes
+  // them `t/{tenantId}/{kind}/`) may be registered — a foreign tenant's object
+  // key can never become an attachment here.
+  if (!parsed.data.key.startsWith(`t/${ctx.tenantId}/${parsed.data.kind}/`)) {
+    return { ok: false, error: 'Invalid upload key' }
+  }
+
   const [row] = await ctx.db((tx) =>
     tx
       .insert(attachments)

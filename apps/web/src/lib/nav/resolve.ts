@@ -12,7 +12,7 @@
 // Read-only: never writes. A tenant gets a persisted row only when an admin
 // saves in /admin/navigation; until then everyone sees the computed defaults.
 
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
 import {
@@ -60,7 +60,13 @@ export async function loadNavConfig(tx: Database): Promise<TenantNavConfig> {
   const builtIns = await tx
     .select({ id: formTemplates.id, key: formTemplates.key })
     .from(formTemplates)
-    .where(inArray(formTemplates.key, [LIFT_PLAN_TEMPLATE_KEY, TOOLBOX_TEMPLATE_KEY]))
+    .where(
+      and(
+        inArray(formTemplates.key, [LIFT_PLAN_TEMPLATE_KEY, TOOLBOX_TEMPLATE_KEY]),
+        eq(formTemplates.status, 'published'),
+        isNull(formTemplates.deletedAt),
+      ),
+    )
   const frontline = config.groups.find((g) => g.id === 'frontline')
   const lift = builtIns.find((t) => t.key === LIFT_PLAN_TEMPLATE_KEY)
   if (lift) {
@@ -103,7 +109,7 @@ export async function resolveNavGroups(
     const rows = await tx
       .select({ id: formTemplates.id, name: formTemplates.name, iconKey: formTemplates.iconKey })
       .from(formTemplates)
-      .where(inArray(formTemplates.id, formIds))
+      .where(and(inArray(formTemplates.id, formIds), isNull(formTemplates.deletedAt)))
     for (const r of rows) formMeta.set(r.id, { name: r.name, iconKey: r.iconKey })
   }
 

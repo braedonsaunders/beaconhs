@@ -43,18 +43,6 @@ const EMAIL_TEMPLATE_OPTION_COLS = {
   recordSubjectKey: emailTemplates.recordSubjectKey,
 } as const
 
-export async function listActiveEmailTemplates(
-  ctx: RequestContext,
-): Promise<EmailTemplateOption[]> {
-  return ctx.db((tx) =>
-    tx
-      .select(EMAIL_TEMPLATE_OPTION_COLS)
-      .from(emailTemplates)
-      .where(and(isNull(emailTemplates.deletedAt), eq(emailTemplates.isActive, true)))
-      .orderBy(asc(emailTemplates.name)),
-  )
-}
-
 /**
  * Active templates relevant to a flow's subject: those authored FOR this exact
  * record type, plus generic (untyped) templates that work with any subject.

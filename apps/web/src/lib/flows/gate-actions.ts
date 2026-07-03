@@ -6,7 +6,7 @@
 // for that subject.
 
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { planFromGate } from '@beaconhs/forms-core'
 import { flowGates, formAutomations } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -36,7 +36,9 @@ export async function resolveFlowGate(args: {
     return { ok: false, error: 'You are not the approver for this gate' }
   }
 
-  await ctx.db((tx) =>
+  // Atomic transition: only a still-pending gate flips, so two concurrent
+  // approvals can never both resume the branch and double-fire its actions.
+  const [decided] = await ctx.db((tx) =>
     tx
       .update(flowGates)
       .set({
@@ -46,8 +48,10 @@ export async function resolveFlowGate(args: {
         comment: args.comment ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(flowGates.id, gateId)),
+      .where(and(eq(flowGates.id, gateId), eq(flowGates.status, 'pending')))
+      .returning({ id: flowGates.id }),
   )
+  if (!decided) return { ok: false, error: 'This approval was already resolved' }
 
   // Resume the chosen branch through the subject's adapter.
   const adapter = buildFlowAdapter(ctx, gate.subjectType, gate.subjectKey, gate.subjectId)
@@ -76,14 +80,17 @@ export async function resolveFlowGate(args: {
     } catch {
       summary += ' · resume error'
     }
-    await recordAudit(ctx, {
-      entityType: adapter.auditEntityType,
-      entityId: gate.subjectId,
-      action: decision === 'approve' ? 'sign' : 'update',
-      summary,
-    })
-    revalidatePath(adapter.deepLink())
   }
+
+  // Every decision is audited — even when the flow row or adapter is gone the
+  // gate mutation itself must leave a trail.
+  await recordAudit(ctx, {
+    entityType: adapter?.auditEntityType ?? 'flow_gate',
+    entityId: adapter ? gate.subjectId : gateId,
+    action: decision === 'approve' ? 'sign' : 'update',
+    summary,
+  })
+  if (adapter) revalidatePath(adapter.deepLink())
 
   return { ok: true }
 }

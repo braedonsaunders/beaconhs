@@ -193,7 +193,9 @@ export async function saveCustomFieldDefAction(input: SaveCustomFieldInput): Pro
     const savedId = await ctx.db(async (tx) => {
       if (input.id) {
         // Key is immutable after creation (stored values are keyed by it).
-        await tx
+        // The entityKind filter pins the row to the kind whose permission was
+        // checked above — an id from another module never matches.
+        const [updated] = await tx
           .update(customFieldDefinitions)
           .set({
             label,
@@ -206,8 +208,14 @@ export async function saveCustomFieldDefAction(input: SaveCustomFieldInput): Pro
             sortOrder: input.sortOrder,
             isActive: input.isActive,
           })
-          .where(eq(customFieldDefinitions.id, input.id))
-        return input.id
+          .where(
+            and(
+              eq(customFieldDefinitions.id, input.id),
+              eq(customFieldDefinitions.entityKind, input.kind),
+            ),
+          )
+          .returning({ id: customFieldDefinitions.id })
+        return updated?.id
       }
       const key = slugifyCustomFieldKey(label)
       if (!isValidCustomFieldKey(key)) throw new Error('INVALID_KEY')
@@ -263,7 +271,17 @@ export async function deleteCustomFieldDefAction(formData: FormData): Promise<vo
   assertCan(ctx, cfg.permission)
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
-  await ctx.db((tx) => tx.delete(customFieldDefinitions).where(eq(customFieldDefinitions.id, id)))
+  // The entityKind filter pins the row to the kind whose permission was checked
+  // above — an id from another module never matches (and is never audited).
+  const [deleted] = await ctx.db((tx) =>
+    tx
+      .delete(customFieldDefinitions)
+      .where(
+        and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.entityKind, kindRaw)),
+      )
+      .returning({ id: customFieldDefinitions.id }),
+  )
+  if (!deleted) return
   await recordAudit(ctx, {
     entityType: 'custom_field_definition',
     entityId: id,

@@ -69,7 +69,7 @@ export async function recordVisibilityWhere(
     if (mine) conds.push(eq(cols.personCol, mine))
   }
   const myUserId = ctx.membership?.id
-  if (cols.createdByCol && myUserId && myUserId !== 'super-admin') {
+  if (cols.createdByCol && myUserId) {
     conds.push(eq(cols.createdByCol, myUserId))
   }
 
@@ -132,8 +132,7 @@ function mySiteIds(ctx: RequestContext): string[] {
 }
 
 function myTenantUserId(ctx: RequestContext): string | null {
-  const id = ctx.membership?.id
-  return !id || id === 'super-admin' ? null : id
+  return ctx.membership?.id ?? null
 }
 
 export type ModuleScopeCols = {

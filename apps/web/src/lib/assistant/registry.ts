@@ -76,8 +76,3 @@ export function buildToolRegistry(ctx: RequestContext, caps: ToolCapabilities): 
   })
   return Object.fromEntries(entries)
 }
-
-/** Names of the tools this user may run — lets the caller know if any exist. */
-export function runnableToolNames(ctx: RequestContext): string[] {
-  return ASSISTANT_TOOLS.filter((t) => canRunTool(ctx, t)).map((t) => t.name)
-}

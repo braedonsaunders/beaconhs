@@ -1,6 +1,8 @@
 // Tiny CSV emitter for list-page exports. RFC 4180-style: comma separator,
 // CRLF terminators, fields containing comma/quote/newline are quoted with
-// internal quotes doubled.
+// internal quotes doubled. String fields starting with a formula trigger
+// (=, +, -, @, tab, CR) are prefixed with an apostrophe so Excel/Sheets treat
+// user-entered text as a literal instead of executing it.
 //
 // Returns a NextResponse with text/csv mime type and a Content-Disposition
 // attachment header so browsers prompt a download.
@@ -11,7 +13,10 @@ export function csvRow(values: (string | number | null | undefined)[]): string {
   return values
     .map((v) => {
       if (v === null || v === undefined) return ''
-      const s = String(v)
+      let s = String(v)
+      // Formula-injection hardening. Real numbers pass through untouched so
+      // negative values stay numeric; only text fields are neutralised.
+      if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`
       if (/[",\r\n]/.test(s)) {
         return `"${s.replace(/"/g, '""')}"`
       }

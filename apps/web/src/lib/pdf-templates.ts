@@ -39,16 +39,6 @@ const PDF_OPTION_COLS = {
   recordSubjectKey: pdfTemplates.recordSubjectKey,
 } as const
 
-export async function listActivePdfTemplates(ctx: RequestContext): Promise<PdfTemplateOption[]> {
-  return ctx.db((tx) =>
-    tx
-      .select(PDF_OPTION_COLS)
-      .from(pdfTemplates)
-      .where(and(isNull(pdfTemplates.deletedAt), eq(pdfTemplates.isActive, true)))
-      .orderBy(asc(pdfTemplates.name)),
-  )
-}
-
 /** Active PDF templates relevant to a flow's subject (typed for it, or generic). */
 export async function listActivePdfTemplatesForSubject(
   ctx: RequestContext,

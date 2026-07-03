@@ -4,8 +4,10 @@
 // parameters via @beaconhs/reports' compileFlatFilters. The caller's ctx.db is
 // already RLS-bound to the key's tenant.
 
-import { sql } from 'drizzle-orm'
+import { getTableColumns, getTableName, is, sql, type SQL } from 'drizzle-orm'
+import { PgTable } from 'drizzle-orm/pg-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import * as dbSchema from '@beaconhs/db/schema'
 import type { ReportCustomFilter, ReportFilterOperator } from '@beaconhs/db/schema'
 import {
   augmentReportEntityWithCustomFields,
@@ -97,6 +99,23 @@ function resolveFields(entity: ReportEntity, params: URLSearchParams): string[] 
 const KIND_BY_KEY = (entity: ReportEntity): Map<string, ReportColumnKind> =>
   new Map(entity.columns.map((c) => [c.key, c.kind]))
 
+/** Physical tables carrying a `deleted_at` soft-delete column, derived from the
+ *  Drizzle schema so the public API excludes archived rows exactly like the UI
+ *  (which filters `isNull(deletedAt)` everywhere). */
+const SOFT_DELETE_TABLES: ReadonlySet<string> = new Set(
+  Object.values(dbSchema)
+    .filter((value): value is PgTable => is(value, PgTable))
+    .filter((table) => 'deletedAt' in getTableColumns(table))
+    .map((table) => getTableName(table)),
+)
+
+/** `deleted_at IS NULL` predicate for soft-deletable entities, else null. */
+function notDeletedSql(entity: ReportEntity): SQL | null {
+  return SOFT_DELETE_TABLES.has(entity.table)
+    ? sql.raw(`"${entity.table}"."deleted_at" IS NULL`)
+    : null
+}
+
 /** JSON-friendly value: timestamps → ISO, numerics → number, else as-is. */
 function formatValue(value: unknown, kind: ReportColumnKind | undefined): unknown {
   if (value === null || typeof value === 'undefined') return null
@@ -133,8 +152,14 @@ export async function readEntityRows(
   const dir =
     orderReq === 'asc' || orderReq === 'desc' ? orderReq : (entity.defaultSort?.direction ?? 'desc')
 
-  const where = compileFlatFilters(entity, filters)
-  const whereSql = where ? sql.join([sql.raw('WHERE'), where], sql.raw(' ')) : sql.raw('')
+  // Soft-deleted rows are never exposed through the public API; the filters
+  // from compileFlatFilters are AND-joined so composing here is safe.
+  const conditions = [notDeletedSql(entity), compileFlatFilters(entity, filters)].filter(
+    (c): c is SQL => c !== null,
+  )
+  const whereSql = conditions.length
+    ? sql.join([sql.raw('WHERE'), sql.join(conditions, sql.raw(' AND '))], sql.raw(' '))
+    : sql.raw('')
   const idSelect = idCol ? [`"${entity.table}"."${idCol}" AS "id"`] : []
   const selectList = sql.raw(
     [...idSelect, ...fields.map((c) => `${columnRef(entity, c)} AS "${c}"`)].join(', '),
@@ -200,12 +225,14 @@ export async function getEntityRecord(
       ...fields.map((c) => `${columnRef(entity, c)} AS "${c}"`),
     ].join(', '),
   )
+  const notDeleted = notDeletedSql(entity)
   const query = sql.join(
     [
       sql.raw('SELECT'),
       selectList,
       sql.raw(`FROM "${entity.table}" WHERE "${entity.table}"."${idCol}" =`),
       sql`${id}`,
+      ...(notDeleted ? [sql.raw('AND'), notDeleted] : []),
       sql.raw('LIMIT 1'),
     ],
     sql.raw(' '),

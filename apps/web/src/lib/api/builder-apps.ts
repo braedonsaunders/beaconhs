@@ -2,7 +2,7 @@ import 'server-only'
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { and, asc, count, desc, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import {
   formResponseScores,
   formResponses,
@@ -85,7 +85,7 @@ export type BuilderAppResponsePage = {
 const MAX_LIMIT = 1000
 const DEFAULT_LIMIT = 50
 
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
+const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
   message: 'Expected a uuid',
 })
 const responseData = z.record(z.string(), z.unknown())
@@ -356,17 +356,29 @@ export async function listBuilderApps(ctx: RequestContext): Promise<BuilderAppSu
       )
       .orderBy(asc(formTemplates.name))
 
+    if (templates.length === 0) return []
+
+    // Latest version per template in one round-trip (DISTINCT ON), instead of
+    // one query per published app.
+    const versions = await tx
+      .selectDistinctOn([formTemplateVersions.templateId], {
+        templateId: formTemplateVersions.templateId,
+        version: formTemplateVersions.version,
+        schema: formTemplateVersions.schema,
+      })
+      .from(formTemplateVersions)
+      .where(
+        inArray(
+          formTemplateVersions.templateId,
+          templates.map((t) => t.id),
+        ),
+      )
+      .orderBy(asc(formTemplateVersions.templateId), desc(formTemplateVersions.version))
+    const latestByTemplate = new Map(versions.map((v) => [v.templateId, v]))
+
     const apps: BuilderAppOpenApiEntity[] = []
     for (const template of templates) {
-      const [version] = await tx
-        .select({
-          version: formTemplateVersions.version,
-          schema: formTemplateVersions.schema,
-        })
-        .from(formTemplateVersions)
-        .where(eq(formTemplateVersions.templateId, template.id))
-        .orderBy(desc(formTemplateVersions.version))
-        .limit(1)
+      const version = latestByTemplate.get(template.id)
       if (!version) continue
       apps.push({
         ...template,
