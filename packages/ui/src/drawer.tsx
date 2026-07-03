@@ -58,6 +58,8 @@ export function Drawer({
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
+  const panelRef = React.useRef<HTMLElement>(null)
+
   React.useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
@@ -71,6 +73,59 @@ export function Drawer({
       document.body.style.overflow = prev
     }
   }, [open, onClose])
+
+  // Focus management: on open, remember the previously focused element and move
+  // focus into the dialog; trap Tab within the panel; restore focus on close.
+  React.useEffect(() => {
+    if (!open) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const focusablesSelector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+    // Defer the initial focus until the panel has mounted for this open cycle.
+    const focusTimer = window.setTimeout(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const first = panel.querySelector<HTMLElement>(focusablesSelector)
+      ;(first ?? panel).focus()
+    }, 0)
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Tab') return
+      const panel = panelRef.current
+      if (!panel) return
+      const focusables = Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      )
+      if (focusables.length === 0) {
+        e.preventDefault()
+        panel.focus()
+        return
+      }
+      const firstEl = focusables[0]!
+      const lastEl = focusables[focusables.length - 1]!
+      const activeEl = document.activeElement
+      if (e.shiftKey) {
+        if (activeEl === firstEl || activeEl === panel || !panel.contains(activeEl)) {
+          e.preventDefault()
+          lastEl.focus()
+        }
+      } else if (activeEl === lastEl) {
+        e.preventDefault()
+        firstEl.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.clearTimeout(focusTimer)
+      document.removeEventListener('keydown', onKeyDown)
+      // Restore focus to the trigger if it's still in the document.
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus()
+      }
+    }
+  }, [open])
 
   if (typeof document === 'undefined') return null
 
@@ -91,11 +146,13 @@ export function Drawer({
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
             onClick={onClose}
-            aria-label="Close drawer"
+            aria-hidden="true"
           />
           <motion.aside
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
+            tabIndex={-1}
             initial={{ x: side === 'left' ? '-100%' : '100%' }}
             animate={{ x: 0 }}
             exit={{ x: side === 'left' ? '-100%' : '100%' }}

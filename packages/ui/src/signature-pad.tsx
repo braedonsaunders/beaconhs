@@ -77,6 +77,10 @@ export function SignaturePad({
 
   // Drawing state — kept in refs to avoid re-renders during a stroke.
   const drawingRef = useRef(false)
+  // True once the user has actually drawn on this canvas. Until then, resize
+  // must restore the incoming `value` prop rather than a (possibly blank)
+  // snapshot taken from a default-sized 300×150 canvas on first mount.
+  const hasDrawnRef = useRef(false)
   const activePointerRef = useRef<number | null>(null)
   const lastPointRef = useRef<Point | null>(null)
   const lastMidRef = useRef<{ x: number; y: number } | null>(null)
@@ -131,9 +135,11 @@ export function SignaturePad({
       return
     }
 
-    // Snapshot current pixels so we can repaint after resize.
+    // Snapshot current pixels so we can repaint after resize — but only once
+    // the user has drawn. Before that, an initial-value pad must restore the
+    // `value` prop, not a blank snapshot from the default-sized canvas.
     let snapshot: string | null = null
-    if (canvas.width > 0 && canvas.height > 0) {
+    if (hasDrawnRef.current && canvas.width > 0 && canvas.height > 0) {
       try {
         snapshot = canvas.toDataURL('image/png')
       } catch {
@@ -194,7 +200,9 @@ export function SignaturePad({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, loadDataUrl])
 
-  const lastEmittedRef = useRef<string | null>(value)
+  // Initialized to null (not `value`) so the external-value repaint effect
+  // runs once on mount and actually paints an initial signature.
+  const lastEmittedRef = useRef<string | null>(null)
 
   const emit = useCallback((next: string | null) => {
     lastEmittedRef.current = next
@@ -246,6 +254,7 @@ export function SignaturePad({
 
     activePointerRef.current = e.pointerId
     drawingRef.current = true
+    hasDrawnRef.current = true
     try {
       canvas.setPointerCapture(e.pointerId)
     } catch {
@@ -382,10 +391,11 @@ export function SignaturePad({
     <div ref={wrapRef} className={cn('w-full', className)}>
       <div
         className={cn(
-          'relative w-full overflow-hidden rounded-md border bg-white dark:bg-slate-900',
-          disabled
-            ? 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900'
-            : 'border-slate-300 dark:border-slate-700',
+          // The signing surface stays white in both themes: the ink is dark
+          // (slate-900) and the exported PNG is dark-on-transparent for PDFs,
+          // so a dark backing would hide the stroke while signing and viewing.
+          'relative w-full overflow-hidden rounded-md border bg-white',
+          disabled ? 'border-slate-200 dark:border-slate-800' : 'border-slate-300 dark:border-slate-700',
         )}
         style={{ height }}
       >
@@ -416,11 +426,11 @@ export function SignaturePad({
             {!hasInk && !disabled ? (
               <div className="pointer-events-none absolute inset-0">
                 <div
-                  className="absolute right-4 left-4 border-t border-dashed border-slate-200 dark:border-slate-800"
+                  className="absolute right-4 left-4 border-t border-dashed border-slate-200"
                   style={{ top: `${(2 / 3) * 100}%` }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs text-slate-400 dark:text-slate-500">Sign here</span>
+                  <span className="text-xs text-slate-400">Sign here</span>
                 </div>
               </div>
             ) : null}

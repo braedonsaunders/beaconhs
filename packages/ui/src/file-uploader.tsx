@@ -165,7 +165,9 @@ export function FileUploader({
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || files.length === 0) return
-      const list = Array.from(files)
+      // Respect `multiple`: a single-file uploader queues only the first file
+      // even when several are dropped at once.
+      const list = multiple ? Array.from(files) : Array.from(files).slice(0, 1)
       const queued = list.map<Item>((file) => ({
         id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         file,
@@ -174,7 +176,7 @@ export function FileUploader({
       setItems((prev) => [...prev, ...queued])
       for (const q of queued) void upload(q.file, q.id)
     },
-    [upload],
+    [multiple, upload],
   )
 
   return (
@@ -217,7 +219,12 @@ export function FileUploader({
           className="hidden"
           accept={accept}
           multiple={multiple}
-          onChange={(e) => handleFiles(e.currentTarget.files)}
+          onChange={(e) => {
+            handleFiles(e.currentTarget.files)
+            // Reset so re-picking the same file (e.g. retry after an error)
+            // still fires a change event.
+            e.currentTarget.value = ''
+          }}
         />
       </div>
 
@@ -233,9 +240,9 @@ export function FileUploader({
                   {item.file.name}
                 </div>
                 {item.status === 'error' ? (
-                  <div className="text-[11px] text-rose-600">{item.error}</div>
+                  <div className="text-[11px] text-rose-600 dark:text-rose-400">{item.error}</div>
                 ) : item.status === 'done' ? (
-                  <div className="text-[11px] text-emerald-700">Uploaded</div>
+                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Uploaded</div>
                 ) : (
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">
                     {item.status === 'uploading'
@@ -258,7 +265,7 @@ export function FileUploader({
                 <button
                   type="button"
                   onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
-                  className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50"
+                  className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
                 >
                   Dismiss
                 </button>

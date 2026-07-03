@@ -25,7 +25,7 @@ export function Popover({
   trigger: React.ReactElement
   open: boolean
   onOpenChange: (open: boolean) => void
-  align?: 'start' | 'center' | 'end'
+  align?: 'start' | 'end'
   side?: 'top' | 'bottom'
   className?: string
   children: React.ReactNode
@@ -104,15 +104,9 @@ export function Popover({
                   style={{
                     top: side === 'bottom' ? rect.top + rect.height + 4 : undefined,
                     bottom: side === 'top' ? window.innerHeight - rect.top + 4 : undefined,
-                    left:
-                      align === 'start'
-                        ? rect.left
-                        : align === 'end'
-                          ? undefined
-                          : rect.left + rect.width / 2,
+                    left: align === 'start' ? rect.left : undefined,
                     right:
                       align === 'end' ? window.innerWidth - (rect.left + rect.width) : undefined,
-                    transform: align === 'center' ? 'translateX(-50%)' : undefined,
                   }}
                   role="dialog"
                 >

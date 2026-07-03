@@ -35,7 +35,7 @@ export const TableHeader = React.forwardRef<
   <thead
     ref={ref}
     className={cn(
-      'sticky top-0 z-10 bg-slate-50/95 shadow-[inset_0_-1px_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-900/80 [&_tr]:border-b [&_tr]:border-slate-200 dark:[&_tr]:border-slate-800',
+      'sticky top-0 z-10 bg-slate-50/95 shadow-[inset_0_-1px_0_rgb(226_232_240)] backdrop-blur-sm dark:bg-slate-900/80 dark:shadow-[inset_0_-1px_0_rgb(30_41_59)] [&_tr]:border-b [&_tr]:border-slate-200 dark:[&_tr]:border-slate-800',
       className,
     )}
     {...props}
@@ -126,15 +126,3 @@ export const TableCell = React.forwardRef<
   <td ref={ref} className={cn('px-3 py-3 align-middle', className)} {...props} />
 ))
 TableCell.displayName = 'TableCell'
-
-export const TableCaption = React.forwardRef<
-  HTMLTableCaptionElement,
-  React.HTMLAttributes<HTMLTableCaptionElement>
->(({ className, ...props }, ref) => (
-  <caption
-    ref={ref}
-    className={cn('mt-2 text-xs text-slate-500 dark:text-slate-400', className)}
-    {...props}
-  />
-))
-TableCaption.displayName = 'TableCaption'

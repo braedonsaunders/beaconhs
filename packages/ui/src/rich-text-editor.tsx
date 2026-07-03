@@ -7,8 +7,8 @@
 // into the hidden input on every edit so a `formData.get(name)` server
 // action call gets the current content.
 
-import { useEffect } from 'react'
-import { EditorContent, useEditor, type Editor } from '@tiptap/react'
+import { useEffect, useState } from 'react'
+import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -40,6 +40,11 @@ export function RichTextEditor({
   className,
   minHeight = '160px',
 }: RichTextEditorProps) {
+  // TipTap v3 does not re-render the host component on transactions
+  // (`shouldRerenderOnTransaction` defaults to false), so the latest HTML is
+  // mirrored into React state from `onUpdate` to keep the hidden form input
+  // current. Toolbar state is driven by `useEditorState` (see Toolbar below).
+  const [html, setHtml] = useState(defaultValue)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -47,7 +52,7 @@ export function RichTextEditor({
       }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: 'text-teal-700 underline underline-offset-2' },
+        HTMLAttributes: { class: 'text-teal-700 underline underline-offset-2 dark:text-teal-300' },
       }),
       Placeholder.configure({ placeholder }),
     ],
@@ -64,7 +69,9 @@ export function RichTextEditor({
       },
     },
     onUpdate({ editor }) {
-      onChange?.(editor.getHTML())
+      const next = editor.getHTML()
+      setHtml(next)
+      onChange?.(next)
     },
   })
 
@@ -98,7 +105,7 @@ export function RichTextEditor({
     >
       <Toolbar editor={editor} disabled={disabled} />
       <EditorContent editor={editor} />
-      {name ? <input type="hidden" name={name} value={editor.getHTML()} readOnly /> : null}
+      {name ? <input type="hidden" name={name} value={html} readOnly /> : null}
     </div>
   )
 }
@@ -106,10 +113,30 @@ export function RichTextEditor({
 // ---- Toolbar ---------------------------------------------------------------
 
 function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+  // TipTap v3 doesn't re-render on transactions, so subscribe to the slices of
+  // editor state the toolbar needs (active marks/nodes + undo/redo ability).
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      bold: e.isActive('bold'),
+      italic: e.isActive('italic'),
+      strike: e.isActive('strike'),
+      h1: e.isActive('heading', { level: 1 }),
+      h2: e.isActive('heading', { level: 2 }),
+      h3: e.isActive('heading', { level: 3 }),
+      bulletList: e.isActive('bulletList'),
+      orderedList: e.isActive('orderedList'),
+      blockquote: e.isActive('blockquote'),
+      codeBlock: e.isActive('codeBlock'),
+      link: e.isActive('link'),
+      canUndo: e.can().undo(),
+      canRedo: e.can().redo(),
+    }),
+  })
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-slate-200 bg-slate-50/50 px-2 py-1 dark:border-slate-800 dark:bg-slate-800/50">
       <Btn
-        active={editor.isActive('bold')}
+        active={state.bold}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleBold().run()}
         label="Bold"
@@ -117,7 +144,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         <b>B</b>
       </Btn>
       <Btn
-        active={editor.isActive('italic')}
+        active={state.italic}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleItalic().run()}
         label="Italic"
@@ -125,7 +152,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         <i>I</i>
       </Btn>
       <Btn
-        active={editor.isActive('strike')}
+        active={state.strike}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleStrike().run()}
         label="Strikethrough"
@@ -134,7 +161,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
       </Btn>
       <Sep />
       <Btn
-        active={editor.isActive('heading', { level: 1 })}
+        active={state.h1}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         label="Heading 1"
@@ -142,7 +169,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         H1
       </Btn>
       <Btn
-        active={editor.isActive('heading', { level: 2 })}
+        active={state.h2}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         label="Heading 2"
@@ -150,7 +177,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         H2
       </Btn>
       <Btn
-        active={editor.isActive('heading', { level: 3 })}
+        active={state.h3}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         label="Heading 3"
@@ -159,7 +186,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
       </Btn>
       <Sep />
       <Btn
-        active={editor.isActive('bulletList')}
+        active={state.bulletList}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         label="Bullet list"
@@ -167,7 +194,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         •
       </Btn>
       <Btn
-        active={editor.isActive('orderedList')}
+        active={state.orderedList}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         label="Numbered list"
@@ -175,7 +202,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         1.
       </Btn>
       <Btn
-        active={editor.isActive('blockquote')}
+        active={state.blockquote}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         label="Quote"
@@ -183,7 +210,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
         “”
       </Btn>
       <Btn
-        active={editor.isActive('codeBlock')}
+        active={state.codeBlock}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         label="Code"
@@ -192,7 +219,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
       </Btn>
       <Sep />
       <Btn
-        active={editor.isActive('link')}
+        active={state.link}
         disabled={disabled}
         onClick={() => {
           const existing = editor.getAttributes('link').href as string | undefined
@@ -210,14 +237,14 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
       </Btn>
       <div className="ml-auto flex items-center gap-0.5">
         <Btn
-          disabled={disabled || !editor.can().undo()}
+          disabled={disabled || !state.canUndo}
           onClick={() => editor.chain().focus().undo().run()}
           label="Undo"
         >
           ↶
         </Btn>
         <Btn
-          disabled={disabled || !editor.can().redo()}
+          disabled={disabled || !state.canRedo}
           onClick={() => editor.chain().focus().redo().run()}
           label="Redo"
         >
