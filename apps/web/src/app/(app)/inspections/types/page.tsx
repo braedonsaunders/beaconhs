@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { ClipboardList } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -106,7 +106,8 @@ export default async function InspectionTypesPage({
   const ctx = await requireModuleManage('inspections')
 
   const { rows, total, statusCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    // Types are soft-deleted; keep deleted rows out of the list and its counts.
+    const filters: SQL<unknown>[] = [isNull(inspectionTypes.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const c = ilike(inspectionTypes.name, term)
@@ -114,7 +115,7 @@ export default async function InspectionTypesPage({
     }
     if (statusFilter === 'published') filters.push(eq(inspectionTypes.isPublished, true))
     if (statusFilter === 'draft') filters.push(eq(inspectionTypes.isPublished, false))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'created_at'
@@ -145,6 +146,7 @@ export default async function InspectionTypesPage({
     const ss = await tx
       .select({ p: inspectionTypes.isPublished, c: count() })
       .from(inspectionTypes)
+      .where(isNull(inspectionTypes.deletedAt))
       .groupBy(inspectionTypes.isPublished)
     const sc: Record<string, number> = {}
     for (const r of ss) sc[r.p ? 'published' : 'draft'] = Number(r.c)
@@ -221,17 +223,19 @@ export default async function InspectionTypesPage({
                   <TableCell>
                     <Link
                       href={`/inspections/types/${type.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {type.name}
                     </Link>
                     {type.description ? (
-                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
                         {type.description}
                       </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-slate-600 tabular-nums">{criteriaCount}</TableCell>
+                  <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                    {criteriaCount}
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {type.requiresForeman ? <Badge variant="secondary">Foreman</Badge> : null}
@@ -248,7 +252,7 @@ export default async function InspectionTypesPage({
                       {type.isPublished ? 'Published' : 'Draft'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {new Date(type.createdAt).toLocaleDateString()}
                   </TableCell>
                 </TableRow>

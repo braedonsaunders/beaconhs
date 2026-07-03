@@ -28,12 +28,15 @@ import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { parseDateFilter } from '../_datetime'
 
 export const dynamic = 'force-dynamic'
 
 // Mirrors the filters/sort of the native records list (/inspections/records)
 // so "Export CSV" honours whatever the user is currently looking at.
 const SORTS = ['occurred_at', 'reference', 'type', 'status'] as const
+
+const STATUS_VALUES = ['draft', 'in_progress', 'submitted', 'closed'] as const
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
@@ -44,13 +47,18 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Whitelist the status param — unknown values would throw a Postgres enum
+  // error, so they fall back to "no filter" (mirrors the list page).
+  const statusRaw = pickString(sp.status)
+  const statusFilter = (STATUS_VALUES as readonly string[]).includes(statusRaw ?? '')
+    ? (statusRaw as (typeof STATUS_VALUES)[number])
+    : undefined
   const typeFilter = pickString(sp.type)
   const siteFilter = pickString(sp.site)
   const inspectorFilter = pickString(sp.inspector)
   const signedFilter = pickString(sp.signed) // 'yes' | 'no'
-  const dateFromRaw = pickString(sp.dateFrom)
-  const dateToRaw = pickString(sp.dateTo)
+  const dateFrom = parseDateFilter(pickString(sp.dateFrom), 'start')
+  const dateTo = parseDateFilter(pickString(sp.dateTo), 'end')
   const ctx = await requireExportContext()
   // Read-tier gate: must hold at least the self read tier, and the export is
   // bounded to the caller's tier (read.self/site can't dump the whole tenant).
@@ -76,14 +84,14 @@ export async function GET(req: NextRequest) {
       )
       if (c) filters.push(c)
     }
-    if (statusFilter) filters.push(eq(inspectionRecords.status, statusFilter as any))
+    if (statusFilter) filters.push(eq(inspectionRecords.status, statusFilter))
     if (typeFilter) filters.push(eq(inspectionRecords.typeId, typeFilter))
     if (siteFilter) filters.push(eq(inspectionRecords.siteOrgUnitId, siteFilter))
     if (inspectorFilter) filters.push(eq(inspectionRecords.inspectorTenantUserId, inspectorFilter))
     if (signedFilter === 'yes') filters.push(isNotNull(inspectionRecords.customerSignedAt))
     if (signedFilter === 'no') filters.push(isNull(inspectionRecords.customerSignedAt))
-    if (dateFromRaw) filters.push(gte(inspectionRecords.occurredAt, new Date(dateFromRaw)))
-    if (dateToRaw) filters.push(lte(inspectionRecords.occurredAt, new Date(dateToRaw)))
+    if (dateFrom) filters.push(gte(inspectionRecords.occurredAt, dateFrom))
+    if (dateTo) filters.push(lte(inspectionRecords.occurredAt, dateTo))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =

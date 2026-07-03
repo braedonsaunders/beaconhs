@@ -210,26 +210,28 @@ export default async function InspectionBanksPage({
                   <TableCell>
                     <Link
                       href={`/inspections/banks/${bank.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {bank.name}
                     </Link>
                     {bank.description ? (
-                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
                         {bank.description}
                       </div>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {bank.category ? bank.category.replace(/_/g, ' ') : '—'}
                   </TableCell>
-                  <TableCell className="text-slate-600 tabular-nums">{criteriaCount}</TableCell>
+                  <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                    {criteriaCount}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
                       {bank.isPublished ? 'Published' : 'Draft'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {new Date(bank.createdAt).toLocaleDateString()}
                   </TableCell>
                 </TableRow>

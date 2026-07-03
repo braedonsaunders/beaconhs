@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { inspectionRecords, inspectionTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -27,7 +27,11 @@ export async function startInspection(formData: FormData) {
   if (!typeId) throw new Error('Inspection type is required')
 
   const [type] = await ctx.db((tx) =>
-    tx.select().from(inspectionTypes).where(eq(inspectionTypes.id, typeId)).limit(1),
+    tx
+      .select()
+      .from(inspectionTypes)
+      .where(and(eq(inspectionTypes.id, typeId), isNull(inspectionTypes.deletedAt)))
+      .limit(1),
   )
   if (!type) throw new Error('Inspection type not found')
 

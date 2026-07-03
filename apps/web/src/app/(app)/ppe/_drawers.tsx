@@ -15,10 +15,18 @@ import {
   Input,
   Label,
   SearchSelect,
+  Select,
   Textarea,
   UrlDrawer,
   type SelectOption,
 } from '@beaconhs/ui'
+
+export type PpeDrawerType = {
+  id: string
+  name: string
+  category: string | null
+  sizingScheme: string[] | null
+}
 
 type IssueAction = (input: {
   typeId: string
@@ -40,7 +48,7 @@ export function PpeDrawers({
 }: {
   openDrawer: 'issue' | null
   closeHref: string
-  types: { id: string; name: string; category: string | null }[]
+  types: PpeDrawerType[]
   people: SelectOption[]
   issueAction: IssueAction
 }) {
@@ -64,7 +72,7 @@ function IssueDrawer({
 }: {
   open: boolean
   closeHref: string
-  types: { id: string; name: string; category: string | null }[]
+  types: PpeDrawerType[]
   people: SelectOption[]
   action: IssueAction
 }) {
@@ -112,6 +120,11 @@ function IssueDrawer({
     hint: t.category ? t.category.replace(/_/g, ' ') : undefined,
   }))
 
+  // Types with a configured sizing scheme get a dropdown of their valid sizes;
+  // everything else stays free text.
+  const sizingScheme = types.find((t) => t.id === typeId)?.sizingScheme ?? null
+  const sizeOptions = sizingScheme && sizingScheme.length > 0 ? sizingScheme : null
+
   return (
     <UrlDrawer
       open={open}
@@ -145,7 +158,11 @@ function IssueDrawer({
           <Label>PPE type *</Label>
           <SearchSelect
             value={typeId}
-            onChange={setTypeId}
+            onChange={(next) => {
+              setTypeId(next)
+              // A different type may have a different sizing scheme.
+              setSize('')
+            }}
             options={typeOptions}
             placeholder="Select a PPE type…"
             searchPlaceholder="Search PPE types…"
@@ -171,12 +188,23 @@ function IssueDrawer({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pi-size">Size</Label>
-            <Input
-              id="pi-size"
-              value={size}
-              onChange={(e) => setSize(e.currentTarget.value)}
-              placeholder="S / M / L / 10 / etc."
-            />
+            {sizeOptions ? (
+              <Select id="pi-size" value={size} onChange={(e) => setSize(e.currentTarget.value)}>
+                <option value="">— No size —</option>
+                {sizeOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                id="pi-size"
+                value={size}
+                onChange={(e) => setSize(e.currentTarget.value)}
+                placeholder="S / M / L / 10 / etc."
+              />
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pi-purchase">Purchase date</Label>

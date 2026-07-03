@@ -45,12 +45,15 @@ import {
   updateTypeCriterion,
 } from '../_actions'
 
+// 'rating' still exists in the DB enum for criteria created before it was
+// withdrawn (the fill view renders those as pass/fail), but it is no longer
+// offered — there is no rating control in the fill flow.
 type ResponseType = 'pass_fail_na' | 'yes_no' | 'rating'
-const RESPONSE_TYPES: ResponseType[] = ['pass_fail_na', 'yes_no', 'rating']
+const RESPONSE_TYPES: ResponseType[] = ['pass_fail_na', 'yes_no']
 const RESPONSE_LABELS: Record<ResponseType, string> = {
   pass_fail_na: 'Pass / Fail / N-A',
   yes_no: 'Yes / No',
-  rating: 'Rating',
+  rating: 'Pass / Fail / N-A',
 }
 
 export type BuilderType = {
@@ -605,7 +608,8 @@ function CriterionEditorDrawer({
     if (!editor) return
     const c = editor.criterion
     setText(c?.text ?? '')
-    setResponseType(c?.responseType ?? 'pass_fail_na')
+    // Coerce withdrawn 'rating' rows to the type they actually behave as.
+    setResponseType(c && c.responseType !== 'rating' ? c.responseType : 'pass_fail_na')
     setRequiresPhoto(c?.requiresPhoto ?? false)
     setRequiresComment(c?.requiresComment ?? false)
     setGroupId(editor.groupId ?? c?.groupId ?? null)

@@ -932,7 +932,8 @@ function SettingsPanel({
           placeholder="S, M, L, XL"
         />
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Comma- or newline-separated valid sizes. Appears as a dropdown when issuing items.
+          Comma- or newline-separated valid sizes. Shown as a dropdown when issuing or editing items
+          of this type.
         </p>
       </div>
       <div className="flex justify-end">

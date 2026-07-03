@@ -51,11 +51,13 @@ export default async function PpePage({
     allowedSorts: SORTS,
   })
   // Default the register to issued items; an explicit `status=all` (the "All
-  // statuses" chip) clears the default so every status shows.
+  // statuses" chip) clears the default so every status shows. Unknown values
+  // would throw a Postgres enum error, so they're whitelisted to "no filter".
   const statusRaw = pickString(sp.status) ?? 'issued'
-  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
+  const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw) ? statusRaw : undefined
   const ctx = await requireRequestContext()
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ppe.read.all')
+  const canIssue = can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
 
   const { rows, total, statusCounts, types } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
@@ -64,7 +66,14 @@ export default async function PpePage({
       const cond = or(ilike(ppeItems.serialNumber, term), ilike(ppeTypes.name, term))
       if (cond) filters.push(cond)
     }
-    if (statusFilter) filters.push(eq(ppeItems.status, statusFilter as any))
+    if (statusFilter) {
+      filters.push(
+        eq(
+          ppeItems.status,
+          statusFilter as 'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired',
+        ),
+      )
+    }
     const whereClause = and(...filters)
 
     // "Date assigned" = the most recent issue/replace event for the item (when
@@ -122,9 +131,15 @@ export default async function PpePage({
     const ss = await tx
       .select({ s: ppeItems.status, c: count() })
       .from(ppeItems)
+      .where(isNull(ppeItems.deletedAt))
       .groupBy(ppeItems.status)
     const typeRows = await tx
-      .select({ id: ppeTypes.id, name: ppeTypes.name, category: ppeTypes.category })
+      .select({
+        id: ppeTypes.id,
+        name: ppeTypes.name,
+        category: ppeTypes.category,
+        sizingScheme: ppeTypes.sizingScheme,
+      })
       .from(ppeTypes)
       .orderBy(asc(ppeTypes.name))
     return {
@@ -135,7 +150,8 @@ export default async function PpePage({
     }
   })
 
-  const holders = await listPeopleForBulkPpe()
+  // People enumeration is only needed (and only permitted) for issuance flows.
+  const holders = canIssue ? await listPeopleForBulkPpe() : []
   const peopleOptions = holders.map((h) => ({
     value: h.id,
     label: h.name,

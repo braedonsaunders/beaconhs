@@ -121,6 +121,14 @@ export async function recordPpeIssueAction(
     note?: string | null
   },
 ): Promise<{ issueId: string | null }> {
+  // The ledger row is attributed to a tenant user (NOT NULL FK). A super-admin
+  // viewing a tenant has no membership, so refuse with a clear error instead of
+  // letting Postgres reject an empty uuid.
+  const issuedByTenantUserId =
+    ctx.membership?.id && ctx.membership.id !== 'super-admin' ? ctx.membership.id : null
+  if (!issuedByTenantUserId) {
+    throw new Error('Super-admin cannot change PPE custody — switch to a tenant user.')
+  }
   const issueId = await ctx.db(async (tx) => {
     const [iss] = await tx
       .insert(ppeIssues)
@@ -130,7 +138,7 @@ export async function recordPpeIssueAction(
         personId: args.personId,
         action: args.action,
         quantity: 1,
-        issuedByTenantUserId: ctx.membership?.id ?? '',
+        issuedByTenantUserId,
         note: args.note ?? null,
       })
       .returning({ id: ppeIssues.id })
@@ -190,7 +198,6 @@ export async function loadInspectionCriteriaForType(
     question: string
     description: string | null
     severity: PpeSeverity
-    requiresPhoto: boolean
     entityOrder: number
   }[]
 > {
@@ -201,7 +208,6 @@ export async function loadInspectionCriteriaForType(
         question: ppeTypeInspectionCriteria.question,
         description: ppeTypeInspectionCriteria.description,
         severity: ppeTypeInspectionCriteria.severity,
-        requiresPhoto: ppeTypeInspectionCriteria.requiresPhoto,
         entityOrder: ppeTypeInspectionCriteria.entityOrder,
       })
       .from(ppeTypeInspectionCriteria)
@@ -224,7 +230,6 @@ export async function loadInspectionCriteriaForType(
       question: r.question,
       description: r.description,
       severity: r.severity as PpeSeverity,
-      requiresPhoto: r.requiresPhoto,
       entityOrder: r.entityOrder,
     }))
   })
@@ -236,7 +241,10 @@ export async function loadInspectionCriteriaForType(
  */
 export function daysUntil(iso: string | null | undefined): number | null {
   if (!iso) return null
-  const target = new Date(iso)
+  // Date-only columns ('YYYY-MM-DD') must parse as LOCAL midnight — bare
+  // `new Date(iso)` parses UTC, which lands on the previous local day in
+  // negative-offset timezones and shifts every due/expiry badge by a day.
+  const target = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00`) : new Date(iso)
   if (Number.isNaN(target.getTime())) return null
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -245,11 +253,12 @@ export function daysUntil(iso: string | null | undefined): number | null {
 }
 
 /**
- * Tag for the per-item annual-record year column — defaults to the year of the
- * inspectedOn date.
+ * Tag for the per-item annual-record year column — the year of the inspectedOn
+ * date. Read straight off the 'YYYY-MM-DD' string: parsing through Date would
+ * mis-key Jan 1 certificates as the previous year in UTC-negative timezones.
  */
 export function deriveAnnualYear(inspectedOn: string): string {
-  return String(new Date(inspectedOn).getFullYear())
+  return inspectedOn.slice(0, 4)
 }
 
 // Re-export the schema imports so callers can do `from '@/app/(app)/ppe/_lib'`

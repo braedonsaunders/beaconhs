@@ -13,7 +13,7 @@
 // server-side.
 
 import * as React from 'react'
-import { Camera, CheckCircle2, CircleDashed, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleDashed, XCircle } from 'lucide-react'
 import { Badge, Button, Input, Label, cn } from '@beaconhs/ui'
 
 type Answer = 'pass' | 'fail' | 'n_a'
@@ -22,7 +22,6 @@ type Criterion = {
   question: string
   description: string | null
   severity: 'low' | 'medium' | 'high' | 'critical'
-  requiresPhoto: boolean
 }
 
 const ANSWERS: { value: Answer; label: string }[] = [
@@ -92,11 +91,6 @@ export function PpeInspectionForm({
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
                     <span className="text-slate-400">{i + 1}.</span>
                     <span className="flex-1">{c.question}</span>
-                    {c.requiresPhoto ? (
-                      <Badge variant="warning">
-                        <Camera size={10} /> photo
-                      </Badge>
-                    ) : null}
                     <Badge
                       variant={
                         c.severity === 'critical' || c.severity === 'high'
@@ -111,17 +105,6 @@ export function PpeInspectionForm({
                   </div>
                   {c.description ? (
                     <p className="mt-1 text-xs text-slate-500">{c.description}</p>
-                  ) : null}
-                  {c.requiresPhoto ? (
-                    <div className="mt-2">
-                      <Label className="text-xs text-slate-500">Attach photo evidence</Label>
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        name={`photo_${c.id}`}
-                        className="mt-1 text-xs"
-                      />
-                    </div>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">

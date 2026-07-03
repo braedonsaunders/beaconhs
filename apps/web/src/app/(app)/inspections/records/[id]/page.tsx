@@ -46,7 +46,7 @@ import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
@@ -117,9 +117,14 @@ function isOverdue(args: {
 // read guard. `inspections.update` is the permission gate; this closes the
 // write-by-guessing-the-URL gap (read.self/site users mutating a record they
 // can't see). Throws `notFound`-equivalent (the action just errors) if denied.
+//
+// It also enforces the record lock: closing freezes the record, so every
+// mutation refuses locked records unless the caller explicitly allows them
+// (toggleLock — the only way to unfreeze).
 async function assertCanSeeInspection(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   recordId: string,
+  opts?: { allowLocked?: boolean },
 ): Promise<void> {
   const [rec] = await ctx.db((tx) =>
     tx
@@ -127,6 +132,7 @@ async function assertCanSeeInspection(
         inspectorTenantUserId: inspectionRecords.inspectorTenantUserId,
         submittedByTenantUserId: inspectionRecords.submittedByTenantUserId,
         siteOrgUnitId: inspectionRecords.siteOrgUnitId,
+        locked: inspectionRecords.locked,
       })
       .from(inspectionRecords)
       .where(eq(inspectionRecords.id, recordId))
@@ -141,6 +147,9 @@ async function assertCanSeeInspection(
     }),
   )
   if (!ok) throw new Error('Inspection record not found')
+  if (rec.locked && !opts?.allowLocked) {
+    throw new Error('Record is locked. Unlock it before making changes.')
+  }
 }
 
 async function updateStatus(formData: FormData) {
@@ -152,8 +161,11 @@ async function updateStatus(formData: FormData) {
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
   await assertCanSeeInspection(ctx, id)
 
+  const closing = status === 'closed'
+  const submitting = status === 'submitted' || closing
+
   // Submit gate — refuse to flip to submitted/closed if any criterion is incomplete.
-  if (status === 'submitted' || status === 'closed') {
+  if (submitting) {
     const missing = await findIncompleteCriteria(ctx, id)
     if (missing.length > 0) {
       throw new Error(
@@ -162,13 +174,43 @@ async function updateStatus(formData: FormData) {
     }
   }
 
-  const closing = status === 'closed'
+  const [current] = await ctx.db((tx) =>
+    tx
+      .select({ record: inspectionRecords, type: inspectionTypes })
+      .from(inspectionRecords)
+      .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+      .where(eq(inspectionRecords.id, id))
+      .limit(1),
+  )
+  if (!current) throw new Error('Inspection record not found')
+
+  // Close gates — the type's workflow requirements are enforced here, not just
+  // advertised in the UI. Closing locks the record, so the evidence must be
+  // complete first.
+  if (closing) {
+    if (current.type.requiresCustomerSignature && !current.record.customerSignatureDataUrl) {
+      throw new Error('Cannot close: this inspection type requires a customer signature.')
+    }
+    if (
+      current.type.requiresForeman &&
+      !current.record.foremanText &&
+      (current.record.foremanPersonIds ?? []).length === 0
+    ) {
+      throw new Error('Cannot close: this inspection type requires a foreman on the record.')
+    }
+  }
+
   await ctx.db((tx) =>
     tx
       .update(inspectionRecords)
       .set({
         status: status as (typeof STATUSES)[number],
-        submittedAt: status === 'submitted' || status === 'closed' ? new Date() : null,
+        // Preserve the original submit attribution when closing an
+        // already-submitted record; clear it when moving back to draft/in-progress.
+        submittedAt: submitting ? (current.record.submittedAt ?? new Date()) : null,
+        submittedByTenantUserId: submitting
+          ? (current.record.submittedByTenantUserId ?? ctx.membership?.id ?? null)
+          : null,
         closedAt: closing ? new Date() : null,
         closedByTenantUserId: closing ? (ctx.membership?.id ?? null) : null,
         locked: closing,
@@ -197,7 +239,7 @@ async function toggleLock(formData: FormData) {
   assertCan(ctx, 'inspections.update')
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
-  await assertCanSeeInspection(ctx, id)
+  await assertCanSeeInspection(ctx, id, { allowLocked: true })
   await ctx.db((tx) =>
     tx.update(inspectionRecords).set({ locked: lock }).where(eq(inspectionRecords.id, id)),
   )
@@ -214,20 +256,11 @@ async function updateRecordField(formData: FormData) {
   const field = String(formData.get('field') ?? '')
   const value = String(formData.get('value') ?? '')
   if (!id || !field) throw new Error('Missing id/field')
+  // Visibility + lock are both enforced by the shared guard.
   await assertCanSeeInspection(ctx, id)
 
   const ALLOWED = new Set(['occurredAt', 'siteOrgUnitId', 'foremanText', 'notes'])
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
-
-  // Refuse edits on a locked record.
-  const [rec] = await ctx.db((tx) =>
-    tx
-      .select({ locked: inspectionRecords.locked })
-      .from(inspectionRecords)
-      .where(eq(inspectionRecords.id, id))
-      .limit(1),
-  )
-  if (rec?.locked) throw new Error('Record is locked')
 
   const NULLABLE_IDS = new Set(['siteOrgUnitId'])
   const DATES = new Set(['occurredAt'])
@@ -315,7 +348,6 @@ async function setCriterionSeverity(formData: FormData) {
   if (!recordId || !rowId) return
   await assertCanSeeInspection(ctx, recordId)
 
-  const prevCAId = await getCriterionCAId(ctx, rowId)
   await ctx.db((tx) =>
     tx
       .update(inspectionRecordCriteria)
@@ -329,19 +361,8 @@ async function setCriterionSeverity(formData: FormData) {
     'update',
     { rowId, severity },
   )
-  const newCAId = await syncCorrectiveActionForCriterion(ctx, rowId)
-  if (!prevCAId && newCAId) {
-    await recordAudit(ctx, {
-      entityType: 'corrective_action',
-      entityId: newCAId,
-      action: 'create',
-      summary: `Auto-spawned from inspection finding (severity ${severity ?? 'unknown'})`,
-      after: { sourceEntityType: 'inspection_record', sourceEntityId: recordId },
-    })
-    await logRecordAudit(ctx, recordId, `Auto-spawned corrective action`, 'update', {
-      correctiveActionId: newCAId,
-    })
-  }
+  // Newly-spawned CAs are audited inside the sync helper.
+  await syncCorrectiveActionForCriterion(ctx, rowId)
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -587,21 +608,6 @@ async function attachRecordPhotos(recordId: string, ids: string[]) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
-// Helper used by setCriterionSeverity to know whether a CA was newly spawned.
-async function getCriterionCAId(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-  rowId: string,
-): Promise<string | null> {
-  const [row] = await ctx.db((tx) =>
-    tx
-      .select({ id: inspectionRecordCriteria.correctiveActionId })
-      .from(inspectionRecordCriteria)
-      .where(eq(inspectionRecordCriteria.id, rowId))
-      .limit(1),
-  )
-  return row?.id ?? null
-}
-
 // ----------------------------------------------------------------------------
 // Page
 // ----------------------------------------------------------------------------
@@ -671,7 +677,7 @@ export default async function InspectionRecordDetailPage({
         employeeNo: people.employeeNo,
       })
       .from(people)
-      .where(eq(people.status, 'active'))
+      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
       .orderBy(asc(people.lastName), asc(people.firstName))
 
     const siteOptions = await tx

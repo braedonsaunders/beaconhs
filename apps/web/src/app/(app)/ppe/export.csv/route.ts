@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
@@ -12,6 +12,8 @@ export const dynamic = 'force-dynamic'
 
 const SORTS = ['type', 'serial', 'size', 'status', 'holder'] as const
 
+const STATUS_VALUES = ['in_stock', 'issued', 'returned', 'damaged', 'discarded', 'expired'] as const
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
@@ -21,20 +23,26 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Mirror the register's status handling exactly: default to issued when no
+  // param is present, `all` clears the filter, and unknown values are ignored
+  // instead of reaching Postgres as invalid enum input.
+  const statusRaw = pickString(sp.status) ?? 'issued'
+  const statusFilter = (STATUS_VALUES as readonly string[]).includes(statusRaw)
+    ? (statusRaw as (typeof STATUS_VALUES)[number])
+    : undefined
   const ctx = await requireExportContext()
   // PPE has a single read tier (read.all); gate the tenant-wide export on it.
   assertCan(ctx, 'ppe.read.all')
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(ppeItems.serialNumber, term), ilike(ppeTypes.name, term))
       if (cond) filters.push(cond)
     }
-    if (statusFilter) filters.push(eq(ppeItems.status, statusFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    if (statusFilter) filters.push(eq(ppeItems.status, statusFilter))
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'serial'

@@ -90,7 +90,7 @@ export default async function NewPpeTypePage() {
         />
         <form
           action={createType}
-          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6"
+          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
@@ -110,14 +110,14 @@ export default async function NewPpeTypePage() {
             <div className="space-y-1.5">
               <Label htmlFor="everyDays">Inspection cadence (days)</Label>
               <Input id="everyDays" name="everyDays" type="number" min={1} placeholder="e.g. 30" />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Only used when the type is marked inspectable.
               </p>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="sizingScheme">Sizing scheme</Label>
               <Input id="sizingScheme" name="sizingScheme" placeholder="S, M, L, XL" />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Comma-separated list of valid sizes for this type.
               </p>
             </div>
@@ -134,7 +134,7 @@ export default async function NewPpeTypePage() {
               </Label>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
             <Link href="/ppe/types">
               <Button type="button" variant="outline">
                 Cancel

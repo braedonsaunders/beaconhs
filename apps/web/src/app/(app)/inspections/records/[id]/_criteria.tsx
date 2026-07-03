@@ -447,11 +447,12 @@ export function CriterionCard({
         </div>
       ) : null}
 
-      {/* Compliant note — pass / N-A, when the type allows it. */}
-      {allowCompliantNotes && answer && answer !== 'fail' && !locked ? (
+      {/* Compliant note — pass / N-A, when the type allows it. Criteria that
+          require a comment always get the field (the submit gate enforces it). */}
+      {(allowCompliantNotes || requiresComment) && answer && answer !== 'fail' && !locked ? (
         <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           <AutoTextarea
-            label="Notes (optional)"
+            label={requiresComment ? 'Comment (required)' : 'Notes (optional)'}
             initial={compliantNote}
             rows={1}
             placeholder="Anything worth noting?"
@@ -460,8 +461,9 @@ export function CriterionCard({
         </div>
       ) : null}
 
-      {/* Photos */}
-      {photoPreviews.length > 0 || (!locked && answer === 'fail') ? (
+      {/* Photos — always offered on fails and on photo-required criteria (the
+          submit gate refuses photo-required rows with no attachment). */}
+      {photoPreviews.length > 0 || (!locked && (answer === 'fail' || requiresPhoto)) ? (
         <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           {photoPreviews.length > 0 ? (
             <div className="mb-2 flex flex-wrap gap-2">

@@ -49,6 +49,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { InspectionsSubNav } from '../_sub-nav'
+import { parseDateFilter } from '../_datetime'
 import { NewInspectionDrawer, type NewInspectionType } from './_new-drawer'
 import { startInspection } from './_actions'
 
@@ -76,13 +77,18 @@ export default async function InspectionRecordsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Whitelist the status param — an unknown value would throw a Postgres enum
+  // error, so unrecognised values fall back to "no filter".
+  const statusRaw = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw) ? statusRaw : undefined
   const typeFilter = pickString(sp.type)
   const siteFilter = pickString(sp.site)
   const inspectorFilter = pickString(sp.inspector)
   const signedFilter = pickString(sp.signed) // 'yes' | 'no'
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
+  const dateFrom = parseDateFilter(dateFromRaw, 'start')
+  const dateTo = parseDateFilter(dateToRaw, 'end')
   const drawerKey = pickString(sp.drawer)
   const ctx = await requireRequestContext()
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'inspections.read.self')
@@ -109,14 +115,21 @@ export default async function InspectionRecordsPage({
       )
       if (c) filters.push(c)
     }
-    if (statusFilter) filters.push(eq(inspectionRecords.status, statusFilter as any))
+    if (statusFilter) {
+      filters.push(
+        eq(
+          inspectionRecords.status,
+          statusFilter as 'draft' | 'in_progress' | 'submitted' | 'closed',
+        ),
+      )
+    }
     if (typeFilter) filters.push(eq(inspectionRecords.typeId, typeFilter))
     if (siteFilter) filters.push(eq(inspectionRecords.siteOrgUnitId, siteFilter))
     if (inspectorFilter) filters.push(eq(inspectionRecords.inspectorTenantUserId, inspectorFilter))
     if (signedFilter === 'yes') filters.push(isNotNull(inspectionRecords.customerSignedAt))
     if (signedFilter === 'no') filters.push(isNull(inspectionRecords.customerSignedAt))
-    if (dateFromRaw) filters.push(gte(inspectionRecords.occurredAt, new Date(dateFromRaw)))
-    if (dateToRaw) filters.push(lte(inspectionRecords.occurredAt, new Date(dateToRaw)))
+    if (dateFrom) filters.push(gte(inspectionRecords.occurredAt, dateFrom))
+    if (dateTo) filters.push(lte(inspectionRecords.occurredAt, dateTo))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =
@@ -192,7 +205,7 @@ export default async function InspectionRecordsPage({
     const tt = await tx
       .select({ id: inspectionTypes.id, name: inspectionTypes.name })
       .from(inspectionTypes)
-      .where(eq(inspectionTypes.isPublished, true))
+      .where(and(eq(inspectionTypes.isPublished, true), isNull(inspectionTypes.deletedAt)))
       .orderBy(asc(inspectionTypes.name))
 
     const siteOptions = await tx
@@ -241,7 +254,7 @@ export default async function InspectionRecordsPage({
             })
             .from(inspectionTypes)
             .leftJoin(inspectionTypeCriteria, eq(inspectionTypeCriteria.typeId, inspectionTypes.id))
-            .where(eq(inspectionTypes.isPublished, true))
+            .where(and(eq(inspectionTypes.isPublished, true), isNull(inspectionTypes.deletedAt)))
             .groupBy(inspectionTypes.id)
             .orderBy(asc(inspectionTypes.name))
           return rows.map((t) => ({ ...t, criteriaCount: Number(t.criteriaCount ?? 0) }))
@@ -275,6 +288,18 @@ export default async function InspectionRecordsPage({
             <TableToolbar>
               <SearchInput placeholder="Search by reference / type / foreman" />
               <form className="flex items-center gap-1 text-xs">
+                {/* Carry every other active filter/sort so applying a date range
+                    doesn't wipe the rest of the URL state. */}
+                {Object.entries(sp)
+                  .filter(
+                    ([k, v]) =>
+                      !['dateFrom', 'dateTo', 'page'].includes(k) &&
+                      typeof v === 'string' &&
+                      v !== '',
+                  )
+                  .map(([k, v]) => (
+                    <input key={k} type="hidden" name={k} value={v as string} />
+                  ))}
                 <label className="flex items-center gap-1 text-slate-500">
                   Occurred from
                   <input

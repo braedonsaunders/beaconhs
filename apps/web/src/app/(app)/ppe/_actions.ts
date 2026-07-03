@@ -15,7 +15,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
@@ -374,6 +374,11 @@ export async function listPeopleForBulkPpe(): Promise<
   { id: string; name: string; employeeNo: string | null }[]
 > {
   const ctx = await requireRequestContext()
+  // People enumeration exists solely to pick an issuance holder — require an
+  // issuance-capable permission so it can't be used to list the tenant roster.
+  if (!can(ctx, 'ppe.issue') && !can(ctx, 'ppe.manage')) {
+    throw new Error('You do not have permission to issue PPE')
+  }
   return ctx.db(async (tx) => {
     const rows = await tx
       .select({

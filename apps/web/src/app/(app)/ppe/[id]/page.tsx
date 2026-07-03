@@ -16,7 +16,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   AlertTriangle,
   ClipboardCheck,
@@ -57,7 +57,6 @@ import {
   ppeIssueReports,
   ppeIssues,
   ppeItems,
-  ppeTypeInspectionCriteria,
   ppeTypes,
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
@@ -147,7 +146,8 @@ async function recordInspection(formData: FormData) {
   assertCan(ctx, 'ppe.inspect')
   const itemId = String(formData.get('itemId') ?? '')
   const typeId = String(formData.get('typeId') ?? '')
-  const kind = String(formData.get('kind') ?? 'pre_use') as 'pre_use' | 'annual'
+  const kindRaw = String(formData.get('kind') ?? 'pre_use')
+  const kind: 'pre_use' | 'annual' = kindRaw === 'annual' ? 'annual' : 'pre_use'
   const notes = String(formData.get('notes') ?? '').trim() || null
   const today = new Date().toISOString().slice(0, 10)
 
@@ -237,13 +237,19 @@ async function setStatus(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   const itemId = String(formData.get('itemId') ?? '')
-  const status = String(formData.get('status') ?? '') as
-    | 'in_stock'
-    | 'issued'
-    | 'returned'
-    | 'damaged'
-    | 'discarded'
-    | 'expired'
+  const STATUS_VALUES = [
+    'in_stock',
+    'issued',
+    'returned',
+    'damaged',
+    'discarded',
+    'expired',
+  ] as const
+  const statusRaw = String(formData.get('status') ?? '')
+  if (!(STATUS_VALUES as readonly string[]).includes(statusRaw)) {
+    throw new Error('Unknown PPE status')
+  }
+  const status = statusRaw as (typeof STATUS_VALUES)[number]
   const personId = String(formData.get('personId') ?? '').trim() || null
   const note = String(formData.get('note') ?? '').trim() || null
 
@@ -384,8 +390,16 @@ async function addCertificate(
         .where(eq(ppeItems.id, itemId))
       return row?.id ?? null
     })
-  } catch {
-    return { ok: false, error: `A certificate for ${year} already exists on this item.` }
+  } catch (e) {
+    // Only the (itemId, year) unique constraint means "duplicate year" — report
+    // everything else truthfully instead of masking real failures.
+    if ((e as { code?: string })?.code === '23505') {
+      return { ok: false, error: `A certificate for ${year} already exists on this item.` }
+    }
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Failed to save the certificate.',
+    }
   }
   await recordAudit(ctx, {
     entityType: 'ppe_annual_record',
@@ -411,11 +425,29 @@ async function deleteCertificate(formData: FormData) {
   const recordId = String(formData.get('id') ?? '').trim()
   const itemId = String(formData.get('itemId') ?? '').trim()
   if (!recordId || !itemId) return
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .delete(ppeAnnualRecords)
-      .where(and(eq(ppeAnnualRecords.id, recordId), eq(ppeAnnualRecords.itemId, itemId))),
-  )
+      .where(and(eq(ppeAnnualRecords.id, recordId), eq(ppeAnnualRecords.itemId, itemId)))
+    // Recompute the cached annual dates from whatever certificate history
+    // remains, so overdue alerts never run on a deleted record's dates.
+    const [latest] = await tx
+      .select({
+        inspectedOn: ppeAnnualRecords.inspectedOn,
+        nextDueOn: ppeAnnualRecords.nextDueOn,
+      })
+      .from(ppeAnnualRecords)
+      .where(eq(ppeAnnualRecords.itemId, itemId))
+      .orderBy(desc(ppeAnnualRecords.inspectedOn))
+      .limit(1)
+    await tx
+      .update(ppeItems)
+      .set({
+        lastAnnualInspectionOn: latest?.inspectedOn ?? null,
+        nextAnnualInspectionDue: latest?.nextDueOn ?? null,
+      })
+      .where(eq(ppeItems.id, itemId))
+  })
   await recordAudit(ctx, {
     entityType: 'ppe_annual_record',
     entityId: recordId,
@@ -486,62 +518,62 @@ export default async function PpeDetailPage({
       .limit(1)
     if (!row) return null
 
-    const [inspections, issuesLog, issueReports, annualRecords, peopleList, relatedCAs] =
-      await Promise.all([
-        tx
-          .select({
-            insp: ppeInspections,
-            insp_by: people,
-          })
-          .from(ppeInspections)
-          .leftJoin(people, eq(people.id, ppeInspections.inspectedByTenantUserId))
-          .where(eq(ppeInspections.itemId, id))
-          .orderBy(desc(ppeInspections.inspectedOn)),
-        tx
-          .select({ issue: ppeIssues, person: people })
-          .from(ppeIssues)
-          .leftJoin(people, eq(people.id, ppeIssues.personId))
-          .where(eq(ppeIssues.itemId, id))
-          .orderBy(desc(ppeIssues.occurredAt)),
-        tx
-          .select()
-          .from(ppeIssueReports)
-          .where(eq(ppeIssueReports.itemId, id))
-          .orderBy(desc(ppeIssueReports.reportedAt)),
-        tx
-          .select({
-            rec: ppeAnnualRecords,
-            person: people,
-            cert: attachments,
-          })
-          .from(ppeAnnualRecords)
-          .leftJoin(people, eq(people.id, ppeAnnualRecords.inspectedByPersonId))
-          .leftJoin(attachments, eq(attachments.id, ppeAnnualRecords.certificateAttachmentId))
-          .where(eq(ppeAnnualRecords.itemId, id))
-          .orderBy(desc(ppeAnnualRecords.inspectedOn)),
-        tx
-          .select({
-            id: people.id,
-            firstName: people.firstName,
-            lastName: people.lastName,
-            employeeNo: people.employeeNo,
-          })
-          .from(people)
-          .where(eq(people.status, 'active'))
-          .orderBy(asc(people.lastName), asc(people.firstName))
-          .limit(500),
-        tx
-          .select()
-          .from(correctiveActions)
-          .where(
-            and(
-              eq(correctiveActions.sourceEntityType, 'ppe_inspection'),
-              // matches any inspection row that belongs to this item; we filter
-              // client-side because the inspection ids set is small
-            ),
-          )
-          .limit(50),
-      ])
+    const [inspections, issuesLog, issueReports, annualRecords, peopleList] = await Promise.all([
+      tx
+        .select({ insp: ppeInspections })
+        .from(ppeInspections)
+        .where(eq(ppeInspections.itemId, id))
+        .orderBy(desc(ppeInspections.inspectedOn)),
+      tx
+        .select({ issue: ppeIssues, person: people })
+        .from(ppeIssues)
+        .leftJoin(people, eq(people.id, ppeIssues.personId))
+        .where(eq(ppeIssues.itemId, id))
+        .orderBy(desc(ppeIssues.occurredAt)),
+      tx
+        .select()
+        .from(ppeIssueReports)
+        .where(eq(ppeIssueReports.itemId, id))
+        .orderBy(desc(ppeIssueReports.reportedAt)),
+      tx
+        .select({
+          rec: ppeAnnualRecords,
+          person: people,
+          cert: attachments,
+        })
+        .from(ppeAnnualRecords)
+        .leftJoin(people, eq(people.id, ppeAnnualRecords.inspectedByPersonId))
+        .leftJoin(attachments, eq(attachments.id, ppeAnnualRecords.certificateAttachmentId))
+        .where(eq(ppeAnnualRecords.itemId, id))
+        .orderBy(desc(ppeAnnualRecords.inspectedOn)),
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+        })
+        .from(people)
+        .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+        .orderBy(asc(people.lastName), asc(people.firstName))
+        .limit(500),
+    ])
+
+    // CAs spawned from this item's inspections — filtered in SQL so the links
+    // stay correct no matter how many PPE-inspection CAs the tenant has.
+    const inspectionIds = inspections.map((i) => i.insp.id)
+    const itemCAs =
+      inspectionIds.length > 0
+        ? await tx
+            .select()
+            .from(correctiveActions)
+            .where(
+              and(
+                eq(correctiveActions.sourceEntityType, 'ppe_inspection'),
+                inArray(correctiveActions.sourceEntityId, inspectionIds),
+              ),
+            )
+        : []
 
     // The inspection flyout is launched per-kind, so we load both lists and
     // hand the drawer only the one matching the clicked button.
@@ -553,13 +585,6 @@ export default async function PpeDetailPage({
       .select({ id: ppeTypes.id, name: ppeTypes.name })
       .from(ppeTypes)
       .orderBy(asc(ppeTypes.name))
-
-    // Cross-reference CAs back to this item's inspections so we can show them
-    // in the inspection list.
-    const inspectionIds = new Set(inspections.map((i) => i.insp.id))
-    const itemCAs = relatedCAs.filter(
-      (ca) => ca.sourceEntityId && inspectionIds.has(ca.sourceEntityId),
-    )
 
     return {
       ...row,
@@ -783,15 +808,35 @@ export default async function PpeDetailPage({
                   disabled={!canManage}
                   updateAction={updatePpeField}
                 />
-                <LiveField
-                  id={id}
-                  field="size"
-                  label="Size"
-                  initialValue={item.size}
-                  placeholder="e.g. L"
-                  disabled={!canManage}
-                  updateAction={updatePpeField}
-                />
+                {type.sizingScheme && type.sizingScheme.length > 0 ? (
+                  // Types with a sizing scheme constrain the size to the
+                  // configured list (keeping an out-of-scheme current value
+                  // selectable so it isn't silently lost).
+                  <LiveSelect
+                    id={id}
+                    field="size"
+                    label="Size"
+                    initialValue={item.size}
+                    options={[
+                      ...(item.size && !type.sizingScheme.includes(item.size)
+                        ? [{ value: item.size, label: item.size }]
+                        : []),
+                      ...type.sizingScheme.map((s) => ({ value: s, label: s })),
+                    ]}
+                    disabled={!canManage}
+                    updateAction={updatePpeField}
+                  />
+                ) : (
+                  <LiveField
+                    id={id}
+                    field="size"
+                    label="Size"
+                    initialValue={item.size}
+                    placeholder="e.g. L"
+                    disabled={!canManage}
+                    updateAction={updatePpeField}
+                  />
+                )}
                 <LiveField
                   id={id}
                   field="purchaseDate"

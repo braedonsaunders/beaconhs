@@ -11,7 +11,9 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
-const RESPONSE_TYPES = ['pass_fail_na', 'yes_no', 'rating'] as const
+// 'rating' is withdrawn — it never had a fill-flow control. Unknown values
+// (including 'rating') fall back to pass_fail_na.
+const RESPONSE_TYPES = ['pass_fail_na', 'yes_no'] as const
 type ResponseType = (typeof RESPONSE_TYPES)[number]
 function parseResponseType(v: unknown): ResponseType {
   return typeof v === 'string' && (RESPONSE_TYPES as readonly string[]).includes(v)

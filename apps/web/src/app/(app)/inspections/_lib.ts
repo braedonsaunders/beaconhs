@@ -5,7 +5,7 @@
 // the pages that use it. Anything cross-module-worthy can be promoted to
 // /lib/ later.
 
-import { and, count, eq, or, sql } from 'drizzle-orm'
+import { count, eq, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
@@ -119,15 +119,25 @@ export function shouldSpawnCorrectiveAction(
  * latest description / severity / due date / assignee instead of spawning a
  * duplicate.
  *
- * Returns the corrective action id, or null if no CA should exist (answer
- * was changed back to pass/N-A, or severity dropped below high).
+ * Returns `{ caId, created }` — caId is null when no CA should exist (answer
+ * was changed back to pass/N-A, or severity dropped below high). When a NEW
+ * CA is spawned, its create audit (both the CA-side and record-side entries)
+ * is written here so every caller path is audited consistently.
  */
 export async function syncCorrectiveActionForCriterion(
   ctx: RequestContext,
   criterionRowId: string,
-): Promise<string | null> {
-  return ctx
-    .db(async (tx) => {
+): Promise<{ caId: string | null; created: boolean }> {
+  const result = await ctx.db(
+    async (
+      tx,
+    ): Promise<{
+      caId: string | null
+      created: boolean
+      recordId: string | null
+      severity: CriterionSeverity | null
+    }> => {
+      const none = { caId: null, created: false, recordId: null, severity: null }
       const [row] = await tx
         .select({
           c: inspectionRecordCriteria,
@@ -139,10 +149,10 @@ export async function syncCorrectiveActionForCriterion(
         .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
         .where(eq(inspectionRecordCriteria.id, criterionRowId))
         .limit(1)
-      if (!row) return null
+      if (!row) return none
 
       // Type-level kill switch
-      if (!row.type.enableCorrectiveActions) return null
+      if (!row.type.enableCorrectiveActions) return none
 
       const answer = row.c.answer as CriterionAnswer | null
       const severity = row.c.severity as CriterionSeverity | null
@@ -158,7 +168,7 @@ export async function syncCorrectiveActionForCriterion(
             .set({ correctiveActionId: null })
             .where(eq(inspectionRecordCriteria.id, criterionRowId))
         }
-        return null
+        return none
       }
 
       const title = `Inspection finding: ${row.c.questionTextSnapshot.slice(0, 80)}`
@@ -194,7 +204,12 @@ export async function syncCorrectiveActionForCriterion(
             actionTaken: row.c.actionTaken,
           })
           .where(eq(correctiveActions.id, row.c.correctiveActionId))
-        return row.c.correctiveActionId
+        return {
+          caId: row.c.correctiveActionId,
+          created: false,
+          recordId: row.c.recordId,
+          severity: caSeverity,
+        }
       }
 
       // Spawn a new CA
@@ -227,7 +242,7 @@ export async function syncCorrectiveActionForCriterion(
         })
         .returning()
 
-      if (!ca) return null
+      if (!ca) return none
 
       // Link back from the criterion row
       await tx
@@ -235,20 +250,26 @@ export async function syncCorrectiveActionForCriterion(
         .set({ correctiveActionId: ca.id })
         .where(eq(inspectionRecordCriteria.id, criterionRowId))
 
-      // Audit on the CA itself
-      await tx.execute(sql`SELECT 1`) // no-op to keep the tx open for the audit below
+      return { caId: ca.id, created: true, recordId: row.c.recordId, severity: caSeverity }
+    },
+  )
 
-      return ca.id
+  // Audit AFTER the transaction so a rollback never leaves a phantom audit row.
+  // Only newly-spawned CAs are audited — in-place updates are routine syncs.
+  if (result.created && result.caId && result.recordId) {
+    await recordAudit(ctx, {
+      entityType: 'corrective_action',
+      entityId: result.caId,
+      action: 'create',
+      summary: `Auto-spawned from inspection finding (severity ${result.severity ?? 'unknown'})`,
+      after: { sourceEntityType: 'inspection_record', sourceEntityId: result.recordId },
     })
-    .then(async (caId) => {
-      // Audit AFTER the transaction so the audit row isn't rolled back if a
-      // downstream caller errors.
-      if (!caId) return null
-      // We only audit when a NEW CA is spawned, not on each update. Determine
-      // that by checking whether the row's correctiveActionId was just set in
-      // this call — best-effort: compare against a freshly-fetched record.
-      return caId
+    await logRecordAudit(ctx, result.recordId, 'Auto-spawned corrective action', 'update', {
+      correctiveActionId: result.caId,
     })
+  }
+
+  return { caId: result.caId, created: result.created }
 }
 
 /**
@@ -277,6 +298,14 @@ export async function findIncompleteCriteria(
         if (!r.nonComplianceDescription)
           missing.push(`${r.questionTextSnapshot}: non-compliance description`)
       }
+      // Enforce the per-criterion requirements snapshotted from the type.
+      // N/A answers are exempt from photo evidence (nothing to photograph);
+      // a required comment is covered by the non-compliance description on
+      // fails and by the note on pass / N-A.
+      if (r.requiresPhoto && r.answer !== 'n_a' && (r.photoAttachmentIds ?? []).length === 0)
+        missing.push(`${r.questionTextSnapshot}: photo evidence`)
+      if (r.requiresComment && r.answer !== 'fail' && !r.compliantNote)
+        missing.push(`${r.questionTextSnapshot}: comment`)
     }
     return missing
   })

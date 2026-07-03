@@ -70,9 +70,12 @@ export async function sendPpeIssueEmail(
   // Recipients are whoever the sender explicitly typed — no silent fallback.
   // (This previously defaulted to EVERY active tenant user, which blasted the
   // whole company on a blank field; that behaviour is removed.)
-  const to = Array.from(new Set((options?.recipients ?? []).filter((s) => /@/.test(s))))
-  if (to.length === 0) return null
-  const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
+  const primary = Array.from(new Set((options?.recipients ?? []).filter((s) => /@/.test(s))))
+  if (primary.length === 0) return null
+  const cc = (options?.cc ?? []).filter((s) => /@/.test(s) && !primary.includes(s))
+  // The email transport has no separate CC lane — every address gets its own
+  // copy, so CC entries are merged into the delivery list.
+  const to = [...primary, ...cc]
 
   const typeName = data.type?.name ?? 'PPE'
   const holderName = data.activeIssue?.person
@@ -159,7 +162,7 @@ export async function sendPpeIssueEmail(
       ? `Emailed open issue report to ${to.length} recipient${to.length === 1 ? '' : 's'}`
       : `Emailed PPE item summary to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
     metadata: {
-      recipients: to,
+      recipients: primary,
       cc,
       channel: 'email',
       issueReportId: data.openReport?.report.id ?? null,
