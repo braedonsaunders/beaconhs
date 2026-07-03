@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   equipmentCategories,
   equipmentItems,
@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
   assertCan(ctx, 'equipment.read.site')
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    // Mirror the register: soft-deleted assets never leave through the export.
+    const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
     const scopeWhere = await moduleScopeWhere(ctx, tx, {
       prefix: 'equipment',
       siteCol: equipmentItems.currentSiteOrgUnitId,
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
   })
 
   await recordAudit(ctx, {
-    entityType: 'equipment_item',
+    entityType: 'equipment',
     action: 'export',
     summary: `Exported ${rows.length} equipment items to CSV`,
     metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },

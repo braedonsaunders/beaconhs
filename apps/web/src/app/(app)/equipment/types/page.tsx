@@ -14,7 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import {
+  equipmentCategories,
+  equipmentInspectionTypes,
+  equipmentItems,
+  equipmentTypes,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -82,7 +87,32 @@ async function deleteType(formData: FormData) {
   assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
-  await ctx.db((tx) => tx.delete(equipmentTypes).where(eq(equipmentTypes.id, id)))
+  await ctx.db(async (tx) => {
+    // Server-side usage check — the disabled delete button is advisory only.
+    // Items reference types with no ON DELETE action (a bare delete would 500
+    // on the FK), and inspection templates can be pinned to a type.
+    const [itemUse] = await tx
+      .select({ c: count() })
+      .from(equipmentItems)
+      .where(eq(equipmentItems.typeId, id))
+    const [templateUse] = await tx
+      .select({ c: count() })
+      .from(equipmentInspectionTypes)
+      .where(eq(equipmentInspectionTypes.appliesToTypeId, id))
+    const items = Number(itemUse?.c ?? 0)
+    const templates = Number(templateUse?.c ?? 0)
+    if (items > 0 || templates > 0) {
+      throw new Error(
+        `Cannot delete: ${[
+          items > 0 ? `${items} item${items === 1 ? '' : 's'}` : null,
+          templates > 0 ? `${templates} inspection type${templates === 1 ? '' : 's'}` : null,
+        ]
+          .filter(Boolean)
+          .join(' and ')} reference this type. Reassign them first.`,
+      )
+    }
+    await tx.delete(equipmentTypes).where(eq(equipmentTypes.id, id))
+  })
   await recordAudit(ctx, {
     entityType: 'equipment_type',
     entityId: id,

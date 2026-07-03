@@ -22,17 +22,6 @@ export type VehicleLogSelectorOption = {
   hint?: string | null
 }
 
-export type VehicleLogActivity = {
-  count: number
-  hours: string | null
-  businessKm: number | null
-  personalKm: number | null
-  siteOrgUnitId: string | null
-  siteName: string | null
-  sourceLabel: string | null
-  status: string
-}
-
 export type VehicleLogImportSource = {
   id: string
   name: string
@@ -40,10 +29,6 @@ export type VehicleLogImportSource = {
   connectorLabel: string
   status: string
   active: boolean
-  monthRowCount: number
-  matchedRowCount: number
-  matchedDayCount: number
-  onDemand: boolean
   description: string | null
 }
 
@@ -69,7 +54,6 @@ export type VehicleLogWorkspaceRow = {
   day: number
   weekday: string
   isWeekend: boolean
-  activity: VehicleLogActivity | null
   entry: VehicleLogEntryDraft
 }
 
@@ -96,15 +80,12 @@ export type VehicleLogWorkspace = {
   importSources: {
     configuredSourceCount: number
     activeSourceCount: number
-    monthRowCount: number
     canConfigureSources: boolean
     sources: VehicleLogImportSource[]
   }
   totals: {
     loggedDays: number
     importSourceDays: number
-    pendingActivityDays: number
-    conflictDays: number
     businessKm: number
     personalKm: number
     totalKm: number
@@ -143,7 +124,6 @@ export type ApplyVehicleLogImportInput = {
 export type ApplyVehicleLogImportResult = {
   created: number
   updated: number
-  conflicts: number
   skipped: number
   pulled: number
   resolved: number
@@ -259,16 +239,12 @@ function buildImportSources(connections: SyncConnectionRow[]): VehicleLogImportS
       connectorLabel: config.label,
       status: connection.status,
       active: connection.status === 'connected' && config.enabled,
-      monthRowCount: 0,
-      matchedRowCount: 0,
-      matchedDayCount: 0,
-      onDemand: true,
       description: config.description,
     }
   })
 }
 
-function computeTotalKm(input: {
+export function computeTotalKm(input: {
   entryMode: VehicleLogMode
   startOdometer?: number | null
   endOdometer?: number | null
@@ -367,6 +343,7 @@ export async function loadVehicleLogWorkspace(
         })
         .from(equipmentItems)
         .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+        .where(isNull(equipmentItems.deletedAt))
         .orderBy(asc(equipmentItems.assetTag))
         .limit(1000),
       tx
@@ -416,11 +393,10 @@ export async function loadVehicleLogWorkspace(
     const selectedVehicle = opts.equipmentItemId
       ? (vehicleRows.find((v) => v.id === opts.equipmentItemId) ?? null)
       : null
-    const baseImportSources = buildImportSources(connectionRows)
-    const baseImportSourceMeta = {
-      configuredSourceCount: baseImportSources.length,
-      activeSourceCount: baseImportSources.filter((source) => source.active).length,
-      monthRowCount: baseImportSources.reduce((sum, source) => sum + source.monthRowCount, 0),
+    const importSources = buildImportSources(connectionRows)
+    const importSourceMeta = {
+      configuredSourceCount: importSources.length,
+      activeSourceCount: importSources.filter((source) => source.active).length,
       canConfigureSources: can(ctx, 'admin.integrations.manage'),
     }
 
@@ -445,12 +421,10 @@ export async function loadVehicleLogWorkspace(
         vehicles,
         sites,
         rows: [],
-        importSources: { ...baseImportSourceMeta, sources: baseImportSources },
+        importSources: { ...importSourceMeta, sources: importSources },
         totals: {
           loggedDays: 0,
           importSourceDays: 0,
-          pendingActivityDays: 0,
-          conflictDays: 0,
           businessKm: 0,
           personalKm: 0,
           totalKm: 0,
@@ -471,14 +445,6 @@ export async function loadVehicleLogWorkspace(
           lt(truckLogEntries.entryDate, endExclusive),
         ),
       )
-    const importSources = buildImportSources(connectionRows)
-    const importSourceMeta = {
-      configuredSourceCount: importSources.length,
-      activeSourceCount: importSources.filter((source) => source.active).length,
-      monthRowCount: importSources.reduce((sum, source) => sum + source.monthRowCount, 0),
-      canConfigureSources: can(ctx, 'admin.integrations.manage'),
-    }
-
     const entryByDate = new Map(entries.map((entry) => [entry.entryDate, entry]))
     const rows: VehicleLogWorkspaceRow[] = []
     let businessKm = 0
@@ -487,15 +453,11 @@ export async function loadVehicleLogWorkspace(
     let hoursOnSite = 0
     let crewCount = 0
     let importSourceDays = 0
-    let pendingActivityDays = 0
-    let conflictDays = 0
     for (let day = 1; day <= dim; day++) {
       const date = dateKey(year, month, day)
       const dateObj = new Date(`${date}T00:00:00`)
       const entry = entryDraft(entryByDate.get(date) ?? null, date, mode)
-      const activity = null
       if (entry.importStatus === 'imported') importSourceDays += 1
-      if (entry.importStatus === 'conflict') conflictDays += 1
       businessKm += entry.businessKm ?? 0
       personalKm += entry.personalKm ?? 0
       totalKm += entry.totalKm ?? 0
@@ -506,7 +468,6 @@ export async function loadVehicleLogWorkspace(
         day,
         weekday: dateObj.toLocaleDateString(undefined, { weekday: 'short' }),
         isWeekend: dateObj.getDay() === 0 || dateObj.getDay() === 6,
-        activity,
         entry,
       })
     }
@@ -535,8 +496,6 @@ export async function loadVehicleLogWorkspace(
       totals: {
         loggedDays: entries.length,
         importSourceDays,
-        pendingActivityDays,
-        conflictDays,
         businessKm,
         personalKm,
         totalKm,
@@ -1010,7 +969,6 @@ export async function applyVehicleLogImportToVehicleLog(
     const existingByDate = new Map(existingEntries.map((entry) => [entry.entryDate, entry]))
     let created = 0
     let updated = 0
-    let conflicts = 0
 
     for (const entry of byDate.values()) {
       const existing = existingByDate.get(entry.date)
@@ -1061,7 +1019,7 @@ export async function applyVehicleLogImportToVehicleLog(
       else created += 1
     }
 
-    return { created, updated, conflicts, skipped, pulled: imported.pulled, resolved: byDate.size }
+    return { created, updated, skipped, pulled: imported.pulled, resolved: byDate.size }
   })
 
   await recordAudit(ctx, {

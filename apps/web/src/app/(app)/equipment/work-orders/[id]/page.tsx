@@ -7,6 +7,7 @@ import { Badge, Button, DetailHeader, Input, Label, Select, Textarea } from '@be
 import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
@@ -29,6 +30,8 @@ const STATUSES = [
   'assigned',
   'in_progress',
   'awaiting_parts',
+  'repaired',
+  'verified',
   'closed',
   'cancelled',
 ] as const
@@ -253,6 +256,16 @@ export default async function WorkOrderDetailPage({
       .where(eq(equipmentWorkOrders.id, id))
       .limit(1)
     if (!row) return null
+    // Read-tier guard: all → any work order; site → work orders on assets at
+    // the caller's sites; self → work orders they opened / are assigned / that
+    // name them as reporter.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'equipment',
+      ownerIds: [row.wo.openedByTenantUserId, row.wo.assignedToTenantUserId],
+      siteId: row.item?.currentSiteOrgUnitId,
+      personId: row.wo.reportedByPersonId,
+    })
+    if (!visible) return null
     const [assignees, reporters] = await Promise.all([
       tx
         .select({

@@ -21,8 +21,9 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
-import { requireRequestContext } from '@/lib/auth'
+import { assertCan, can } from '@beaconhs/tenant'
+import { requireExportContext, requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
 
@@ -83,7 +84,7 @@ export async function bulkTransferEquipmentToSite(args: {
   if ('editable' in result && result.editable) {
     for (const id of result.editable) {
       await recordAudit(ctx, {
-        entityType: 'equipment_item',
+        entityType: 'equipment',
         entityId: id,
         action: 'update',
         summary: `Bulk action: transferred to site "${siteRow.name}"`,
@@ -92,7 +93,7 @@ export async function bulkTransferEquipmentToSite(args: {
       })
     }
     await recordAudit(ctx, {
-      entityType: 'equipment_item',
+      entityType: 'equipment',
       action: 'update',
       summary: `Bulk transferred ${result.editable.length} item${result.editable.length === 1 ? '' : 's'} to ${siteRow.name}`,
       metadata: {
@@ -154,7 +155,7 @@ export async function bulkAssignEquipmentToHolder(args: {
   if ('editable' in result && result.editable) {
     for (const id of result.editable) {
       await recordAudit(ctx, {
-        entityType: 'equipment_item',
+        entityType: 'equipment',
         entityId: id,
         action: 'update',
         summary: `Bulk action: assigned to ${person.firstName} ${person.lastName}`,
@@ -163,7 +164,7 @@ export async function bulkAssignEquipmentToHolder(args: {
       })
     }
     await recordAudit(ctx, {
-      entityType: 'equipment_item',
+      entityType: 'equipment',
       action: 'update',
       summary: `Bulk assigned ${result.editable.length} item${result.editable.length === 1 ? '' : 's'} to ${person.firstName} ${person.lastName}`,
       metadata: {
@@ -224,7 +225,7 @@ export async function bulkSetEquipmentStatus(args: {
   if ('editable' in result && result.editable) {
     for (const id of result.editable) {
       await recordAudit(ctx, {
-        entityType: 'equipment_item',
+        entityType: 'equipment',
         entityId: id,
         action: 'update',
         summary: `Bulk action: set status ${args.status}`,
@@ -233,7 +234,7 @@ export async function bulkSetEquipmentStatus(args: {
       })
     }
     await recordAudit(ctx, {
-      entityType: 'equipment_item',
+      entityType: 'equipment',
       action: 'update',
       summary: `Bulk set status to ${args.status} on ${result.editable.length} item${result.editable.length === 1 ? '' : 's'}`,
       metadata: {
@@ -252,14 +253,21 @@ export async function bulkSetEquipmentStatus(args: {
 export async function bulkExportEquipmentCsv(args: {
   equipmentIds: string[]
 }): Promise<BulkCsvResult> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.read.all')
+  // Same gate as the /equipment/export.csv route: admin.data.export (with the
+  // impersonation guard) plus the equipment read tier, scope-bounded below.
+  const ctx = await requireExportContext()
+  assertCan(ctx, 'equipment.read.site')
   if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
   const ids = args.equipmentIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
 
-  const rows = await ctx.db((tx) =>
-    tx
+  const rows = await ctx.db(async (tx) => {
+    const scope = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
+    return tx
       .select({
         item: equipmentItems,
         type: equipmentTypes,
@@ -270,9 +278,15 @@ export async function bulkExportEquipmentCsv(args: {
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-      .where(inArray(equipmentItems.id, ids))
-      .orderBy(asc(equipmentItems.assetTag)),
-  )
+      .where(
+        and(
+          inArray(equipmentItems.id, ids),
+          isNull(equipmentItems.deletedAt),
+          ...(scope ? [scope] : []),
+        ),
+      )
+      .orderBy(asc(equipmentItems.assetTag))
+  })
 
   const headers = [
     'Asset tag',
@@ -305,7 +319,7 @@ export async function bulkExportEquipmentCsv(args: {
 
   for (const { item } of rows) {
     await recordAudit(ctx, {
-      entityType: 'equipment_item',
+      entityType: 'equipment',
       entityId: item.id,
       action: 'export',
       summary: 'Bulk action: exported to CSV',
@@ -313,7 +327,7 @@ export async function bulkExportEquipmentCsv(args: {
     })
   }
   await recordAudit(ctx, {
-    entityType: 'equipment_item',
+    entityType: 'equipment',
     action: 'export',
     summary: `Bulk exported ${rows.length} equipment item${rows.length === 1 ? '' : 's'} to CSV`,
     metadata: { batchId, equipmentIds: rows.map((r) => r.item.id), format: 'csv' },
@@ -361,17 +375,22 @@ export async function listPeopleForBulkHolder(): Promise<
 }
 
 // ---------- Check-in (sign in) ----------------------------------------------
-// Shared by the /equipment/station page and the dashboard "My equipment"
-// widget's one-tap check-in. Returns the item to base: closes the open checkout,
-// clears the holder, and flips the item back to available. Condition defaults to
-// "good" when the caller doesn't supply one (the dashboard one-tap case).
+// Shared by the /equipment/station page, the item-detail check-in drawer, and
+// the dashboard "My equipment" widget's one-tap check-in. Returns the item to
+// base: closes the open checkout, clears the holder, and flips the item back to
+// available (when it's still in service). Condition defaults to "good" when the
+// caller doesn't supply one (the dashboard one-tap case).
+//
+// Permission model: equipment.manage may close any checkout; everyone else may
+// only check in equipment currently checked out to their own person record —
+// the dashboard widget's entire audience.
 
 const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
 type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
 
 export async function checkInEquipment(formData: FormData) {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
+  const canManage = ctx.isSuperAdmin || can(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '').trim()
   const rawCondition = String(formData.get('returnedCondition') ?? 'good').trim()
   const condition: ReturnCondition = (RETURN_CONDITIONS as readonly string[]).includes(rawCondition)
@@ -388,6 +407,22 @@ export async function checkInEquipment(formData: FormData) {
       .limit(1)
     // Already returned (or unknown) — nothing to do; keeps the action idempotent.
     if (!co || co.returnedAt) return null
+    if (!canManage) {
+      // Self-service: only the person the item is checked out to may return it.
+      const [me] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(eq(people.userId, ctx.userId))
+        .limit(1)
+      if (!me || co.holderPersonId !== me.id) {
+        throw new Error('Forbidden: you can only check in equipment issued to you')
+      }
+    }
+    const [item] = await tx
+      .select({ status: equipmentItems.status })
+      .from(equipmentItems)
+      .where(eq(equipmentItems.id, co.equipmentItemId))
+      .limit(1)
     await tx
       .update(equipmentCheckouts)
       .set({
@@ -401,7 +436,7 @@ export async function checkInEquipment(formData: FormData) {
       .update(equipmentItems)
       .set({
         currentHolderPersonId: null,
-        isAvailableForCheckout: true,
+        isAvailableForCheckout: item?.status === 'in_service',
         lastSeenAt: new Date(),
       })
       .where(eq(equipmentItems.id, co.equipmentItemId))
@@ -416,13 +451,15 @@ export async function checkInEquipment(formData: FormData) {
     return co.equipmentItemId
   })
 
-  await recordAudit(ctx, {
-    entityType: 'equipment_checkout',
-    entityId: id,
-    action: 'update',
-    summary: 'Checked equipment in',
-    after: { condition, returnedNotes },
-  })
+  if (itemId) {
+    await recordAudit(ctx, {
+      entityType: 'equipment_checkout',
+      entityId: id,
+      action: 'update',
+      summary: 'Checked equipment in',
+      after: { condition, returnedNotes },
+    })
+  }
   revalidatePath('/equipment/station')
   revalidatePath('/dashboard')
   if (itemId) revalidatePath(`/equipment/${itemId}`)

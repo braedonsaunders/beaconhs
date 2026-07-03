@@ -1,11 +1,10 @@
-import { randomBytes } from 'crypto'
 import Link from 'next/link'
-import { asc, inArray } from 'drizzle-orm'
+import { and, asc, inArray, isNull } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { equipmentItems } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { moduleScopeWhere } from '@/lib/visibility'
 
 export const metadata = { title: 'Bulk QR sheet' }
 export const dynamic = 'force-dynamic'
@@ -16,11 +15,16 @@ function pickStrings(v: string | string[] | undefined): string[] {
   return []
 }
 
+function pickString(v: string | string[] | undefined): string | null {
+  if (Array.isArray(v)) return v[0] ?? null
+  return typeof v === 'string' && v ? v : null
+}
+
 /**
  * Server-rendered print-ready QR sheet — a 4×3 grid (12 labels per A4 page)
- * with the asset tag, name, type-name, and scan URL beneath each code.
- * Pure server-side: hits /print directly with `?ids=…` and pipes a fresh QR
- * SVG per item via the `qrcode` lib.
+ * with the asset tag, name, and scan URL beneath each code. Read-only: the
+ * bulk-QR token stamp + export audit happen in `generateBulkQrSheet` (the
+ * picker's server action) so re-rendering this page has no side effects.
  */
 export default async function BulkQrPrintPage({
   searchParams,
@@ -29,6 +33,7 @@ export default async function BulkQrPrintPage({
 }) {
   const sp = await searchParams
   const ids = pickStrings(sp.ids)
+  const bulkToken = pickString(sp.token)
   if (ids.length === 0) {
     return (
       <div className="p-12 text-center">
@@ -44,42 +49,28 @@ export default async function BulkQrPrintPage({
   }
 
   const ctx = await requireRequestContext()
-  // Printable export of equipment data (asset tags, names, scan URLs) that also
-  // stamps a traceable bulk-QR token — gate on the equipment read tier.
+  // Printable export of equipment data (asset tags, names, scan URLs) — gate on
+  // the equipment read tier and bound the read to the caller's scope.
   assertCan(ctx, 'equipment.read.site')
-  const bulkToken = randomBytes(8).toString('base64url')
 
   const items = await ctx.db(async (tx) => {
-    const rows = await tx
+    const scope = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
+    return tx
       .select()
       .from(equipmentItems)
-      .where(inArray(equipmentItems.id, ids))
+      .where(
+        and(
+          inArray(equipmentItems.id, ids),
+          isNull(equipmentItems.deletedAt),
+          ...(scope ? [scope] : []),
+        ),
+      )
       .orderBy(asc(equipmentItems.assetTag))
-    // Stamp the bulk-QR token + timestamp so re-printing a sheet can be
-    // traced back through the audit log.
-    if (rows.length > 0) {
-      await tx
-        .update(equipmentItems)
-        .set({ bulkQrToken: bulkToken, bulkQrGeneratedAt: new Date() })
-        .where(
-          inArray(
-            equipmentItems.id,
-            rows.map((r) => r.id),
-          ),
-        )
-    }
-    return rows
   })
-
-  await recordAudit(ctx, {
-    entityType: 'equipment_item',
-    action: 'export',
-    summary: `Generated bulk QR sheet for ${items.length} items`,
-    metadata: { bulkToken, itemIds: items.map((i) => i.id) },
-  })
-  // NOTE: do NOT revalidatePath() here — Next 16 throws when revalidation runs
-  // during render. The picker page is `force-dynamic`, so it re-reads the
-  // stamped tokens on its next visit anyway.
 
   const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
   const labels = await Promise.all(
@@ -124,8 +115,13 @@ export default async function BulkQrPrintPage({
       `}</style>
       <div className="no-print mb-4 flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-sm">
         <div>
-          <span className="font-medium">Bulk QR sheet</span> · {items.length} labels · token{' '}
-          <code className="font-mono text-xs">{bulkToken}</code>
+          <span className="font-medium">Bulk QR sheet</span> · {items.length} labels
+          {bulkToken ? (
+            <>
+              {' '}
+              · token <code className="font-mono text-xs">{bulkToken}</code>
+            </>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <Link href="/equipment/qr/bulk" className="text-teal-700 hover:underline">

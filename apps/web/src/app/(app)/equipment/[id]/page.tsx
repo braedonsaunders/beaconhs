@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import {
   Activity,
   ArrowLeftRight,
@@ -49,6 +49,7 @@ import { pickString } from '@/lib/list-params'
 import { LiveField, LivePersonSelect, LiveSelect, LiveToggle } from '@/components/live-field'
 import {
   attachments,
+  equipmentCategories,
   equipmentCheckouts,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
@@ -62,6 +63,7 @@ import {
   tenantUsers,
   user,
 } from '@beaconhs/db/schema'
+import type { Database } from '@beaconhs/db'
 import { deleteObject, publicUrl } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -74,6 +76,8 @@ import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { upsertVehicleLogEntry } from '../vehicle-log/_service'
+import { checkInEquipment } from '../_actions'
+import { createEquipmentWorkOrder } from '../work-orders/_lib'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +93,36 @@ const TABS = [
 type Tab = (typeof TABS)[number]
 
 const EQUIPMENT_STATUSES = ['in_service', 'out_of_service', 'in_repair', 'lost', 'retired'] as const
+
+// Recompute the cached availability flag from its inputs (see the schema note
+// on equipment_items.is_available_for_checkout): available ⇔ no holder AND
+// in service AND not missing AND no open checkout. Every action here that can
+// change one of those inputs calls this so the register's availability filter
+// and the station's available count never drift.
+async function refreshAvailability(tx: Database, itemId: string) {
+  const [item] = await tx
+    .select({
+      status: equipmentItems.status,
+      holder: equipmentItems.currentHolderPersonId,
+      isMissing: equipmentItems.isMissing,
+    })
+    .from(equipmentItems)
+    .where(eq(equipmentItems.id, itemId))
+    .limit(1)
+  if (!item) return
+  const [open] = await tx
+    .select({ id: equipmentCheckouts.id })
+    .from(equipmentCheckouts)
+    .where(
+      and(eq(equipmentCheckouts.equipmentItemId, itemId), isNull(equipmentCheckouts.returnedAt)),
+    )
+    .limit(1)
+  const available = item.holder === null && item.status === 'in_service' && !item.isMissing && !open
+  await tx
+    .update(equipmentItems)
+    .set({ isAvailableForCheckout: available })
+    .where(eq(equipmentItems.id, itemId))
+}
 
 // ---------------- Server actions ----------------
 
@@ -109,7 +143,12 @@ async function updateEquipmentField(formData: FormData) {
   const TEXT = new Set(['name', 'assetTag', 'serialNumber', 'description', 'notes'])
   const TEXT_NOTNULL = new Set(['name', 'assetTag'])
   const DATE_ONLY = new Set(['purchaseDate', 'warrantyExpiresOn'])
-  const NULLABLE_IDS = new Set(['typeId', 'currentSiteOrgUnitId', 'currentHolderPersonId'])
+  const NULLABLE_IDS = new Set([
+    'typeId',
+    'categoryId',
+    'currentSiteOrgUnitId',
+    'currentHolderPersonId',
+  ])
   const BOOLS = new Set(['requiresPreUseInspection', 'requiresAnnualInspection'])
   const ENUMS: Record<string, readonly string[]> = { status: EQUIPMENT_STATUSES }
 
@@ -135,13 +174,17 @@ async function updateEquipmentField(formData: FormData) {
     val = trimmed === '' ? null : trimmed
   }
 
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(equipmentItems)
       // Editing the asset commits a draft (clears the Draft badge).
       .set({ [field]: val, isDraft: false } as any)
-      .where(eq(equipmentItems.id, id)),
-  )
+      .where(eq(equipmentItems.id, id))
+    // Holder/status feed the cached availability flag.
+    if (field === 'currentHolderPersonId' || field === 'status') {
+      await refreshAvailability(tx, id)
+    }
+  })
   await recordAudit(ctx, {
     entityType: 'equipment',
     entityId: id,
@@ -168,6 +211,8 @@ async function reportMissing(formData: FormData) {
       .update(equipmentItems)
       .set({
         isMissing: true,
+        // A missing item is never available for check-out.
+        isAvailableForCheckout: false,
         // Snapshot fields specific to the missing-report workflow.
         missingReportedAt: now,
         missingReportedBy: ctx.userId,
@@ -204,8 +249,8 @@ async function reportFound(formData: FormData) {
   const foundNotes = String(formData.get('foundNotes') ?? '').trim() || null
   if (!id) return
   const now = new Date()
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(equipmentItems)
       .set({
         isMissing: false,
@@ -217,8 +262,9 @@ async function reportFound(formData: FormData) {
           : equipmentItems.missingNotes,
         lastSeenAt: now,
       })
-      .where(eq(equipmentItems.id, id)),
-  )
+      .where(eq(equipmentItems.id, id))
+    await refreshAvailability(tx, id)
+  })
   await recordAudit(ctx, {
     entityType: 'equipment',
     entityId: id,
@@ -260,6 +306,7 @@ async function transferLocation(formData: FormData) {
       recordedByTenantUserId: ctx.membership?.id,
       note,
     })
+    await refreshAvailability(tx, id)
   })
   await recordAudit(ctx, {
     entityType: 'equipment',
@@ -322,6 +369,27 @@ async function checkOutFromItem(formData: FormData) {
   if (!itemId) return
 
   const coId = await ctx.db(async (tx) => {
+    // Server-side guards mirroring the station core — the UI hides the button
+    // while a checkout is open, but a double submit / second tab must not
+    // create two open checkouts or check out an unserviceable asset.
+    const [item] = await tx
+      .select({ status: equipmentItems.status })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, itemId), isNull(equipmentItems.deletedAt)))
+      .limit(1)
+    if (!item) throw new Error('Equipment item not found')
+    if (item.status !== 'in_service') {
+      throw new Error(`Cannot check out: item is ${item.status.replace(/_/g, ' ')}`)
+    }
+    const [open] = await tx
+      .select({ id: equipmentCheckouts.id })
+      .from(equipmentCheckouts)
+      .where(
+        and(eq(equipmentCheckouts.equipmentItemId, itemId), isNull(equipmentCheckouts.returnedAt)),
+      )
+      .limit(1)
+    if (open) throw new Error('This item is already checked out')
+
     const [row] = await tx
       .insert(equipmentCheckouts)
       .values({
@@ -346,6 +414,14 @@ async function checkOutFromItem(formData: FormData) {
         isMissing: false,
       })
       .where(eq(equipmentItems.id, itemId))
+    await tx.insert(equipmentLocationHistory).values({
+      tenantId: ctx.tenantId,
+      itemId,
+      siteOrgUnitId: destinationOrgUnitId,
+      holderPersonId,
+      recordedByTenantUserId: ctx.membership?.id,
+      note: `Checked out${notes ? ` — ${notes}` : ''}`,
+    })
     return row?.id
   })
   await recordAudit(ctx, {
@@ -359,42 +435,19 @@ async function checkOutFromItem(formData: FormData) {
   redirect(`/equipment/${itemId}?tab=location`)
 }
 
+// Delegates to the shared checkInEquipment action, which verifies the checkout
+// is still open, validates the condition, writes the location-history row,
+// audits, and derives availability from the item's status.
 async function checkInFromItem(formData: FormData) {
   'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
   const checkoutId = String(formData.get('checkoutId') ?? '').trim()
   const itemId = String(formData.get('itemId') ?? '').trim()
-  const condition = String(formData.get('returnedCondition') ?? 'good').trim() || 'good'
-  const returnedNotes = String(formData.get('returnedNotes') ?? '').trim() || null
   if (!checkoutId || !itemId) return
-  await ctx.db(async (tx) => {
-    await tx
-      .update(equipmentCheckouts)
-      .set({
-        returnedAt: new Date(),
-        returnedCondition: condition as any,
-        returnedNotes,
-        checkedInByTenantUserId: ctx.membership?.id,
-      })
-      .where(eq(equipmentCheckouts.id, checkoutId))
-    await tx
-      .update(equipmentItems)
-      .set({
-        currentHolderPersonId: null,
-        isAvailableForCheckout: true,
-        lastSeenAt: new Date(),
-      })
-      .where(eq(equipmentItems.id, itemId))
-  })
-  await recordAudit(ctx, {
-    entityType: 'equipment_checkout',
-    entityId: checkoutId,
-    action: 'update',
-    summary: 'Checked equipment in',
-    after: { condition, returnedNotes },
-  })
-  revalidatePath(`/equipment/${itemId}`)
+  const fd = new FormData()
+  fd.set('id', checkoutId)
+  fd.set('returnedCondition', String(formData.get('returnedCondition') ?? 'good'))
+  fd.set('returnedNotes', String(formData.get('returnedNotes') ?? ''))
+  await checkInEquipment(fd)
   redirect(`/equipment/${itemId}?tab=location`)
 }
 
@@ -422,42 +475,17 @@ async function createWorkOrderAction(input: {
   if (!itemId || !summary.trim()) return { ok: false, error: 'Summary is required.' }
   if (!PRIORITIES.includes(priority)) return { ok: false, error: 'Invalid priority.' }
 
-  const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const counts = await tx
-      .select({ c: sql<number>`count(*)::int` })
-      .from(equipmentWorkOrders)
-      .where(sql`extract(year from ${equipmentWorkOrders.openedAt}) = ${year}`)
-    const c = counts[0]?.c ?? 0
-    const reference = `WO-${year}-${String(Number(c) + 1).padStart(4, '0')}`
-    const [inserted] = await tx
-      .insert(equipmentWorkOrders)
-      .values({
-        tenantId: ctx.tenantId,
-        itemId,
-        reference,
-        summary: summary.trim(),
-        description,
-        priority,
-        status: 'open',
-        reportedByPersonId,
-        assignedToTenantUserId,
-        openedByTenantUserId: ctx.membership?.id,
-      } as any)
-      .returning()
-    return inserted
+  // Shared creator: reference generation + audit + on_create module flows +
+  // revalidation live in one place with the full-page /work-orders/new form.
+  const row = await createEquipmentWorkOrder(ctx, {
+    itemId,
+    summary: summary.trim(),
+    description,
+    priority,
+    assignedToTenantUserId,
+    reportedByPersonId,
   })
   if (!row) return { ok: false, error: 'Failed to insert work order.' }
-
-  await recordAudit(ctx, {
-    entityType: 'equipment_work_order',
-    entityId: row.id,
-    action: 'create',
-    summary: `Opened work order ${row.reference}: ${summary}`,
-    after: { reference: row.reference, itemId, priority, summary, status: 'open' },
-  })
-  revalidatePath('/equipment/work-orders')
-  revalidatePath(`/equipment/${itemId}`)
   return { ok: true }
 }
 
@@ -526,7 +554,11 @@ async function attachEquipmentFile(input: {
   const kind = EQUIPMENT_FILE_KINDS.includes(input.kind) ? input.kind : 'other'
 
   const att = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).limit(1)
+    const [row] = await tx
+      .select()
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId))
+      .limit(1)
     return row
   })
   if (!att) return { ok: false, error: 'Uploaded file not found.' }
@@ -560,7 +592,11 @@ async function deleteEquipmentFile(formData: FormData) {
   if (!itemId || !attachmentId) return
 
   const att = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).limit(1)
+    const [row] = await tx
+      .select()
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId))
+      .limit(1)
     return row
   })
   // Only delete a document actually tagged to this asset (defence in depth).
@@ -607,6 +643,7 @@ export default async function EquipmentDetailPage({
       .select({
         item: equipmentItems,
         type: equipmentTypes,
+        category: equipmentCategories,
         site: orgUnits,
         holder: people,
         missingReporter: { id: user.id, name: user.name },
@@ -614,11 +651,12 @@ export default async function EquipmentDetailPage({
       })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
       .leftJoin(user, eq(user.id, equipmentItems.missingReportedBy))
       .leftJoin(attachments, eq(attachments.id, equipmentItems.photoAttachmentId))
-      .where(eq(equipmentItems.id, id))
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
       .limit(1)
     if (!row) return null
 
@@ -643,6 +681,7 @@ export default async function EquipmentDetailPage({
       logRows,
       checkoutRows,
       allTypes,
+      allCategories,
     ] = await Promise.all([
       tx
         .select({ history: equipmentLocationHistory, site: orgUnits, holder: people })
@@ -658,7 +697,12 @@ export default async function EquipmentDetailPage({
         .where(eq(equipmentWorkOrders.itemId, id))
         .orderBy(desc(equipmentWorkOrders.openedAt))
         .limit(50),
-      tx.select().from(orgUnits).orderBy(asc(orgUnits.name)).limit(200),
+      tx
+        .select()
+        .from(orgUnits)
+        .where(isNull(orgUnits.deletedAt))
+        .orderBy(asc(orgUnits.name))
+        .limit(500),
       tx
         .select()
         .from(people)
@@ -694,7 +738,12 @@ export default async function EquipmentDetailPage({
           equipmentInspectionTypes,
           eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
         )
-        .where(eq(equipmentInspectionRecords.equipmentItemId, id))
+        .where(
+          and(
+            eq(equipmentInspectionRecords.equipmentItemId, id),
+            isNull(equipmentInspectionRecords.deletedAt),
+          ),
+        )
         .orderBy(desc(equipmentInspectionRecords.occurredAt))
         .limit(50),
       // Per-item freeform log.
@@ -719,6 +768,11 @@ export default async function EquipmentDetailPage({
         .select({ id: equipmentTypes.id, name: equipmentTypes.name })
         .from(equipmentTypes)
         .orderBy(asc(equipmentTypes.name)),
+      // Category list for the Overview category picker.
+      tx
+        .select({ id: equipmentCategories.id, name: equipmentCategories.name })
+        .from(equipmentCategories)
+        .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name)),
     ])
 
     return {
@@ -734,6 +788,7 @@ export default async function EquipmentDetailPage({
       logEntries: logRows,
       checkouts: checkoutRows,
       allTypes,
+      allCategories,
     }
   })
 
@@ -741,6 +796,7 @@ export default async function EquipmentDetailPage({
   const {
     item,
     type,
+    category,
     site,
     holder,
     missingReporter,
@@ -755,6 +811,7 @@ export default async function EquipmentDetailPage({
     logEntries,
     checkouts,
     allTypes,
+    allCategories,
   } = data
   const openCheckout = checkouts.find((c) => c.co.returnedAt === null) ?? null
 
@@ -767,6 +824,7 @@ export default async function EquipmentDetailPage({
     .filter((s) => s.level === 'site')
     .map((s) => ({ value: s.id, label: s.name }))
   const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
+  const categoryOptions = allCategories.map((c) => ({ value: c.id, label: c.name }))
   const personOptions = holders.map((p) => ({
     value: p.id,
     label: `${p.lastName}, ${p.firstName}`,
@@ -909,7 +967,7 @@ export default async function EquipmentDetailPage({
                 <div className="space-y-1.5 border-t border-slate-100 pt-3">
                   <SidebarRow label="Asset tag">{item.assetTag}</SidebarRow>
                   <SidebarRow label="Serial #">{item.serialNumber ?? '—'}</SidebarRow>
-                  <SidebarRow label="Category">{type?.category ?? '—'}</SidebarRow>
+                  <SidebarRow label="Category">{category?.name ?? '—'}</SidebarRow>
                   <SidebarRow label="Site">{site?.name ?? '—'}</SidebarRow>
                   <SidebarRow label="Holder">
                     {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
@@ -982,6 +1040,16 @@ export default async function EquipmentDetailPage({
                         label="Type"
                         initialValue={item.typeId}
                         options={typeOptions}
+                        disabled={locked}
+                        updateAction={updateEquipmentField}
+                      />
+                      <LiveSelect
+                        id={id}
+                        field="categoryId"
+                        label="Category"
+                        initialValue={item.categoryId}
+                        options={categoryOptions}
+                        emptyLabel="— No category —"
                         disabled={locked}
                         updateAction={updateEquipmentField}
                       />
@@ -1436,9 +1504,7 @@ export default async function EquipmentDetailPage({
                                 <TableCell className="text-slate-600 dark:text-slate-300">
                                   {humanSize(a.sizeBytes)}
                                 </TableCell>
-                                <TableCell>
-                                  {new Date(a.createdAt).toLocaleDateString()}
-                                </TableCell>
+                                <TableCell>{new Date(a.createdAt).toLocaleDateString()}</TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end gap-3">
                                     <a
@@ -1812,9 +1878,9 @@ export default async function EquipmentDetailPage({
           <Field label="Destination site">
             <Select name="destinationOrgUnitId" defaultValue="">
               <option value="">— Unassigned —</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+              {siteOptions.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
                 </option>
               ))}
             </Select>
@@ -1849,9 +1915,9 @@ export default async function EquipmentDetailPage({
           <Field label="Move to site">
             <Select name="siteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
               <option value="">— Unassigned —</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+              {siteOptions.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
                 </option>
               ))}
             </Select>

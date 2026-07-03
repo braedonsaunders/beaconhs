@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, isNull } from 'drizzle-orm'
 import {
   Button,
   Card,
@@ -97,6 +97,7 @@ export default async function NewTruckLogEntryPage({
           name: equipmentItems.name,
         })
         .from(equipmentItems)
+        .where(isNull(equipmentItems.deletedAt))
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
       tx

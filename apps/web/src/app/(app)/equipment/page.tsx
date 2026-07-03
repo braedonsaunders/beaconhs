@@ -262,6 +262,7 @@ export default async function EquipmentPage({
             currentParams={sp}
             sort={params.sort}
             dir={params.dir}
+            canExport={canExport}
           />
           <Pagination
             basePath="/equipment"

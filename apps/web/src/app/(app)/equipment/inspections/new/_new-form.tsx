@@ -3,11 +3,26 @@
 // Start-inspection form: pick an equipment item + an inspection type, then the
 // server action creates the record, materialises the criteria, and redirects to
 // the fill page. SearchSelects back hidden inputs so the plain server-action
-// form submits the ids.
+// form submits the ids. Type-restricted templates (appliesToTypeId) only show
+// for items of that equipment type — the server action enforces the same rule.
 
-import { useState } from 'react'
-import { Button, Label, SearchSelect, type SelectOption } from '@beaconhs/ui'
+import { useMemo, useState } from 'react'
+import { Button, Label, SearchSelect } from '@beaconhs/ui'
 import { startEquipmentInspection } from '../_actions'
+
+export type NewInspectionItemOption = {
+  value: string
+  label: string
+  hint?: string
+  typeId: string | null
+}
+
+export type NewInspectionTypeOption = {
+  value: string
+  label: string
+  hint?: string
+  appliesToTypeId: string | null
+}
 
 export function NewInspectionForm({
   itemOptions,
@@ -15,24 +30,36 @@ export function NewInspectionForm({
   defaultItemId,
   defaultTypeId,
 }: {
-  itemOptions: SelectOption[]
-  typeOptions: SelectOption[]
+  itemOptions: NewInspectionItemOption[]
+  typeOptions: NewInspectionTypeOption[]
   defaultItemId: string
   defaultTypeId: string
 }) {
   const [itemId, setItemId] = useState(defaultItemId)
   const [typeId, setTypeId] = useState(defaultTypeId)
 
+  const selectedItem = itemOptions.find((i) => i.value === itemId) ?? null
+  const applicableTypes = useMemo(
+    () =>
+      typeOptions.filter(
+        (t) =>
+          !t.appliesToTypeId || (selectedItem != null && t.appliesToTypeId === selectedItem.typeId),
+      ),
+    [typeOptions, selectedItem],
+  )
+  // Clear a type that stops applying when the item changes.
+  const effectiveTypeId = applicableTypes.some((t) => t.value === typeId) ? typeId : ''
+
   return (
     <form action={startEquipmentInspection} className="max-w-lg space-y-4">
       <input type="hidden" name="equipmentItemId" value={itemId} />
-      <input type="hidden" name="typeId" value={typeId} />
+      <input type="hidden" name="typeId" value={effectiveTypeId} />
       <div className="space-y-1.5">
         <Label>Equipment item *</Label>
         <SearchSelect
           value={itemId}
           onChange={setItemId}
-          options={itemOptions}
+          options={itemOptions.map(({ value, label, hint }) => ({ value, label, hint }))}
           placeholder="Select equipment…"
           searchPlaceholder="Search by name or tag…"
           sheetTitle="Select equipment"
@@ -42,16 +69,16 @@ export function NewInspectionForm({
       <div className="space-y-1.5">
         <Label>Inspection type *</Label>
         <SearchSelect
-          value={typeId}
+          value={effectiveTypeId}
           onChange={setTypeId}
-          options={typeOptions}
+          options={applicableTypes.map(({ value, label, hint }) => ({ value, label, hint }))}
           placeholder="Select an inspection type…"
           searchPlaceholder="Search types…"
           sheetTitle="Select inspection type"
           ariaLabel="Inspection type"
         />
       </div>
-      <Button type="submit" disabled={!itemId || !typeId}>
+      <Button type="submit" disabled={!itemId || !effectiveTypeId}>
         Start inspection
       </Button>
     </form>

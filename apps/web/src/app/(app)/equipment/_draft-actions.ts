@@ -37,7 +37,7 @@ export async function createEquipmentDraft(): Promise<
   })
   if (!itemId) return { ok: false, error: 'Failed to create equipment.' }
   await recordAudit(ctx, {
-    entityType: 'equipment_item',
+    entityType: 'equipment',
     entityId: itemId,
     action: 'create',
     summary: 'Started a draft equipment item',

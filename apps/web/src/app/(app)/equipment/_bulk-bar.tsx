@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, MapPin, Square, ToggleRight, UserCog, X } from 'lucide-react'
 import { Button, SearchSelect, Select } from '@beaconhs/ui'
@@ -28,11 +29,13 @@ export function BulkEquipmentBar({
   onClear,
   sites,
   holders,
+  canExport,
 }: {
   selectedIds: string[]
   onClear: () => void
   sites: SiteOption[]
   holders: HolderOption[]
+  canExport: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -42,13 +45,16 @@ export function BulkEquipmentBar({
   const [status, setStatus] = useState<EquipmentStatus>('in_service')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  // Portal target only exists after mount (SSR renders nothing here).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   const label = useMemo(
     () => `${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} selected`,
     [selectedIds.length],
   )
 
-  if (selectedIds.length === 0) return null
+  if (selectedIds.length === 0 || !mounted) return null
 
   function go() {
     setError(null)
@@ -129,18 +135,20 @@ export function BulkEquipmentBar({
     })
   }
 
-  return (
+  // Portaled to <body>: PageContainer's FadeInBody transform would otherwise
+  // capture position:fixed and pin the bar to the container, not the viewport.
+  return createPortal(
     <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-800 dark:bg-slate-900">
         <button
           type="button"
           onClick={onClear}
           aria-label="Clear selection"
-          className="rounded p-1 text-slate-500 hover:bg-slate-100"
+          className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
 
         <Select
           value={action}
@@ -151,7 +159,7 @@ export function BulkEquipmentBar({
           <option value="site">Transfer to site</option>
           <option value="holder">Assign to holder</option>
           <option value="status">Set status</option>
-          <option value="export">Export selected to CSV</option>
+          {canExport ? <option value="export">Export selected to CSV</option> : null}
         </Select>
 
         {action === 'site' ? (
@@ -222,10 +230,13 @@ export function BulkEquipmentBar({
             'Apply'
           )}
         </Button>
-        {error ? <span className="text-xs text-red-600">{error}</span> : null}
-        {info ? <span className="text-xs text-emerald-700">{info}</span> : null}
+        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
+        {info ? (
+          <span className="text-xs text-emerald-700 dark:text-emerald-400">{info}</span>
+        ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -246,9 +257,13 @@ export function SelectionCheckbox({
         onToggle(id)
       }}
       aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
     >
-      {selected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {selected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }
@@ -265,9 +280,13 @@ export function HeaderSelectAll({
       type="button"
       onClick={onToggleAll}
       aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
     >
-      {allSelected ? <CheckSquare size={16} className="text-teal-700" /> : <Square size={16} />}
+      {allSelected ? (
+        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+      ) : (
+        <Square size={16} />
+      )}
     </button>
   )
 }

@@ -2,7 +2,7 @@
 // criteria materialisation, result computation, and work-order spawning on a
 // failed inspection (the legacy "fail = WO" rule).
 
-import { and, count, eq, sql } from 'drizzle-orm'
+import { count, eq, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   equipmentInspectionCriteria,
@@ -10,6 +10,7 @@ import {
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
+  equipmentItems,
   equipmentWorkOrders,
 } from '@beaconhs/db/schema'
 
@@ -95,29 +96,70 @@ export async function materialiseEquipmentCriteria(
   })
 }
 
-export type SubmitOutcome = {
-  result: 'pass' | 'fail' | 'incomplete'
-  failed: number
-  workOrdersSpawned: number
+export type SubmitOutcome =
+  | {
+      ok: true
+      result: 'pass' | 'fail' | 'incomplete'
+      failed: number
+      workOrdersSpawned: number
+    }
+  | { ok: false; error: string }
+
+/** Interval → months until the next inspection is due (null = no schedule). */
+const INTERVAL_MONTHS: Record<string, number | null> = {
+  pre_use: null,
+  daily: 0, // handled as +1 day below
+  weekly: 0, // handled as +7 days below
+  monthly: 1,
+  quarterly: 3,
+  annually: 12,
+  five_year: 60,
+  on_demand: null,
+}
+
+function dateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+/** Next-due date (YYYY-MM-DD) for an interval, from the inspection instant. */
+export function nextDueFromInterval(interval: string | null, occurredAt: Date): string | null {
+  if (!interval) return null
+  if (interval === 'daily') {
+    return dateOnly(new Date(occurredAt.getTime() + 86_400_000))
+  }
+  if (interval === 'weekly') {
+    return dateOnly(new Date(occurredAt.getTime() + 7 * 86_400_000))
+  }
+  const months = INTERVAL_MONTHS[interval]
+  if (!months) return null
+  const next = new Date(occurredAt)
+  next.setUTCMonth(next.getUTCMonth() + months)
+  return dateOnly(next)
 }
 
 /**
  * Compute a record's result from its answers and, when the type spawns work
- * orders, open one per failed criterion (critical fails always spawn). Returns
- * the result + counts. Idempotent on work orders via the per-criterion
- * work_order_id pointer.
+ * orders, open one per failed criterion (critical fails always spawn). Blocks
+ * submission when a failed criterion is missing evidence its template demands
+ * (requiresComment / requiresPhoto). On success it stamps the record's
+ * last/next inspection dates AND the equipment item's pre-use / annual
+ * inspection columns so overdue tracking reflects performed inspections.
+ * Idempotent on work orders via the per-criterion work_order_id pointer.
  */
 export async function finaliseEquipmentInspection(
   ctx: RequestContext,
   recordId: string,
 ): Promise<SubmitOutcome> {
-  return ctx.db(async (tx) => {
+  return ctx.db(async (tx): Promise<SubmitOutcome> => {
     const [record] = await tx
       .select()
       .from(equipmentInspectionRecords)
       .where(eq(equipmentInspectionRecords.id, recordId))
       .limit(1)
-    if (!record) return { result: 'incomplete', failed: 0, workOrdersSpawned: 0 }
+    if (!record) return { ok: false, error: 'Inspection record not found.' }
+    if (record.status === 'submitted' || record.status === 'closed') {
+      return { ok: false, error: 'This inspection is already submitted.' }
+    }
 
     const rows = await tx
       .select()
@@ -137,7 +179,27 @@ export async function finaliseEquipmentInspection(
       if (r.answer === 'fail') fails.push(r)
     }
 
-    const result: SubmitOutcome['result'] =
+    // Failed criteria must carry the evidence their template demands.
+    const missingComment = fails.filter((f) => f.requiresComment && !(f.comment ?? '').trim())
+    const missingPhoto = fails.filter(
+      (f) => f.requiresPhoto && (f.photoAttachmentIds?.length ?? 0) === 0,
+    )
+    if (missingComment.length > 0 || missingPhoto.length > 0) {
+      const parts: string[] = []
+      if (missingComment.length > 0) {
+        parts.push(
+          `${missingComment.length} failed item${missingComment.length === 1 ? '' : 's'} need${missingComment.length === 1 ? 's' : ''} a comment`,
+        )
+      }
+      if (missingPhoto.length > 0) {
+        parts.push(
+          `${missingPhoto.length} failed item${missingPhoto.length === 1 ? '' : 's'} need${missingPhoto.length === 1 ? 's' : ''} a photo`,
+        )
+      }
+      return { ok: false, error: `Cannot submit yet: ${parts.join(' and ')}.` }
+    }
+
+    const result: 'pass' | 'fail' | 'incomplete' =
       fails.length > 0 ? 'fail' : answered >= rows.length ? 'pass' : 'incomplete'
 
     // Spawn work orders for failed criteria (legacy fail = WO). A critical
@@ -186,6 +248,9 @@ export async function finaliseEquipmentInspection(
       }
     }
 
+    const occurredOn = record.occurredAt.toISOString().slice(0, 10)
+    const nextDueOn = nextDueFromInterval(record.intervalSnapshot, record.occurredAt)
+
     await tx
       .update(equipmentInspectionRecords)
       .set({
@@ -193,20 +258,28 @@ export async function finaliseEquipmentInspection(
         status: 'submitted',
         submittedAt: new Date(),
         submittedByTenantUserId: ctx.membership?.id ?? null,
+        // Snapshot this record's own inspection date + computed next-due so the
+        // upcoming report and compliance engine can read the row directly.
+        lastInspectionOn: record.lastInspectionOn ?? occurredOn,
+        nextDueOn,
       })
       .where(eq(equipmentInspectionRecords.id, recordId))
 
-    // Stamp the item's last/next inspection dates from the interval snapshot.
-    await tx
-      .update(equipmentInspectionRecords)
-      .set({ lastInspectionOn: record.occurredAt.toISOString().slice(0, 10) })
-      .where(
-        and(
-          eq(equipmentInspectionRecords.id, recordId),
-          sql`${equipmentInspectionRecords.lastInspectionOn} is null`,
-        ),
-      )
+    // Stamp the equipment item's last/next inspection dates from the interval
+    // snapshot so the detail-page stats, dashboard "annual due" widget, and
+    // compliance signals update from actually-performed inspections.
+    if (record.intervalSnapshot === 'pre_use') {
+      await tx
+        .update(equipmentItems)
+        .set({ lastPreUseInspectionAt: record.occurredAt })
+        .where(eq(equipmentItems.id, record.equipmentItemId))
+    } else if (record.intervalSnapshot === 'annually') {
+      await tx
+        .update(equipmentItems)
+        .set({ lastAnnualInspectionOn: occurredOn, nextAnnualInspectionDue: nextDueOn })
+        .where(eq(equipmentItems.id, record.equipmentItemId))
+    }
 
-    return { result, failed: fails.length, workOrdersSpawned: spawned }
+    return { ok: true, result, failed: fails.length, workOrdersSpawned: spawned }
   })
 }

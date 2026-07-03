@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { and, asc, count, desc, eq, ilike, or, type AnyColumn, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type AnyColumn, type SQL } from 'drizzle-orm'
 import { ClipboardCheck, Plus } from 'lucide-react'
 import {
   Badge,
@@ -21,6 +21,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
@@ -78,7 +79,7 @@ export default async function EquipmentInspectionsPage({
     status: equipmentInspectionRecords.status,
   }
   const orderBy = params.dir === 'asc' ? asc(sortCol[params.sort]) : desc(sortCol[params.sort])
-  const filters: SQL<unknown>[] = []
+  const filters: SQL<unknown>[] = [isNull(equipmentInspectionRecords.deletedAt)]
   if (statusFilter) {
     filters.push(
       eq(equipmentInspectionRecords.status, statusFilter as 'draft' | 'in_progress' | 'submitted'),
@@ -94,9 +95,20 @@ export default async function EquipmentInspectionsPage({
     )
     if (cond) filters.push(cond)
   }
-  const where = filters.length > 0 ? and(...filters) : undefined
 
   const { rows, total } = await ctx.db(async (tx) => {
+    // Read-tier scope: all → everything; site → records at the caller's sites
+    // (plus their own); self → only records they performed/submitted.
+    const scope = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      ownerCols: [
+        equipmentInspectionRecords.inspectorTenantUserId,
+        equipmentInspectionRecords.submittedByTenantUserId,
+      ],
+      siteCol: equipmentInspectionRecords.siteOrgUnitId,
+      personCol: equipmentInspectionRecords.inspectorPersonId,
+    })
+    const where = and(...filters, ...(scope ? [scope] : []))
     const [tot] = await tx
       .select({ n: count() })
       .from(equipmentInspectionRecords)

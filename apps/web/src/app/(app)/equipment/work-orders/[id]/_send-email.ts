@@ -3,15 +3,8 @@
 // and the description / action-taken text. Default recipients are the
 // tenant admin distribution list; caller can override.
 
-import { and, eq, sql } from 'drizzle-orm'
-import {
-  equipmentItems,
-  equipmentWorkOrders,
-  people,
-  tenantUsers,
-  user,
-  users,
-} from '@beaconhs/db/schema'
+import { eq } from 'drizzle-orm'
+import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 

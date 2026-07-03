@@ -3,19 +3,23 @@
 // Runtime server actions for performing an equipment inspection: start a record
 // from (type × item), per-criterion autosave setters (matching the fill card's
 // CriterionActions FormData contract), record-level live fields, and submit.
+// Every setter re-checks that the parent record is still editable so a stale or
+// crafted request can never mutate a submitted/closed record.
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import {
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
   equipmentItems,
 } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, type RequestContext } from '@beaconhs/tenant'
+import type { Database } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { parseDatetimeLocal } from './_datetime'
 import {
   finaliseEquipmentInspection,
   materialiseEquipmentCriteria,
@@ -27,6 +31,35 @@ import {
 function revalidateRecord(id: string) {
   revalidatePath(`/equipment/inspections/${id}`)
   revalidatePath('/equipment/inspections')
+}
+
+/** True when the record still accepts edits (draft / in-progress). */
+async function recordEditable(tx: Database, recordId: string): Promise<boolean> {
+  if (!recordId) return false
+  const [rec] = await tx
+    .select({ status: equipmentInspectionRecords.status })
+    .from(equipmentInspectionRecords)
+    .where(
+      and(
+        eq(equipmentInspectionRecords.id, recordId),
+        isNull(equipmentInspectionRecords.deletedAt),
+      ),
+    )
+    .limit(1)
+  return rec != null && rec.status !== 'submitted' && rec.status !== 'closed'
+}
+
+/** Shared preamble for the per-criterion / record-level autosave setters. */
+async function editableContext(
+  formData: FormData,
+): Promise<{ ctx: RequestContext; rowId: string; recordId: string } | null> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  const rowId = String(formData.get('rowId') ?? '')
+  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await ctx.db((tx) => recordEditable(tx, recordId))
+  if (!editable) return null
+  return { ctx, rowId, recordId }
 }
 
 /**
@@ -45,14 +78,24 @@ export async function startEquipmentInspection(formData: FormData) {
     tx
       .select()
       .from(equipmentInspectionTypes)
-      .where(eq(equipmentInspectionTypes.id, typeId))
+      .where(
+        and(eq(equipmentInspectionTypes.id, typeId), eq(equipmentInspectionTypes.isActive, true)),
+      )
       .limit(1),
   )
   if (!type) throw new Error('Inspection type not found')
   const [item] = await ctx.db((tx) =>
-    tx.select().from(equipmentItems).where(eq(equipmentItems.id, equipmentItemId)).limit(1),
+    tx
+      .select()
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, equipmentItemId), isNull(equipmentItems.deletedAt)))
+      .limit(1),
   )
   if (!item) throw new Error('Equipment item not found')
+  // Type-restricted templates only apply to items of that equipment type.
+  if (type.appliesToTypeId && item.typeId !== type.appliesToTypeId) {
+    throw new Error('This inspection type does not apply to the selected equipment item')
+  }
 
   const occurredAt = new Date()
   const reference = await nextEquipmentInspectionReference(ctx, occurredAt)
@@ -91,10 +134,9 @@ export async function startEquipmentInspection(formData: FormData) {
 // --- per-criterion autosave (FormData contract) ----------------------------
 
 export async function setAnswer(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const rowId = String(formData.get('rowId') ?? '')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, rowId, recordId } = editable
   const answer = parseEqAnswer(formData.get('answer'))
   await ctx.db((tx) =>
     tx
@@ -104,62 +146,78 @@ export async function setAnswer(formData: FormData) {
         answeredAt: new Date(),
         answeredByTenantUserId: ctx.membership?.id ?? null,
       })
-      .where(eq(equipmentInspectionRecordCriteria.id, rowId)),
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.id, rowId),
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        ),
+      ),
   )
   revalidateRecord(recordId)
 }
 
 export async function setSeverity(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const rowId = String(formData.get('rowId') ?? '')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, rowId, recordId } = editable
   const severity = parseEqSeverity(formData.get('severity'))
   await ctx.db((tx) =>
     tx
       .update(equipmentInspectionRecordCriteria)
       .set({ severity })
-      .where(eq(equipmentInspectionRecordCriteria.id, rowId)),
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.id, rowId),
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        ),
+      ),
   )
   revalidateRecord(recordId)
 }
 
 export async function setComment(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const rowId = String(formData.get('rowId') ?? '')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, rowId, recordId } = editable
   const value = String(formData.get('value') ?? '').trim() || null
   await ctx.db((tx) =>
     tx
       .update(equipmentInspectionRecordCriteria)
       .set({ comment: value })
-      .where(eq(equipmentInspectionRecordCriteria.id, rowId)),
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.id, rowId),
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        ),
+      ),
   )
   revalidateRecord(recordId)
 }
 
 export async function setActionTaken(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const rowId = String(formData.get('rowId') ?? '')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, rowId, recordId } = editable
   const value = String(formData.get('value') ?? '').trim() || null
   await ctx.db((tx) =>
     tx
       .update(equipmentInspectionRecordCriteria)
       .set({ actionTaken: value })
-      .where(eq(equipmentInspectionRecordCriteria.id, rowId)),
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.id, rowId),
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        ),
+      ),
   )
   revalidateRecord(recordId)
 }
 
 /** Text / numeric answer kinds. */
 export async function setValue(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const rowId = String(formData.get('rowId') ?? '')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, rowId, recordId } = editable
   const kind = String(formData.get('kind') ?? '')
   const raw = String(formData.get('value') ?? '').trim()
   const patch =
@@ -170,16 +228,20 @@ export async function setValue(formData: FormData) {
     tx
       .update(equipmentInspectionRecordCriteria)
       .set({ ...patch, answeredAt: new Date(), answeredByTenantUserId: ctx.membership?.id ?? null })
-      .where(eq(equipmentInspectionRecordCriteria.id, rowId)),
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.id, rowId),
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        ),
+      ),
   )
   revalidateRecord(recordId)
 }
 
 export async function addCriterionPhotos(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const rowId = String(formData.get('rowId') ?? '')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, rowId, recordId } = editable
   const ids = String(formData.get('attachmentIds') ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -189,9 +251,15 @@ export async function addCriterionPhotos(formData: FormData) {
     const [row] = await tx
       .select({ photoAttachmentIds: equipmentInspectionRecordCriteria.photoAttachmentIds })
       .from(equipmentInspectionRecordCriteria)
-      .where(eq(equipmentInspectionRecordCriteria.id, rowId))
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.id, rowId),
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+        ),
+      )
       .limit(1)
-    const existing = Array.isArray(row?.photoAttachmentIds) ? row!.photoAttachmentIds : []
+    if (!row) return
+    const existing = Array.isArray(row.photoAttachmentIds) ? row.photoAttachmentIds : []
     await tx
       .update(equipmentInspectionRecordCriteria)
       .set({ photoAttachmentIds: [...existing, ...ids] })
@@ -200,12 +268,41 @@ export async function addCriterionPhotos(formData: FormData) {
   revalidateRecord(recordId)
 }
 
-// --- record-level live fields ----------------------------------------------
-
-export async function setRecordNotes(formData: FormData) {
+/**
+ * "Pass all" shortcut: mark every unanswered pass/fail criterion as passed.
+ * Only offered by the fill page when the type's allowPassAll flag is set.
+ */
+export async function passAllEquipmentInspection(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
+  const editable = await ctx.db((tx) => recordEditable(tx, recordId))
+  if (!editable) return
+  await ctx.db((tx) =>
+    tx
+      .update(equipmentInspectionRecordCriteria)
+      .set({
+        answer: 'pass',
+        answeredAt: new Date(),
+        answeredByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.recordId, recordId),
+          isNull(equipmentInspectionRecordCriteria.answer),
+          inArray(equipmentInspectionRecordCriteria.kind, ['pass_fail', 'pass_fail_na']),
+        ),
+      ),
+  )
+  revalidateRecord(recordId)
+}
+
+// --- record-level live fields ----------------------------------------------
+
+export async function setRecordNotes(formData: FormData) {
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, recordId } = editable
   const value = String(formData.get('value') ?? '').trim() || null
   await ctx.db((tx) =>
     tx
@@ -217,9 +314,9 @@ export async function setRecordNotes(formData: FormData) {
 }
 
 export async function setRecordHours(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, recordId } = editable
   const raw = String(formData.get('value') ?? '').trim()
   await ctx.db((tx) =>
     tx
@@ -231,15 +328,19 @@ export async function setRecordHours(formData: FormData) {
 }
 
 export async function setRecordOccurredAt(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.inspect')
-  const recordId = String(formData.get('recordId') ?? '')
+  const editable = await editableContext(formData)
+  if (!editable) return
+  const { ctx, recordId } = editable
   const raw = String(formData.get('value') ?? '').trim()
   if (!raw) return
+  // The datetime-local input posts the user's wall-clock time — parse it in
+  // their timezone, never the server's.
+  const occurredAt = parseDatetimeLocal(raw, ctx.timezone)
+  if (!occurredAt) return
   await ctx.db((tx) =>
     tx
       .update(equipmentInspectionRecords)
-      .set({ occurredAt: new Date(raw) })
+      .set({ occurredAt })
       .where(eq(equipmentInspectionRecords.id, recordId)),
   )
   revalidateRecord(recordId)
@@ -253,6 +354,10 @@ export async function submitEquipmentInspection(formData: FormData) {
   const recordId = String(formData.get('recordId') ?? '')
   if (!recordId) throw new Error('Record is required')
   const outcome = await finaliseEquipmentInspection(ctx, recordId)
+  if (!outcome.ok) {
+    revalidateRecord(recordId)
+    redirect(`/equipment/inspections/${recordId}?issue=${encodeURIComponent(outcome.error)}`)
+  }
   await recordAudit(ctx, {
     entityType: 'equipment_inspection_record',
     entityId: recordId,
@@ -268,11 +373,29 @@ export async function reopenEquipmentInspection(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
-  await ctx.db((tx) =>
-    tx
+  if (!recordId) return
+  const reopened = await ctx.db(async (tx) => {
+    const [rec] = await tx
+      .select({ status: equipmentInspectionRecords.status })
+      .from(equipmentInspectionRecords)
+      .where(eq(equipmentInspectionRecords.id, recordId))
+      .limit(1)
+    if (!rec || (rec.status !== 'submitted' && rec.status !== 'closed')) return false
+    // The stored result is stale once the record is editable again — it gets
+    // recomputed on the next submit.
+    await tx
       .update(equipmentInspectionRecords)
-      .set({ status: 'in_progress', submittedAt: null })
-      .where(eq(equipmentInspectionRecords.id, recordId)),
-  )
+      .set({ status: 'in_progress', submittedAt: null, result: null })
+      .where(eq(equipmentInspectionRecords.id, recordId))
+    return true
+  })
+  if (reopened) {
+    await recordAudit(ctx, {
+      entityType: 'equipment_inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Reopened for editing',
+    })
+  }
   revalidateRecord(recordId)
 }

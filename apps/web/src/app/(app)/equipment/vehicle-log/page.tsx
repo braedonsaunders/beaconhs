@@ -110,6 +110,7 @@ export default async function VehicleLogPage({
       ) : (
         <VehicleLogWorkspaceClient
           workspace={workspace}
+          canManage={can(ctx, 'equipment.manage')}
           saveAction={saveVehicleLogEntryAction}
           applyAction={applyVehicleLogImportAction}
           deleteMonthAction={deleteMonthAction}

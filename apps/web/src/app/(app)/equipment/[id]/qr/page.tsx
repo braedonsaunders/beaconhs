@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { Button, DetailHeader } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
+import { generateBulkQrSheet } from '../../qr/bulk/_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,9 +24,17 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
       .select({ item: equipmentItems, type: equipmentTypes })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-      .where(eq(equipmentItems.id, id))
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
       .limit(1)
-    return r ?? null
+    if (!r) return null
+    // Same read-tier guard as the item detail page — the label exposes the
+    // name, serial, and a working scan URL.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'equipment',
+      siteId: r.item.currentSiteOrgUnitId,
+      personId: r.item.currentHolderPersonId,
+    })
+    return visible ? r : null
   })
   if (!row) notFound()
 
@@ -45,61 +55,70 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
           title={`QR label — ${row.item.name}`}
           subtitle={`${row.item.assetTag}${row.type ? ` · ${row.type.name}` : ''}`}
           actions={
-            <Button asChild variant="outline">
-              <a
-                href={`/equipment/${id}/qr/print`}
-                target="_blank"
-                rel="noreferrer"
-                title="Open the print sheet"
-              >
+            <form action={generateBulkQrSheet}>
+              <input type="hidden" name="ids" value={id} />
+              <Button type="submit" variant="outline" title="Open the print sheet">
                 Print sheet
-              </a>
-            </Button>
+              </Button>
+            </form>
           }
         />
 
-        <div className="rounded-lg border border-slate-200 bg-white p-8 print:border-0">
+        <div className="rounded-lg border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900 print:border-0">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:items-center">
             <div className="flex items-center justify-center">
+              {/* The QR tile stays on white so scanners read it in dark mode too. */}
               <div
-                className="w-72"
+                className="w-72 rounded-md bg-white p-2"
                 aria-label={`QR code for ${row.item.name}`}
                 dangerouslySetInnerHTML={{ __html: svg }}
               />
             </div>
             <div className="space-y-3">
               <div>
-                <div className="text-xs tracking-wide text-slate-500 uppercase">Asset tag</div>
-                <div className="font-mono text-2xl font-semibold">{row.item.assetTag}</div>
+                <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  Asset tag
+                </div>
+                <div className="font-mono text-2xl font-semibold dark:text-slate-100">
+                  {row.item.assetTag}
+                </div>
               </div>
               <div>
-                <div className="text-xs tracking-wide text-slate-500 uppercase">Name</div>
-                <div className="text-lg">{row.item.name}</div>
+                <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  Name
+                </div>
+                <div className="text-lg dark:text-slate-100">{row.item.name}</div>
               </div>
               {row.type ? (
                 <div>
-                  <div className="text-xs tracking-wide text-slate-500 uppercase">Type</div>
-                  <div>{row.type.name}</div>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    Type
+                  </div>
+                  <div className="dark:text-slate-200">{row.type.name}</div>
                 </div>
               ) : null}
               {row.item.serialNumber ? (
                 <div>
-                  <div className="text-xs tracking-wide text-slate-500 uppercase">Serial</div>
-                  <div className="font-mono text-sm">{row.item.serialNumber}</div>
+                  <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    Serial
+                  </div>
+                  <div className="font-mono text-sm dark:text-slate-200">
+                    {row.item.serialNumber}
+                  </div>
                 </div>
               ) : null}
-              <div className="pt-3 text-xs text-slate-500">
+              <div className="pt-3 text-xs text-slate-500 dark:text-slate-400">
                 Scan to verify, log pre-use inspection, or transfer location.
               </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600">
-          <div className="font-medium text-slate-800">Scan URL</div>
+        <div className="rounded-md border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
+          <div className="font-medium text-slate-800 dark:text-slate-100">Scan URL</div>
           <div className="mt-1 font-mono text-xs break-all">{scanUrl}</div>
           <div className="mt-3">
-            <Link href={scanUrl} className="text-teal-700 hover:underline">
+            <Link href={scanUrl} className="text-teal-700 hover:underline dark:text-teal-400">
               Try it
             </Link>
           </div>

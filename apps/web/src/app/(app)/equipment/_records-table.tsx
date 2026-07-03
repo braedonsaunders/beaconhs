@@ -34,6 +34,7 @@ export function EquipmentRecordsTable({
   currentParams,
   sort,
   dir,
+  canExport,
 }: {
   rows: EquipmentTableRow[]
   sites: SiteOption[]
@@ -42,6 +43,7 @@ export function EquipmentRecordsTable({
   currentParams: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
+  canExport: boolean
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -199,6 +201,7 @@ export function EquipmentRecordsTable({
         onClear={clear}
         sites={sites}
         holders={holders}
+        canExport={canExport}
       />
     </>
   )

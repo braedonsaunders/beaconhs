@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
-import { and, asc, count, desc, eq, gte, ilike, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, isNull, lt, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -22,6 +22,7 @@ import {
 } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -46,8 +47,11 @@ const SORTS = [
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Open' },
+  { value: 'assigned', label: 'Assigned' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'awaiting_parts', label: 'Awaiting parts' },
+  { value: 'repaired', label: 'Repaired' },
+  { value: 'verified', label: 'Verified' },
   { value: 'closed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ]
@@ -96,7 +100,18 @@ export default async function WorkOrdersPage({
 
   const { rows, total, statusCounts, priorityCounts, assigneeOptions, typeOptions } = await ctx.db(
     async (tx) => {
-      const filters: SQL<unknown>[] = []
+      // Read-tier scope: all → every WO; site → WOs on assets at the caller's
+      // sites (plus their own); self → WOs they opened / are assigned / report.
+      const scope = await moduleScopeWhere(ctx, tx, {
+        prefix: 'equipment',
+        ownerCols: [
+          equipmentWorkOrders.openedByTenantUserId,
+          equipmentWorkOrders.assignedToTenantUserId,
+        ],
+        siteCol: equipmentItems.currentSiteOrgUnitId,
+        personCol: equipmentWorkOrders.reportedByPersonId,
+      })
+      const filters: SQL<unknown>[] = scope ? [scope] : []
       if (params.q) {
         const term = `%${params.q}%`
         const cond = or(
@@ -113,8 +128,19 @@ export default async function WorkOrdersPage({
       if (assigneeFilter)
         filters.push(eq(equipmentWorkOrders.assignedToTenantUserId, assigneeFilter))
       if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
-      if (openedFromRaw) filters.push(gte(equipmentWorkOrders.openedAt, new Date(openedFromRaw)))
-      if (openedToRaw) filters.push(lte(equipmentWorkOrders.openedAt, new Date(openedToRaw)))
+      if (openedFromRaw) {
+        const from = new Date(openedFromRaw)
+        if (!Number.isNaN(from.getTime())) filters.push(gte(equipmentWorkOrders.openedAt, from))
+      }
+      if (openedToRaw) {
+        // Inclusive To date: bound strictly below the start of the next day so
+        // work orders opened any time on the selected day are included.
+        const to = new Date(openedToRaw)
+        if (!Number.isNaN(to.getTime())) {
+          const nextDay = new Date(to.getTime() + 86_400_000)
+          filters.push(lt(equipmentWorkOrders.openedAt, nextDay))
+        }
+      }
       if (ageBucketFilter === 'open7') {
         filters.push(isNull(equipmentWorkOrders.closedAt))
         filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
@@ -204,10 +230,14 @@ export default async function WorkOrdersPage({
       const ss = await tx
         .select({ s: equipmentWorkOrders.status, c: count() })
         .from(equipmentWorkOrders)
+        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+        .where(scope)
         .groupBy(equipmentWorkOrders.status)
       const ps = await tx
         .select({ p: equipmentWorkOrders.priority, c: count() })
         .from(equipmentWorkOrders)
+        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+        .where(scope)
         .groupBy(equipmentWorkOrders.priority)
 
       const aOpts = await tx
@@ -263,6 +293,14 @@ export default async function WorkOrdersPage({
           <TableToolbar>
             <SearchInput placeholder="Search reference, summary, asset tag…" />
             <form className="flex items-center gap-1 text-xs">
+              {/* Preserve the other active filters — a bare GET form replaces
+                  the whole query string. */}
+              {(['q', 'status', 'priority', 'assignee', 'type', 'age', 'sort', 'dir'] as const).map(
+                (key) => {
+                  const value = pickString(sp[key])
+                  return value ? <input key={key} type="hidden" name={key} value={value} /> : null
+                },
+              )}
               <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                 Opened
                 <input

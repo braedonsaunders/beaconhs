@@ -49,12 +49,16 @@ function Dot({ state }: { state: SaveState }) {
 export function RecordMeta({
   recordId,
   occurredAt,
+  occurredAtDisplay,
   hours,
   notes,
   locked,
 }: {
   recordId: string
+  /** datetime-local input value, already formatted in the viewer's timezone. */
   occurredAt: string
+  /** Human-readable timestamp in the viewer's timezone, for the locked view. */
+  occurredAtDisplay: string
   hours: string
   notes: string
   locked: boolean
@@ -70,9 +74,7 @@ export function RecordMeta({
       <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 text-sm sm:grid-cols-3 dark:border-slate-800">
         <div>
           <div className="text-xs text-slate-500">Performed</div>
-          <div className="text-slate-800 dark:text-slate-200">
-            {occurredAt ? new Date(occurredAt).toLocaleString() : '—'}
-          </div>
+          <div className="text-slate-800 dark:text-slate-200">{occurredAtDisplay || '—'}</div>
         </div>
         <div>
           <div className="text-xs text-slate-500">Hours / reading</div>

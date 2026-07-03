@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { asc, eq, inArray } from 'drizzle-orm'
-import { Badge, Button, PageHeader } from '@beaconhs/ui'
-import { ClipboardCheck, RotateCcw, Wrench } from 'lucide-react'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { Alert, AlertDescription, AlertTitle, Badge, Button, PageHeader } from '@beaconhs/ui'
+import { CheckCheck, ClipboardCheck, RotateCcw, Wrench } from 'lucide-react'
 import { publicUrl } from '@beaconhs/storage'
 import {
   attachments,
@@ -14,13 +14,17 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
+import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CriterionCard, type EqKind } from './_criteria'
 import { RecordMeta } from './_record-meta'
+import { datetimeLocalValue, formatDateTime } from '../_datetime'
 import {
   addCriterionPhotos,
+  passAllEquipmentInspection,
   reopenEquipmentInspection,
   setActionTaken,
   setAnswer,
@@ -51,10 +55,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function EquipmentInspectionRecordPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  const sp = await searchParams
+  const issue = pickString(sp.issue)
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -73,9 +81,20 @@ export default async function EquipmentInspectionRecordPage({
       .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentInspectionRecords.inspectorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(equipmentInspectionRecords.id, id))
+      .where(
+        and(eq(equipmentInspectionRecords.id, id), isNull(equipmentInspectionRecords.deletedAt)),
+      )
       .limit(1)
     if (!row) return null
+    // Read-tier guard mirroring the equipment item detail page: site-tier
+    // viewers see records at their sites; everyone else only their own.
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'equipment',
+      ownerIds: [row.record.inspectorTenantUserId, row.record.submittedByTenantUserId],
+      siteId: row.record.siteOrgUnitId ?? row.item?.currentSiteOrgUnitId,
+      personId: row.record.inspectorPersonId ?? row.item?.currentHolderPersonId,
+    })
+    if (!visible) return null
     const criteria = await tx
       .select()
       .from(equipmentInspectionRecordCriteria)
@@ -160,16 +179,33 @@ export default async function EquipmentInspectionRecordPage({
                   </Button>
                 </form>
               ) : (
-                <form action={submitEquipmentInspection}>
-                  <input type="hidden" name="recordId" value={record.id} />
-                  <Button type="submit">
-                    <ClipboardCheck size={14} /> Submit
-                  </Button>
-                </form>
+                <>
+                  {type?.allowPassAll && answered < total ? (
+                    <form action={passAllEquipmentInspection}>
+                      <input type="hidden" name="recordId" value={record.id} />
+                      <Button type="submit" variant="outline">
+                        <CheckCheck size={14} /> Pass all remaining
+                      </Button>
+                    </form>
+                  ) : null}
+                  <form action={submitEquipmentInspection}>
+                    <input type="hidden" name="recordId" value={record.id} />
+                    <Button type="submit">
+                      <ClipboardCheck size={14} /> Submit
+                    </Button>
+                  </form>
+                </>
               )}
             </div>
           }
         />
+
+        {issue && !locked ? (
+          <Alert variant="destructive">
+            <AlertTitle>Submission blocked</AlertTitle>
+            <AlertDescription>{issue}</AlertDescription>
+          </Alert>
+        ) : null}
 
         {item ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
@@ -189,7 +225,10 @@ export default async function EquipmentInspectionRecordPage({
         <RecordMeta
           recordId={record.id}
           occurredAt={
-            record.occurredAt ? new Date(record.occurredAt).toISOString().slice(0, 16) : ''
+            record.occurredAt ? datetimeLocalValue(new Date(record.occurredAt), ctx.timezone) : ''
+          }
+          occurredAtDisplay={
+            record.occurredAt ? formatDateTime(new Date(record.occurredAt), ctx.timezone) : ''
           }
           hours={record.hours ?? ''}
           notes={record.notes ?? ''}

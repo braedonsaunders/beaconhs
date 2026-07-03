@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { asc, eq, sql } from 'drizzle-orm'
+import { redirect } from 'next/navigation'
+import { asc, eq, isNull, sql } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
@@ -59,6 +60,15 @@ export default async function TruckLogSummaryPage({
   const sp = await searchParams
   const year = parseYear(pickString(sp.year))
   const ctx = await requireRequestContext()
+  // Same read-tier gate as /equipment/vehicle-log — this is a tenant-wide
+  // fleet roll-up.
+  if (
+    !can(ctx, 'equipment.read.all') &&
+    !can(ctx, 'equipment.read.site') &&
+    !can(ctx, 'equipment.manage')
+  ) {
+    redirect('/dashboard')
+  }
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.all')
 
   const firstDay = ymd(year, 1, 1)
@@ -75,6 +85,7 @@ export default async function TruckLogSummaryPage({
       })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .where(isNull(equipmentItems.deletedAt))
       .orderBy(asc(equipmentItems.assetTag))
       .limit(500)
     const result = await tx.execute(sql`

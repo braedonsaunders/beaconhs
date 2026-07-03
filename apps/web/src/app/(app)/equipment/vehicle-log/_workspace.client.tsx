@@ -81,11 +81,14 @@ function plural(value: number, singular: string, pluralLabel = `${singular}s`) {
 
 export function VehicleLogWorkspaceClient({
   workspace,
+  canManage,
   saveAction,
   applyAction,
   deleteMonthAction,
 }: {
   workspace: VehicleLogWorkspace
+  /** equipment.manage — read-tier viewers get a read-only grid. */
+  canManage: boolean
   saveAction: SaveAction
   applyAction: ApplyAction
   deleteMonthAction: DeleteMonthAction
@@ -112,12 +115,7 @@ export function VehicleLogWorkspaceClient({
     setSelectedImportSourceId((current) => {
       const sources = workspace.importSources.sources
       if (sources.some((source) => source.id === current && source.active)) return current
-      return (
-        sources.find((source) => source.active && source.onDemand)?.id ??
-        sources.find((source) => source.active)?.id ??
-        sources[0]?.id ??
-        ''
-      )
+      return sources.find((source) => source.active)?.id ?? sources[0]?.id ?? ''
     })
   }, [workspace])
 
@@ -154,6 +152,7 @@ export function VehicleLogWorkspaceClient({
   }
 
   async function saveRow(date: string) {
+    if (!canManage) return
     const draft = drafts[date]
     if (!draft || !workspace.selectedDriverId || !workspace.selectedEquipmentId) return
     if (!draft.id && !hasMeaningfulDraft(draft)) return
@@ -185,6 +184,7 @@ export function VehicleLogWorkspaceClient({
   }
 
   function applyActivity(sourceConnectionId?: string | null) {
+    if (!canManage) return
     if (!workspace.selectedDriverId || !workspace.selectedEquipmentId) {
       setActionResult('Choose a driver and vehicle first.')
       return
@@ -194,7 +194,7 @@ export function VehicleLogWorkspaceClient({
       selectedImportSourceId ||
       (importableSources.length === 1 ? importableSources[0]?.id : null)
     const source = workspace.importSources.sources.find((candidate) => candidate.id === sourceId)
-    if (!source || !source.active || (!source.onDemand && source.matchedDayCount === 0)) {
+    if (!source || !source.active) {
       setImportPickerOpen(workspace.importSources.sources.length > 1)
       setActionResult(source ? `${source.name} is not ready to import.` : importHint)
       return
@@ -208,12 +208,12 @@ export function VehicleLogWorkspaceClient({
         sourceConnectionId: source.id,
       })
       if (res.ok) {
-        const { created, updated, conflicts, skipped, pulled, resolved } = res.result
-        const changed = created + updated + conflicts
+        const { created, updated, skipped, pulled, resolved } = res.result
+        const changed = created + updated
         setActionResult(
           changed === 0
             ? `${source.name}: pulled ${pulled}, applied 0.`
-            : `${source.name}: pulled ${pulled} · resolved ${resolved} · ${created} added · ${updated} refreshed · ${conflicts} conflicts${
+            : `${source.name}: pulled ${pulled} · resolved ${resolved} · ${created} added · ${updated} refreshed${
                 skipped ? ` · ${skipped} skipped` : ''
               }`,
         )
@@ -226,6 +226,7 @@ export function VehicleLogWorkspaceClient({
   }
 
   function deleteMonth() {
+    if (!canManage) return
     if (!workspace.selectedDriverId || !workspace.selectedEquipmentId) return
     const label = `${activeDriver?.label ?? 'driver'} / ${activeVehicle?.hint ?? activeVehicle?.label}`
     if (!window.confirm(`Delete ${workspace.month.label} entries for ${label}?`)) return
@@ -245,11 +246,9 @@ export function VehicleLogWorkspaceClient({
     })
   }
 
-  const canEdit = Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
+  const canEdit = canManage && Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
   const importSources = workspace.importSources.sources
-  const importableSources = importSources.filter(
-    (source) => source.active && (source.onDemand || source.matchedDayCount > 0),
-  )
+  const importableSources = importSources.filter((source) => source.active)
   const selectedImportSource =
     importSources.find((source) => source.id === selectedImportSourceId) ?? importableSources[0]
   const hasActiveSource = workspace.importSources.activeSourceCount > 0
@@ -262,22 +261,13 @@ export function VehicleLogWorkspaceClient({
         ? 'No vehicle log import source is configured.'
         : importableSources.length > 1
           ? 'Choose an import source.'
-          : selectedImportSource?.onDemand
+          : selectedImportSource
             ? `${selectedImportSource.name}: pulls ${workspace.month.label} on demand.`
-            : selectedImportSource && selectedImportSource.matchedDayCount > 0
-              ? `${selectedImportSource.name}: ${plural(
-                  selectedImportSource.matchedDayCount,
-                  'matched day',
-                )} ready.`
-              : workspace.importSources.monthRowCount > 0
-                ? 'No source rows match this driver/month.'
-                : 'No import source is ready.'
+            : 'No import source is ready.'
   const sourceBadge = hasActiveSource
     ? `${plural(workspace.importSources.activeSourceCount, 'source')}`
     : 'No source'
-  const activityBadge = canEdit
-    ? `${plural(matchedImportDays, 'imported day')}`
-    : `${plural(workspace.importSources.monthRowCount, 'source row')}`
+  const activityBadge = `${plural(matchedImportDays, 'imported day')}`
   const canImport = canEdit && importableSources.length > 0 && !pending
   const hasSourcePicker = importSources.length > 1
   const canOpenSourcePicker = canEdit && hasSourcePicker && !pending
@@ -356,7 +346,7 @@ export function VehicleLogWorkspaceClient({
             </Select>
           </div>
           <div className="flex flex-wrap items-end justify-start gap-2 lg:justify-end">
-            {hasSourcePicker ? (
+            {!canManage ? null : hasSourcePicker ? (
               <Popover
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
@@ -374,8 +364,7 @@ export function VehicleLogWorkspaceClient({
                 </div>
                 <div className="max-h-72 overflow-y-auto py-1">
                   {importSources.map((source) => {
-                    const disabled =
-                      !source.active || (!source.onDemand && source.matchedDayCount === 0)
+                    const disabled = !source.active
                     const selected = selectedImportSource?.id === source.id
                     return (
                       <button
@@ -397,25 +386,10 @@ export function VehicleLogWorkspaceClient({
                             {source.connectorLabel} · {source.status}
                           </span>
                           <span className="mt-0.5 block text-[11px] text-slate-400">
-                            {source.onDemand
-                              ? source.description || `Pulls ${workspace.month.label} live`
-                              : `${plural(source.monthRowCount, 'row')} this month · ${plural(
-                                  source.matchedDayCount,
-                                  'matched day',
-                                )}`}
+                            {source.description || `Pulls ${workspace.month.label} live`}
                           </span>
                         </span>
-                        <Badge
-                          variant={
-                            source.onDemand
-                              ? 'secondary'
-                              : source.matchedDayCount
-                                ? 'secondary'
-                                : 'outline'
-                          }
-                        >
-                          {source.onDemand ? 'Live' : source.matchedDayCount}
-                        </Badge>
+                        <Badge variant="secondary">Live</Badge>
                       </button>
                     )
                   })}
@@ -428,13 +402,7 @@ export function VehicleLogWorkspaceClient({
                     type="button"
                     size="sm"
                     onClick={() => void applyActivity(selectedImportSource?.id)}
-                    disabled={
-                      !selectedImportSource ||
-                      !selectedImportSource.active ||
-                      (!selectedImportSource.onDemand &&
-                        selectedImportSource.matchedDayCount === 0) ||
-                      pending
-                    }
+                    disabled={!selectedImportSource || !selectedImportSource.active || pending}
                   >
                     Import
                   </Button>
@@ -443,7 +411,7 @@ export function VehicleLogWorkspaceClient({
             ) : (
               importButton
             )}
-            {workspace.importSources.canConfigureSources && !hasActiveSource ? (
+            {canManage && workspace.importSources.canConfigureSources && !hasActiveSource ? (
               <Link
                 href="/admin/integrations"
                 className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60"
@@ -452,16 +420,18 @@ export function VehicleLogWorkspaceClient({
                 Configure
               </Link>
             ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={deleteMonth}
-              disabled={!canEdit || pending}
-            >
-              <Trash2 size={14} />
-              Delete month
-            </Button>
+            {canManage ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={deleteMonth}
+                disabled={!canEdit || pending}
+              >
+                <Trash2 size={14} />
+                Delete month
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -490,18 +460,12 @@ export function VehicleLogWorkspaceClient({
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">{workspace.totals.loggedDays} logged</Badge>
-            <Badge variant={workspace.totals.pendingActivityDays ? 'warning' : 'outline'}>
-              {workspace.totals.pendingActivityDays} pending
-            </Badge>
-            <Badge variant={workspace.totals.conflictDays ? 'warning' : 'outline'}>
-              {workspace.totals.conflictDays} conflicts
-            </Badge>
             <Badge variant="outline">{workspace.totals.totalKm} km</Badge>
             <Badge variant={hasActiveSource ? 'outline' : 'warning'}>{sourceBadge}</Badge>
             <Badge variant={matchedImportDays ? 'secondary' : 'outline'}>{activityBadge}</Badge>
             {actionResult ? (
               <span className="text-slate-500 dark:text-slate-400">{actionResult}</span>
-            ) : !canImport ? (
+            ) : canManage && !canImport ? (
               <span className="text-slate-500 dark:text-slate-400">{importHint}</span>
             ) : null}
           </div>
@@ -520,7 +484,6 @@ export function VehicleLogWorkspaceClient({
                 <th className="sticky left-0 z-20 w-24 bg-slate-50 px-3 py-2 text-left font-medium dark:bg-slate-950">
                   Date
                 </th>
-                <th className="w-56 px-3 py-2 text-left font-medium">Import source</th>
                 <th className="w-52 px-3 py-2 text-left font-medium">Site</th>
                 {workspace.mode === 'destination' ? (
                   <>
@@ -572,38 +535,6 @@ export function VehicleLogWorkspaceClient({
                       </div>
                     </td>
                     <td className="px-3 py-2 align-top">
-                      {row.activity ? (
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant={draft.id ? 'secondary' : 'warning'}>
-                              {draft.id ? 'Matched' : 'Ready'}
-                            </Badge>
-                            {row.activity.count > 1 ? (
-                              <span className="text-xs text-slate-500">
-                                {row.activity.count} items
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="truncate text-xs text-slate-600 dark:text-slate-300">
-                            {row.activity.sourceLabel ?? row.activity.siteName ?? 'Source activity'}
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            {[
-                              row.activity.hours ? `${row.activity.hours} h` : null,
-                              row.activity.businessKm != null
-                                ? `${row.activity.businessKm} km`
-                                : null,
-                              row.activity.siteName,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top">
                       <div className="space-y-1">
                         <Select
                           value={draft.siteOrgUnitId ?? ''}
@@ -612,6 +543,7 @@ export function VehicleLogWorkspaceClient({
                           }
                           onBlur={() => void saveRow(row.date)}
                           className="h-8 text-xs"
+                          disabled={!canManage}
                         >
                           <option value="">—</option>
                           {workspace.sites.map((site) => (
@@ -628,6 +560,7 @@ export function VehicleLogWorkspaceClient({
                           onBlur={() => void saveRow(row.date)}
                           placeholder="Other"
                           className="h-8 text-xs"
+                          disabled={!canManage}
                         />
                       </div>
                     </td>
@@ -646,6 +579,7 @@ export function VehicleLogWorkspaceClient({
                             }
                             onBlur={() => void saveRow(row.date)}
                             className="h-8 text-right text-xs"
+                            disabled={!canManage}
                           />
                         </td>
                         <td className="px-2 py-2 align-top">
@@ -661,6 +595,7 @@ export function VehicleLogWorkspaceClient({
                             }
                             onBlur={() => void saveRow(row.date)}
                             className="h-8 text-right text-xs"
+                            disabled={!canManage}
                           />
                         </td>
                       </>
@@ -679,6 +614,7 @@ export function VehicleLogWorkspaceClient({
                             }
                             onBlur={() => void saveRow(row.date)}
                             className="h-8 text-right text-xs"
+                            disabled={!canManage}
                           />
                         </td>
                         <td className="px-2 py-2 align-top">
@@ -694,6 +630,7 @@ export function VehicleLogWorkspaceClient({
                             }
                             onBlur={() => void saveRow(row.date)}
                             className="h-8 text-right text-xs"
+                            disabled={!canManage}
                           />
                         </td>
                       </>
@@ -709,6 +646,7 @@ export function VehicleLogWorkspaceClient({
                         }
                         onBlur={() => void saveRow(row.date)}
                         className="h-8 text-right text-xs"
+                        disabled={!canManage}
                       />
                     </td>
                     <td className="px-2 py-2 align-top">
@@ -724,6 +662,7 @@ export function VehicleLogWorkspaceClient({
                         }
                         onBlur={() => void saveRow(row.date)}
                         className="h-8 text-right text-xs"
+                        disabled={!canManage}
                       />
                     </td>
                     <td className="px-2 py-2 text-right align-top">
@@ -738,6 +677,7 @@ export function VehicleLogWorkspaceClient({
                         onBlur={() => void saveRow(row.date)}
                         rows={1}
                         className="min-h-8 text-xs"
+                        disabled={!canManage}
                       />
                     </td>
                     <td className="px-3 py-2 align-top">
@@ -786,7 +726,7 @@ export function VehicleLogWorkspaceClient({
             </tbody>
             <tfoot className="border-t border-slate-200 bg-slate-50 text-sm font-medium dark:border-slate-800 dark:bg-slate-950">
               <tr>
-                <td className="sticky left-0 bg-slate-50 px-3 py-2 dark:bg-slate-950" colSpan={3}>
+                <td className="sticky left-0 bg-slate-50 px-3 py-2 dark:bg-slate-950" colSpan={2}>
                   Totals
                 </td>
                 {workspace.mode === 'destination' ? (

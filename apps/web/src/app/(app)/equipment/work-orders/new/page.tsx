@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
-import { asc, eq, sql } from 'drizzle-orm'
+import { asc, eq, isNull } from 'drizzle-orm'
 import {
   Button,
   Card,
@@ -12,14 +11,13 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
+import { equipmentItems, people, tenantUsers, user } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
+import { createEquipmentWorkOrder } from '../_lib'
 
 export const metadata = { title: 'New work order' }
 export const dynamic = 'force-dynamic'
@@ -39,43 +37,15 @@ async function createWorkOrder(formData: FormData) {
   if (!itemId || !summary) throw new Error('Equipment and summary are required.')
   if (!PRIORITIES.includes(priority)) throw new Error('Invalid priority.')
 
-  const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const counts = await tx
-      .select({ c: sql<number>`count(*)::int` })
-      .from(equipmentWorkOrders)
-      .where(sql`extract(year from ${equipmentWorkOrders.openedAt}) = ${year}`)
-    const c = counts[0]?.c ?? 0
-    const reference = `WO-${year}-${String(Number(c) + 1).padStart(4, '0')}`
-    const [inserted] = await tx
-      .insert(equipmentWorkOrders)
-      .values({
-        tenantId: ctx.tenantId,
-        itemId,
-        reference,
-        summary,
-        description,
-        priority,
-        status: 'open',
-        reportedByPersonId,
-        assignedToTenantUserId,
-        openedByTenantUserId: ctx.membership?.id,
-      } as any)
-      .returning()
-    return inserted
+  const row = await createEquipmentWorkOrder(ctx, {
+    itemId,
+    summary,
+    description,
+    priority,
+    assignedToTenantUserId,
+    reportedByPersonId,
   })
-
   if (!row) redirect('/equipment/work-orders')
-  await recordAudit(ctx, {
-    entityType: 'equipment_work_order',
-    entityId: row.id,
-    action: 'create',
-    summary: `Opened work order ${row.reference}: ${summary}`,
-    after: { reference: row.reference, itemId, priority, summary, status: 'open' },
-  })
-  await runModuleFlows(ctx, { moduleKey: 'equipment', event: 'on_create', subjectId: row.id })
-  revalidatePath('/equipment/work-orders')
-  revalidatePath(`/equipment/${itemId}`)
   redirect(`/equipment/work-orders/${row.id}`)
 }
 
@@ -103,6 +73,7 @@ export default async function NewWorkOrderPage({
           name: equipmentItems.name,
         })
         .from(equipmentItems)
+        .where(isNull(equipmentItems.deletedAt))
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
       tx

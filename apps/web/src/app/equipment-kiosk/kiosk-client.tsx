@@ -93,7 +93,17 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
       availableCount={config.availableCount}
       onSearch={async (query) => {
         const r = await searchKioskScan({ tenantId, pin, query })
-        return r.ok ? r.results : { equipment: [], people: [] }
+        if (!r.ok) {
+          // A revoked/rotated PIN detected during search re-locks the kiosk,
+          // matching how scans handle auth failures. Other errors (e.g. rate
+          // limiting) resolve to no matches rather than a dead search box.
+          if (/pin/i.test(r.error)) {
+            setPin(null)
+            setConfig(null)
+          }
+          return { equipment: [], people: [] }
+        }
+        return r.results
       }}
       onScan={(input) => performKioskScan({ ...input, tenantId, pin, deviceLabel })}
       onAuthError={() => {

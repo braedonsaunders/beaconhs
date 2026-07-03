@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Printer, QrCode } from 'lucide-react'
-import { and, asc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { Printer } from 'lucide-react'
+import { and, asc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -16,11 +16,14 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { Section } from '@/components/section'
+import { generateBulkQrSheet } from './_actions'
 
 export const metadata = { title: 'Bulk QR generator' }
 export const dynamic = 'force-dynamic'
@@ -34,9 +37,18 @@ export default async function BulkQrPage({
   const search = pickString(sp.q)
   const typeFilter = pickString(sp.typeId)
   const ctx = await requireRequestContext()
+  // Same gate + scope bounding as the CSV export: the picker lists asset tags,
+  // names, and QR tokens.
+  assertCan(ctx, 'equipment.read.site')
 
   const { rows, types } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
+    const scope = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
+    if (scope) filters.push(scope)
     if (search) {
       const term = `%${search}%`
       const cond = or(ilike(equipmentItems.assetTag, term), ilike(equipmentItems.name, term))
@@ -100,7 +112,7 @@ export default async function BulkQrPage({
       }
     >
       <Section title="Pick equipment for the QR sheet" defaultOpen>
-        <form action="/equipment/qr/bulk/print" method="GET" className="space-y-4">
+        <form action={generateBulkQrSheet} className="space-y-4">
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <Table>
               <TableHeader>
@@ -110,8 +122,10 @@ export default async function BulkQrPage({
                       type="checkbox"
                       id="select-all"
                       onChange={undefined}
-                      // Plain server-rendered select-all: a simple JS hook on
-                      // the print page also re-checks based on the chosen IDs.
+                      aria-label="Select all equipment"
+                      // Server-rendered select-all — the delegated inline
+                      // script at the bottom of the page toggles every .qr-cb
+                      // row checkbox when this changes.
                     />
                   </TableHead>
                   <TableHead>Asset tag</TableHead>
@@ -161,6 +175,19 @@ export default async function BulkQrPage({
           </div>
         </form>
       </Section>
+      {/* Select-all wiring — a delegated inline script keeps this page a pure
+          server component (same pattern as the print page's Print button). */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `document.addEventListener('change', (e) => {
+            const t = e.target instanceof HTMLInputElement ? e.target : null;
+            if (!t || t.id !== 'select-all') return;
+            document.querySelectorAll('input.qr-cb').forEach((cb) => {
+              if (cb instanceof HTMLInputElement) cb.checked = t.checked;
+            });
+          });`,
+        }}
+      />
     </ListPageLayout>
   )
 }

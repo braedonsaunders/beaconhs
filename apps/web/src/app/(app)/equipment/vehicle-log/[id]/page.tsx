@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, isNull } from 'drizzle-orm'
 import {
   Button,
   Card,
@@ -22,6 +22,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PersonSelectField } from '@/components/person-select-field'
+import { computeTotalKm } from '../_service'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,34 +55,59 @@ async function updateEntry(formData: FormData) {
   if (!driverPersonId) throw new Error('Driver is required.')
   const startOdometer = safeInt(formData.get('startOdometer'))
   const endOdometer = safeInt(formData.get('endOdometer'))
+  const businessKm = safeInt(formData.get('businessKm'))
+  const personalKm = safeInt(formData.get('personalKm'))
   const siteOrgUnitId = safeStr(formData.get('siteOrgUnitId'))
   const hoursRaw = safeStr(formData.get('hoursOnSite'))
   const manpowerCount = safeInt(formData.get('manpowerCount'))
   const notes = safeStr(formData.get('notes'))
-  const kmDriven =
-    typeof startOdometer === 'number' &&
-    typeof endOdometer === 'number' &&
-    endOdometer >= startOdometer
-      ? endOdometer - startOdometer
-      : null
 
-  await ctx.db((tx) =>
-    tx
-      .update(truckLogEntries)
-      .set({
-        equipmentItemId,
-        entryDate,
-        driverPersonId,
-        startOdometer,
-        endOdometer,
-        kmDriven,
-        siteOrgUnitId,
-        hoursOnSite: hoursRaw as any,
-        manpowerCount,
-        notes,
-      })
-      .where(eq(truckLogEntries.id, id)),
-  )
+  const kmDriven = await ctx.db(async (tx) => {
+    const [existing] = await tx
+      .select({ entryMode: truckLogEntries.entryMode })
+      .from(truckLogEntries)
+      .where(eq(truckLogEntries.id, id))
+      .limit(1)
+    if (!existing) throw new Error('Vehicle log entry not found.')
+    // Mode-aware save: only the fields for the entry's mode are written and
+    // the total is derived the same way the workspace grid derives it, so a
+    // destination-mode entry never has its kmDriven clobbered by empty
+    // odometer inputs.
+    const entryMode = existing.entryMode
+    const fields =
+      entryMode === 'odometer'
+        ? { startOdometer, endOdometer, businessKm: null, personalKm: null }
+        : { startOdometer: null, endOdometer: null, businessKm, personalKm }
+    const kmDriven = computeTotalKm({ entryMode, ...fields })
+    try {
+      await tx
+        .update(truckLogEntries)
+        .set({
+          equipmentItemId,
+          entryDate,
+          driverPersonId,
+          ...fields,
+          kmDriven,
+          siteOrgUnitId,
+          hoursOnSite: hoursRaw as any,
+          manpowerCount,
+          notes,
+        })
+        .where(eq(truckLogEntries.id, id))
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code?: string }).code === '23505'
+      ) {
+        throw new Error(
+          'An entry already exists for that vehicle, driver, and date. Edit that entry instead.',
+        )
+      }
+      throw error
+    }
+    return kmDriven
+  })
   await recordAudit(ctx, {
     entityType: 'truck_log_entry',
     entityId: id,
@@ -166,6 +192,7 @@ export default async function TruckLogDetailPage({
           name: equipmentItems.name,
         })
         .from(equipmentItems)
+        .where(isNull(equipmentItems.deletedAt))
         .orderBy(asc(equipmentItems.assetTag))
         .limit(500),
       tx
@@ -247,8 +274,15 @@ export default async function TruckLogDetailPage({
                   ),
                 },
                 { label: 'Site', value: site?.name ?? '—' },
-                { label: 'Start odometer', value: entry.startOdometer ?? '—' },
-                { label: 'End odometer', value: entry.endOdometer ?? '—' },
+                ...(entry.entryMode === 'destination'
+                  ? [
+                      { label: 'Business km', value: entry.businessKm ?? '—' },
+                      { label: 'Personal km', value: entry.personalKm ?? '—' },
+                    ]
+                  : [
+                      { label: 'Start odometer', value: entry.startOdometer ?? '—' },
+                      { label: 'End odometer', value: entry.endOdometer ?? '—' },
+                    ]),
                 { label: 'Km driven', value: entry.kmDriven ?? '—' },
                 { label: 'Hours on site', value: entry.hoursOnSite ?? '—' },
                 { label: 'Crew count', value: entry.manpowerCount ?? '—' },
@@ -313,24 +347,49 @@ export default async function TruckLogDetailPage({
                         ))}
                       </Select>
                     </Field>
-                    <Field label="Start odometer (km)">
-                      <Input
-                        name="startOdometer"
-                        type="number"
-                        min="0"
-                        step="1"
-                        defaultValue={entry.startOdometer ?? ''}
-                      />
-                    </Field>
-                    <Field label="End odometer (km)">
-                      <Input
-                        name="endOdometer"
-                        type="number"
-                        min="0"
-                        step="1"
-                        defaultValue={entry.endOdometer ?? ''}
-                      />
-                    </Field>
+                    {entry.entryMode === 'destination' ? (
+                      <>
+                        <Field label="Business km">
+                          <Input
+                            name="businessKm"
+                            type="number"
+                            min="0"
+                            step="1"
+                            defaultValue={entry.businessKm ?? ''}
+                          />
+                        </Field>
+                        <Field label="Personal km">
+                          <Input
+                            name="personalKm"
+                            type="number"
+                            min="0"
+                            step="1"
+                            defaultValue={entry.personalKm ?? ''}
+                          />
+                        </Field>
+                      </>
+                    ) : (
+                      <>
+                        <Field label="Start odometer (km)">
+                          <Input
+                            name="startOdometer"
+                            type="number"
+                            min="0"
+                            step="1"
+                            defaultValue={entry.startOdometer ?? ''}
+                          />
+                        </Field>
+                        <Field label="End odometer (km)">
+                          <Input
+                            name="endOdometer"
+                            type="number"
+                            min="0"
+                            step="1"
+                            defaultValue={entry.endOdometer ?? ''}
+                          />
+                        </Field>
+                      </>
+                    )}
                     <Field label="Hours on site">
                       <Input
                         name="hoursOnSite"

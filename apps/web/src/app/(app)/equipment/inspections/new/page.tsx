@@ -34,6 +34,7 @@ export default async function NewEquipmentInspectionPage({
         id: equipmentItems.id,
         name: equipmentItems.name,
         assetTag: equipmentItems.assetTag,
+        typeId: equipmentItems.typeId,
       })
       .from(equipmentItems)
       .where(and(isNull(equipmentItems.deletedAt), eq(equipmentItems.isDraft, false)))
@@ -43,6 +44,7 @@ export default async function NewEquipmentInspectionPage({
         id: equipmentInspectionTypes.id,
         name: equipmentInspectionTypes.name,
         interval: equipmentInspectionTypes.interval,
+        appliesToTypeId: equipmentInspectionTypes.appliesToTypeId,
       })
       .from(equipmentInspectionTypes)
       .where(eq(equipmentInspectionTypes.isActive, true))
@@ -54,11 +56,13 @@ export default async function NewEquipmentInspectionPage({
     value: i.id,
     label: i.name,
     hint: i.assetTag,
+    typeId: i.typeId,
   }))
   const typeOptions = types.map((t) => ({
     value: t.id,
     label: t.name,
     hint: INTERVAL_LABELS[t.interval] ?? t.interval,
+    appliesToTypeId: t.appliesToTypeId,
   }))
 
   return (

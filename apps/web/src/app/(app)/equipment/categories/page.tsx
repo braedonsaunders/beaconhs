@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { equipmentCategories, equipmentTypes } from '@beaconhs/db/schema'
+import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
@@ -94,7 +94,31 @@ async function deleteCategory(formData: FormData) {
   assertCanManageModule(ctx, 'equipment')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
-  await ctx.db((tx) => tx.delete(equipmentCategories).where(eq(equipmentCategories.id, id)))
+  await ctx.db(async (tx) => {
+    // Server-side usage check — the disabled delete button is advisory only.
+    // Both equipment types AND equipment items reference categories.
+    const [typeUse] = await tx
+      .select({ c: count() })
+      .from(equipmentTypes)
+      .where(eq(equipmentTypes.categoryId, id))
+    const [itemUse] = await tx
+      .select({ c: count() })
+      .from(equipmentItems)
+      .where(eq(equipmentItems.categoryId, id))
+    const types = Number(typeUse?.c ?? 0)
+    const items = Number(itemUse?.c ?? 0)
+    if (types > 0 || items > 0) {
+      throw new Error(
+        `Cannot delete: ${[
+          types > 0 ? `${types} type${types === 1 ? '' : 's'}` : null,
+          items > 0 ? `${items} item${items === 1 ? '' : 's'}` : null,
+        ]
+          .filter(Boolean)
+          .join(' and ')} reference this category. Reassign them first.`,
+      )
+    }
+    await tx.delete(equipmentCategories).where(eq(equipmentCategories.id, id))
+  })
   await recordAudit(ctx, {
     entityType: 'equipment_category',
     entityId: id,
@@ -121,7 +145,7 @@ export default async function EquipmentCategoriesPage({
   const perPage = params.perPage
   const ctx = await requireModuleManage('equipment')
 
-  const { categories, total, typeCounts, editingRow } = await ctx.db(async (tx) => {
+  const { categories, total, typeCounts, itemCounts, editingRow } = await ctx.db(async (tx) => {
     const search: SQL<unknown> | undefined = params.q
       ? or(
           ilike(equipmentCategories.name, `%${params.q}%`),
@@ -150,6 +174,11 @@ export default async function EquipmentCategoriesPage({
       .select({ categoryId: equipmentTypes.categoryId, c: count() })
       .from(equipmentTypes)
       .groupBy(equipmentTypes.categoryId)
+    // Items reference categories directly too — the delete guard counts both.
+    const itemTally = await tx
+      .select({ categoryId: equipmentItems.categoryId, c: count() })
+      .from(equipmentItems)
+      .groupBy(equipmentItems.categoryId)
     // Edit row fetched by id so the drawer opens regardless of which page it's on.
     const ed =
       drawerParam && drawerParam !== 'new'
@@ -166,6 +195,11 @@ export default async function EquipmentCategoriesPage({
       total: Number(tot?.c ?? 0),
       typeCounts: Object.fromEntries(
         tally
+          .filter((x) => x.categoryId !== null)
+          .map((x) => [x.categoryId as string, Number(x.c)]),
+      ),
+      itemCounts: Object.fromEntries(
+        itemTally
           .filter((x) => x.categoryId !== null)
           .map((x) => [x.categoryId as string, Number(x.c)]),
       ),
@@ -252,12 +286,15 @@ export default async function EquipmentCategoriesPage({
                   Order
                 </SortableTh>
                 <TableHead className="text-right">Types</TableHead>
+                <TableHead className="text-right">Items</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {categories.map((c) => {
-                const used = typeCounts[c.id] ?? 0
+                const typeUse = typeCounts[c.id] ?? 0
+                const itemUse = itemCounts[c.id] ?? 0
+                const used = typeUse + itemUse
                 const editHref = mergeHref(BASE, sp, { drawer: c.id })
                 return (
                   <TableRow key={c.id}>
@@ -282,7 +319,10 @@ export default async function EquipmentCategoriesPage({
                       {c.sortOrder}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Badge variant="secondary">{used}</Badge>
+                      <Badge variant="secondary">{typeUse}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="secondary">{itemUse}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center gap-1">
@@ -300,7 +340,7 @@ export default async function EquipmentCategoriesPage({
                             disabled={used > 0}
                             title={
                               used > 0
-                                ? `${used} type(s) reference this category — reassign before deleting`
+                                ? `${typeUse} type(s) and ${itemUse} item(s) reference this category — reassign before deleting`
                                 : 'Delete category'
                             }
                             className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"

@@ -9,8 +9,9 @@ import {
   people,
   tenants,
 } from '@beaconhs/db/schema'
-import { assertCan, can } from '@beaconhs/tenant'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { StationClient } from './_station-client'
@@ -28,7 +29,9 @@ export default async function StationPage({
   assertCan(ctx, 'equipment.manage')
   const sp = await searchParams
   const initialScanCode = typeof sp.code === 'string' ? sp.code : null
-  const canManage = ctx.isSuperAdmin || can(ctx, 'equipment.manage')
+  // The settings page is gated by the module-admin permission, not
+  // equipment.manage — only show the button to users who can actually open it.
+  const canManage = canManageModule(ctx, 'equipment')
 
   const data = await ctx.db(async (tx) => {
     const [settings] = await tx
