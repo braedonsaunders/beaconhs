@@ -102,12 +102,15 @@ const KIND_BY_KEY = (entity: ReportEntity): Map<string, ReportColumnKind> =>
 /** Physical tables carrying a `deleted_at` soft-delete column, derived from the
  *  Drizzle schema so the public API excludes archived rows exactly like the UI
  *  (which filters `isNull(deletedAt)` everywhere). */
-const SOFT_DELETE_TABLES: ReadonlySet<string> = new Set(
-  Object.values(dbSchema)
-    .filter((value): value is PgTable => is(value, PgTable))
-    .filter((table) => 'deletedAt' in getTableColumns(table))
-    .map((table) => getTableName(table)),
-)
+const SOFT_DELETE_TABLES: ReadonlySet<string> = (() => {
+  const names = new Set<string>()
+  for (const value of Object.values(dbSchema)) {
+    if (!is(value, PgTable)) continue
+    const table = value as PgTable
+    if ('deletedAt' in getTableColumns(table)) names.add(getTableName(table))
+  }
+  return names
+})()
 
 /** `deleted_at IS NULL` predicate for soft-deletable entities, else null. */
 function notDeletedSql(entity: ReportEntity): SQL | null {
