@@ -125,7 +125,7 @@ import {
   LiveRichText,
   LiveSelect,
 } from '@/components/live-field'
-import { localDatetimeValue } from '../_datetime'
+import { datetimeLocalValue, formatDateTime } from '../_datetime'
 import { AddSignatureDrawerBody } from '../_signature-form'
 import { HazidPhotoUploader } from '../_photo-uploader'
 import { RiskScoreBadge } from '../_risk'
@@ -152,7 +152,7 @@ async function sendEmailAction(formData: FormData) {
         siteOrgUnitId: hazidAssessments.siteOrgUnitId,
       })
       .from(hazidAssessments)
-      .where(eq(hazidAssessments.id, id))
+      .where(and(eq(hazidAssessments.id, id), isNull(hazidAssessments.deletedAt)))
       .limit(1)
     if (!row) return false
     return canSeeRecord(ctx, tx, {
@@ -316,7 +316,16 @@ export default async function HazidAssessmentDetailPage({
     const siteOptions = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
+      // active sites only, plus this assessment's current site even if it was archived
+      .where(
+        and(
+          eq(orgUnits.level, 'site'),
+          or(
+            isNull(orgUnits.deletedAt),
+            row.a.siteOrgUnitId ? eq(orgUnits.id, row.a.siteOrgUnitId) : undefined,
+          ),
+        ),
+      )
       .orderBy(asc(orgUnits.name))
     const projectOptions = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
@@ -718,7 +727,7 @@ export default async function HazidAssessmentDetailPage({
           <DetailHeader
             back={{ href: '/hazard-assessments', label: 'Back to assessments' }}
             title={type?.name ?? 'Hazard assessment'}
-            subtitle={`${a.reference} · ${new Date(a.occurredAt).toLocaleString()}`}
+            subtitle={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone)}`}
             badge={
               <div className="flex items-center gap-2">
                 {locked ? (
@@ -752,8 +761,8 @@ export default async function HazidAssessmentDetailPage({
             <Alert variant="warning">
               <AlertTitle>This assessment is locked</AlertTitle>
               <AlertDescription>
-                Locked on {a.lockedAt ? new Date(a.lockedAt).toLocaleString() : '—'}. Unlock to make
-                edits (existing signatures will be cleared on unlock).
+                Locked on {a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone) : '—'}. Unlock to
+                make edits (existing signatures will be cleared on unlock).
               </AlertDescription>
             </Alert>
           ) : null}
@@ -892,7 +901,7 @@ export default async function HazidAssessmentDetailPage({
                   id={a.id}
                   field="occurredAt"
                   label="Date & time"
-                  initialValue={localDatetimeValue(new Date(a.occurredAt))}
+                  initialValue={datetimeLocalValue(a.occurredAt, ctx.timezone)}
                   disabled={locked}
                   updateAction={updateTextField}
                 />
@@ -1192,7 +1201,7 @@ export default async function HazidAssessmentDetailPage({
                             <span>{item.template.name}</span>
                             {item.response?.updatedAt ? (
                               <span>
-                                Updated {new Date(item.response.updatedAt).toLocaleString()}
+                                Updated {formatDateTime(item.response.updatedAt, ctx.timezone)}
                               </span>
                             ) : null}
                           </div>
@@ -1208,7 +1217,9 @@ export default async function HazidAssessmentDetailPage({
                         <input type="hidden" name="typeAppId" value={item.app.id} />
                         <Button
                           type="submit"
-                          disabled={locked && !item.response}
+                          // Locked assessments are read-only: submitted responses
+                          // stay viewable, drafts cannot be continued or started.
+                          disabled={locked && !item.done}
                           className="ff-chip w-full sm:w-auto sm:min-w-32"
                         >
                           {item.done ? <CheckCircle2 size={16} /> : <PlayCircle size={16} />}
@@ -1322,7 +1333,7 @@ export default async function HazidAssessmentDetailPage({
                       </div>
                       <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500 dark:border-slate-800">
                         {s.row.signedAt
-                          ? `Signed ${new Date(s.row.signedAt).toLocaleString()}`
+                          ? `Signed ${formatDateTime(s.row.signedAt, ctx.timezone)}`
                           : 'Awaiting signature'}
                       </div>
                     </li>
@@ -1522,9 +1533,9 @@ export default async function HazidAssessmentDetailPage({
         />
       </UrlDrawer>
 
-      {/* Delete confirmation */}
+      {/* Delete confirmation — module managers only, matching deleteAssessment */}
       <UrlDrawer
-        open={drawerKey === 'confirm-delete'}
+        open={drawerKey === 'confirm-delete' && canManage}
         closeHref={tabHref}
         title="Delete this assessment?"
         size="sm"
@@ -1556,7 +1567,7 @@ export default async function HazidAssessmentDetailPage({
       <GenericSendEmailDialog
         open={pickString(sp.send) === '1'}
         title="Send hazard assessment"
-        description="Sends a structured recap email to the tenant admin distribution list by default, or to the explicit recipients below."
+        description="Sends a structured recap of this assessment to the recipients below."
         reference={a.reference}
         defaultSubjectPrefix="Update"
         sendAction={async (fd) => {

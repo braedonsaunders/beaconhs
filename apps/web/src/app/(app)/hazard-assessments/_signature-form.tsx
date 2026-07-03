@@ -54,8 +54,10 @@ export function AddSignatureDrawerBody({
     const fd = new FormData()
     fd.set('assessmentId', assessmentId)
     fd.set('signatureType', type)
-    fd.set('personId', personId)
-    fd.set('externalName', externalName)
+    // Only send the identity field for the selected signer type — a value left
+    // over from the other mode must not ride along.
+    if (type === 'internal') fd.set('personId', personId)
+    if (type === 'external') fd.set('externalName', externalName)
     fd.set('signatureDataUrl', signature)
     if (showCSRoles) {
       if (csEntrant) fd.set('csEntrant', 'on')

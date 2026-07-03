@@ -51,6 +51,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { HazidSubNav } from './_subnav'
+import { formatDate, parseDatetimeLocal } from './_datetime'
 import { RiskScoreChip } from './_risk'
 import { NewAssessmentDrawer, type NewAssessmentType } from './_new-drawer'
 import { startAssessment } from './_actions'
@@ -108,8 +109,12 @@ export async function AssessmentsListPage({
     if (statusFilter === 'open') filters.push(eq(hazidAssessments.locked, false))
     if (statusFilter === 'locked') filters.push(eq(hazidAssessments.locked, true))
     if (siteFilter) filters.push(eq(hazidAssessments.siteOrgUnitId, siteFilter))
-    if (dateFromRaw) filters.push(gte(hazidAssessments.occurredAt, new Date(dateFromRaw)))
-    if (dateToRaw) filters.push(lte(hazidAssessments.occurredAt, new Date(`${dateToRaw}T23:59:59`)))
+    // Both range bounds are wall-clock dates in the user's timezone — parse
+    // them the same way so From and To never straddle different zones.
+    const dateFrom = dateFromRaw ? parseDatetimeLocal(`${dateFromRaw}T00:00`, ctx.timezone) : null
+    const dateTo = dateToRaw ? parseDatetimeLocal(`${dateToRaw}T23:59:59.999`, ctx.timezone) : null
+    if (dateFrom) filters.push(gte(hazidAssessments.occurredAt, dateFrom))
+    if (dateTo) filters.push(lte(hazidAssessments.occurredAt, dateTo))
     const whereClause = and(...filters)
 
     const orderBy =
@@ -187,11 +192,18 @@ export async function AssessmentsListPage({
       .where(sql`${hazidAssessmentTypes.deletedAt} is null`)
       .orderBy(asc(hazidAssessmentTypes.name))
 
+    // Same base scope as the list (not deleted, visibility, mineOnly) so the
+    // chips never offer a site that can only match hidden rows.
+    const siteScope: SQL<unknown>[] = [sql`${hazidAssessments.deletedAt} is null`]
+    if (vis) siteScope.push(vis)
+    if (mineOnly && ctx.membership?.id) {
+      siteScope.push(eq(hazidAssessments.reportedByTenantUserId, ctx.membership.id))
+    }
     const siteOptions = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
       .innerJoin(hazidAssessments, eq(hazidAssessments.siteOrgUnitId, orgUnits.id))
-      .where(vis)
+      .where(and(...siteScope))
       .groupBy(orgUnits.id, orgUnits.name)
       .orderBy(asc(orgUnits.name))
 
@@ -371,7 +383,7 @@ export async function AssessmentsListPage({
                           {scope || type?.name || 'Hazard assessment'}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
-                          {new Date(a.occurredAt).toLocaleDateString()}
+                          {formatDate(a.occurredAt, ctx.timezone)}
                           {site ? ` · ${site.name}` : ''}
                           {type?.name && scope ? ` · ${type.name}` : ''}
                         </div>
@@ -432,7 +444,7 @@ export async function AssessmentsListPage({
                             </Link>
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                            {new Date(a.occurredAt).toLocaleDateString()}
+                            {formatDate(a.occurredAt, ctx.timezone)}
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400">
                             {type?.name ?? '—'}

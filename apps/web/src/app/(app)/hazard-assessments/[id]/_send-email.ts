@@ -5,7 +5,7 @@
 // recipients + composes html/text and dispatches via `sendEmail`. The
 // audit row + email_log row both end up linked back to the assessment.
 
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   hazidAssessmentHazards,
   hazidAssessmentPPE,
@@ -21,6 +21,7 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { recordAudit } from '@/lib/audit'
+import { formatDateTime } from '../_datetime'
 
 export async function sendHazidEmail(
   ctx: RequestContext,
@@ -47,7 +48,7 @@ export async function sendHazidEmail(
       )
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
       .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
-      .where(eq(hazidAssessments.id, assessmentId))
+      .where(and(eq(hazidAssessments.id, assessmentId), isNull(hazidAssessments.deletedAt)))
       .limit(1)
     if (!row) return null
 
@@ -86,9 +87,12 @@ export async function sendHazidEmail(
   if (!data) return null
 
   // Explicit recipients only — no silent blast to every active tenant user.
-  const to = Array.from(new Set((options?.recipients ?? []).filter((s) => /@/.test(s))))
+  // The email queue carries no Cc header (EmailJobData transports only `to`),
+  // so Cc addresses are delivered as additional recipients rather than dropped.
+  const to = Array.from(
+    new Set([...(options?.recipients ?? []), ...(options?.cc ?? [])].filter((s) => /@/.test(s))),
+  )
   if (to.length === 0) return null
-  const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
 
   const supervisorName = data.supervisor
     ? `${data.supervisor.firstName} ${data.supervisor.lastName}`
@@ -121,7 +125,7 @@ export async function sendHazidEmail(
     `HAZARD ASSESSMENT`,
     `${data.a.reference}${data.type ? ` · ${data.type.name}` : ''}`,
     ``,
-    `Occurred: ${data.a.occurredAt.toLocaleString()}`,
+    `Occurred: ${formatDateTime(data.a.occurredAt, ctx.timezone)}`,
     `Site: ${data.site?.name ?? '—'}`,
     `Location on site: ${data.a.locationOnSite ?? '—'}`,
     `Supervisor: ${supervisorName}`,
@@ -137,7 +141,7 @@ export async function sendHazidEmail(
       const name = s.person
         ? `${s.person.firstName} ${s.person.lastName}`
         : (s.row.externalName ?? 'Unknown')
-      return `  - ${name}${s.row.signedAt ? ` (signed ${s.row.signedAt.toLocaleString()})` : ' (not signed)'}`
+      return `  - ${name}${s.row.signedAt ? ` (signed ${formatDateTime(s.row.signedAt, ctx.timezone)})` : ' (not signed)'}`
     }),
   ]
     .filter((s) => s !== '')
@@ -195,7 +199,7 @@ export async function sendHazidEmail(
       <h2 style="margin:0 0 4px;font-size:18px;">Hazard Assessment ${escapeHtml(data.a.reference)}</h2>
       <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
         ${data.type ? escapeHtml(data.type.name) + ' · ' : ''}
-        ${escapeHtml(data.a.occurredAt.toLocaleString())} ·
+        ${escapeHtml(formatDateTime(data.a.occurredAt, ctx.timezone))} ·
         ${data.a.locked ? 'locked / completed' : 'in progress'}
       </div>
       ${
@@ -224,7 +228,7 @@ export async function sendHazidEmail(
                 const name = s.person
                   ? `${escapeHtml(s.person.firstName)} ${escapeHtml(s.person.lastName)}`
                   : escapeHtml(s.row.externalName ?? 'Unknown')
-                return `<li>${name}${s.row.signedAt ? ` (signed ${escapeHtml(s.row.signedAt.toLocaleString())})` : ' (not signed)'}</li>`
+                return `<li>${name}${s.row.signedAt ? ` (signed ${escapeHtml(formatDateTime(s.row.signedAt, ctx.timezone))})` : ' (not signed)'}</li>`
               })
               .join('')}</ul>`
       }
@@ -252,7 +256,7 @@ export async function sendHazidEmail(
     entityId: assessmentId,
     action: 'export',
     summary: `Emailed hazard assessment to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
-    after: { recipientCount: to.length, recipients: to, cc },
+    after: { recipientCount: to.length, recipients: to },
   })
   return { recipientCount: to.length }
 }

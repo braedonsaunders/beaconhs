@@ -57,11 +57,13 @@ export function AssessmentHeaderActions({
     <>
       {/* Desktop: the full row */}
       <div className="hidden items-center gap-2 sm:flex">
-        <Link href={pdfHref as any}>
+        {/* Plain <a>, not <Link> — the PDF route audits the export, and Link
+            prefetch would log phantom exports on hover/viewport. */}
+        <a href={pdfHref}>
           <Button variant="outline">
             <FileText size={14} /> Print / PDF
           </Button>
-        </Link>
+        </a>
         <Link href={emailHref as any} scroll={false}>
           <Button variant="outline">
             <Mail size={14} /> Send email
@@ -104,9 +106,9 @@ export function AssessmentHeaderActions({
               onClick={() => setOpen(false)}
             />
             <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-              <Link href={pdfHref as any} className={menuItem} onClick={() => setOpen(false)}>
+              <a href={pdfHref} className={menuItem} onClick={() => setOpen(false)}>
                 <FileText size={15} /> Print / PDF
-              </Link>
+              </a>
               <Link
                 href={emailHref as any}
                 scroll={false}

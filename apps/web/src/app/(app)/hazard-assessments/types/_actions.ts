@@ -124,6 +124,13 @@ export async function addTypePPE(input: {
       .returning({ id: hazidAssessmentTypePPE.id })
     return { id: row?.id, entityOrder }
   })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: `Added default PPE "${name}"`,
+    metadata: { ppeId: result.id ?? null },
+  })
   revalidateType(input.typeId)
   return result
 }
@@ -146,6 +153,13 @@ export async function updateTypePPE(input: {
       })
       .where(eq(hazidAssessmentTypePPE.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: `Updated default PPE "${input.name.trim() || 'PPE'}"`,
+    metadata: { ppeId: input.id },
+  })
   revalidateType(input.typeId)
 }
 
@@ -154,6 +168,13 @@ export async function deleteTypePPE(input: { typeId: string; id: string }) {
   await ctx.db((tx) =>
     tx.delete(hazidAssessmentTypePPE).where(eq(hazidAssessmentTypePPE.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Removed default PPE',
+    metadata: { ppeId: input.id },
+  })
   revalidateType(input.typeId)
 }
 
@@ -166,6 +187,12 @@ export async function reorderTypePPE(input: { typeId: string; ids: string[] }) {
         .set({ entityOrder: i })
         .where(eq(hazidAssessmentTypePPE.id, input.ids[i]!))
     }
+  })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Reordered default PPE',
   })
   revalidateType(input.typeId)
 }
@@ -206,6 +233,13 @@ export async function addTypeQuestion(input: {
       .returning({ id: hazidAssessmentTypeQuestions.id })
     return { id: row?.id, entityOrder }
   })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: `Added default question "${question}"`,
+    metadata: { questionId: result.id ?? null },
+  })
   revalidateType(input.typeId)
   return result
 }
@@ -230,6 +264,13 @@ export async function updateTypeQuestion(input: {
       })
       .where(eq(hazidAssessmentTypeQuestions.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Updated default question',
+    metadata: { questionId: input.id },
+  })
   revalidateType(input.typeId)
 }
 
@@ -238,6 +279,13 @@ export async function deleteTypeQuestion(input: { typeId: string; id: string }) 
   await ctx.db((tx) =>
     tx.delete(hazidAssessmentTypeQuestions).where(eq(hazidAssessmentTypeQuestions.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Removed default question',
+    metadata: { questionId: input.id },
+  })
   revalidateType(input.typeId)
 }
 
@@ -250,6 +298,12 @@ export async function reorderTypeQuestions(input: { typeId: string; ids: string[
         .set({ entityOrder: i })
         .where(eq(hazidAssessmentTypeQuestions.id, input.ids[i]!))
     }
+  })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Reordered default questions',
   })
   revalidateType(input.typeId)
 }
@@ -310,6 +364,13 @@ export async function addTypeApp(input: {
       })
     return row
   })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: `Attached app "${result?.label ?? 'App'}"`,
+    metadata: { typeAppId: result?.id ?? null, templateId: input.templateId },
+  })
   revalidateType(input.typeId)
   return result
 }
@@ -334,6 +395,13 @@ export async function updateTypeApp(input: {
       })
       .where(eq(hazidAssessmentTypeApps.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: `Updated attached app "${input.label.trim() || 'App'}"`,
+    metadata: { typeAppId: input.id },
+  })
   revalidateType(input.typeId)
 }
 
@@ -342,6 +410,13 @@ export async function deleteTypeApp(input: { typeId: string; id: string }) {
   await ctx.db((tx) =>
     tx.delete(hazidAssessmentTypeApps).where(eq(hazidAssessmentTypeApps.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Removed attached app',
+    metadata: { typeAppId: input.id },
+  })
   revalidateType(input.typeId)
 }
 
@@ -354,6 +429,12 @@ export async function reorderTypeApps(input: { typeId: string; ids: string[] }) 
         .set({ entityOrder: i })
         .where(eq(hazidAssessmentTypeApps.id, input.ids[i]!))
     }
+  })
+  await recordAudit(ctx, {
+    entityType: 'hazid_assessment_type',
+    entityId: input.typeId,
+    action: 'update',
+    summary: 'Reordered attached apps',
   })
   revalidateType(input.typeId)
 }

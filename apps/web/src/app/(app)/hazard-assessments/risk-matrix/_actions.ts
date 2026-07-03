@@ -15,6 +15,7 @@ import type { RiskMatrixConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { RISK_AXIS_MAX } from '../_risk-scale'
 
 export type SaveResult = { ok: true } | { ok: false; error: string }
 
@@ -30,8 +31,10 @@ function validate(
     return { ok: false, error: 'Both axes need labels.' }
   if (sev.length < 2 || lik.length < 2)
     return { ok: false, error: 'Each axis needs at least two levels.' }
-  if (sev.length > 8 || lik.length > 8)
-    return { ok: false, error: 'Each axis can have at most eight levels.' }
+  // Same ceiling as the editor's MAX_AXIS and the rating-field clamp — a
+  // larger matrix would have top cells no stored rating could reference.
+  if (sev.length > RISK_AXIS_MAX || lik.length > RISK_AXIS_MAX)
+    return { ok: false, error: `Each axis can have at most ${RISK_AXIS_MAX} levels.` }
 
   const cells: RiskMatrixConfig['cells'] = {}
   for (let s = 0; s < sev.length; s++) {

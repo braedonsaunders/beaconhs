@@ -40,6 +40,8 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitHazardAssessmentCreated } from '@beaconhs/integrations'
+import { parseDatetimeLocal } from './_datetime'
+import { riskRating } from './_risk-scale'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
 // types tenantId as string | null because some admin pages run pre-tenant —
@@ -52,28 +54,49 @@ async function ctxWithTenant(): Promise<HazidCtx> {
   return ctx as HazidCtx
 }
 
-// Re-scope guard for the per-assessment mutations: the caller already holds
+// Re-scope guard for the per-assessment actions: the caller already holds
 // `hazid.update`, but a self/site-tier user must not be able to drive an
 // assessment they cannot see by guessing its id. Mirrors the detail page's
-// canSeeRecord check (prefix 'hazid', owner = reporter, site).
+// canSeeRecord check (prefix 'hazid', owner = reporter, site). Soft-deleted
+// assessments are treated as not found.
 async function assertCanSeeAssessment(ctx: HazidCtx, assessmentId: string): Promise<void> {
-  const visible = await ctx.db(async (tx) => {
-    const [row] = await tx
+  await resolveAssessmentAccess(ctx, assessmentId)
+}
+
+// Mutation guard: visibility re-scope PLUS lock enforcement. The detail page
+// only hides controls when an assessment is locked, so the server must reject
+// writes on a locked (signed) assessment regardless of what gets posted —
+// otherwise signatures would silently stop attesting to what was signed.
+// Lock/unlock/copy/delete/export keep the plain visibility guard.
+async function assertAssessmentEditable(ctx: HazidCtx, assessmentId: string): Promise<void> {
+  const row = await resolveAssessmentAccess(ctx, assessmentId)
+  if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
+}
+
+async function resolveAssessmentAccess(
+  ctx: HazidCtx,
+  assessmentId: string,
+): Promise<{ locked: boolean }> {
+  const row = await ctx.db(async (tx) => {
+    const [found] = await tx
       .select({
         reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
         siteOrgUnitId: hazidAssessments.siteOrgUnitId,
+        locked: hazidAssessments.locked,
       })
       .from(hazidAssessments)
-      .where(eq(hazidAssessments.id, assessmentId))
+      .where(and(eq(hazidAssessments.id, assessmentId), isNull(hazidAssessments.deletedAt)))
       .limit(1)
-    if (!row) return false
-    return canSeeRecord(ctx, tx, {
+    if (!found) return null
+    const visible = await canSeeRecord(ctx, tx, {
       prefix: 'hazid',
-      ownerIds: [row.reportedByTenantUserId],
-      siteId: row.siteOrgUnitId,
+      ownerIds: [found.reportedByTenantUserId],
+      siteId: found.siteOrgUnitId,
     })
+    return visible ? found : null
   })
-  if (!visible) throw new Error('Assessment not found')
+  if (!row) throw new Error('Assessment not found')
+  return { locked: row.locked }
 }
 
 const PATHS = (id: string) => [`/hazard-assessments/${id}`, '/hazard-assessments']
@@ -187,13 +210,19 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
   const locationOnSite = String(formData.get('locationOnSite') ?? '').trim() || null
   const occurredAtRaw = String(formData.get('occurredAt') ?? '')
   const supervisorPersonId = String(formData.get('supervisorPersonId') ?? '').trim() || null
-  // jobScope is rich-text HTML; treat an empty editor (`<p></p>`) as null.
-  const jobScopeRaw = String(formData.get('jobScope') ?? '').trim()
-  const jobScope = htmlToText(jobScopeRaw) ? jobScopeRaw : null
+  // jobScope is rich-text HTML; sanitize it and treat an empty editor
+  // (`<p></p>`) as null.
+  const jobScope = nullableRichText(formData.get('jobScope'))
   const copyFromId = String(formData.get('copyFromId') ?? '').trim() || null
 
-  const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : new Date()
-  if (Number.isNaN(occurredAt.getTime())) throw new Error('Invalid occurred date/time')
+  // datetime-local values are wall-clock strings — parse them in the user's
+  // timezone, not the server's.
+  const occurredAt = occurredAtRaw ? parseDatetimeLocal(occurredAtRaw, ctx.timezone) : new Date()
+  if (!occurredAt) throw new Error('Invalid occurred date/time')
+
+  // Re-scope the copy source: a self/site-tier user must not be able to
+  // exfiltrate an assessment they cannot see by replaying its id.
+  if (copyFromId) await assertCanSeeAssessment(ctx, copyFromId)
 
   const created = await ctx.db(async (tx) => {
     const year = new Date().getFullYear()
@@ -283,7 +312,12 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
             const hazRows = await tx
               .select()
               .from(hazidHazards)
-              .where(sql`${hazidHazards.id} = ANY(${set.hazardIds})`)
+              .where(
+                and(
+                  sql`${hazidHazards.id} = ANY(${set.hazardIds})`,
+                  isNull(hazidHazards.deletedAt),
+                ),
+              )
             if (hazRows.length > 0) {
               await tx.insert(hazidAssessmentHazards).values(
                 hazRows.map((h, i) => ({
@@ -331,7 +365,9 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
         await tx
           .update(hazidAssessments)
           .set({
-            jobScope: src.jobScope,
+            // Re-sanitize on copy so payloads stored before write-time
+            // sanitization existed cannot propagate into new records.
+            jobScope: src.jobScope ? sanitizeDocumentHtml(src.jobScope) : null,
             locationOnSite: src.locationOnSite,
           })
           .where(eq(hazidAssessments.id, row.id))
@@ -531,6 +567,11 @@ export async function openAssessmentApp(formData: FormData) {
 
     let responseId = existing?.response.id ?? null
     let status = existing?.response.status ?? null
+    // Locked assessments are read-only: submitted responses stay viewable, but
+    // pre-submit drafts must not be editable and new responses cannot start.
+    if (assessment.locked && existing && (status === 'draft' || status === 'in_progress')) {
+      throw new Error('Unlock this assessment before editing this app')
+    }
     if (!responseId) {
       if (assessment.locked) throw new Error('Unlock this assessment before starting a new app')
       const link = await createAssessmentAppResponse(tx, {
@@ -575,35 +616,6 @@ export async function openAssessmentApp(formData: FormData) {
   redirect(`/apps/responses/${target.responseId}` as any)
 }
 
-export async function updateGeneral(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  if (!id) throw new Error('Missing id')
-  await assertCanSeeAssessment(ctx, id)
-
-  const occurredAtRaw = String(formData.get('occurredAt') ?? '')
-  const occurredAt = occurredAtRaw ? new Date(occurredAtRaw) : undefined
-  const updates: Record<string, unknown> = {
-    siteOrgUnitId: nullable(formData.get('siteOrgUnitId')),
-    projectOrgUnitId: nullable(formData.get('projectOrgUnitId')),
-    locationOnSite: nullable(formData.get('locationOnSite')),
-    supervisorPersonId: nullable(formData.get('supervisorPersonId')),
-    assessmentTypeId: nullable(formData.get('assessmentTypeId')),
-  }
-  if (occurredAt && !Number.isNaN(occurredAt.getTime())) updates.occurredAt = occurredAt
-
-  await ctx.db((tx) => tx.update(hazidAssessments).set(updates).where(eq(hazidAssessments.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated general information',
-    after: updates,
-  })
-  revalidateAssessment(id)
-}
-
 export async function updateTextField(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
@@ -611,7 +623,7 @@ export async function updateTextField(formData: FormData) {
   const field = String(formData.get('field') ?? '')
   const value = nullable(formData.get('value'))
   if (!id || !field) throw new Error('Missing id/field')
-  await assertCanSeeAssessment(ctx, id)
+  await assertAssessmentEditable(ctx, id)
   const ALLOWED = new Set([
     'jobScope',
     // General-info fields editable inline on the single-page form
@@ -624,8 +636,6 @@ export async function updateTextField(formData: FormData) {
   ])
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
 
-  // Booleans (toggles) come in as "on" / "off" / "true" / "false".
-  const BOOLS = new Set<string>()
   // Nullable FK columns — empty string clears them.
   const NULLABLE_IDS = new Set([
     'siteOrgUnitId',
@@ -634,25 +644,18 @@ export async function updateTextField(formData: FormData) {
     'assessmentTypeId',
   ])
   const DATES = new Set(['occurredAt'])
-  // Array-string fields (multi-select text) come comma-separated.
-  const ARRAYS = new Set<string>()
 
-  // Rich-text columns store HTML; an empty editor sends `<p></p>` — store null.
+  // Rich-text columns store HTML; sanitize on write and store an empty editor
+  // (`<p></p>`) as null.
   const RICH = new Set(['jobScope'])
 
   let val: unknown = value
-  if (BOOLS.has(field)) val = value === 'on' || value === 'true' || value === '1'
-  if (RICH.has(field)) val = htmlToText(value).length > 0 ? value : null
-  if (ARRAYS.has(field)) {
-    val = (value ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-  }
+  if (RICH.has(field)) val = nullableRichText(value)
   if (NULLABLE_IDS.has(field)) val = value || null
   if (DATES.has(field)) {
-    const d = value ? new Date(value) : null
-    if (!d || Number.isNaN(d.getTime())) throw new Error('Invalid date')
+    // datetime-local wall-clock strings are parsed in the user's timezone.
+    const d = value ? parseDatetimeLocal(value, ctx.timezone) : null
+    if (!d) throw new Error('Invalid date')
     val = d
   }
 
@@ -732,7 +735,8 @@ export async function unlockAssessment(formData: FormData) {
 
 export async function deleteAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
+  // Delete is a module-manager action — `hazid.update` alone is not enough.
+  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
   await ctx.db((tx) =>
@@ -936,7 +940,7 @@ export async function addTask(formData: FormData) {
   const description = String(formData.get('description') ?? '').trim() || null
   const controls = String(formData.get('controls') ?? '').trim() || null
   if (!assessmentId) throw new Error('Missing assessmentId')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
 
   await ctx.db(async (tx) => {
     let hazardIds: string[] = []
@@ -979,14 +983,16 @@ export async function updateTask(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const description = nullable(formData.get('description'))
   const controls = nullable(formData.get('controls'))
   await ctx.db((tx) =>
     tx
       .update(hazidAssessmentTasks)
       .set({ description, controls })
-      .where(eq(hazidAssessmentTasks.id, id)),
+      .where(
+        and(eq(hazidAssessmentTasks.id, id), eq(hazidAssessmentTasks.assessmentId, assessmentId)),
+      ),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_task',
@@ -1002,8 +1008,14 @@ export async function deleteTask(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
-  await ctx.db((tx) => tx.delete(hazidAssessmentTasks).where(eq(hazidAssessmentTasks.id, id)))
+  await assertAssessmentEditable(ctx, assessmentId)
+  await ctx.db((tx) =>
+    tx
+      .delete(hazidAssessmentTasks)
+      .where(
+        and(eq(hazidAssessmentTasks.id, id), eq(hazidAssessmentTasks.assessmentId, assessmentId)),
+      ),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_task',
     entityId: id,
@@ -1020,7 +1032,7 @@ export async function moveTask(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentTasks, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1035,7 +1047,7 @@ export async function addHazard(formData: FormData) {
   const hazardId = String(formData.get('hazardId') ?? '').trim() || null
   const name = String(formData.get('name') ?? '').trim() || null
   if (!assessmentId) throw new Error('Missing assessmentId')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
 
   await ctx.db(async (tx) => {
     let standardControls: string | null = null
@@ -1072,7 +1084,7 @@ export async function addHazardSet(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const setId = String(formData.get('setId') ?? '')
   if (!assessmentId || !setId) throw new Error('Missing ids')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db(async (tx) => {
     const [set] = await tx
       .select()
@@ -1083,7 +1095,7 @@ export async function addHazardSet(formData: FormData) {
     const hazRows = await tx
       .select()
       .from(hazidHazards)
-      .where(sql`${hazidHazards.id} = ANY(${set.hazardIds})`)
+      .where(and(sql`${hazidHazards.id} = ANY(${set.hazardIds})`, isNull(hazidHazards.deletedAt)))
     if (hazRows.length === 0) return
     const [maxOrder] = await tx
       .select({ m: max(hazidAssessmentHazards.entityOrder) })
@@ -1115,13 +1127,13 @@ export async function updateHazard(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const specificControls = nullable(formData.get('specificControls'))
   const applicable = formData.get('applicable') === 'on' || formData.get('applicable') === 'true'
   const standardControls = nullable(formData.get('standardControls'))
   const name = nullable(formData.get('name'))
-  // Risk-rating fields are optional 1-5 ints; absent → leave the column alone,
-  // empty → null it out, otherwise clamp into the valid range.
+  // Risk-rating fields are optional 1..RISK_AXIS_MAX ints; absent → leave the
+  // column alone, empty → null it out, otherwise clamp into the valid range.
   const updates: Record<string, unknown> = { specificControls, applicable }
   if (standardControls !== undefined) updates.standardControls = standardControls
   if (name !== undefined) updates.name = name
@@ -1133,7 +1145,15 @@ export async function updateHazard(formData: FormData) {
   if (formData.has('postSeverity')) updates.postSeverity = riskRating(formData.get('postSeverity'))
   if (formData.has('controls')) updates.controls = nullable(formData.get('controls'))
   await ctx.db((tx) =>
-    tx.update(hazidAssessmentHazards).set(updates).where(eq(hazidAssessmentHazards.id, id)),
+    tx
+      .update(hazidAssessmentHazards)
+      .set(updates)
+      .where(
+        and(
+          eq(hazidAssessmentHazards.id, id),
+          eq(hazidAssessmentHazards.assessmentId, assessmentId),
+        ),
+      ),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_hazard',
@@ -1144,27 +1164,22 @@ export async function updateHazard(formData: FormData) {
   revalidateAssessment(assessmentId)
 }
 
-// Coerces an incoming risk-rating form value to a clamped int, or null when the
-// field is empty / not a number. The ceiling matches the risk-matrix editor's
-// MAX_AXIS so a resized (e.g. 6×6) matrix can store its top index.
-function riskRating(v: FormDataEntryValue | null): number | null {
-  if (v === null) return null
-  const s = String(v).trim()
-  if (s === '') return null
-  const n = Number(s)
-  if (!Number.isFinite(n)) return null
-  const i = Math.round(n)
-  if (i < 1 || i > 6) return null
-  return i
-}
-
 export async function deleteHazard(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
-  await ctx.db((tx) => tx.delete(hazidAssessmentHazards).where(eq(hazidAssessmentHazards.id, id)))
+  await assertAssessmentEditable(ctx, assessmentId)
+  await ctx.db((tx) =>
+    tx
+      .delete(hazidAssessmentHazards)
+      .where(
+        and(
+          eq(hazidAssessmentHazards.id, id),
+          eq(hazidAssessmentHazards.assessmentId, assessmentId),
+        ),
+      ),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_hazard',
     entityId: id,
@@ -1181,7 +1196,7 @@ export async function moveHazard(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentHazards, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1195,7 +1210,7 @@ export async function addPPE(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
   if (!assessmentId || !name) throw new Error('Missing fields')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const description = nullable(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   await ctx.db(async (tx) => {
@@ -1226,14 +1241,17 @@ export async function updatePPE(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const name = String(formData.get('name') ?? '').trim() || undefined
   const description = nullable(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   const updates: Record<string, unknown> = { description, required }
   if (name) updates.name = name
   await ctx.db((tx) =>
-    tx.update(hazidAssessmentPPE).set(updates).where(eq(hazidAssessmentPPE.id, id)),
+    tx
+      .update(hazidAssessmentPPE)
+      .set(updates)
+      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId))),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_ppe',
@@ -1251,12 +1269,12 @@ export async function answerPPE(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const answer = String(formData.get('answer') ?? '')
   if (!['yes', 'no', 'na'].includes(answer)) throw new Error('Bad answer')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db((tx) =>
     tx
       .update(hazidAssessmentPPE)
       .set({ answer: answer as 'yes' | 'no' | 'na' })
-      .where(eq(hazidAssessmentPPE.id, id)),
+      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId))),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_ppe',
@@ -1272,8 +1290,12 @@ export async function deletePPE(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
-  await ctx.db((tx) => tx.delete(hazidAssessmentPPE).where(eq(hazidAssessmentPPE.id, id)))
+  await assertAssessmentEditable(ctx, assessmentId)
+  await ctx.db((tx) =>
+    tx
+      .delete(hazidAssessmentPPE)
+      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId))),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_ppe',
     entityId: id,
@@ -1290,7 +1312,7 @@ export async function movePPE(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentPPE, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1304,7 +1326,7 @@ export async function addQuestion(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const question = String(formData.get('question') ?? '').trim()
   if (!assessmentId || !question) throw new Error('Missing fields')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const questionType = String(formData.get('questionType') ?? 'yes_no') as
     | 'yes_no'
     | 'text'
@@ -1346,10 +1368,18 @@ export async function answerQuestion(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const answer = nullable(formData.get('answer'))
   await ctx.db((tx) =>
-    tx.update(hazidAssessmentQuestions).set({ answer }).where(eq(hazidAssessmentQuestions.id, id)),
+    tx
+      .update(hazidAssessmentQuestions)
+      .set({ answer })
+      .where(
+        and(
+          eq(hazidAssessmentQuestions.id, id),
+          eq(hazidAssessmentQuestions.assessmentId, assessmentId),
+        ),
+      ),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_question',
@@ -1365,13 +1395,21 @@ export async function updateQuestion(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   const question = String(formData.get('question') ?? '').trim() || undefined
   const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
   const updates: Record<string, unknown> = { requiresYes }
   if (question) updates.question = question
   await ctx.db((tx) =>
-    tx.update(hazidAssessmentQuestions).set(updates).where(eq(hazidAssessmentQuestions.id, id)),
+    tx
+      .update(hazidAssessmentQuestions)
+      .set(updates)
+      .where(
+        and(
+          eq(hazidAssessmentQuestions.id, id),
+          eq(hazidAssessmentQuestions.assessmentId, assessmentId),
+        ),
+      ),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_question',
@@ -1387,9 +1425,16 @@ export async function deleteQuestion(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db((tx) =>
-    tx.delete(hazidAssessmentQuestions).where(eq(hazidAssessmentQuestions.id, id)),
+    tx
+      .delete(hazidAssessmentQuestions)
+      .where(
+        and(
+          eq(hazidAssessmentQuestions.id, id),
+          eq(hazidAssessmentQuestions.assessmentId, assessmentId),
+        ),
+      ),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_question',
@@ -1407,7 +1452,7 @@ export async function moveQuestion(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await reorderEntities(ctx, hazidAssessmentQuestions, assessmentId, id, direction as 'up' | 'down')
   revalidateAssessment(assessmentId)
 }
@@ -1422,8 +1467,12 @@ export async function addSignature(formData: FormData) {
   const signatureType = String(formData.get('signatureType') ?? 'internal') as
     | 'internal'
     | 'external'
-  const personId = String(formData.get('personId') ?? '').trim() || null
-  const externalName = String(formData.get('externalName') ?? '').trim() || null
+  // Only keep the identity field that matches the signer type so a stale value
+  // from the other mode can never be stored (and displayed) alongside it.
+  const personId =
+    signatureType === 'internal' ? String(formData.get('personId') ?? '').trim() || null : null
+  const externalName =
+    signatureType === 'external' ? String(formData.get('externalName') ?? '').trim() || null : null
   const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '').trim() || null
   const csEntrant = formData.get('csEntrant') === 'on' || formData.get('csEntrant') === 'true'
   const csAttendant = formData.get('csAttendant') === 'on' || formData.get('csAttendant') === 'true'
@@ -1433,7 +1482,7 @@ export async function addSignature(formData: FormData) {
     throw new Error('Internal signer requires a person')
   if (signatureType === 'external' && !externalName)
     throw new Error('External signer requires a name')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
 
   // Move the captured signature bytes to object storage; store only the URL.
   const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
@@ -1468,65 +1517,21 @@ export async function addSignature(formData: FormData) {
   revalidateAssessment(assessmentId)
 }
 
-export async function updateSignature(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
-  const personId = formData.has('personId')
-    ? String(formData.get('personId') ?? '').trim() || null
-    : undefined
-  const externalName = formData.has('externalName')
-    ? String(formData.get('externalName') ?? '').trim() || null
-    : undefined
-  const signatureDataUrl = formData.has('signatureDataUrl')
-    ? String(formData.get('signatureDataUrl') ?? '').trim() || null
-    : undefined
-  const csEntrant = formData.has('csEntrant')
-    ? formData.get('csEntrant') === 'on' || formData.get('csEntrant') === 'true'
-    : undefined
-  const csAttendant = formData.has('csAttendant')
-    ? formData.get('csAttendant') === 'on' || formData.get('csAttendant') === 'true'
-    : undefined
-  const csRescue = formData.has('csRescue')
-    ? formData.get('csRescue') === 'on' || formData.get('csRescue') === 'true'
-    : undefined
-
-  const updates: Record<string, unknown> = {}
-  if (personId !== undefined) updates.personId = personId
-  if (externalName !== undefined) updates.externalName = externalName
-  if (signatureDataUrl !== undefined) {
-    // Only when a new value is provided: move the bytes to object storage and
-    // store the URL. null (clear) flows through unchanged.
-    const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
-    updates.signatureDataUrl = storedSignature
-    updates.signedAt = storedSignature ? new Date() : null
-  }
-  if (csEntrant !== undefined) updates.csEntrant = csEntrant
-  if (csAttendant !== undefined) updates.csAttendant = csAttendant
-  if (csRescue !== undefined) updates.csRescue = csRescue
-
-  await ctx.db((tx) =>
-    tx.update(hazidAssessmentSignatures).set(updates).where(eq(hazidAssessmentSignatures.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_signature',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated signature',
-  })
-  revalidateAssessment(assessmentId)
-}
-
 export async function deleteSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db((tx) =>
-    tx.delete(hazidAssessmentSignatures).where(eq(hazidAssessmentSignatures.id, id)),
+    tx
+      .delete(hazidAssessmentSignatures)
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.id, id),
+          eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+        ),
+      ),
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_signature',
@@ -1548,7 +1553,7 @@ export async function attachPhotos(formData: FormData) {
     .split(',')
     .filter(Boolean)
   if (!assessmentId || ids.length === 0) return
-  await assertCanSeeAssessment(ctx, assessmentId)
+  await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db((tx) =>
     tx.insert(hazidAssessmentPhotos).values(
       ids.map((attachmentId) => ({
@@ -1572,8 +1577,14 @@ export async function deletePhoto(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
-  await ctx.db((tx) => tx.delete(hazidAssessmentPhotos).where(eq(hazidAssessmentPhotos.id, id)))
+  await assertAssessmentEditable(ctx, assessmentId)
+  await ctx.db((tx) =>
+    tx
+      .delete(hazidAssessmentPhotos)
+      .where(
+        and(eq(hazidAssessmentPhotos.id, id), eq(hazidAssessmentPhotos.assessmentId, assessmentId)),
+      ),
+  )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',
     entityId: assessmentId,
@@ -1767,13 +1778,6 @@ export async function deleteHazardSet(formData: FormData) {
   revalidatePath('/hazard-assessments/hazards/sets')
 }
 
-// 1-5 risk inputs arrive as strings; anything non-numeric / out of range
-// clears the rating (null) rather than erroring.
-function riskInt(v: FormDataEntryValue | null): number | null {
-  const n = Number(String(v ?? '').trim())
-  return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null
-}
-
 export async function createTaskLibrary(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCanManageModule(ctx, 'hazid')
@@ -1794,10 +1798,10 @@ export async function createTaskLibrary(formData: FormData) {
         description,
         controls,
         hazardIds,
-        preLikelihood: riskInt(formData.get('preLikelihood')),
-        preSeverity: riskInt(formData.get('preSeverity')),
-        postLikelihood: riskInt(formData.get('postLikelihood')),
-        postSeverity: riskInt(formData.get('postSeverity')),
+        preLikelihood: riskRating(formData.get('preLikelihood')),
+        preSeverity: riskRating(formData.get('preSeverity')),
+        postLikelihood: riskRating(formData.get('postLikelihood')),
+        postSeverity: riskRating(formData.get('postSeverity')),
       })
       .returning(),
   )
@@ -1823,10 +1827,10 @@ export async function updateTaskLibrary(formData: FormData) {
     description: nullable(formData.get('description')),
     controls: nullableRichText(formData.get('controls')),
     hazardIds,
-    preLikelihood: riskInt(formData.get('preLikelihood')),
-    preSeverity: riskInt(formData.get('preSeverity')),
-    postLikelihood: riskInt(formData.get('postLikelihood')),
-    postSeverity: riskInt(formData.get('postSeverity')),
+    preLikelihood: riskRating(formData.get('preLikelihood')),
+    preSeverity: riskRating(formData.get('preSeverity')),
+    postLikelihood: riskRating(formData.get('postLikelihood')),
+    postSeverity: riskRating(formData.get('postSeverity')),
   }
   await ctx.db((tx) => tx.update(hazidTasks).set(updates).where(eq(hazidTasks.id, id)))
   await recordAudit(ctx, {
@@ -1906,15 +1910,6 @@ function nullableRichText(v: FormDataEntryValue | null): string | null {
   if (!raw) return null
   const clean = sanitizeDocumentHtml(raw)
   return htmlToText(clean) ? clean : null
-}
-
-function nullableNumeric(v: FormDataEntryValue | null): string | null {
-  if (v === null) return null
-  const s = String(v).trim()
-  if (s === '') return null
-  if (Number.isNaN(Number(s))) return null
-  // numeric() columns expect string in Drizzle
-  return s
 }
 
 // Generic reorder: untyped pass-through to avoid Drizzle's structural-table
