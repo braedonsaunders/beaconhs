@@ -5,6 +5,7 @@
 // config at /training/skills/types.
 
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { CreditCard, FileText, Printer, Star } from 'lucide-react'
 import {
   and,
@@ -28,8 +29,10 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { CredentialDownloadButton } from '@/components/credential-download-button'
@@ -73,6 +76,17 @@ export default async function SkillsPage({
   const skillFilter = pickString(sp.skill)
   const ctx = await requireRequestContext()
   const canManage = canManageModule(ctx, 'training')
+  // Skills are person-scoped credentials: viewing the list requires a training
+  // read tier (mirrors /training/records). Managers see everything — they edit
+  // any assignment; read.self holders are scoped to their own rows below. No
+  // qualifying permission at all → 404.
+  if (
+    !ctx.isSuperAdmin &&
+    !canManage &&
+    !can(ctx, 'training.read.all') &&
+    !can(ctx, 'training.read.self')
+  )
+    notFound()
   const now = new Date()
   const nowMs = now.getTime()
   const today = now.toISOString().slice(0, 10)
@@ -80,7 +94,15 @@ export default async function SkillsPage({
 
   const { rows, total, authorities, tenantSettings, peopleList, skillTypesList } = await ctx.db(
     async (tx) => {
+      // read.self → only the viewer's own skills; managers/read.all → everyone.
+      const vis = canManage
+        ? undefined
+        : await moduleScopeWhere(ctx, tx, {
+            prefix: 'training',
+            personCol: trainingSkillAssignments.personId,
+          })
       const filters: SQL<unknown>[] = [isNull(trainingSkillAssignments.deletedAt)]
+      if (vis) filters.push(vis)
       if (params.q) {
         const term = `%${params.q}%`
         const cond = or(
@@ -190,7 +212,8 @@ export default async function SkillsPage({
         .limit(1)
 
       // Filter option lists: only people/skill types that actually hold an
-      // assignment (so the dropdowns aren't padded with never-credentialed rows).
+      // assignment (so the dropdowns aren't padded with never-credentialed
+      // rows), scoped to the assignments the viewer can see.
       const peopleList = await tx
         .selectDistinct({
           id: people.id,
@@ -200,7 +223,7 @@ export default async function SkillsPage({
         })
         .from(trainingSkillAssignments)
         .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-        .where(isNull(trainingSkillAssignments.deletedAt))
+        .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
         .orderBy(asc(people.lastName), asc(people.firstName))
       const skillTypesList = await tx
         .selectDistinct({
@@ -213,7 +236,7 @@ export default async function SkillsPage({
           trainingSkillTypes,
           eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
         )
-        .where(isNull(trainingSkillAssignments.deletedAt))
+        .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
         .orderBy(asc(trainingSkillTypes.name))
 
       return {

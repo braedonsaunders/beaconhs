@@ -12,7 +12,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, isNull } from 'drizzle-orm'
 import { trainingClasses, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -37,6 +37,7 @@ export async function createClassDraft(): Promise<
     const [first] = await tx
       .select({ id: trainingCourses.id })
       .from(trainingCourses)
+      .where(isNull(trainingCourses.deletedAt))
       .orderBy(asc(trainingCourses.name))
       .limit(1)
     if (!first) return null // no courses in the catalogue yet

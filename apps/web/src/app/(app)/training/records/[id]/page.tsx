@@ -59,6 +59,7 @@ import {
   type CredentialOutput,
 } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
+import { addMonthsIso, isoToday } from '../../_lib/dates'
 import { RecordDetailFields } from './_fields'
 import { updateTrainingRecordField } from '../_actions'
 
@@ -92,7 +93,7 @@ async function renewRecord(formData: FormData) {
   })
   if (!existing) return
 
-  const completedOn = new Date().toISOString().slice(0, 10)
+  const completedOn = isoToday()
   let expiresOn: string | null = null
   if (existing.courseId) {
     const courseId = existing.courseId
@@ -105,9 +106,7 @@ async function renewRecord(formData: FormData) {
       return c
     })
     if (course?.validForMonths) {
-      const d = new Date(completedOn)
-      d.setMonth(d.getMonth() + course.validForMonths)
-      expiresOn = d.toISOString().slice(0, 10)
+      expiresOn = addMonthsIso(completedOn, course.validForMonths)
     }
   }
 
@@ -253,7 +252,11 @@ export default async function TrainingRecordPage({
   // Per-record visibility: training.read.all (or super-admin) → any record;
   // otherwise only the viewer's own training (record.personId === my person).
   // Closes the read-by-URL gap for users who hold only training.read.self.
+  // training.record.create also qualifies: recording staff work with other
+  // people's records (and a fresh "New certificate" draft has no person yet,
+  // which would otherwise 404 for its own creator).
   if (
+    !can(ctx, 'training.record.create') &&
     !(await ctx.db((tx) =>
       canSeeRecord(ctx, tx, {
         prefix: 'training',

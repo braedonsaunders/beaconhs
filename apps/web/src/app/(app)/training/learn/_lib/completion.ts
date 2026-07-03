@@ -15,6 +15,7 @@ import {
   trainingLessons,
   trainingRecords,
 } from '@beaconhs/db/schema'
+import { addMonthsIso } from '../../_lib/dates'
 
 export type CompletionResult = {
   completed: boolean
@@ -46,9 +47,7 @@ async function issueCourseRecordAndComplete(
     .where(eq(trainingCourses.id, courseId))
     .limit(1)
   const completedOn = now.toISOString().slice(0, 10)
-  const expiresOn = course?.validForMonths
-    ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000).toISOString().slice(0, 10)
-    : null
+  const expiresOn = course?.validForMonths ? addMonthsIso(completedOn, course.validForMonths) : null
   const [rec] = await tx
     .insert(trainingRecords)
     .values({

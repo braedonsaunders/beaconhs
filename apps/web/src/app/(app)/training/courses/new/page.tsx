@@ -12,6 +12,7 @@ import {
 } from '@beaconhs/ui'
 import { trainingCourses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
@@ -28,17 +29,19 @@ const DELIVERY_OPTIONS = [
 async function createCourse(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  // A server action is a POST endpoint — the page render gate alone is not
+  // protection. Creating catalogue courses is a training-management mutation,
+  // matching updateCourseSettings in the course studio actions.
+  assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId: string = ctx.tenantId
   const name = String(formData.get('name') ?? '').trim()
   const code = String(formData.get('code') ?? '').trim()
   if (!name || !code) throw new Error('Name and code are required')
-  const deliveryType = String(formData.get('deliveryType') ?? 'classroom').trim() as
-    | 'classroom'
-    | 'self_paced'
-    | 'on_the_job'
-    | 'external_certificate'
-    | 'online'
+  const deliveryRaw = String(formData.get('deliveryType') ?? 'classroom').trim()
+  const delivery = DELIVERY_OPTIONS.find((o) => o.value === deliveryRaw)
+  if (!delivery) throw new Error('Invalid delivery type')
+  const deliveryType = delivery.value
   const description = String(formData.get('description') ?? '').trim() || null
   const durationRaw = String(formData.get('durationMinutes') ?? '').trim()
   const durationMinutes = durationRaw ? Number(durationRaw) : null
@@ -77,7 +80,9 @@ async function createCourse(formData: FormData) {
 }
 
 export default async function NewTrainingCoursePage() {
-  await requireRequestContext()
+  // Course creation is a training-management surface; non-managers are bounced
+  // to the module home (createCourse re-checks server-side).
+  await requireModuleManage('training')
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">

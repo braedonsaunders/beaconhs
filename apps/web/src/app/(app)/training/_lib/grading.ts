@@ -1,7 +1,8 @@
 // Server-side grading for assessment attempts.
 // Pure function: given a question (kind + correctAnswer) and the user's answer,
-// decide correct/incorrect/null. `text` questions never auto-grade — they
-// remain null until a human marks them.
+// decide correct/incorrect/null. `text` questions never auto-grade — they are
+// unscored: submitAssessmentAttempt excludes them from the points denominator
+// and they render as recorded reference answers on the attempt page.
 //
 // Multi-choice canonicalisation: both `correctAnswer` and `answer` are
 // comma-separated value lists. We sort + lowercase both before comparing so

@@ -22,6 +22,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
+import { addMonthsIso, isoToday } from '../_lib/dates'
 
 const RECORD_SOURCES = ['class', 'self_paced', 'evaluator', 'external_upload', 'migrated'] as const
 
@@ -41,7 +42,7 @@ export async function startTrainingRecord(): Promise<void> {
         tenantId: ctx.tenantId,
         source: 'external_upload',
         completedOn: isoToday(),
-        issuedByTenantUserId: safeTenantUserId(ctx),
+        issuedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: trainingRecords.id })
     return row?.id ?? null
@@ -158,25 +159,6 @@ function makeBatchId(): string {
   return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
-  const id = ctx.membership?.id
-  if (!id || id === 'super-admin') return null
-  return id
-}
-
-function isoToday(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function addMonthsIso(iso: string, months: number): string {
-  const d = new Date(`${iso}T00:00:00Z`)
-  const day = d.getUTCDate()
-  d.setUTCMonth(d.getUTCMonth() + months)
-  // If the new month is shorter, JS rolls over into next month; clamp back.
-  if (d.getUTCDate() < day) d.setUTCDate(0)
-  return d.toISOString().slice(0, 10)
-}
-
 /**
  * For each selected record, mint a NEW training_records row (same person +
  * course) with completedOn=today and expiresOn auto-computed from
@@ -194,7 +176,7 @@ export async function bulkRenewTrainingRecords(args: {
   const ids = args.recordIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
   const today = isoToday()
-  const issuedByTenantUserId = safeTenantUserId(ctx)
+  const issuedByTenantUserId = ctx.membership?.id ?? null
 
   const result = await ctx.db(async (tx) => {
     const rows = await tx

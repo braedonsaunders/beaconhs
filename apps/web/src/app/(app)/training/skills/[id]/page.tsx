@@ -47,6 +47,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
+import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
 import { isUuid, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -96,6 +97,7 @@ export default async function SkillAssignmentPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
+  const canManage = canManageModule(ctx, 'training')
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -116,6 +118,18 @@ export default async function SkillAssignmentPage({
       .where(eq(trainingSkillAssignments.id, id))
       .limit(1)
     if (!row) return null
+
+    // Per-record visibility (mirrors /training/records/[id]): managers and
+    // read.all see any skill; everyone else only their own. Closes the
+    // read-by-URL gap exposing notes, extra fields, and evidence files.
+    if (
+      !canManage &&
+      !(await canSeeRecord(ctx, tx, {
+        prefix: 'training',
+        personId: row.assignment.personId,
+      }))
+    )
+      return null
 
     const [skillExtras, typeExtras, authorityExtras, files, tenant] = await Promise.all([
       tx
@@ -241,7 +255,6 @@ export default async function SkillAssignmentPage({
         ]
       : skillTypesList
 
-  const canManage = canManageModule(ctx, 'training')
   const isRevoked = assignment.deletedAt != null
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
   const credentialOutputs = enabledCredentialOutputs(data.tenantSettings)

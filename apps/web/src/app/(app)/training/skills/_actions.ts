@@ -19,27 +19,9 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { addMonthsIso, isoToday } from '../_lib/dates'
 
 const ALLOWED_FILE_KINDS = new Set(['certificate', 'evidence', 'photo', 'other'])
-
-function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
-  const id = ctx.membership?.id
-  if (!id || id === 'super-admin') return null
-  return id
-}
-
-function isoToday(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function addMonthsIso(iso: string, months: number): string {
-  const d = new Date(`${iso}T00:00:00Z`)
-  const day = d.getUTCDate()
-  d.setUTCMonth(d.getUTCMonth() + months)
-  // Clamp month-end roll-over (e.g. Jan 31 + 1mo → Feb 28, not Mar 3).
-  if (d.getUTCDate() < day) d.setUTCDate(0)
-  return d.toISOString().slice(0, 10)
-}
 
 // ---------------------------------------------------------------------------
 // "New skill" — creates the row immediately and redirects straight to its
@@ -58,7 +40,7 @@ export async function startSkillAssignment(): Promise<void> {
       .values({
         tenantId: ctx.tenantId,
         grantedOn: isoToday(),
-        grantedByTenantUserId: safeTenantUserId(ctx),
+        grantedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: trainingSkillAssignments.id })
     return row?.id ?? null
@@ -195,7 +177,7 @@ export async function renewSkillAssignment(formData: FormData): Promise<void> {
         skillTypeId: existing.assignment.skillTypeId,
         grantedOn,
         expiresOn,
-        grantedByTenantUserId: safeTenantUserId(ctx),
+        grantedByTenantUserId: ctx.membership?.id ?? null,
         notes,
       })
       .returning({ id: trainingSkillAssignments.id })

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { ClipboardCheck } from 'lucide-react'
 import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
@@ -19,7 +20,9 @@ import {
   trainingAssessments,
   trainingCourses,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -59,10 +62,30 @@ export default async function AssessmentsPage({
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
   const ctx = await requireRequestContext()
+  // Attempts are person-scoped records: viewing them requires a training read
+  // tier. Proctors (training.record.create / training.class.manage) run
+  // attempts for other people, so either staff permission grants all-visibility;
+  // read.self holders are scoped to their own attempts by moduleScopeWhere
+  // below. No qualifying permission at all → 404, mirroring /training/records.
+  const isProctor = can(ctx, 'training.record.create') || can(ctx, 'training.class.manage')
+  if (
+    !ctx.isSuperAdmin &&
+    !isProctor &&
+    !can(ctx, 'training.read.all') &&
+    !can(ctx, 'training.read.self')
+  )
+    notFound()
 
   const { rows, total, types, statusCounts, peopleList, coursesList } = await ctx.db(async (tx) => {
+    const vis = isProctor
+      ? undefined
+      : await moduleScopeWhere(ctx, tx, {
+          prefix: 'training',
+          personCol: trainingAssessments.personId,
+        })
     const filters: SQL<unknown>[] = []
     filters.push(isNull(trainingAssessments.deletedAt))
+    if (vis) filters.push(vis)
     if (statusFilter === 'in_progress') {
       filters.push(eq(trainingAssessments.status, 'in_progress'))
     } else if (statusFilter === 'cancelled') {
@@ -136,19 +159,23 @@ export default async function AssessmentsPage({
       .where(isNull(trainingAssessmentTypes.deletedAt))
       .orderBy(asc(trainingAssessmentTypes.name))
 
+    // People filter options are scoped to the attempts the viewer can see —
+    // a self-only viewer must not get the whole directory as chips.
     const peopleAll = await tx
-      .select({
+      .selectDistinct({
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
       })
-      .from(people)
-      .where(eq(people.status, 'active'))
+      .from(trainingAssessments)
+      .innerJoin(people, eq(people.id, trainingAssessments.personId))
+      .where(and(isNull(trainingAssessments.deletedAt), vis))
       .orderBy(asc(people.lastName), asc(people.firstName))
 
     const coursesAll = await tx
       .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
       .from(trainingCourses)
+      .where(isNull(trainingCourses.deletedAt))
       .orderBy(asc(trainingCourses.name))
 
     const counts = await tx
@@ -158,7 +185,7 @@ export default async function AssessmentsPage({
         c: count(),
       })
       .from(trainingAssessments)
-      .where(isNull(trainingAssessments.deletedAt))
+      .where(and(isNull(trainingAssessments.deletedAt), vis))
       .groupBy(trainingAssessments.status, trainingAssessments.passed)
 
     const sc: Record<string, number> = {
@@ -214,6 +241,13 @@ export default async function AssessmentsPage({
           <TrainingSubNav active="assessments" />
           <div className="flex flex-wrap items-center gap-3">
             <form className="flex items-center gap-1 text-xs">
+              {/* A GET form replaces the whole query string, so carry every
+                  other active filter/sort through hidden inputs — applying a
+                  date range must not clear them. */}
+              {(['status', 'person', 'type', 'course', 'sort', 'dir'] as const).map((key) => {
+                const value = pickString(sp[key])
+                return value ? <input key={key} type="hidden" name={key} value={value} /> : null
+              })}
               <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                 Completed from
                 <input

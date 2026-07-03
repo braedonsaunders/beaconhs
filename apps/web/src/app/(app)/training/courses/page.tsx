@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { GraduationCap } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
@@ -15,6 +15,7 @@ import {
 import { trainingCourses } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -53,16 +54,19 @@ export default async function TrainingCoursesPage({
   const canExport =
     can(ctx, 'admin.data.export') &&
     (can(ctx, 'training.read.all') || can(ctx, 'training.course.manage'))
+  // Creating courses is a training-management mutation — hide the entry point
+  // for everyone else (createCourse re-checks server-side).
+  const canManage = canManageModule(ctx, 'training')
 
   const { rows, total, deliveryCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(trainingCourses.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(trainingCourses.name, term), ilike(trainingCourses.code, term))
       if (cond) filters.push(cond)
     }
     if (deliveryFilter) filters.push(eq(trainingCourses.deliveryType, deliveryFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'code'
@@ -92,6 +96,7 @@ export default async function TrainingCoursesPage({
     const dd = await tx
       .select({ s: trainingCourses.deliveryType, c: count() })
       .from(trainingCourses)
+      .where(isNull(trainingCourses.deletedAt))
       .groupBy(trainingCourses.deliveryType)
     return {
       rows: data,
@@ -116,9 +121,11 @@ export default async function TrainingCoursesPage({
                     <Button variant="outline">Export CSV</Button>
                   </Link>
                 ) : null}
-                <Link href="/training/courses/new">
-                  <Button>New course</Button>
-                </Link>
+                {canManage ? (
+                  <Link href="/training/courses/new">
+                    <Button>New course</Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />
@@ -142,9 +149,11 @@ export default async function TrainingCoursesPage({
           title={params.q ? 'No matching courses' : 'No courses'}
           description="Add a course to start tracking competencies."
           action={
-            <Link href="/training/courses/new">
-              <Button>New course</Button>
-            </Link>
+            canManage ? (
+              <Link href="/training/courses/new">
+                <Button>New course</Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (

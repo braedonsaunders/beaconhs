@@ -6,7 +6,9 @@ import {
   trainingAssessments,
   trainingCourses,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canSeeRecord } from '@/lib/visibility'
 import { PrintButton } from './print-button'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +27,10 @@ export default async function AssessmentCertificatePage({
 }) {
   const { id } = await params
   const ctx = await requireRequestContext()
+  // Proctors run attempts for other people; either staff permission sees any
+  // attempt's certificate. Everyone else is scoped by canSeeRecord (read.all →
+  // any; otherwise only the viewer's own attempt).
+  const isProctor = can(ctx, 'training.record.create') || can(ctx, 'training.class.manage')
   const data = await ctx.db(async (tx) => {
     const [attempt] = await tx
       .select()
@@ -32,6 +38,11 @@ export default async function AssessmentCertificatePage({
       .where(eq(trainingAssessments.id, id))
       .limit(1)
     if (!attempt) return null
+    if (
+      !isProctor &&
+      !(await canSeeRecord(ctx, tx, { prefix: 'training', personId: attempt.personId }))
+    )
+      return null
     if (attempt.status !== 'submitted' || !attempt.passed) return null
     const [type] = await tx
       .select()

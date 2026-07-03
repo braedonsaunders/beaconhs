@@ -2,13 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import {
   people,
   trainingAssessmentResults,
-  trainingAssessmentTypeQuestions,
-  trainingAssessmentTypes,
   trainingAssessments,
+  trainingCertificates,
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
@@ -16,6 +15,8 @@ import { can, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { createAssessmentAttempt } from '../_lib/assessment-attempts'
+import { addMonthsIso, isoToday } from '../_lib/dates'
 import { gradeAnswer, type QuestionKind } from '../_lib/grading'
 
 /**
@@ -67,51 +68,12 @@ export async function startAssessmentAttempt(formData: FormData) {
     throw new Error('You can only start an assessment attempt for yourself')
   }
 
-  const created = await ctx.db(async (tx) => {
-    const [type] = await tx
-      .select()
-      .from(trainingAssessmentTypes)
-      .where(eq(trainingAssessmentTypes.id, typeId))
-      .limit(1)
-    if (!type) throw new Error('Assessment type not found')
-
-    const questions = await tx
-      .select()
-      .from(trainingAssessmentTypeQuestions)
-      .where(eq(trainingAssessmentTypeQuestions.typeId, typeId))
-      .orderBy(asc(trainingAssessmentTypeQuestions.entityOrder))
-
-    const pointsPossible = questions.reduce((s, q) => s + (q.points ?? 1), 0)
-
-    const [attempt] = await tx
-      .insert(trainingAssessments)
-      .values({
-        tenantId,
-        typeId,
-        personId,
-        courseId: type.courseId,
-        passingScore: type.passingScore,
-        pointsPossible,
-        status: 'in_progress',
-      })
-      .returning()
-    if (!attempt) throw new Error('Failed to create assessment attempt')
-
-    if (questions.length > 0) {
-      await tx.insert(trainingAssessmentResults).values(
-        questions.map((q) => ({
-          tenantId,
-          assessmentId: attempt.id,
-          questionId: q.id,
-          promptSnapshot: q.prompt,
-          correctAnswerSnapshot: q.correctAnswer,
-          kindSnapshot: q.kind,
-          pointsPossible: q.points ?? 1,
-        })),
-      )
-    }
-    return attempt
-  })
+  // Shared creation path (also used by lesson quizzes). Standalone attempts
+  // must come from the live catalogue: soft-deleted or deactivated types are
+  // rejected server-side — the New-attempt page only filters options in the UI.
+  const created = await ctx.db((tx) =>
+    createAssessmentAttempt(tx, { tenantId, typeId, personId, requireActive: true }),
+  )
 
   await recordAudit(ctx, {
     entityType: 'training_assessment',
@@ -166,8 +128,14 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
       const answer = String(formData.get(`answer_${r.id}`) ?? '').trim() || null
       const correct = gradeAnswer(r.kindSnapshot as QuestionKind, r.correctAnswerSnapshot, answer)
       const awarded = correct === true ? (r.pointsPossible ?? 1) : 0
-      pointsAwarded += awarded
-      pointsPossible += r.pointsPossible ?? 1
+      // Free-text questions are never auto-graded and have no manual-marking
+      // flow — leaving them in the denominator would cap the achievable score
+      // below 100% and could make a passing score unreachable. They are
+      // recorded but unscored.
+      if (r.kindSnapshot !== 'text') {
+        pointsAwarded += awarded
+        pointsPossible += r.pointsPossible ?? 1
+      }
       await tx
         .update(trainingAssessmentResults)
         .set({ answer, correct, pointsAwarded: awarded })
@@ -184,9 +152,9 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
         .from(trainingCourses)
         .where(eq(trainingCourses.id, attempt.courseId))
         .limit(1)
-      const completedOn = new Date().toISOString().slice(0, 10)
+      const completedOn = isoToday()
       const expiresOn = course?.validForMonths
-        ? new Date(Date.now() + course.validForMonths * 30 * 86_400_000).toISOString().slice(0, 10)
+        ? addMonthsIso(completedOn, course.validForMonths)
         : null
       const [rec] = await tx
         .insert(trainingRecords)
@@ -238,84 +206,77 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
 }
 
 /**
- * Cancel an in-progress attempt (or mark a submitted attempt void).
+ * Cancel an in-progress attempt, or void a submitted one. Voiding a submitted
+ * attempt is training-staff-only, and revokes the training record (plus any
+ * issued certificates) it minted — the credential must not outlive the voided
+ * evidence.
  */
 export async function cancelAssessmentAttempt(attemptId: string) {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
   const myPersonId = await resolveMyPersonId(ctx)
 
-  await ctx.db(async (tx) => {
+  const outcome = await ctx.db(async (tx) => {
     const [attempt] = await tx
-      .select({ personId: trainingAssessments.personId })
+      .select({
+        personId: trainingAssessments.personId,
+        status: trainingAssessments.status,
+        trainingRecordId: trainingAssessments.trainingRecordId,
+      })
       .from(trainingAssessments)
       .where(eq(trainingAssessments.id, attemptId))
       .limit(1)
     if (!attempt) throw new Error('Attempt not found')
     if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
       throw new Error('That assessment attempt is not yours')
+    }
+    if (attempt.status === 'cancelled') {
+      return { changed: false, wasSubmitted: false, revokedRecordId: null as string | null }
+    }
+    const wasSubmitted = attempt.status === 'submitted'
+    if (wasSubmitted && !canProctorAssessments(ctx)) {
+      throw new Error('Only training staff can void a submitted attempt')
+    }
+    let revokedRecordId: string | null = null
+    if (wasSubmitted && attempt.trainingRecordId) {
+      await tx
+        .update(trainingRecords)
+        .set({ deletedAt: new Date(), notes: 'Revoked: assessment attempt voided' })
+        .where(
+          and(eq(trainingRecords.id, attempt.trainingRecordId), isNull(trainingRecords.deletedAt)),
+        )
+      await tx
+        .update(trainingCertificates)
+        .set({ revokedAt: new Date(), revokedReason: 'Assessment attempt voided' })
+        .where(
+          and(
+            eq(trainingCertificates.recordId, attempt.trainingRecordId),
+            isNull(trainingCertificates.revokedAt),
+          ),
+        )
+      revokedRecordId = attempt.trainingRecordId
     }
     await tx
       .update(trainingAssessments)
       .set({ status: 'cancelled', completedAt: new Date() })
       .where(eq(trainingAssessments.id, attemptId))
+    return { changed: true, wasSubmitted, revokedRecordId }
   })
-  await recordAudit(ctx, {
-    entityType: 'training_assessment',
-    entityId: attemptId,
-    action: 'update',
-    summary: `Cancelled assessment attempt ${attemptId}`,
-  })
+
+  if (outcome.changed) {
+    await recordAudit(ctx, {
+      entityType: 'training_assessment',
+      entityId: attemptId,
+      action: 'update',
+      summary: outcome.wasSubmitted
+        ? `Voided submitted assessment attempt ${attemptId}`
+        : `Cancelled assessment attempt ${attemptId}`,
+      metadata: outcome.revokedRecordId
+        ? { revokedTrainingRecordId: outcome.revokedRecordId }
+        : undefined,
+    })
+  }
   revalidatePath(`/training/assessments/${attemptId}`)
   revalidatePath('/training/assessments')
-}
-
-/**
- * Bind a per-result update (used by a question-by-question UI). Not currently
- * wired into the default submit flow but exposed so an in-progress attempt
- * page can autosave.
- */
-export async function setAssessmentAnswer(
-  attemptId: string,
-  resultId: string,
-  answer: string | null,
-) {
-  const ctx = await requireRequestContext()
-  if (!ctx.tenantId) throw new Error('No active tenant')
-  const myPersonId = await resolveMyPersonId(ctx)
-
-  await ctx.db(async (tx) => {
-    const [attempt] = await tx
-      .select({ personId: trainingAssessments.personId, status: trainingAssessments.status })
-      .from(trainingAssessments)
-      .where(eq(trainingAssessments.id, attemptId))
-      .limit(1)
-    if (!attempt) throw new Error('Attempt not found')
-    if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
-      throw new Error('That assessment attempt is not yours')
-    }
-    if (attempt.status !== 'in_progress') throw new Error('Attempt is no longer editable')
-
-    const [row] = await tx
-      .select()
-      .from(trainingAssessmentResults)
-      .where(
-        and(
-          eq(trainingAssessmentResults.id, resultId),
-          eq(trainingAssessmentResults.assessmentId, attemptId),
-        ),
-      )
-      .limit(1)
-    if (!row) return
-    const correct = gradeAnswer(row.kindSnapshot as QuestionKind, row.correctAnswerSnapshot, answer)
-    await tx
-      .update(trainingAssessmentResults)
-      .set({
-        answer,
-        correct,
-        pointsAwarded: correct === true ? (row.pointsPossible ?? 1) : 0,
-      })
-      .where(eq(trainingAssessmentResults.id, resultId))
-  })
-  revalidatePath(`/training/assessments/${attemptId}`)
+  revalidatePath('/training')
 }

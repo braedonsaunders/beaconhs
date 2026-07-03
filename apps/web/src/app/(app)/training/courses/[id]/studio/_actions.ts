@@ -14,7 +14,6 @@ import {
   trainingCourses,
   trainingCourseModules,
   trainingLessons,
-  type LessonBlock,
   type PracticalCriterion,
   type Slide,
 } from '@beaconhs/db/schema'
@@ -110,39 +109,6 @@ export async function reorderModules(courseId: string, orderedIds: string[]) {
 }
 
 // --- Lessons ---------------------------------------------------------------
-
-export async function createLesson(courseId: string, moduleId: string, formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'training')
-  if (!ctx.tenantId) throw new Error('No active tenant')
-  const tenantId = ctx.tenantId
-  const title = String(formData.get('title') ?? '').trim() || 'Untitled lesson'
-  const kind = (String(formData.get('kind') ?? 'rich').trim() || 'rich') as LessonKind
-
-  const created = await ctx.db(async (tx) => {
-    const existing = await tx
-      .select({ s: trainingLessons.sortOrder })
-      .from(trainingLessons)
-      .where(and(eq(trainingLessons.moduleId, moduleId), isNull(trainingLessons.deletedAt)))
-    const sortOrder = existing.reduce((m, r) => Math.max(m, r.s), -1) + 1
-    const completionRule: CompletionRule =
-      kind === 'quiz' ? 'pass' : kind === 'practical' ? 'evaluator' : 'view'
-    const [row] = await tx
-      .insert(trainingLessons)
-      .values({ tenantId, courseId, moduleId, title, kind, sortOrder, completionRule })
-      .returning()
-    return row
-  })
-  if (created) {
-    await recordAudit(ctx, {
-      entityType: 'training_lesson',
-      entityId: created.id,
-      action: 'create',
-      summary: `Added ${kind} lesson "${title}"`,
-    })
-  }
-  revalidatePath(studioPath(courseId))
-}
 
 const KIND_DEFAULT_TITLE: Record<LessonKind, string> = {
   rich: 'New text lesson',
@@ -317,18 +283,6 @@ export async function updateLesson(lessonId: string, courseId: string, formData:
         contentItemId,
         durationMinutes,
       })
-      .where(eq(trainingLessons.id, lessonId))
-  })
-  revalidatePath(studioPath(courseId))
-}
-
-export async function saveLessonContent(lessonId: string, courseId: string, blocks: LessonBlock[]) {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'training')
-  await ctx.db(async (tx) => {
-    await tx
-      .update(trainingLessons)
-      .set({ contentBlocks: blocks })
       .where(eq(trainingLessons.id, lessonId))
   })
   revalidatePath(studioPath(courseId))

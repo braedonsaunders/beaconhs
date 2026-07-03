@@ -15,6 +15,7 @@ import { desc, eq } from 'drizzle-orm'
 import { trainingCertificates, trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
+import { recordAudit } from '@/lib/audit'
 import {
   pdfResponse,
   renderTrainingCredentialPdf,
@@ -60,6 +61,16 @@ export async function GET(
     })
     if (!visible) return { error: 'Training record not found.', status: 404 } as const
 
+    // A revoked record must not produce a fresh, valid-looking credential —
+    // whether or not a certificate row was already issued (revokeRecord marks
+    // both the record and its certificates).
+    if (record.deletedAt) {
+      return {
+        error: 'This record has been revoked; the certificate is no longer valid.',
+        status: 409,
+      } as const
+    }
+
     let [cert] = await tx
       .select()
       .from(trainingCertificates)
@@ -69,12 +80,6 @@ export async function GET(
 
     // Lazy issuance: any live (non-revoked) record can produce a credential.
     if (!cert) {
-      if (record.deletedAt) {
-        return {
-          error: 'This record has been revoked; no certificate can be issued.',
-          status: 409,
-        } as const
-      }
       const [created] = await tx
         .insert(trainingCertificates)
         .values({
@@ -86,6 +91,12 @@ export async function GET(
       cert = created
     }
     if (!cert) return { error: 'Failed to issue certificate.', status: 500 } as const
+    if (cert.revokedAt) {
+      return {
+        error: 'This certificate has been revoked and can no longer be downloaded.',
+        status: 409,
+      } as const
+    }
 
     return { cert } as const
   })
@@ -101,5 +112,15 @@ export async function GET(
   if (!rendered) {
     return NextResponse.json({ error: 'Training certificate not found.' }, { status: 404 })
   }
+
+  // Credential PDFs are personal-data exports — audit them like the CSV routes.
+  await recordAudit(ctx, {
+    entityType: 'training_record',
+    entityId: recordId,
+    action: 'export',
+    summary: 'Downloaded training credential PDF',
+    metadata: { certificateId: result.cert.id, outputId, format: pdfFormat },
+  })
+
   return pdfResponse(rendered)
 }

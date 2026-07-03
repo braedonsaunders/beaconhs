@@ -53,6 +53,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
     const aTypes = await tx
       .select({ id: trainingAssessmentTypes.id, name: trainingAssessmentTypes.name })
       .from(trainingAssessmentTypes)
+      .where(isNull(trainingAssessmentTypes.deletedAt))
       .orderBy(asc(trainingAssessmentTypes.name))
 
     const cls = await tx

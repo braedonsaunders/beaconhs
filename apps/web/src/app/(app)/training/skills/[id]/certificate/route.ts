@@ -7,9 +7,12 @@
 
 import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { trainingSkillAssignments, trainingSkillCertificates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
+import { canSeeRecord } from '@/lib/visibility'
+import { recordAudit } from '@/lib/audit'
 import {
   pdfResponse,
   renderSkillCredentialPdf,
@@ -34,6 +37,35 @@ export async function GET(
   }
 
   const result = await ctx.db(async (tx) => {
+    const [assignment] = await tx
+      .select({
+        id: trainingSkillAssignments.id,
+        personId: trainingSkillAssignments.personId,
+        deletedAt: trainingSkillAssignments.deletedAt,
+      })
+      .from(trainingSkillAssignments)
+      .where(eq(trainingSkillAssignments.id, assignmentId))
+      .limit(1)
+    if (!assignment) return { error: 'Skill assignment not found.', status: 404 } as const
+
+    // Same per-record visibility gate as the training-record certificate route:
+    // managers and read.all see any credential; everyone else only their own.
+    // Without this any authenticated user could download (and lazily issue)
+    // anyone's credential PDF by guessing the assignment id.
+    const visible =
+      canManageModule(ctx, 'training') ||
+      (await canSeeRecord(ctx, tx, { prefix: 'training', personId: assignment.personId }))
+    if (!visible) return { error: 'Skill assignment not found.', status: 404 } as const
+
+    // A revoked skill must not produce a fresh, valid-looking credential —
+    // whether or not a certificate row was already issued.
+    if (assignment.deletedAt) {
+      return {
+        error: 'This skill has been revoked; the credential is no longer valid.',
+        status: 409,
+      } as const
+    }
+
     let [cert] = await tx
       .select()
       .from(trainingSkillCertificates)
@@ -42,17 +74,6 @@ export async function GET(
       .limit(1)
 
     if (!cert) {
-      const [assignment] = await tx
-        .select({ id: trainingSkillAssignments.id })
-        .from(trainingSkillAssignments)
-        .where(
-          and(
-            eq(trainingSkillAssignments.id, assignmentId),
-            isNull(trainingSkillAssignments.deletedAt),
-          ),
-        )
-        .limit(1)
-      if (!assignment) return { error: 'Skill assignment not found.', status: 404 } as const
       const [created] = await tx
         .insert(trainingSkillCertificates)
         .values({
@@ -64,6 +85,12 @@ export async function GET(
       cert = created
     }
     if (!cert) return { error: 'Failed to issue certificate.', status: 500 } as const
+    if (cert.revokedAt) {
+      return {
+        error: 'This certificate has been revoked and can no longer be downloaded.',
+        status: 409,
+      } as const
+    }
 
     return { cert } as const
   })
@@ -79,5 +106,15 @@ export async function GET(
   if (!rendered) {
     return NextResponse.json({ error: 'Skill certificate not found.' }, { status: 404 })
   }
+
+  // Credential PDFs are personal-data exports — audit them like the CSV routes.
+  await recordAudit(ctx, {
+    entityType: 'training_skill',
+    entityId: assignmentId,
+    action: 'export',
+    summary: 'Downloaded skill credential PDF',
+    metadata: { certificateId: result.cert.id, outputId, format: pdfFormat },
+  })
+
   return pdfResponse(rendered)
 }

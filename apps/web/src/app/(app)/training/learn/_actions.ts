@@ -10,13 +10,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import {
   people,
-  trainingAssessmentResults,
-  trainingAssessmentTypeQuestions,
-  trainingAssessmentTypes,
   trainingAssessments,
   trainingCourses,
   trainingEnrollments,
@@ -25,6 +22,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { completeOnlineEnrollment, recomputeEnrollmentCompletion } from './_lib/completion'
 
 // Resolve the signed-in user's People record id, or null when no People row is
@@ -294,47 +292,16 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
       .where(eq(trainingLessons.id, lessonId))
       .limit(1)
     if (!lesson || !lesson.assessmentTypeId) throw new Error('This lesson has no quiz configured.')
-    const [type] = await tx
-      .select()
-      .from(trainingAssessmentTypes)
-      .where(eq(trainingAssessmentTypes.id, lesson.assessmentTypeId))
-      .limit(1)
-    if (!type) throw new Error('Assessment type not found')
 
-    const questions = await tx
-      .select()
-      .from(trainingAssessmentTypeQuestions)
-      .where(eq(trainingAssessmentTypeQuestions.typeId, type.id))
-      .orderBy(asc(trainingAssessmentTypeQuestions.entityOrder))
-    const pointsPossible = questions.reduce((s, q) => s + (q.points ?? 1), 0)
-
-    const [attempt] = await tx
-      .insert(trainingAssessments)
-      .values({
-        tenantId,
-        typeId: type.id,
-        personId,
-        courseId: type.courseId,
-        passingScore: type.passingScore,
-        pointsPossible,
-        status: 'in_progress',
-      })
-      .returning()
-    if (!attempt) throw new Error('Failed to start quiz')
-
-    if (questions.length > 0) {
-      await tx.insert(trainingAssessmentResults).values(
-        questions.map((q) => ({
-          tenantId,
-          assessmentId: attempt.id,
-          questionId: q.id,
-          promptSnapshot: q.prompt,
-          correctAnswerSnapshot: q.correctAnswer,
-          kindSnapshot: q.kind,
-          pointsPossible: q.points ?? 1,
-        })),
-      )
-    }
+    // Shared creation path (also used by the proctor "New attempt" flow).
+    // Soft-deleted types are rejected; the catalogue `active` flag is not
+    // required here — a type hidden from the catalogue keeps working for the
+    // lessons still wired to it.
+    const attempt = await createAssessmentAttempt(tx, {
+      tenantId,
+      typeId: lesson.assessmentTypeId,
+      personId,
+    })
 
     const [existing] = await tx
       .select()
@@ -371,5 +338,12 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
     return attempt.id
   })
 
+  await recordAudit(ctx, {
+    entityType: 'training_assessment',
+    entityId: attemptId,
+    action: 'create',
+    summary: `Started lesson quiz attempt ${attemptId}`,
+    after: { enrollmentId, lessonId },
+  })
   redirect(`/training/assessments/${attemptId}`)
 }

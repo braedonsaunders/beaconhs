@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, notInArray } from 'drizzle-orm'
+import { and, asc, eq, isNull, notInArray } from 'drizzle-orm'
 import { Ban, Check, GraduationCap, Plus, RotateCcw, Trash2, UserCheck } from 'lucide-react'
 import {
   Badge,
@@ -30,6 +30,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { emitTrainingClassCompleted } from '@beaconhs/integrations'
 import { PersonSelectField } from '@/components/person-select-field'
+import { addMonthsIso } from '../../_lib/dates'
 import { ClassDetailFields } from '../_class-fields'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -125,19 +126,6 @@ async function markClassComplete(formData: FormData) {
   const classId = String(formData.get('classId') ?? '')
   if (!classId) return
 
-  // Pull all entries from the form. Field names are:
-  //   grade__<personId>, passed__<personId>
-  const attendeeGrades: { personId: string; grade: number | null; passed: boolean }[] = []
-  for (const [key, value] of formData.entries()) {
-    if (key.startsWith('grade__')) {
-      const personId = key.slice('grade__'.length)
-      const raw = String(value ?? '').trim()
-      const grade = raw ? Number(raw) : null
-      const passed = formData.get(`passed__${personId}`) === 'on'
-      attendeeGrades.push({ personId, grade, passed })
-    }
-  }
-
   const completed = await ctx.db(async (tx) => {
     const [cls] = await tx
       .select()
@@ -145,33 +133,56 @@ async function markClassComplete(formData: FormData) {
       .where(eq(trainingClasses.id, classId))
       .limit(1)
     if (!cls) return null
+    // Idempotency: a re-POST (double-click, stale tab, direct request) must not
+    // mint a second set of training records for the whole roster.
+    if (cls.completedAt) throw new Error('Class is already complete')
+    if (cls.cancelledAt) throw new Error('Class is cancelled — reopen it before marking completion')
     const [course] = await tx
       .select()
       .from(trainingCourses)
       .where(eq(trainingCourses.id, cls.courseId))
       .limit(1)
     if (!course) return null
+
+    // Only people actually on the roster are processed — form field names are
+    // caller-controlled and must not create records for arbitrary personIds.
+    const roster = await tx
+      .select({ personId: trainingClassAttendees.personId })
+      .from(trainingClassAttendees)
+      .where(eq(trainingClassAttendees.classId, classId))
+
+    // Field names are attended__<personId>, grade__<personId>, passed__<personId>.
+    const attendeeGrades = roster.map(({ personId }) => {
+      const raw = String(formData.get(`grade__${personId}`) ?? '').trim()
+      let grade: number | null = null
+      if (raw) {
+        const n = Number.parseInt(raw, 10)
+        if (Number.isNaN(n)) throw new Error('Grades must be whole numbers between 0 and 100')
+        grade = Math.max(0, Math.min(100, n))
+      }
+      const attended = formData.get(`attended__${personId}`) === 'on'
+      // Passing requires attendance — a no-show cannot earn a training record.
+      const passed = attended && formData.get(`passed__${personId}`) === 'on'
+      return { personId, grade, attended, passed }
+    })
+
     const completedOn = (cls.endsAt ?? new Date()).toISOString().slice(0, 10)
     const expiresOn = course.validForMonths
-      ? (() => {
-          const d = new Date(cls.endsAt ?? new Date())
-          d.setMonth(d.getMonth() + course.validForMonths!)
-          return d.toISOString().slice(0, 10)
-        })()
+      ? addMonthsIso(completedOn, course.validForMonths)
       : null
 
     for (const ag of attendeeGrades) {
-      // Update attendee row.
+      // Attendance and pass state are separate: someone who sat the class but
+      // failed is still "attended" — they just don't get a training record.
       await tx
         .update(trainingClassAttendees)
-        .set({ status: ag.passed ? 'attended' : 'no_show' })
+        .set({ status: ag.attended ? 'attended' : 'no_show' })
         .where(
           and(
             eq(trainingClassAttendees.classId, classId),
             eq(trainingClassAttendees.personId, ag.personId),
           ),
         )
-      // Only write a training record if they actually passed (or there's no grade and the box is checked).
       if (ag.passed) {
         await tx.insert(trainingRecords).values({
           tenantId: ctx.tenantId,
@@ -191,8 +202,9 @@ async function markClassComplete(formData: FormData) {
       .update(trainingClasses)
       .set({ completedAt: new Date() })
       .where(eq(trainingClasses.id, classId))
-    return { cls, course }
+    return { cls, course, attendeeGrades }
   })
+  if (!completed) return
 
   await recordAudit(ctx, {
     entityType: 'training_class',
@@ -200,8 +212,9 @@ async function markClassComplete(formData: FormData) {
     action: 'update',
     summary: 'Marked class complete',
     after: {
-      count: attendeeGrades.length,
-      passed: attendeeGrades.filter((a) => a.passed).length,
+      count: completed.attendeeGrades.length,
+      attended: completed.attendeeGrades.filter((a) => a.attended).length,
+      passed: completed.attendeeGrades.filter((a) => a.passed).length,
     },
   })
 
@@ -210,8 +223,8 @@ async function markClassComplete(formData: FormData) {
   // integration must never break class completion.
   if (completed) {
     try {
-      const { cls, course } = completed
-      const passedByPerson = new Map(attendeeGrades.map((a) => [a.personId, a.passed]))
+      const { cls, course, attendeeGrades } = completed
+      const attendedByPerson = new Map(attendeeGrades.map((a) => [a.personId, a.attended]))
       const startsAt = new Date(cls.startsAt)
       const endsAt = new Date(cls.endsAt)
       const startDay = Date.UTC(
@@ -250,7 +263,7 @@ async function markClassComplete(formData: FormData) {
         hoursPerDay,
         lengthDays,
         attendees: roster.map((r) => {
-          const attended = passedByPerson.get(r.personId) ?? false
+          const attended = attendedByPerson.get(r.personId) ?? false
           return {
             personId: r.personId,
             externalEmployeeId: r.externalEmployeeId,
@@ -332,6 +345,7 @@ export default async function TrainingClassPage({
       tx
         .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
         .from(trainingCourses)
+        .where(isNull(trainingCourses.deletedAt))
         .orderBy(asc(trainingCourses.name)),
       tx
         .select({ id: orgUnits.id, name: orgUnits.name })
@@ -354,6 +368,12 @@ export default async function TrainingClassPage({
 
   if (!data) notFound()
   const { cls, course, attendees, availablePeople, courses, sites, instructors } = data
+  // Keep the class's current course selectable even if it was soft-deleted from
+  // the catalogue after scheduling (the option list only carries live courses).
+  const courseOptions =
+    course && !courses.some((c) => c.id === course.id)
+      ? [{ id: course.id, name: course.name, code: course.code }, ...courses]
+      : courses
   // Managing a class (roster edits, completion, lifecycle, field edits) requires
   // training.class.manage — mirrors the assertCan in every class mutation. A
   // viewer without it sees the class read-only.
@@ -437,7 +457,7 @@ export default async function TrainingClassPage({
               capacity: cls.capacity != null ? String(cls.capacity) : null,
               notes: cls.notes,
             }}
-            options={{ courses, sites, instructors }}
+            options={{ courses: courseOptions, sites, instructors }}
             disabled={isCompleted || !canManageClasses}
             courseHref={course ? `/training/courses/${course.id}` : null}
             notice={
@@ -575,6 +595,7 @@ export default async function TrainingClassPage({
                       <thead className="bg-slate-50 dark:bg-slate-800">
                         <tr className="text-left text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
                           <th className="px-3 py-2">Person</th>
+                          <th className="w-24 px-3 py-2 text-center">Attended</th>
                           <th className="w-24 px-3 py-2">Grade %</th>
                           <th className="w-20 px-3 py-2 text-center">Passed</th>
                         </tr>
@@ -584,6 +605,14 @@ export default async function TrainingClassPage({
                           <tr key={row.att.id}>
                             <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
                               {row.person.lastName}, {row.person.firstName}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <input
+                                type="checkbox"
+                                name={`attended__${row.person.id}`}
+                                defaultChecked
+                                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+                              />
                             </td>
                             <td className="px-3 py-2">
                               <Input
@@ -608,7 +637,8 @@ export default async function TrainingClassPage({
                     </table>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Checking "Passed" creates a training record for the person. Grades are optional.
+                    Uncheck "Attended" for no-shows. Checking "Passed" creates a training record for
+                    the person; grades are optional.
                   </p>
                   <div className="flex justify-end">
                     <Button type="submit">

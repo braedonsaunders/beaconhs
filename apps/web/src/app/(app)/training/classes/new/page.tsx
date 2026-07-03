@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, isNull } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { orgUnits, tenantUsers, trainingCourses, users } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -29,6 +29,7 @@ export default async function NewClassPage() {
       tx
         .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
         .from(trainingCourses)
+        .where(isNull(trainingCourses.deletedAt))
         .orderBy(asc(trainingCourses.name)),
       tx
         .select({ id: orgUnits.id, name: orgUnits.name })
