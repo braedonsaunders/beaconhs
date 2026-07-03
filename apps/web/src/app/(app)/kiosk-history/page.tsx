@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { Clock } from 'lucide-react'
 import { and, asc, count, desc, eq, gte, ilike, lt, or, type SQL } from 'drizzle-orm'
+import { can } from '@beaconhs/tenant'
 import {
   Badge,
   EmptyState,
@@ -21,6 +23,8 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { parseDatetimeLocal } from '../equipment/inspections/_datetime'
+import { todayISO } from '../journals/_lib'
 import { DayPicker } from './day-picker'
 
 export const metadata = { title: 'Kiosk history' }
@@ -33,7 +37,10 @@ const KIND_OPTIONS = [
   { value: 'out', label: 'Sign-out' },
 ]
 
-function toDateOnly(d: Date): string {
+/** The day after a yyyy-mm-dd date string (calendar arithmetic, zone-free). */
+function nextDayIso(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
   return d.toISOString().slice(0, 10)
 }
 
@@ -50,12 +57,20 @@ export default async function KioskHistoryPage({
     allowedSorts: SORTS,
   })
   const kindFilter = pickString(sp.kind)
-  const dayFilter = pickString(sp.day) ?? toDateOnly(new Date())
   const ctx = await requireRequestContext()
+  // Attendance data covers every person in the tenant — restrict to people/user
+  // administrators and audit readers rather than any authenticated member.
+  if (!can(ctx, 'admin.users.manage') && !can(ctx, 'admin.audit.read')) notFound()
 
-  const dayStart = new Date(`${dayFilter}T00:00:00Z`)
-  const dayEnd = new Date(dayStart)
-  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1)
+  // Kiosk scans are jobsite-local attendance events: default to TODAY in the
+  // viewer's timezone and bucket days as local midnight-to-midnight, not UTC.
+  const tz = ctx.timezone
+  const requestedDay = pickString(sp.day)
+  const dayFilter =
+    requestedDay && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay) ? requestedDay : todayISO(tz)
+  const dayStart = parseDatetimeLocal(dayFilter, tz) ?? new Date(`${dayFilter}T00:00:00Z`)
+  const dayEnd =
+    parseDatetimeLocal(nextDayIso(dayFilter), tz) ?? new Date(`${nextDayIso(dayFilter)}T00:00:00Z`)
 
   const { rows, total, kindCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [
@@ -166,10 +181,11 @@ export default async function KioskHistoryPage({
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.scan.id}>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-300">
                     {new Date(row.scan.scannedAt).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
+                      timeZone: tz,
                     })}
                   </TableCell>
                   <TableCell>
@@ -184,9 +200,13 @@ export default async function KioskHistoryPage({
                       <Badge variant="warning">Sign-out</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-slate-600">{row.site?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{row.crew?.name ?? '—'}</TableCell>
-                  <TableCell className="max-w-xs truncate text-xs text-slate-400">
+                  <TableCell className="text-slate-600 dark:text-slate-300">
+                    {row.site?.name ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-300">
+                    {row.crew?.name ?? '—'}
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-xs text-slate-400 dark:text-slate-500">
                     {row.scan.deviceLabel ?? '—'}
                   </TableCell>
                 </TableRow>

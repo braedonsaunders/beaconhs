@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Alert, AlertDescription } from '@beaconhs/ui'
 import { Logo } from '@/components/brand-logo'
@@ -33,10 +32,7 @@ export default async function LoginPage({
         ) : null}
         <LoginForm />
         <p className="text-center text-xs text-slate-500">
-          Need an account?{' '}
-          <Link href="/help/access" className="text-teal-700 hover:underline">
-            Contact your administrator
-          </Link>
+          Need an account? Contact your administrator.
         </p>
       </div>
     </main>

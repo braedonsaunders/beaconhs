@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, count, eq, sql } from 'drizzle-orm'
+import { asc, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,

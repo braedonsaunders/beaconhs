@@ -27,9 +27,13 @@ import { auth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { auditLog, roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { setActiveTenant } from '@/lib/actions'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
+
+// Same locale whitelist the self-service account form enforces.
+const LOCALES = new Set(['en', 'fr', 'es'])
 
 /** Platform actions are reserved for super-admins — no tenant permission applies. */
 async function gate(): Promise<Ctx> {
@@ -66,19 +70,50 @@ async function loadMembership(tx: Database, membershipId: string) {
 // --- global identity ------------------------------------------------------
 
 export async function updateIdentity(formData: FormData): Promise<void> {
-  await gate()
+  const ctx = await gate()
   const userId = String(formData.get('userId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
-  const locale = String(formData.get('locale') ?? '').trim() || 'en'
-  const timezone = String(formData.get('timezone') ?? '').trim() || 'America/Toronto'
+  const locale = String(formData.get('locale') ?? '').trim()
+  const timezone = String(formData.get('timezone') ?? '').trim()
   if (!userId) return
   if (!name) backToUser(userId, { error: 'Name is required.' })
+  if (!LOCALES.has(locale)) backToUser(userId, { error: 'Choose a supported language.' })
+  // A typo'd time zone silently breaks every server-rendered local-time display
+  // for the target user, so reject anything Intl can't format — mirrors the
+  // self-service account action.
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone })
+  } catch {
+    backToUser(userId, { error: 'Choose a valid time zone.' })
+  }
 
-  await withSuperAdmin(db, async (tx) => {
+  const before = await withSuperAdmin(db, async (tx) => {
+    const [u] = await tx
+      .select({
+        email: users.email,
+        name: users.name,
+        locale: users.locale,
+        timezone: users.timezone,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    if (!u) return null
     await tx
       .update(users)
       .set({ name, locale, timezone, updatedAt: new Date() })
       .where(eq(users.id, userId))
+    return u
+  })
+  if (!before) backToUser(userId, { error: 'User not found.' })
+
+  await recordAudit(ctx, {
+    entityType: 'platform',
+    action: 'update',
+    summary: `Updated identity for ${before.email} (platform)`,
+    before: { name: before.name, locale: before.locale, timezone: before.timezone },
+    after: { name, locale, timezone },
+    metadata: { via: 'platform', targetUserId: userId },
   })
   revalidatePath(userPath(userId))
   revalidatePath('/platform/users')
@@ -94,11 +129,30 @@ export async function setSuperAdmin(formData: FormData): Promise<void> {
   if (userId === ctx.userId && !value) {
     backToUser(userId, { error: "You can't revoke your own super-admin access." })
   }
-  await withSuperAdmin(db, async (tx) => {
+  const target = await withSuperAdmin(db, async (tx) => {
+    const [u] = await tx
+      .select({ email: users.email, isSuperAdmin: users.isSuperAdmin })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+    if (!u) return null
     await tx
       .update(users)
       .set({ isSuperAdmin: value, updatedAt: new Date() })
       .where(eq(users.id, userId))
+    return u
+  })
+  if (!target) backToUser(userId, { error: 'User not found.' })
+
+  // Granting/revoking platform-wide access is the most privileged mutation in
+  // the system — it must never be forensically invisible.
+  await recordAudit(ctx, {
+    entityType: 'platform',
+    action: 'update',
+    summary: `${value ? 'Granted' : 'Revoked'} super-admin for ${target.email} (platform)`,
+    before: { isSuperAdmin: target.isSuperAdmin },
+    after: { isSuperAdmin: value },
+    metadata: { via: 'platform', targetUserId: userId },
   })
   revalidatePath(userPath(userId))
   revalidatePath('/platform/users')

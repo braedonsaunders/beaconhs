@@ -84,7 +84,10 @@ export default function NewTenantPage() {
     <PageContainer>
       <div className="mx-auto max-w-2xl">
         <div>
-          <Link href="/platform/tenants" className="text-xs text-slate-500 hover:text-teal-700">
+          <Link
+            href="/platform/tenants"
+            className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-400"
+          >
             ← Back to tenants
           </Link>
           <PageHeader
@@ -94,7 +97,7 @@ export default function NewTenantPage() {
         </div>
         <form
           action={createTenant}
-          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6"
+          className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
         >
           <div className="space-y-1.5">
             <Label htmlFor="name">Tenant name *</Label>
@@ -103,7 +106,7 @@ export default function NewTenantPage() {
           <div className="space-y-1.5">
             <Label htmlFor="slug">Slug (optional)</Label>
             <Input id="slug" name="slug" placeholder="auto-generated from name if blank" />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Used in URLs and as a stable identifier. Lowercase, numbers, dashes only.
             </p>
           </div>
@@ -128,11 +131,11 @@ export default function NewTenantPage() {
           <div className="space-y-1.5">
             <Label htmlFor="enabledLanguages">Enabled languages</Label>
             <Input id="enabledLanguages" name="enabledLanguages" defaultValue="en" />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Comma-separated ISO codes, e.g. <code>en,fr</code>
             </p>
           </div>
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
             <Link href="/platform/tenants">
               <Button type="button" variant="outline">
                 Cancel

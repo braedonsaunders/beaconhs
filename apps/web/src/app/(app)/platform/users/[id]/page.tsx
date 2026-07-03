@@ -97,6 +97,24 @@ export default async function PlatformUserDetailPage({
 
   const activeCount = memberRows.filter((m) => m.membership.status === 'active').length
 
+  // Full IANA list (searchable Select) — a free-text time zone would let a typo
+  // silently break the target user's local-time rendering. Mirrors
+  // account/_profile-form.tsx: surface 'UTC' plus the stored value even when the
+  // engine omits them.
+  const timezones = (() => {
+    let z: string[] = []
+    try {
+      z =
+        (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.(
+          'timeZone',
+        ) ?? []
+    } catch {
+      z = []
+    }
+    const withUtc = ['UTC', ...z.filter((t) => t !== 'UTC')]
+    return withUtc.includes(account.timezone) ? withUtc : [account.timezone, ...withUtc]
+  })()
+
   return (
     <PageContainer>
       <div className="space-y-5">
@@ -148,7 +166,18 @@ export default async function PlatformUserDetailPage({
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="timezone">Time zone</Label>
-                    <Input id="timezone" name="timezone" defaultValue={account.timezone} />
+                    <Select
+                      id="timezone"
+                      name="timezone"
+                      defaultValue={account.timezone}
+                      searchable
+                    >
+                      {timezones.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
                 </div>
                 <div className="flex justify-end">

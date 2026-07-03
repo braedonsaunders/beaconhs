@@ -101,10 +101,15 @@ export async function recordKioskScan(
 
   const scanId = await db.transaction(async (tx): Promise<{ id: string } | { error: string }> => {
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${input.tenantId}, true)`)
+    // Mirror the directory filter in unlockKiosk: only active, non-deleted
+    // people may record scans — the action takes personId directly, so an
+    // existence check alone would accept terminated or soft-deleted people.
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(eq(people.id, input.personId))
+      .where(
+        and(eq(people.id, input.personId), eq(people.status, 'active'), isNull(people.deletedAt)),
+      )
       .limit(1)
     if (!person) return { error: 'Selected person is not valid for this tenant' } as const
     if (input.siteOrgUnitId) {

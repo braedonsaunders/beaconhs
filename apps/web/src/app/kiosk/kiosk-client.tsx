@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { ArrowLeft, CheckCircle2, LogIn, LogOut, Search, X } from 'lucide-react'
 import { Select } from '@beaconhs/ui'
 import { recordKioskScan, unlockKiosk, type KioskDirectory } from './actions'
@@ -24,6 +24,19 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
   const [crewId, setCrewId] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  // The confirmation screen auto-returns to the roster after a few seconds; on
+  // a shared tablet the timer must be cancelled the moment anyone moves on
+  // manually, or it fires mid-flow and yanks the next worker back to the roster.
+  const doneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function clearDoneTimeout() {
+    if (doneTimeoutRef.current !== null) {
+      clearTimeout(doneTimeoutRef.current)
+      doneTimeoutRef.current = null
+    }
+  }
+
+  useEffect(() => clearDoneTimeout, [])
 
   const filtered = useMemo(() => {
     const people = directory?.people ?? []
@@ -88,7 +101,9 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
         return
       }
       setStage({ kind: 'done', pin, person, scanKind, at: new Date() })
-      setTimeout(() => {
+      clearDoneTimeout()
+      doneTimeoutRef.current = setTimeout(() => {
+        doneTimeoutRef.current = null
         setStage({ kind: 'pick', pin })
         setQuery('')
       }, 4000)
@@ -304,6 +319,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
         <button
           type="button"
           onClick={() => {
+            clearDoneTimeout()
             setStage({ kind: 'pick', pin: stage.pin })
             setQuery('')
           }}

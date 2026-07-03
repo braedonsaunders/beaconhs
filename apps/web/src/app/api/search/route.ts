@@ -2,8 +2,10 @@
 // search box. Each entity contributes its own SQL with a hard LIMIT 5; we then
 // join the counts so the UI can show "View all incidents matching X".
 //
-// All queries are tenant-scoped via `ctx.db()` which sets the RLS GUC. Nothing
-// here mutates state — purely a GET endpoint.
+// All queries are tenant-scoped via `ctx.db()` which sets the RLS GUC, and each
+// record module additionally applies the caller's read tier (`moduleScopeWhere`)
+// so search never surfaces records whose list/detail pages would hide them.
+// Nothing here mutates state — purely a GET endpoint.
 
 import { NextResponse } from 'next/server'
 import { and, count, desc, gte, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -16,7 +18,9 @@ import {
   incidents,
   people,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { getRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +78,35 @@ export async function GET(req: Request): Promise<NextResponse> {
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
 
   const data = await ctx.db(async (tx) => {
+    // Per-user record visibility, mirroring each module's list page: read.all →
+    // everything, read.site → the caller's sites, else → only their own records.
+    const [incidentVis, caVis, equipmentVis, hazidVis] = await Promise.all([
+      moduleScopeWhere(ctx, tx, {
+        prefix: 'incidents',
+        ownerCols: [incidents.reportedByTenantUserId],
+        siteCol: incidents.siteOrgUnitId,
+      }),
+      moduleScopeWhere(ctx, tx, {
+        prefix: 'ca',
+        ownerCols: [correctiveActions.ownerTenantUserId],
+        siteCol: correctiveActions.siteOrgUnitId,
+      }),
+      moduleScopeWhere(ctx, tx, {
+        prefix: 'equipment',
+        siteCol: equipmentItems.currentSiteOrgUnitId,
+        personCol: equipmentItems.currentHolderPersonId,
+      }),
+      moduleScopeWhere(ctx, tx, {
+        prefix: 'hazid',
+        ownerCols: [hazidAssessments.reportedByTenantUserId],
+        siteCol: hazidAssessments.siteOrgUnitId,
+      }),
+    ])
+    // Documents has a flat read permission instead of tiers — the /documents
+    // page 404s without it, so search must skip the group entirely.
+    const documentsVis: SQL<unknown> | undefined =
+      can(ctx, 'documents.read') || can(ctx, 'documents.manage') ? undefined : sql`false`
+
     const [
       incidentRows,
       incidentTotal,
@@ -94,6 +127,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           gte(incidents.occurredAt, oneYearAgo),
           isNull(incidents.deletedAt),
         ]
+        if (incidentVis) where.push(incidentVis)
         const match = or(
           ilike(incidents.reference, term),
           ilike(incidents.title, term),
@@ -117,6 +151,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           gte(incidents.occurredAt, oneYearAgo),
           isNull(incidents.deletedAt),
         ]
+        if (incidentVis) where.push(incidentVis)
         const match = or(
           ilike(incidents.reference, term),
           ilike(incidents.title, term),
@@ -132,6 +167,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       // ---- corrective actions (reference + title) ------------------------
       (() => {
         const where: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
+        if (caVis) where.push(caVis)
         const match = or(
           ilike(correctiveActions.reference, term),
           ilike(correctiveActions.title, term),
@@ -151,6 +187,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       })(),
       (() => {
         const where: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
+        if (caVis) where.push(caVis)
         const match = or(
           ilike(correctiveActions.reference, term),
           ilike(correctiveActions.title, term),
@@ -207,6 +244,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       // ---- equipment_items (assetTag / serialNumber / name) -------------
       (() => {
         const where: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
+        if (equipmentVis) where.push(equipmentVis)
         const match = or(
           ilike(equipmentItems.assetTag, term),
           ilike(equipmentItems.serialNumber, term),
@@ -228,6 +266,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       })(),
       (() => {
         const where: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
+        if (equipmentVis) where.push(equipmentVis)
         const match = or(
           ilike(equipmentItems.assetTag, term),
           ilike(equipmentItems.serialNumber, term),
@@ -243,6 +282,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       // ---- documents (title + key) -------------------------------------
       (() => {
         const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
+        if (documentsVis) where.push(documentsVis)
         const match = or(ilike(documents.title, term), ilike(documents.key, term))
         if (match) where.push(match)
         return tx
@@ -259,6 +299,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       })(),
       (() => {
         const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
+        if (documentsVis) where.push(documentsVis)
         const match = or(ilike(documents.title, term), ilike(documents.key, term))
         if (match) where.push(match)
         return tx
@@ -270,6 +311,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       // ---- hazid_assessments (reference) -------------------------------
       (() => {
         const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
+        if (hazidVis) where.push(hazidVis)
         const match = ilike(hazidAssessments.reference, term)
         if (match) where.push(match)
         return tx
@@ -286,6 +328,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       })(),
       (() => {
         const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
+        if (hazidVis) where.push(hazidVis)
         const match = ilike(hazidAssessments.reference, term)
         if (match) where.push(match)
         return tx

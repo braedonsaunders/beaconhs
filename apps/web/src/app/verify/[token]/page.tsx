@@ -101,7 +101,10 @@ async function resolveToken(token: string): Promise<Resolved | null> {
         expiresOn: skill.assignment.expiresOn,
         issuerName: skill.tenant.name,
         authorityName: skill.authority.name,
-        revoked: skill.cert.revokedAt !== null,
+        // A skill is revoked by soft-deleting its assignment (see
+        // training_skill_assignments), so honour deletedAt like the course
+        // branch honours the record's — not just the certificate row's revokedAt.
+        revoked: skill.cert.revokedAt !== null || skill.assignment.deletedAt !== null,
       }
     }
 
@@ -126,7 +129,11 @@ export default async function VerifyPage({ params }: { params: Promise<{ token: 
     )
   }
 
-  const expired = result.expiresOn ? new Date(result.expiresOn) < new Date() : false
+  // A credential is valid THROUGH its expiry date (`expires_on < CURRENT_DATE`
+  // in packages/db views), so compare date-only strings — parsing the yyyy-mm-dd
+  // value as a Date would flip to EXPIRED at UTC midnight on the final valid day.
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const expired = result.expiresOn ? result.expiresOn < todayIso : false
 
   return (
     <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
