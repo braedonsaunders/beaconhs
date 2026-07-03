@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -16,6 +16,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['reference', 'occurred_at', 'name', 'method'] as const
+const METHODS: SafeDistanceMethod[] = ['nasa', 'asme', 'lloyds']
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
   const ctx = await requireExportContext()
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(safeDistanceRecords.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -41,9 +42,9 @@ export async function GET(req: NextRequest) {
       )
       if (cond) filters.push(cond)
     }
-    if (methodFilter)
+    if (methodFilter && METHODS.includes(methodFilter as SafeDistanceMethod))
       filters.push(eq(safeDistanceRecords.method, methodFilter as SafeDistanceMethod))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'reference'

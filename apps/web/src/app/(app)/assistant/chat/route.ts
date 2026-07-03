@@ -25,6 +25,10 @@ export const maxDuration = 300
 const SCOPE = 'assistant'
 const MAX_HISTORY = 40
 
+// Conversation ids are uuid PKs — reject malformed ids before they reach a
+// uuid-typed column comparison (Postgres errors on invalid uuid input).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 // Vision tool (view_document_pages) results carry base64 page images so the
 // model can SEE them this turn — but they must NOT be written into the saved
 // transcript (DB bloat, and they'd be re-sent every later turn). The browser
@@ -60,6 +64,7 @@ export async function POST(req: Request): Promise<Response> {
   // Resolve / create the conversation. Only the OWNER may send a turn.
   let conversationId = body.conversationId ?? null
   if (conversationId) {
+    if (!UUID.test(conversationId)) return new Response('Bad request', { status: 400 })
     if ((await resolveConversationAccess(conversationId)) !== 'owner') {
       return new Response('Forbidden', { status: 403 })
     }

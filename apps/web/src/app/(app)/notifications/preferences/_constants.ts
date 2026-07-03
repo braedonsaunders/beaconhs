@@ -1,7 +1,10 @@
 // Canonical list of notification categories + channels surfaced in the
-// preferences UI. Kept in sync with:
-//   • DEFAULT_ROLES_BY_CATEGORY in @beaconhs/events
-//   • notificationChannel pgEnum in @beaconhs/db/schema
+// preferences UI. Category keys must match what dispatchers actually stamp on
+// notifications — the native engines emit `incident`, `ca`, and `compliance`
+// (see packages/events), the training/document Flow adapters emit `training`
+// and `document`, and the monitored-session overdue scanner emits
+// `monitored_session`. Channels mirror the notificationChannel pgEnum in
+// @beaconhs/db/schema.
 //
 // A user without a row for (category, channel) is treated as "enabled" by the
 // dispatcher, so we render the defaults checked when no row exists.
@@ -9,9 +12,10 @@
 export const NOTIFICATION_CATEGORIES = [
   'incident',
   'ca',
+  'compliance',
   'training',
   'document',
-  'lone_worker',
+  'monitored_session',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -26,6 +30,10 @@ export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; desc
       title: 'Corrective actions',
       description: 'Assignments, due-date reminders, overdue escalations.',
     },
+    compliance: {
+      title: 'Compliance',
+      description: 'Obligations becoming due, overdue, or expiring.',
+    },
     training: {
       title: 'Training',
       description: 'Course assignments, expiry reminders, completions.',
@@ -34,9 +42,8 @@ export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; desc
       title: 'Documents',
       description: 'Periodic-review due, new versions to acknowledge.',
     },
-    // Engine category key stays `lone_worker` (every monitored Builder app
-    // escalates under it); the label is generic.
-    lone_worker: {
+    // Every monitored Builder app escalates under `monitored_session`.
+    monitored_session: {
       title: 'Monitored sessions',
       description: 'Missed check-ins, escalations, and overdue session alerts.',
     },

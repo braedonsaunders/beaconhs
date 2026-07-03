@@ -13,6 +13,10 @@ import { AssistantApp } from '../_components/assistant-app'
 
 export const dynamic = 'force-dynamic'
 
+// Conversation ids are uuid PKs — reject malformed ids before they reach a
+// uuid-typed column comparison (Postgres errors on invalid uuid input).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function AssistantConversationPage({
   params,
 }: {
@@ -21,6 +25,7 @@ export default async function AssistantConversationPage({
   const { id } = await params
   const ctx = await requireRequestContext()
   if (!can(ctx, 'assistant.use')) redirect('/dashboard')
+  if (!UUID.test(id)) redirect('/assistant')
 
   const access = await resolveConversationAccess(id)
   if (access === 'none') redirect('/assistant')

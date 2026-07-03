@@ -52,7 +52,11 @@ export default async function MyInspectionsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  // Unknown enum values from the URL are dropped rather than passed to
+  // Postgres (invalid enum input → 500).
+  const statusParam = pickString(sp.status)
+  const statusFilter =
+    statusParam && STATUS_OPTIONS.some((o) => o.value === statusParam) ? statusParam : null
 
   const ctx = await requireRequestContext()
   const membershipId = ctx.membership?.id ?? null
@@ -91,7 +95,10 @@ export default async function MyInspectionsPage({
       )
       if (cond) filters.push(cond)
     }
-    if (statusFilter) filters.push(eq(inspectionRecords.status, statusFilter as any))
+    if (statusFilter)
+      filters.push(
+        eq(inspectionRecords.status, statusFilter as typeof inspectionRecords.$inferSelect.status),
+      )
     const whereClause = and(...filters)
 
     const orderBy =
@@ -214,11 +221,13 @@ export default async function MyInspectionsPage({
                       {rec.reference}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {new Date(rec.occurredAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell>{type?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {site?.name ?? '—'}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant={

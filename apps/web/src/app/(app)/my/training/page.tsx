@@ -89,7 +89,7 @@ export default async function MyTrainingPage({
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(eq(people.userId, ctx.userId))
+      .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
       .limit(1)
     const personId = person?.id ?? null
 
@@ -427,9 +427,9 @@ export default async function MyTrainingPage({
                           <span
                             className={
                               expired
-                                ? 'font-medium text-red-700'
+                                ? 'font-medium text-red-700 dark:text-red-400'
                                 : expiringSoon
-                                  ? 'font-medium text-amber-700'
+                                  ? 'font-medium text-amber-700 dark:text-amber-400'
                                   : ''
                             }
                           >
@@ -440,7 +440,7 @@ export default async function MyTrainingPage({
                           <span className="text-slate-500">No expiry</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-slate-400">
                         {rec.source.replace('_', ' ')}
                       </TableCell>
                       <TableCell>
@@ -513,7 +513,9 @@ export default async function MyTrainingPage({
                           {daysLeft ?? '—'}d
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-600">{rec.completedOn}</TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {rec.completedOn}
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -562,7 +564,9 @@ export default async function MyTrainingPage({
                       </TableCell>
                       <TableCell>{course?.name ?? assignment.itemKind}</TableCell>
                       <TableCell>
-                        <span className={overdue ? 'font-medium text-red-700' : ''}>
+                        <span
+                          className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}
+                        >
                           {assignment.dueOn ?? '—'}
                           {overdue ? ' (overdue)' : ''}
                         </span>

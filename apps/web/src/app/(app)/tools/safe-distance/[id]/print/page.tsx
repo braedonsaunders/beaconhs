@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   orgUnits,
   people,
@@ -57,7 +57,7 @@ export default async function SafeDistancePrintPage({
       .leftJoin(tenantUsers, eq(tenantUsers.id, safeDistanceRecords.supervisorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(people, eq(people.id, safeDistanceRecords.operatorPersonId))
-      .where(eq(safeDistanceRecords.id, id))
+      .where(and(eq(safeDistanceRecords.id, id), isNull(safeDistanceRecords.deletedAt)))
       .limit(1)
     if (!row) return null
     const segments = await tx

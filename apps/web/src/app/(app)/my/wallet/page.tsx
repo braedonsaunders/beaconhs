@@ -10,7 +10,7 @@
 //
 // Pivots on people.userId = ctx.userId, like every other /my view.
 
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { PageHeader } from '@beaconhs/ui'
 import {
@@ -68,7 +68,7 @@ export default async function MyWalletPage() {
         photoAttachmentId: people.photoAttachmentId,
       })
       .from(people)
-      .where(eq(people.userId, ctx.userId))
+      .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
       .limit(1)
     if (!person) return { person: null } as const
 
@@ -124,7 +124,15 @@ export default async function MyWalletPage() {
             token: trainingCertificates.verifyToken,
           })
           .from(trainingCertificates)
-          .where(isNull(trainingCertificates.revokedAt))
+          .where(
+            and(
+              isNull(trainingCertificates.revokedAt),
+              inArray(
+                trainingCertificates.recordId,
+                records.map((r) => r.id),
+              ),
+            ),
+          )
       : []
     const skillCerts = skills.length
       ? await tx
@@ -133,7 +141,15 @@ export default async function MyWalletPage() {
             token: trainingSkillCertificates.verifyToken,
           })
           .from(trainingSkillCertificates)
-          .where(isNull(trainingSkillCertificates.revokedAt))
+          .where(
+            and(
+              isNull(trainingSkillCertificates.revokedAt),
+              inArray(
+                trainingSkillCertificates.skillAssignmentId,
+                skills.map((s) => s.id),
+              ),
+            ),
+          )
       : []
 
     let photoUrl: string | null = null

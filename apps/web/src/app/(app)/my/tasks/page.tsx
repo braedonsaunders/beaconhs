@@ -5,8 +5,8 @@
 // filter chips. The overdue computation matches /corrective-actions.
 
 import Link from 'next/link'
-import { CheckCircle2, ListChecks } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, inArray, isNull, lte, or, type SQL } from 'drizzle-orm'
+import { CheckCircle2 } from 'lucide-react'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, lt, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -73,9 +73,14 @@ export default async function MyTasksPage({
     allowedSorts: SORTS,
   })
   // Default to 'all_open' when no status is explicitly chosen so the page
-  // doesn't immediately show closed rows.
-  const rawStatus = pickString(sp.status) ?? 'all_open'
-  const sevFilter = pickString(sp.severity)
+  // doesn't immediately show closed rows. Unknown enum values from the URL are
+  // dropped rather than passed to Postgres (invalid enum input → 500).
+  const rawStatusParam = pickString(sp.status) ?? 'all_open'
+  const rawStatus = STATUS_OPTIONS.some((o) => o.value === rawStatusParam)
+    ? rawStatusParam
+    : 'all_open'
+  const sevParam = pickString(sp.severity)
+  const sevFilter = sevParam && SEVERITY_OPTIONS.some((o) => o.value === sevParam) ? sevParam : null
   const overdueOnly = pickString(sp.overdue) === '1'
 
   const ctx = await requireRequestContext()
@@ -123,12 +128,17 @@ export default async function MyTasksPage({
     } else {
       filters.push(eq(correctiveActions.status, rawStatus as CAStatus))
     }
-    if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter as any))
+    if (sevFilter) {
+      filters.push(
+        eq(correctiveActions.severity, sevFilter as 'low' | 'medium' | 'high' | 'critical'),
+      )
+    }
     if (overdueOnly) {
       // Only open statuses can be "overdue" — closed/cancelled rows fall out
-      // even if they have a past due date.
+      // even if they have a past due date. Strictly before today, matching the
+      // row badge below and the /corrective-actions module.
       filters.push(inArray(correctiveActions.status, OPEN_STATUSES))
-      filters.push(lte(correctiveActions.dueOn, todayStr))
+      filters.push(lt(correctiveActions.dueOn, todayStr))
     }
     const whereClause = and(...filters)
 
@@ -228,7 +238,7 @@ export default async function MyTasksPage({
               className={
                 overdueOnly
                   ? 'inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700'
-                  : 'inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50'
+                  : 'inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
               }
             >
               {overdueOnly ? 'Showing overdue only' : 'Show overdue only'}
@@ -335,7 +345,7 @@ export default async function MyTasksPage({
                     <TableCell>
                       <Link
                         href={`/corrective-actions/${ca.id}`}
-                        className="font-medium text-slate-900 hover:underline"
+                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                       >
                         {ca.title}
                       </Link>
@@ -372,12 +382,14 @@ export default async function MyTasksPage({
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className={overdue ? 'font-medium text-red-700' : ''}>
+                      <span className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}>
                         {ca.dueOn ?? '—'}
                         {overdue ? ' (overdue)' : ''}
                       </span>
                     </TableCell>
-                    <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {site?.name ?? '—'}
+                    </TableCell>
                   </TableRow>
                 )
               })}

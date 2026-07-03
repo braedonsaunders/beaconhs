@@ -1,13 +1,26 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
   complianceStatus,
   correctiveActions,
-  documentAcknowledgments,
-  documents,
   notifications,
   people,
 } from '@beaconhs/db/schema'
@@ -42,7 +55,7 @@ export type InboxFolders = {
   categories: { category: string; total: number; unread: number }[]
 }
 
-export type TodoKind = 'compliance' | 'capa' | 'document'
+export type TodoKind = 'compliance' | 'capa'
 export type TodoItem = {
   id: string
   kind: TodoKind
@@ -147,19 +160,8 @@ export async function fetchInboxFolders(): Promise<InboxFolders> {
     },
     { total: 0, unread: 0, criticalTotal: 0, criticalUnread: 0, todos: 0, categories: [] },
   )
-  folders.todos = (await collectTodos(ctx)).length
+  folders.todos = await countTodos(ctx)
   return folders
-}
-
-export async function inboxUnreadCount() {
-  const ctx = await requireRequestContext()
-  const [row] = await ctx.db((tx) =>
-    tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(notifications)
-      .where(and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt))),
-  )
-  return row?.count ?? 0
 }
 
 export async function markNotificationRead(id: string) {
@@ -225,22 +227,51 @@ export async function snoozeNotification(id: string, hours: number) {
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
+// Shared to-do scope: outstanding compliance statuses for the person, and
+// still-open corrective actions owned by the membership. Document
+// acknowledgments surface through the compliance branch — obligations of kind
+// 'document' target the people who must acknowledge, so there is no separate
+// per-document query.
+const TODO_COMPLIANCE_STATUSES: (typeof complianceStatus.$inferSelect)['status'][] = [
+  'pending',
+  'in_progress',
+  'overdue',
+  'expiring',
+]
+const TODO_CA_STATUSES: (typeof correctiveActions.$inferSelect)['status'][] = [
+  'open',
+  'in_progress',
+  'pending_verification',
+]
+
+async function resolveTodoIdentity(
+  tx: Database,
+  ctx: Ctx,
+): Promise<{ personId: string | null; membershipId: string | null }> {
+  const [me] = await tx
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(
+        eq(people.tenantId, ctx.tenantId),
+        eq(people.userId, ctx.userId),
+        isNull(people.deletedAt),
+      ),
+    )
+    .limit(1)
+  return { personId: me?.id ?? null, membershipId: ctx.membership?.id ?? null }
+}
+
 /**
  * The actionable "what's due for me" side of the blended inbox: the user's own
- * compliance subjects, their open corrective actions, and unacknowledged
- * documents. These are persistent obligations (not one-shot alerts), so they
- * live alongside notifications rather than inside them.
+ * compliance subjects and their open corrective actions. These are persistent
+ * obligations (not one-shot alerts), so they live alongside notifications
+ * rather than inside them.
  */
 async function collectTodos(ctx: Ctx): Promise<TodoItem[]> {
   return ctx.db(async (tx) => {
     const todos: TodoItem[] = []
-    const [me] = await tx
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.tenantId, ctx.tenantId), eq(people.userId, ctx.userId)))
-      .limit(1)
-    const personId = me?.id ?? null
-    const membershipId = ctx.membership?.id ?? null
+    const { personId, membershipId } = await resolveTodoIdentity(tx, ctx)
 
     if (personId) {
       const rows = await tx
@@ -260,7 +291,7 @@ async function collectTodos(ctx: Ctx): Promise<TodoItem[]> {
           and(
             eq(complianceStatus.tenantId, ctx.tenantId),
             eq(complianceStatus.personId, personId),
-            inArray(complianceStatus.status, ['pending', 'in_progress', 'overdue', 'expiring']),
+            inArray(complianceStatus.status, TODO_COMPLIANCE_STATUSES),
           ),
         )
         .orderBy(asc(complianceStatus.dueOn))
@@ -292,7 +323,7 @@ async function collectTodos(ctx: Ctx): Promise<TodoItem[]> {
             eq(correctiveActions.tenantId, ctx.tenantId),
             eq(correctiveActions.ownerTenantUserId, membershipId),
             isNull(correctiveActions.deletedAt),
-            inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
+            inArray(correctiveActions.status, TODO_CA_STATUSES),
           ),
         )
         .orderBy(asc(correctiveActions.dueOn))
@@ -309,33 +340,46 @@ async function collectTodos(ctx: Ctx): Promise<TodoItem[]> {
       }
     }
 
+    return todos
+  })
+}
+
+/**
+ * To-do count for the folder rail — same scope as `collectTodos`, computed
+ * with count queries instead of materialising every row.
+ */
+async function countTodos(ctx: Ctx): Promise<number> {
+  return ctx.db(async (tx) => {
+    const { personId, membershipId } = await resolveTodoIdentity(tx, ctx)
+    let total = 0
     if (personId) {
-      const rows = await tx
-        .select({ id: documents.id, title: documents.title })
-        .from(documents)
+      const [row] = await tx
+        .select({ c: count() })
+        .from(complianceStatus)
         .where(
           and(
-            eq(documents.tenantId, ctx.tenantId),
-            eq(documents.status, 'published'),
-            isNull(documents.deletedAt),
-            sql`not exists (select 1 from ${documentAcknowledgments} a where a.document_id = ${documents.id} and a.person_id = ${personId})`,
+            eq(complianceStatus.tenantId, ctx.tenantId),
+            eq(complianceStatus.personId, personId),
+            inArray(complianceStatus.status, TODO_COMPLIANCE_STATUSES),
           ),
         )
-        .orderBy(asc(documents.title))
-      for (const r of rows) {
-        todos.push({
-          id: `document:${r.id}`,
-          kind: 'document',
-          title: r.title,
-          subtitle: 'Acknowledgment required',
-          status: 'pending',
-          dueOn: null,
-          linkPath: `/documents/${r.id}`,
-        })
-      }
+      total += Number(row?.c ?? 0)
     }
-
-    return todos
+    if (membershipId) {
+      const [row] = await tx
+        .select({ c: count() })
+        .from(correctiveActions)
+        .where(
+          and(
+            eq(correctiveActions.tenantId, ctx.tenantId),
+            eq(correctiveActions.ownerTenantUserId, membershipId),
+            isNull(correctiveActions.deletedAt),
+            inArray(correctiveActions.status, TODO_CA_STATUSES),
+          ),
+        )
+      total += Number(row?.c ?? 0)
+    }
+    return total
   })
 }
 

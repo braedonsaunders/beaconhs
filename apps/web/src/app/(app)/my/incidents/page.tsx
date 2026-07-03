@@ -64,8 +64,13 @@ export default async function MyIncidentsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const typeFilter = pickString(sp.type)
-  const statusFilter = pickString(sp.status)
+  // Unknown enum values from the URL are dropped rather than passed to
+  // Postgres (invalid enum input → 500).
+  const typeParam = pickString(sp.type)
+  const typeFilter = typeParam && TYPE_OPTIONS.some((o) => o.value === typeParam) ? typeParam : null
+  const statusParam = pickString(sp.status)
+  const statusFilter =
+    statusParam && STATUS_OPTIONS.some((o) => o.value === statusParam) ? statusParam : null
 
   const ctx = await requireRequestContext()
   const membershipId = ctx.membership?.id ?? null
@@ -108,8 +113,10 @@ export default async function MyIncidentsPage({
       )
       if (cond) filters.push(cond)
     }
-    if (typeFilter) filters.push(eq(incidents.type, typeFilter as any))
-    if (statusFilter) filters.push(eq(incidents.status, statusFilter as any))
+    if (typeFilter)
+      filters.push(eq(incidents.type, typeFilter as typeof incidents.$inferSelect.type))
+    if (statusFilter)
+      filters.push(eq(incidents.status, statusFilter as typeof incidents.$inferSelect.status))
     const whereClause = and(...filters)
 
     const orderBy =
@@ -246,15 +253,15 @@ export default async function MyIncidentsPage({
             <TableBody>
               {rows.map(({ incident, site }) => (
                 <TableRow key={incident.id}>
-                  <TableCell className="font-mono text-xs text-slate-600">
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
                     <Link href={`/incidents/${incident.id}`} className="hover:underline">
                       {incident.reference}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {new Date(incident.occurredAt).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="text-slate-600">
+                  <TableCell className="text-slate-600 dark:text-slate-400">
                     {incident.type.replace('_', ' ')}
                   </TableCell>
                   <TableCell>
@@ -266,12 +273,14 @@ export default async function MyIncidentsPage({
                   <TableCell>
                     <Link
                       href={`/incidents/${incident.id}`}
-                      className="font-medium text-slate-900 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
                       {incident.title}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-slate-600">{site?.name ?? '—'}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400">
+                    {site?.name ?? '—'}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

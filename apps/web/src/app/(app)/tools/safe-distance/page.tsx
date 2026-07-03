@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Gauge } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -72,7 +72,7 @@ export default async function SafeDistanceListPage({
   const canExport = can(ctx, 'admin.data.export')
 
   const { rows, total, methodCounts } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(safeDistanceRecords.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -86,7 +86,7 @@ export default async function SafeDistanceListPage({
     if (methodFilter && METHOD_OPTIONS.some((o) => o.value === methodFilter)) {
       filters.push(eq(safeDistanceRecords.method, methodFilter as SafeDistanceMethod))
     }
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'reference'
@@ -122,6 +122,7 @@ export default async function SafeDistanceListPage({
     const mc = await tx
       .select({ m: safeDistanceRecords.method, c: count() })
       .from(safeDistanceRecords)
+      .where(isNull(safeDistanceRecords.deletedAt))
       .groupBy(safeDistanceRecords.method)
 
     return {

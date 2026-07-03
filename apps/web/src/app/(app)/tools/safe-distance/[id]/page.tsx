@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, DetailHeader } from '@beaconhs/ui'
 import {
   orgUnits,
@@ -45,7 +45,7 @@ export default async function SafeDistanceDetailPage({
     const [row] = await tx
       .select()
       .from(safeDistanceRecords)
-      .where(eq(safeDistanceRecords.id, id))
+      .where(and(eq(safeDistanceRecords.id, id), isNull(safeDistanceRecords.deletedAt)))
       .limit(1)
     if (!row) return null
     const segments = await tx
@@ -74,7 +74,7 @@ export default async function SafeDistanceDetailPage({
         employeeNo: people.employeeNo,
       })
       .from(people)
-      .where(eq(people.status, 'active'))
+      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
       .orderBy(asc(people.lastName), asc(people.firstName))
       .limit(500)
     return { row, segments, sites, supervisors, operators }

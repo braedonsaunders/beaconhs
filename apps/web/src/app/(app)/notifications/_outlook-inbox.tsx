@@ -15,7 +15,6 @@ import {
   CheckCheck,
   ChevronLeft,
   Clock,
-  FileText,
   Flag,
   Inbox,
   ListChecks,
@@ -426,12 +425,6 @@ const TODO_META: Record<
     Icon: Wrench,
     bg: 'bg-amber-100 dark:bg-amber-950/40',
     fg: 'text-amber-600 dark:text-amber-300',
-  },
-  document: {
-    label: 'Document',
-    Icon: FileText,
-    bg: 'bg-sky-100 dark:bg-sky-950/40',
-    fg: 'text-sky-600 dark:text-sky-300',
   },
 }
 
@@ -911,7 +904,7 @@ export function OutlookInbox({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search inbox"
-                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pr-8 pl-8 text-sm text-slate-900 transition-colors outline-none placeholder:text-slate-400 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-800"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pr-8 pl-8 text-base text-slate-900 transition-colors outline-none placeholder:text-slate-400 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-800"
               />
               {search ? (
                 <button

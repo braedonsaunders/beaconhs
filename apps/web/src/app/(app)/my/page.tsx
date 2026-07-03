@@ -17,7 +17,7 @@ import {
   User,
   Wallet,
 } from 'lucide-react'
-import { and, count, eq, gte, isNull, lte, or, type SQL } from 'drizzle-orm'
+import { and, count, eq, gte, isNull, lt, lte, or, type SQL } from 'drizzle-orm'
 import { Badge, cn, PageHeader } from '@beaconhs/ui'
 import {
   correctiveActions,
@@ -94,7 +94,7 @@ export default async function MyLandingPage() {
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(eq(people.userId, ctx.userId))
+      .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
       .limit(1)
     const personId = person?.id ?? null
 
@@ -157,7 +157,8 @@ export default async function MyLandingPage() {
           .where(
             and(
               tasksWhere as SQL<unknown>,
-              lte(correctiveActions.dueOn, today.toISOString().slice(0, 10)),
+              // Strictly before today — matches /my/tasks and /corrective-actions.
+              lt(correctiveActions.dueOn, today.toISOString().slice(0, 10)),
             ) as SQL<unknown>,
           )
           .then((r) => Number(r[0]?.c ?? 0))

@@ -13,7 +13,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { count, eq, sql } from 'drizzle-orm'
+import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import { safeDistanceRecords, safeDistanceSegments } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -57,7 +57,7 @@ async function loadRecord(ctx: Awaited<ReturnType<typeof requireRequestContext>>
     const [row] = await tx
       .select()
       .from(safeDistanceRecords)
-      .where(eq(safeDistanceRecords.id, id))
+      .where(and(eq(safeDistanceRecords.id, id), isNull(safeDistanceRecords.deletedAt)))
       .limit(1)
     return row ?? null
   })
