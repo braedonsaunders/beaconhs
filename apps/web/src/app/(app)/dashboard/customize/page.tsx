@@ -16,13 +16,21 @@ export const dynamic = 'force-dynamic'
 export default async function CustomiseDashboardPage() {
   const ctx = await requireRequestContext()
   const { layout, role } = await loadDashboardLayout(ctx)
-  const { nodes, libraryCards } = await loadDashboardEditCanvas(ctx, layout, {
-    includeLibraryCards: canViewInsights(ctx),
-  })
+  // Same security gate as view mode (dashboard/page.tsx): drop org widgets the
+  // viewer may not see BEFORE rendering the canvas — otherwise a saved/injected
+  // layout would surface real org data in edit mode that view mode hides.
+  const visibleLayout = {
+    ...layout,
+    widgets: layout.widgets.filter((w) => canSeeWidget(ctx, w.id)),
+  }
   // Palette is permission-gated to match the live dashboard: a self-tier user is
   // only offered personal widgets, and the Insights library only when they have
   // analytics access — so they can't add a card that the view-mode filter drops.
   const allowedWidgetIds = Object.keys(WIDGETS).filter((id) => canSeeWidget(ctx, id))
+  const { nodes, libraryCards } = await loadDashboardEditCanvas(ctx, visibleLayout, {
+    includeLibraryCards: canViewInsights(ctx),
+    allowedWidgetIds: new Set(allowedWidgetIds),
+  })
 
   return (
     <PageContainer>
@@ -47,8 +55,8 @@ export default async function CustomiseDashboardPage() {
         </div>
 
         <DashboardGrid
-          key={`${role}:${JSON.stringify(layout.widgets)}`}
-          initialLayout={layout}
+          key={`${role}:${JSON.stringify(visibleLayout.widgets)}`}
+          initialLayout={visibleLayout}
           nodes={nodes}
           role={role}
           mode="edit"

@@ -5,6 +5,7 @@
 
 import { Briefcase, MapPin } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { tagSwatch } from '../_tag-colors'
 import { formatLongDate, statusMeta, textToHtml } from '../_format'
 import type { JournalEntryDetail } from '../_types'
@@ -62,9 +63,10 @@ export function JournalView({
   tagColors: Map<string, string | null>
 }) {
   const status = statusMeta(entry.status)
+  // Sanitise at render too (defence in depth for rows written before the
+  // server-side write sanitiser existed) — never inject stored HTML raw.
   const html =
-    entry.bodyHtml ||
-    textToHtml(entry.bodyText) ||
+    sanitizeDocumentHtml(entry.bodyHtml || textToHtml(entry.bodyText)) ||
     '<p class="text-slate-400 dark:text-slate-500">No content recorded.</p>'
 
   return (

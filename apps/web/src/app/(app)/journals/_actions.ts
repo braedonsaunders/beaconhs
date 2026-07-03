@@ -7,7 +7,7 @@
 // entries even though RLS only bounds to the tenant.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, sql, type SQL } from 'drizzle-orm'
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   attachments,
   journalEntries,
@@ -15,6 +15,7 @@ import {
   journalEntryTags,
 } from '@beaconhs/db/schema'
 import { describePhoto, extractEntryMeta } from '@beaconhs/ai'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -29,13 +30,7 @@ import {
   journalCanReadAll,
   journalScopeWhere,
 } from './_lib'
-import {
-  buildTree,
-  getEntry,
-  getOrCreateEntryForDate,
-  getWorkspaceData,
-  listEntries,
-} from './_data'
+import { buildTree, getEntry, getOrCreateEntryForDate, getWorkspaceData } from './_data'
 import { sendJournalEntryEmail } from './_send-email'
 import type {
   AuthorRef,
@@ -44,7 +39,6 @@ import type {
   GroupBy,
   JournalEntryDetail,
   JournalFilters,
-  JournalListItem,
   TreeNode,
   WorkspaceData,
 } from './_types'
@@ -52,19 +46,23 @@ import type {
 type ActionOk<T = {}> = { ok: true } & T
 type ActionErr = { ok: false; error: string }
 
-/** Visibility-scoped WHERE for a single entry (tenant + author/site/self). */
+/** Visibility-scoped WHERE for a single live entry (tenant + author/site/self).
+ *  Always excludes soft-deleted entries — a deleted journal is not editable. */
 async function scopedWhere(ctx: RequestContext, id: string): Promise<SQL> {
   const authorPersonId = journalCanReadAll(ctx) ? null : await getAuthorPersonId(ctx)
   const scope = journalScopeWhere(ctx, authorPersonId)
-  return scope ? and(eq(journalEntries.id, id), scope)! : eq(journalEntries.id, id)
+  return and(eq(journalEntries.id, id), isNull(journalEntries.deletedAt), scope)!
 }
 
 // ---- create -----------------------------------------------------------------
 
+const NO_AUTHOR_IDENTITY =
+  'Your account is not linked to a person or membership in this tenant, so it cannot own a journal.'
+
 export async function createTodayEntry(): Promise<ActionOk<{ id: string }> | ActionErr> {
   const ctx = await requireRequestContext()
   const id = await getOrCreateEntryForDate(ctx)
-  if (!id) return { ok: false, error: 'Could not create today’s entry.' }
+  if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
   revalidatePath('/journals')
   return { ok: true, id }
 }
@@ -74,7 +72,7 @@ export async function createEntryForDate(
 ): Promise<ActionOk<{ id: string }> | ActionErr> {
   const ctx = await requireRequestContext()
   const id = await getOrCreateEntryForDate(ctx, dateISO)
-  if (!id) return { ok: false, error: 'Could not create entry.' }
+  if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
   revalidatePath('/journals')
   return { ok: true, id }
 }
@@ -91,8 +89,12 @@ export async function updateEntry(input: {
   const values: Record<string, unknown> = {}
   if (patch.title !== undefined) values.title = patch.title?.slice(0, 300) ?? null
   if (patch.bodyHtml !== undefined) {
-    values.bodyHtml = patch.bodyHtml
-    values.bodyText = htmlToText(patch.bodyHtml)
+    // Server-side sanitisation — this action accepts arbitrary strings, so never
+    // trust the client editor. Shared allow-list sanitiser (same as Documents)
+    // strips scripts/event handlers while keeping every TipTap node and mark.
+    const clean = sanitizeDocumentHtml(patch.bodyHtml)
+    values.bodyHtml = clean
+    values.bodyText = htmlToText(clean)
   }
   if (patch.definition !== undefined) values.definition = patch.definition
   if (patch.siteOrgUnitId !== undefined) values.siteOrgUnitId = patch.siteOrgUnitId || null
@@ -118,14 +120,24 @@ export async function updateEntry(input: {
 export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
   const where = await scopedWhere(ctx, id)
+  // Draft guard: re-submitting (double-click, replayed request) must not reset
+  // submittedAt or re-fire flows / integrations / AI for the same submission.
   const [row] = await ctx.db((tx) =>
     tx
       .update(journalEntries)
       .set({ status: 'submitted', submittedAt: new Date() })
-      .where(where)
+      .where(and(where, eq(journalEntries.status, 'draft')))
       .returning({ reference: journalEntries.reference }),
   )
-  if (!row) return { ok: false, error: 'Entry not found.' }
+  if (!row) {
+    const [existing] = await ctx.db((tx) =>
+      tx.select({ id: journalEntries.id }).from(journalEntries).where(where).limit(1),
+    )
+    return {
+      ok: false,
+      error: existing ? 'This entry has already been submitted.' : 'Entry not found.',
+    }
+  }
   await recordAudit(ctx, {
     entityType: 'journal_entry',
     entityId: id,
@@ -269,27 +281,6 @@ async function applyEntryAi(ctx: RequestContext, id: string): Promise<EntryMetaR
   return { summary: meta.summary, tags: meta.tags }
 }
 
-export async function runEntryAI(
-  id: string,
-): Promise<ActionOk<{ meta: EntryMetaResult }> | ActionErr> {
-  const ctx = await requireRequestContext()
-  const aiConfig = await getTenantAiConfig(ctx)
-  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
-
-  const meta = await applyEntryAi(ctx, id)
-  if (!meta) return { ok: false, error: 'Write a little more first, then run AI.' }
-
-  await recordAudit(ctx, {
-    entityType: 'journal_entry',
-    entityId: id,
-    action: 'update',
-    summary: 'AI analysed entry',
-    metadata: { tags: meta.tags.length },
-  })
-  revalidatePath('/journals')
-  return { ok: true, meta }
-}
-
 // ---- photos -----------------------------------------------------------------
 
 export async function attachJournalPhotos(input: {
@@ -339,12 +330,37 @@ export async function attachJournalPhotos(input: {
 
 export async function removeJournalPhoto(photoId: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const [row] = await ctx.db((tx) =>
-    tx.delete(journalEntryPhotos).where(eq(journalEntryPhotos.id, photoId)).returning({
-      entryId: journalEntryPhotos.entryId,
-    }),
-  )
-  if (!row) return { ok: false, error: 'Photo not found.' }
+  const photo = await ctx.db(async (tx) => {
+    const [p] = await tx
+      .select({ entryId: journalEntryPhotos.entryId })
+      .from(journalEntryPhotos)
+      .where(eq(journalEntryPhotos.id, photoId))
+      .limit(1)
+    return p ?? null
+  })
+  if (!photo) return { ok: false, error: 'Photo not found.' }
+
+  // Visibility check on the parent entry — a photo id alone must never allow
+  // mutating another user's journal.
+  const where = await scopedWhere(ctx, photo.entryId)
+  const done = await ctx.db(async (tx) => {
+    const [e] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(where)
+      .limit(1)
+    if (!e) return false
+    await tx.delete(journalEntryPhotos).where(eq(journalEntryPhotos.id, photoId))
+    return true
+  })
+  if (!done) return { ok: false, error: 'Photo not found.' }
+
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: photo.entryId,
+    action: 'update',
+    summary: 'Removed a photo',
+  })
   revalidatePath('/journals')
   return { ok: true }
 }
@@ -370,6 +386,19 @@ export async function describeJournalPhoto(
     return p ?? null
   })
   if (!photo) return { ok: false, error: 'Photo not found.' }
+
+  // Visibility check on the parent entry before mutating it (or spending AI
+  // budget) — mirrors attachJournalPhotos / removeJournalPhoto.
+  const where = await scopedWhere(ctx, photo.entryId)
+  const visible = await ctx.db(async (tx) => {
+    const [e] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(where)
+      .limit(1)
+    return !!e
+  })
+  if (!visible) return { ok: false, error: 'Photo not found.' }
 
   // Fetch bytes server-side — the model provider can't reach a dev/localhost
   // object store via URL, so we send the image data directly.
@@ -411,15 +440,6 @@ export async function fetchTree(input: {
   const ctx = await requireRequestContext()
   // Workspace tree is always personal — self-scoped.
   return buildTree(ctx, input.groupBy, input.filters, true)
-}
-
-export async function fetchEntries(input: {
-  filters: JournalFilters
-  limit?: number
-  offset?: number
-}): Promise<JournalListItem[]> {
-  const ctx = await requireRequestContext()
-  return listEntries(ctx, input.filters, { limit: input.limit, offset: input.offset })
 }
 
 export async function fetchEntry(id: string): Promise<JournalEntryDetail | null> {

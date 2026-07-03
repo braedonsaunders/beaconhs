@@ -1,7 +1,20 @@
 // Read layer for the Journals workspace. Plain server functions (ctx, …) shared
 // by the page (SSR) and the action layer (client refetch). No 'use server'.
 
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import {
   attachments,
@@ -100,7 +113,8 @@ function entryWhere(
   selfOnly = false,
   targetAuthor?: AuthorRef | null,
 ): SQL | undefined {
-  const conds: SQL[] = []
+  // Soft-deleted entries are invisible everywhere (list, tree, counts, export).
+  const conds: SQL[] = [isNull(journalEntries.deletedAt)]
   const scope = targetAuthor
     ? journalAuthorScopeWhere(ctx, authorPersonId, targetAuthor)
     : selfOnly
@@ -126,8 +140,9 @@ function entryWhere(
   }
   if (filters.mine && authorPersonId) {
     const mineConds: SQL[] = [eq(journalEntries.personId, authorPersonId)]
-    if (ctx.membership?.id)
-      mineConds.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
+    // authorTenantUserId guards the super-admin sentinel (never a uuid).
+    const tenantUserId = authorTenantUserId(ctx)
+    if (tenantUserId) mineConds.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
     conds.push(mineConds.length === 1 ? mineConds[0]! : or(...mineConds)!)
   }
   return conds.length === 0 ? undefined : and(...conds)
@@ -287,7 +302,7 @@ export async function countEntries(ctx: RequestContext, filters: JournalFilters)
  */
 export async function listRecordsFacets(ctx: RequestContext): Promise<JournalRecordsFacets> {
   const authorPersonId = await getAuthorPersonId(ctx)
-  const scope = journalScopeWhere(ctx, authorPersonId)
+  const scope = and(isNull(journalEntries.deletedAt), journalScopeWhere(ctx, authorPersonId))
   return ctx.db(async (tx) => {
     const statusRows = await tx
       .select({ status: journalEntries.status, n: sql<number>`count(*)::int` })
@@ -384,7 +399,7 @@ export async function getEntry(
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
       .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
-      .where(scope ? and(eq(journalEntries.id, id), scope) : eq(journalEntries.id, id))
+      .where(and(eq(journalEntries.id, id), isNull(journalEntries.deletedAt), scope))
       .limit(1)
     if (!row) return null
 
@@ -655,9 +670,12 @@ export async function getWorkspaceData(
   const authorPersonId = await getAuthorPersonId(ctx)
   const selfOnly = !targetAuthor
   const where = entryWhere(ctx, filters, authorPersonId, selfOnly, targetAuthor)
-  const scopeOnly = targetAuthor
-    ? journalAuthorScopeWhere(ctx, authorPersonId, targetAuthor)
-    : journalSelfScopeWhere(ctx, authorPersonId)
+  const scopeOnly = and(
+    isNull(journalEntries.deletedAt),
+    targetAuthor
+      ? journalAuthorScopeWhere(ctx, authorPersonId, targetAuthor)
+      : journalSelfScopeWhere(ctx, authorPersonId),
+  )
 
   const [tree, hm, otd, options, tagSuggestions, counts] = await Promise.all([
     buildTree(ctx, groupBy, filters, selfOnly, targetAuthor),
@@ -699,27 +717,35 @@ export async function getWorkspaceData(
   }
 }
 
-/** Resolve the author's entry for a date (default today), creating a draft if none. */
+/** Resolve the author's entry for a date (default today in the user's timezone),
+ *  creating a draft if none. */
 export async function getOrCreateEntryForDate(
   ctx: RequestContext,
   dateISO?: string,
 ): Promise<string | null> {
   const authorPersonId = await getAuthorPersonId(ctx)
-  const today = dateISO ?? todayISO()
+  const tenantUserId = authorTenantUserId(ctx)
+  // No linked person and no tenant membership (e.g. a memberless super-admin):
+  // there is no identity to own the entry, and an ownerless lookup would match
+  // ANY user's entry for the date. Refuse rather than open someone else's journal.
+  if (!authorPersonId && !tenantUserId) return null
+  const today = dateISO ?? todayISO(ctx.timezone)
   return ctx.db(async (tx) => {
-    // Most-recent entry on this date authored by / created by this user.
-    const mineToday: SQL[] = [eq(journalEntries.entryDate, today)]
+    // Most-recent live entry on this date authored by / created by this user.
     const ownership: SQL[] = []
     if (authorPersonId) ownership.push(eq(journalEntries.personId, authorPersonId))
-    if (ctx.membership?.id)
-      ownership.push(eq(journalEntries.createdByTenantUserId, ctx.membership.id))
-    if (ownership.length > 0)
-      mineToday.push(ownership.length === 1 ? ownership[0]! : or(...ownership)!)
+    if (tenantUserId) ownership.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
 
     const [existing] = await tx
       .select({ id: journalEntries.id })
       .from(journalEntries)
-      .where(and(...mineToday))
+      .where(
+        and(
+          eq(journalEntries.entryDate, today),
+          isNull(journalEntries.deletedAt),
+          ownership.length === 1 ? ownership[0]! : or(...ownership)!,
+        ),
+      )
       .orderBy(desc(journalEntries.updatedAt))
       .limit(1)
     if (existing) return existing.id
@@ -731,7 +757,7 @@ export async function getOrCreateEntryForDate(
         tenantId: ctx.tenantId,
         reference,
         personId: authorPersonId,
-        createdByTenantUserId: authorTenantUserId(ctx),
+        createdByTenantUserId: tenantUserId,
         entryDate: today,
         status: 'draft',
       })

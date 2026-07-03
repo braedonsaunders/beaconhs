@@ -1,9 +1,10 @@
 // GET /journals/:id/print — a self-contained printable HTML document (bypasses
 // the app shell). The user prints it to PDF from the browser. Auth-scoped.
 
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { getEntry } from '../../_data'
-import { formatLongDate } from '../../_format'
+import { formatLongDate, textToHtml } from '../../_format'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +63,10 @@ export async function GET(
   <div class="meta">${esc(entry.authorName ?? '')}${entry.siteName ? ` · ${esc(entry.siteName)}` : ''} · ${esc(entry.definition)} · ${esc(entry.status)}</div>
   ${tags ? `<div style="margin:10px 0">${tags}</div>` : ''}
   ${entry.summary ? `<p style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:10px 12px;font-size:13px;color:#0f766e">${esc(entry.summary)}</p>` : ''}
-  <div class="body">${entry.bodyHtml || '<p style="color:#94a3b8">No content.</p>'}</div>
+  <div class="body">${
+    sanitizeDocumentHtml(entry.bodyHtml || textToHtml(entry.bodyText)) ||
+    '<p style="color:#94a3b8">No content.</p>'
+  }</div>
   ${photos ? `<div class="grid">${photos}</div>` : ''}
 </body></html>`
 

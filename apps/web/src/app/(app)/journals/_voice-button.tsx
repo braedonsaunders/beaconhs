@@ -15,6 +15,9 @@ type SR = {
   stop: () => void
   onresult:
     | ((e: {
+        /** Index of the first result that changed in this event — results before
+         *  it were already delivered (the results list is cumulative). */
+        resultIndex: number
         results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> & {
           length: number
         }
@@ -66,7 +69,9 @@ export function VoiceButton({
     rec.interimResults = false
     rec.lang = 'en-US'
     rec.onresult = (e) => {
-      for (let i = 0; i < e.results.length; i++) {
+      // Start at resultIndex — e.results is cumulative for the whole session, so
+      // iterating from 0 would re-insert every earlier sentence on each event.
+      for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i]
         if (r && r.isFinal) {
           const t = r[0]?.transcript?.trim()

@@ -34,10 +34,14 @@ import type { FeedEvent, FeedKind, FeedPage, FeedSummary, FeedTag } from './_typ
 
 const PAGE = 20
 
-type ModuleScope = SQL | undefined | 'none'
+export type ModuleScope = SQL | undefined | 'none'
 
-/** Conservative per-module visibility: all → site → self → none (mirrors journals). */
-function moduleScope(
+/**
+ * Conservative per-module visibility: all → site → self → none (mirrors
+ * journals). Shared with the dashboard list widgets (dashboard/_metrics.ts) so
+ * both surfaces enforce the same record-visibility tiers.
+ */
+export function moduleScope(
   ctx: RequestContext,
   base: string,
   siteCol: AnyPgColumn,

@@ -524,7 +524,7 @@ function DaysSinceCard({ days, lastDate }: { days: number | null; lastDate: Date
 }
 
 function VehicleLogStatusCard({ status }: { status: DashboardMetrics['vehicleLogStatus'] }) {
-  const attention = status.conflictDays > 0 || status.pendingActivityDays > 0
+  const attention = status.conflictDays > 0
   const importedPct =
     status.loggedDays > 0 ? Math.round((status.importedDays / status.loggedDays) * 100) : 0
   return (
@@ -573,13 +573,8 @@ function VehicleLogStatusCard({ status }: { status: DashboardMetrics['vehicleLog
           </div>
         </div>
 
-        <div className="mt-auto grid grid-cols-3 gap-2 pt-3">
+        <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
           <StatusPill label="Imported" value={status.importedDays} tone="good" />
-          <StatusPill
-            label="Pending"
-            value={status.pendingActivityDays}
-            tone={status.pendingActivityDays > 0 ? 'warn' : 'quiet'}
-          />
           <StatusPill
             label="Conflicts"
             value={status.conflictDays}

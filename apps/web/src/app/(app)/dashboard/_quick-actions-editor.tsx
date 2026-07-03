@@ -162,7 +162,7 @@ export function QuickActionsEditor({
       title={title}
       description={
         view === 'list'
-          ? 'Pin the shortcuts your crew uses most. Drag to reorder, tap to edit.'
+          ? 'Pin the shortcuts your crew uses most. Use the arrows to reorder, tap to edit.'
           : undefined
       }
       footer={

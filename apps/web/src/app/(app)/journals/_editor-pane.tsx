@@ -73,12 +73,13 @@ export function EditorPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.id])
 
-  function flush() {
+  function flush(): Promise<void> {
+    if (timer.current) clearTimeout(timer.current)
     const patch = pending.current
     pending.current = {}
-    if (Object.keys(patch).length === 0) return
+    if (Object.keys(patch).length === 0) return Promise.resolve()
     setSaveState('saving')
-    updateEntry({ id: entry.id, patch }).then((r) => {
+    return updateEntry({ id: entry.id, patch }).then((r) => {
       setSaveState(r.ok ? 'saved' : 'idle')
       if (!r.ok && 'error' in r) toast.error(r.error)
     })
@@ -117,7 +118,9 @@ export function EditorPane({
 
   function submit() {
     startSubmit(async () => {
-      flush()
+      // Persist the last debounced edits BEFORE submitting — the on-submit
+      // flows / recap email / AI read the body from the DB.
+      await flush()
       const r = await submitEntry(entry.id)
       if (!r.ok) {
         toast.error(r.error)

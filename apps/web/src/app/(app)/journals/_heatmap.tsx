@@ -4,6 +4,7 @@
 // Click any cell to jump to (or start) that day's entry.
 
 import { useMemo } from 'react'
+import { localDateISO } from './_format'
 import type { HeatmapCell } from './_types'
 
 const WEEKS = 53
@@ -34,7 +35,9 @@ export function Heatmap({ data, onPick }: { data: HeatmapCell[]; onPick: (date: 
     for (let w = 0; w < WEEKS; w++) {
       const col: { date: string; count: number; future: boolean }[] = []
       for (let d = 0; d < 7; d++) {
-        const iso = cursor.toISOString().slice(0, 10)
+        // Cells are built from local Dates — serialise in local time so a cell
+        // never labels (and creates entries for) the wrong day in UTC+ zones.
+        const iso = localDateISO(cursor)
         const month = cursor.getMonth()
         if (d === 0 && month !== lastMonth) {
           ticks.push({ col: w, label: MONTH_ABBR[month] ?? '' })

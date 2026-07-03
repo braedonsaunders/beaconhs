@@ -155,14 +155,28 @@ export function isExternalHref(href: string): boolean {
 /** Upper bound on tiles — the grid wraps gracefully, this just keeps it sane. */
 export const MAX_QUICK_ACTIONS = 12
 
-/** Shipped defaults, used whenever a user hasn't customised their tiles. */
-export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
+/**
+ * One curated "start something" CTA. The single source of truth behind BOTH the
+ * shipped default tiles and the "Add action" picker, so labels never drift.
+ * `requiredPermission` matches the destination page's own gate — the picker
+ * (actions.ts listQuickActionOptions) filters on it with can(ctx, …).
+ */
+export type CuratedQuickAction = QuickActionOption & {
+  /** Stable id used for the shipped default tiles. */
+  id: string
+  /** Permission the destination requires (null = reachable by everyone). */
+  requiredPermission: string | null
+}
+
+export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
   {
     id: 'd-incident',
     label: 'Report incident',
     href: '/incidents/new',
     iconKey: 'alert',
     tone: 'rose',
+    hint: 'Create',
+    requiredPermission: 'incidents.create',
   },
   {
     id: 'd-hazid',
@@ -170,6 +184,8 @@ export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
     href: '/hazard-assessments/new',
     iconKey: 'radiation',
     tone: 'amber',
+    hint: 'Create',
+    requiredPermission: 'hazid.create',
   },
   {
     id: 'd-ca',
@@ -177,6 +193,8 @@ export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
     href: '/corrective-actions/new',
     iconKey: 'list-checks',
     tone: 'teal',
+    hint: 'Create',
+    requiredPermission: 'ca.create',
   },
   {
     id: 'd-equip',
@@ -184,6 +202,21 @@ export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
     href: '/equipment/station',
     iconKey: 'clipboard-check',
     tone: 'violet',
+    hint: 'Action',
+    requiredPermission: 'equipment.manage',
   },
-  { id: 'd-report', label: 'Run report', href: '/reports', iconKey: 'file', tone: 'slate' },
+  {
+    id: 'd-report',
+    label: 'Run report',
+    href: '/reports',
+    iconKey: 'file',
+    tone: 'slate',
+    hint: 'Open',
+    requiredPermission: 'reports.read',
+  },
 ]
+
+/** Shipped defaults, used whenever a user hasn't customised their tiles. */
+export const DEFAULT_QUICK_ACTIONS: QuickAction[] = CURATED_QUICK_ACTIONS.map(
+  ({ id, label, href, iconKey, tone }) => ({ id, label, href, iconKey, tone }),
+)

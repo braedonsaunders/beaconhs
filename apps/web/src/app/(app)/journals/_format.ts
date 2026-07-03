@@ -29,8 +29,16 @@ export function weekdayShort(iso: string): string {
   return WD[parse(iso).getDay()] ?? ''
 }
 
+/** A Date's YYYY-MM-DD in LOCAL time — never toISOString(), which is UTC and
+ *  shifts evening dates to tomorrow (or cells a day off) for non-UTC users. */
+export function localDateISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`
+}
+
 export function isToday(iso: string): boolean {
-  return iso === new Date().toISOString().slice(0, 10)
+  return iso === localDateISO(new Date())
 }
 
 /** "now", "5m", "2h", "3d", else date. */

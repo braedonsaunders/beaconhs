@@ -7,17 +7,23 @@
 // dropped so a removed widget can't crash the renderer.
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { formTemplates, userDashboardLayouts, type DashboardLayoutData } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { NAV_MODULES } from '@/lib/nav/registry'
+import { canViewInsights } from '../insights/_access'
 import { getUserRoleTier } from './_role-tier'
-import { type QuickActionOption, type QuickActionOptions } from './_quick-actions-shared'
+import {
+  CURATED_QUICK_ACTIONS,
+  type QuickActionOption,
+  type QuickActionOptions,
+} from './_quick-actions-shared'
 import { QuickActionsSchema } from './_quick-actions-input'
 import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from './_layout-input'
 import { resolveDashboardDefault } from './_load-layout'
+import { canSeeWidget } from './_widget-access'
+import { WIDGETS } from './_widget-registry'
 
 export async function saveDashboardLayout(input: unknown) {
   const ctx = await requireRequestContext()
@@ -41,11 +47,13 @@ export async function saveDashboardLayout(input: unknown) {
     return { ok: false as const, error: parsed.error.message }
   }
 
-  // Keep registered widget keys AND saved insight-card ids (uuids), so a real
-  // Insights card can live on the homepage grid alongside the bespoke widgets.
-  // An inaccessible card id simply renders an empty cell under RLS — never a leak.
+  // Keep only registered widget keys the CALLER may see (canSeeWidget — the same
+  // gate view + customize render through, so a crafted save can never park an
+  // org widget on a self-tier dashboard), plus saved insight-card ids (uuids)
+  // when the caller has analytics access.
   const widgets = filterPersistableDashboardWidgets(parsed.data.widgets, {
-    allowAnyInsightCardUuid: true,
+    allowedWidgetIds: new Set(Object.keys(WIDGETS).filter((id) => canSeeWidget(ctx, id))),
+    allowAnyInsightCardUuid: canViewInsights(ctx),
   })
   const role = await getUserRoleTier(ctx)
   const dashboardDefault = await resolveDashboardDefault(ctx, role)
@@ -183,38 +191,11 @@ function labelForKind(kind: string): string {
 export async function listQuickActionOptions(): Promise<QuickActionOptions> {
   const ctx = await requireRequestContext()
 
-  // Curated "start something" shortcuts. Routes that always exist for any tenant.
-  const ctas: QuickActionOption[] = [
-    {
-      label: 'Report incident',
-      href: '/incidents/new',
-      iconKey: 'alert',
-      tone: 'rose',
-      hint: 'Create',
-    },
-    {
-      label: 'Hazard assessment',
-      href: '/hazard-assessments/new',
-      iconKey: 'radiation',
-      tone: 'amber',
-      hint: 'Create',
-    },
-    {
-      label: 'New corrective action',
-      href: '/corrective-actions/new',
-      iconKey: 'list-checks',
-      tone: 'teal',
-      hint: 'Create',
-    },
-    {
-      label: 'Check out equipment',
-      href: '/equipment/station',
-      iconKey: 'clipboard-check',
-      tone: 'violet',
-      hint: 'Action',
-    },
-    { label: 'Run report', href: '/reports', iconKey: 'file', tone: 'slate', hint: 'Open' },
-  ]
+  // Curated "start something" shortcuts (shared with the default tiles),
+  // filtered to what the caller can actually reach — no dead-end offers.
+  const ctas: QuickActionOption[] = CURATED_QUICK_ACTIONS.filter(
+    (c) => !c.requiredPermission || can(ctx, c.requiredPermission),
+  ).map(({ label, href, iconKey, tone, hint }) => ({ label, href, iconKey, tone, hint }))
 
   const nav: QuickActionOption[] = NAV_MODULES.filter(
     (m) => !m.requiredPermission || can(ctx, m.requiredPermission),
@@ -284,10 +265,4 @@ export async function resetDashboardLayout() {
   revalidatePath('/dashboard')
   revalidatePath('/dashboard/customize')
   return { ok: true as const }
-}
-
-export async function saveAndExitCustomize(input: unknown) {
-  const res = await saveDashboardLayout(input)
-  if (res.ok) redirect('/dashboard')
-  return res
 }

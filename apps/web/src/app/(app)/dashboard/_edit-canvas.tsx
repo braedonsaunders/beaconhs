@@ -16,6 +16,13 @@ export async function loadDashboardEditCanvas(
   opts: {
     includeLibraryCards: boolean
     filterLibraryCard?: (card: CardRow) => boolean
+    /**
+     * When set, registry widgets (and their Insights system-card renders) are
+     * only built for these ids. The personal customize page MUST pass the
+     * viewer's `canSeeWidget` set so edit mode never renders org data that view
+     * mode hides; the admin role-default editor passes the role's set instead.
+     */
+    allowedWidgetIds?: ReadonlySet<string>
   },
 ): Promise<{
   nodes: Record<string, React.ReactNode>
@@ -29,12 +36,14 @@ export async function loadDashboardEditCanvas(
     ensureSystemCards(ctx),
   ])
 
+  const widgetAllowed = (id: string) => !opts.allowedWidgetIds || opts.allowedWidgetIds.has(id)
   const visiblePaletteCards = opts.filterLibraryCard
     ? paletteCards.filter(opts.filterLibraryCard)
     : paletteCards
 
   const nodes: Record<string, React.ReactNode> = {}
   for (const id of Object.keys(WIDGETS)) {
+    if (!widgetAllowed(id)) continue
     nodes[id] = (
       <WidgetCard
         widgetId={id}
@@ -49,6 +58,7 @@ export async function loadDashboardEditCanvas(
   const sysItems: CardItem[] = []
   const widgetKeyByCardId = new Map<string, string>()
   for (const [widgetKey, insightKey] of Object.entries(WIDGET_CARD_KEY)) {
+    if (!widgetAllowed(widgetKey)) continue
     const card = systemCards.get(insightKey)
     if (!card) continue
     sysItems.push({ ...card, kind: 'question', config: null })

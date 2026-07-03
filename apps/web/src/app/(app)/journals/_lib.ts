@@ -122,9 +122,19 @@ export async function nextJournalReference(tx: Database, year: number): Promise<
   return `JRN-${year}-${String(Number(row?.c ?? 0) + 1).padStart(4, '0')}`
 }
 
-/** Today as an ISO date (YYYY-MM-DD) in server local time. */
-export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
+/**
+ * Today as an ISO date (YYYY-MM-DD) in the given IANA timezone (ctx.timezone).
+ * Never uses the server clock's date directly — in prod the container runs UTC,
+ * so an evening entry would otherwise land on tomorrow's date for the author.
+ */
+export function todayISO(timeZone: string): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
 }
 
 /** Flatten TipTap HTML into readable plaintext for search + AI + snippets. */

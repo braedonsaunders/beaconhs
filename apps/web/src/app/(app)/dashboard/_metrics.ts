@@ -31,6 +31,7 @@ import {
   truckLogEntries,
 } from '@beaconhs/db/schema'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
+import { moduleScope } from '../feed/_data'
 
 /**
  * One 12-element series of monthly values, oldest -> newest. Used to draw the
@@ -56,7 +57,6 @@ export type DashboardMetrics = {
     loggedDays: number
     importedDays: number
     conflictDays: number
-    pendingActivityDays: number
     businessKm: number
     personalKm: number
     totalKm: number
@@ -358,25 +358,30 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(incidents)
-        .where(gte(incidents.occurredAt, thirtyDaysAgo))
+        .where(and(isNull(incidents.deletedAt), gte(incidents.occurredAt, thirtyDaysAgo)))
         .then((r) => r[0]),
       tx
         .select({ c: count() })
         .from(incidents)
         .where(
-          and(gte(incidents.occurredAt, sixtyDaysAgo), lte(incidents.occurredAt, thirtyDaysAgo)),
+          and(
+            isNull(incidents.deletedAt),
+            gte(incidents.occurredAt, sixtyDaysAgo),
+            lte(incidents.occurredAt, thirtyDaysAgo),
+          ),
         )
         .then((r) => r[0]),
       tx
         .select({ c: count() })
         .from(correctiveActions)
-        .where(isNull(correctiveActions.closedAt))
+        .where(and(isNull(correctiveActions.deletedAt), isNull(correctiveActions.closedAt)))
         .then((r) => r[0]),
       tx
         .select({ c: count() })
         .from(correctiveActions)
         .where(
           and(
+            isNull(correctiveActions.deletedAt),
             isNull(correctiveActions.closedAt),
             isNotNull(correctiveActions.dueOn),
             lte(correctiveActions.dueOn, todayIso),
@@ -386,7 +391,7 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(formResponses)
-        .where(gte(formResponses.submittedAt, todayStart))
+        .where(and(isNull(formResponses.deletedAt), gte(formResponses.submittedAt, todayStart)))
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -406,7 +411,7 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(formResponses)
-        .where(eq(formResponses.monitorStatus, 'active'))
+        .where(and(isNull(formResponses.deletedAt), eq(formResponses.monitorStatus, 'active')))
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -418,6 +423,7 @@ export async function loadDashboardMetrics(
         .from(ppeItems)
         .where(
           and(
+            isNull(ppeItems.deletedAt),
             isNotNull(ppeItems.nextAnnualInspectionDue),
             lte(ppeItems.nextAnnualInspectionDue, todayIso),
           ),
@@ -474,7 +480,6 @@ export async function loadDashboardMetrics(
       loggedDays: Number(vehicleLogRow?.loggedDays ?? 0),
       importedDays: Number(vehicleLogRow?.importedDays ?? 0),
       conflictDays: Number(vehicleLogRow?.conflictDays ?? 0),
-      pendingActivityDays: 0,
       businessKm: Number(vehicleLogRow?.businessKm ?? 0),
       personalKm: Number(vehicleLogRow?.personalKm ?? 0),
       totalKm: Number(vehicleLogRow?.totalKm ?? 0),
@@ -492,6 +497,7 @@ export async function loadDashboardMetrics(
       .from(incidents)
       .where(
         and(
+          isNull(incidents.deletedAt),
           gte(incidents.occurredAt, twentyFourMonthsAgo),
           inArray(incidents.severity, ['medical_aid', 'lost_time', 'fatality']),
         ),
@@ -504,7 +510,13 @@ export async function loadDashboardMetrics(
         c: count(),
       })
       .from(incidents)
-      .where(and(gte(incidents.occurredAt, twentyFourMonthsAgo), eq(incidents.lostTime, true)))
+      .where(
+        and(
+          isNull(incidents.deletedAt),
+          gte(incidents.occurredAt, twentyFourMonthsAgo),
+          eq(incidents.lostTime, true),
+        ),
+      )
       .groupBy(sql`to_char(${incidents.occurredAt}, 'YYYY-MM')`)
 
     // Real hours worked per month, from recorded periods (bucketed by start month).
@@ -616,7 +628,7 @@ export async function loadDashboardMetrics(
         avgDays: sql<number>`COALESCE(AVG(EXTRACT(EPOCH FROM (now() - ${correctiveActions.createdAt})) / 86400), 0)::float`,
       })
       .from(correctiveActions)
-      .where(isNull(correctiveActions.closedAt))
+      .where(and(isNull(correctiveActions.deletedAt), isNull(correctiveActions.closedAt)))
     const openCAAgingDays =
       agingRow && Number(agingRow.avgDays) > 0 ? Math.round(Number(agingRow.avgDays)) : null
 
@@ -631,7 +643,7 @@ export async function loadDashboardMetrics(
         ge60: sql<number>`SUM(CASE WHEN now() - ${correctiveActions.createdAt} >= interval '60 days' THEN 1 ELSE 0 END)::int`,
       })
       .from(correctiveActions)
-      .where(isNull(correctiveActions.closedAt))
+      .where(and(isNull(correctiveActions.deletedAt), isNull(correctiveActions.closedAt)))
     const openCABuckets = {
       lt7: Number(bucketRow?.lt7 ?? 0),
       lt30: Number(bucketRow?.lt30 ?? 0),
@@ -649,6 +661,7 @@ export async function loadDashboardMetrics(
       .from(incidents)
       .where(
         and(
+          isNull(incidents.deletedAt),
           inArray(incidents.severity, ['medical_aid', 'lost_time', 'fatality']),
           lte(incidents.occurredAt, now),
         ),
@@ -665,7 +678,7 @@ export async function loadDashboardMetrics(
         n: count(),
       })
       .from(incidents)
-      .where(gte(incidents.occurredAt, twelveMonthsAgo))
+      .where(and(isNull(incidents.deletedAt), gte(incidents.occurredAt, twelveMonthsAgo)))
       .groupBy(incidents.severity)
     const severityDistribution = {
       fatality: 0,
@@ -701,27 +714,64 @@ export async function loadDashboardMetrics(
     const [nmRow] = await tx
       .select({ n: count() })
       .from(incidents)
-      .where(and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'near_miss')))
+      .where(
+        and(
+          isNull(incidents.deletedAt),
+          gte(incidents.occurredAt, twelveMonthsAgo),
+          eq(incidents.type, 'near_miss'),
+        ),
+      )
     severityDistribution.nearMiss = Number(nmRow?.n ?? 0)
     const [pdRow] = await tx
       .select({ n: count() })
       .from(incidents)
-      .where(and(gte(incidents.occurredAt, twelveMonthsAgo), eq(incidents.type, 'property_damage')))
+      .where(
+        and(
+          isNull(incidents.deletedAt),
+          gte(incidents.occurredAt, twelveMonthsAgo),
+          eq(incidents.type, 'property_damage'),
+        ),
+      )
     severityDistribution.propertyDamage = Number(pdRow?.n ?? 0)
 
     // --- List widgets ----------------------------------------------------
-    const recentIncidents = await tx
-      .select()
-      .from(incidents)
-      .orderBy(desc(incidents.occurredAt))
-      .limit(5)
+    // The incident / CA lists surface record-level detail, so they enforce the
+    // same conservative visibility tiers as the feed (all → site → self → none)
+    // — a site-scoped foreman never sees another site's incident titles.
+    const incidentScope = moduleScope(
+      ctx,
+      'incidents.read',
+      incidents.siteOrgUnitId,
+      incidents.reportedByTenantUserId,
+    )
+    const caScope = moduleScope(
+      ctx,
+      'ca.read',
+      correctiveActions.siteOrgUnitId,
+      correctiveActions.ownerTenantUserId,
+    )
 
-    const dueCAs = await tx
-      .select()
-      .from(correctiveActions)
-      .where(isNull(correctiveActions.closedAt))
-      .orderBy(asc(correctiveActions.dueOn))
-      .limit(5)
+    const recentIncidents =
+      incidentScope === 'none'
+        ? []
+        : await tx
+            .select()
+            .from(incidents)
+            .where(and(isNull(incidents.deletedAt), incidentScope))
+            .orderBy(desc(incidents.occurredAt))
+            .limit(5)
+
+    const dueCAs =
+      caScope === 'none'
+        ? []
+        : await tx
+            .select()
+            .from(correctiveActions)
+            .where(
+              and(isNull(correctiveActions.deletedAt), isNull(correctiveActions.closedAt), caScope),
+            )
+            .orderBy(asc(correctiveActions.dueOn))
+            .limit(5)
 
     const myInbox = await tx
       .select()
@@ -739,7 +789,7 @@ export async function loadDashboardMetrics(
       })
       .from(incidents)
       .leftJoin(orgUnits, eq(orgUnits.id, incidents.siteOrgUnitId))
-      .where(gte(incidents.occurredAt, ninetyDaysAgo))
+      .where(and(isNull(incidents.deletedAt), gte(incidents.occurredAt, ninetyDaysAgo)))
       .groupBy(incidents.siteOrgUnitId, orgUnits.name)
       .orderBy(desc(count()))
       .limit(5)
@@ -749,24 +799,29 @@ export async function loadDashboardMetrics(
       incidents: Number(r.c),
     }))
 
-    // Top 5 most-overdue CAs
-    const topOverdueRaw = await tx
-      .select({
-        id: correctiveActions.id,
-        reference: correctiveActions.reference,
-        title: correctiveActions.title,
-        dueOn: correctiveActions.dueOn,
-      })
-      .from(correctiveActions)
-      .where(
-        and(
-          isNull(correctiveActions.closedAt),
-          isNotNull(correctiveActions.dueOn),
-          lte(correctiveActions.dueOn, todayIso),
-        ),
-      )
-      .orderBy(asc(correctiveActions.dueOn))
-      .limit(5)
+    // Top 5 most-overdue CAs — same visibility tiers as the due-CAs list.
+    const topOverdueRaw =
+      caScope === 'none'
+        ? []
+        : await tx
+            .select({
+              id: correctiveActions.id,
+              reference: correctiveActions.reference,
+              title: correctiveActions.title,
+              dueOn: correctiveActions.dueOn,
+            })
+            .from(correctiveActions)
+            .where(
+              and(
+                isNull(correctiveActions.deletedAt),
+                isNull(correctiveActions.closedAt),
+                isNotNull(correctiveActions.dueOn),
+                lte(correctiveActions.dueOn, todayIso),
+                caScope,
+              ),
+            )
+            .orderBy(asc(correctiveActions.dueOn))
+            .limit(5)
     const topOverdueCAs = topOverdueRaw.map((r) => {
       const dayMs = 86_400_000
       const days = r.dueOn ? Math.round((today.getTime() - new Date(r.dueOn).getTime()) / dayMs) : 0

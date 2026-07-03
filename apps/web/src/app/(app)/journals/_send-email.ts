@@ -1,9 +1,10 @@
 // Server-only helper: email a journal-entry recap. Recipients = the tenant's
 // 'journal' notification recipients, plus the entry's supervisor and author.
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { sendEmail } from '@beaconhs/emails'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   journalEntries,
   orgUnits,
@@ -13,6 +14,8 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
+import { getAuthorPersonId, journalCanReadAll, journalScopeWhere } from './_lib'
+import { textToHtml } from './_format'
 
 const authorPerson = alias(people, 'jmail_author')
 const supPerson = alias(people, 'jmail_sup')
@@ -27,6 +30,16 @@ function esc(s: string | null | undefined): string {
 }
 
 export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string): Promise<number> {
+  // Visibility-scoped exactly like the entry mutations (_actions.ts scopedWhere):
+  // a journals.read.self user must not be able to email another author's journal
+  // by id, and soft-deleted entries are never sent.
+  const authorPersonId = journalCanReadAll(ctx) ? null : await getAuthorPersonId(ctx)
+  const entryWhere = and(
+    eq(journalEntries.id, entryId),
+    isNull(journalEntries.deletedAt),
+    journalScopeWhere(ctx, authorPersonId),
+  )
+
   const data = await ctx.db(async (tx) => {
     const [e] = await tx
       .select({
@@ -41,7 +54,7 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
       .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
       .leftJoin(supPerson, eq(supPerson.id, journalEntries.supervisorPersonId))
-      .where(eq(journalEntries.id, entryId))
+      .where(entryWhere)
       .limit(1)
     if (!e) return null
 
@@ -89,7 +102,9 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
           data.e.siteName ? ` · ${esc(data.e.siteName)}` : ''
         }
       </div>
-      <div style="font-size:14px;line-height:1.6;">${entry.bodyHtml ?? '(no content)'}</div>
+      <div style="font-size:14px;line-height:1.6;">${
+        sanitizeDocumentHtml(entry.bodyHtml || textToHtml(entry.bodyText)) || '(no content)'
+      }</div>
     </div>`
 
   await sendEmail({ to, subject, html, text })

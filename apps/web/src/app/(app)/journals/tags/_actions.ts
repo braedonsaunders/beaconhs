@@ -35,12 +35,6 @@ async function refresh(ctx: RequestContext): Promise<TagActionResult> {
   return { ok: true, tags: await listManagedTags(ctx) }
 }
 
-export async function listTags(): Promise<TagActionResult> {
-  const ctx = await gate()
-  if (!ctx) return { ok: false, error: 'You don’t have permission to manage tags.' }
-  return { ok: true, tags: await listManagedTags(ctx) }
-}
-
 /** Create a tag, or edit an existing one (rename + colour/description). */
 export async function saveTag(input: {
   name: string
