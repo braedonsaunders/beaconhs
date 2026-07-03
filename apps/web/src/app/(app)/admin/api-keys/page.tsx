@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { cookies, headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { desc } from 'drizzle-orm'
 import { BookText, Download, Key } from 'lucide-react'
 import {
@@ -24,13 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { can } from '@beaconhs/tenant'
 import { apiKeys } from '@beaconhs/db/schema'
-import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { permissionGroupLabel } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../roles/_components/permission-matrix'
 import { createApiKey, dismissReveal, REVEAL_COOKIE, revokeApiKey } from './_actions'
+import { requireApiKeyAdmin } from './_guard'
 
 export const metadata = { title: 'API keys' }
 export const dynamic = 'force-dynamic'
@@ -39,14 +37,6 @@ export const dynamic = 'force-dynamic'
 // as an anchor, so links are styled <a> elements — matching the app's pattern).
 const DOC_LINK_CLASS =
   'inline-flex h-8 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60'
-
-/** API keys are a privileged credential — gate the page and every action on
- *  the dedicated permission (super-admins always pass). */
-async function requireApiKeyAdmin() {
-  const ctx = await requireRequestContext()
-  if (!ctx.isSuperAdmin && !can(ctx, 'admin.api-keys.manage')) redirect('/admin')
-  return ctx
-}
 
 function permissionSummary(permissions: string[]) {
   if (permissions.length === 0) return <span className="text-xs text-slate-400">none</span>

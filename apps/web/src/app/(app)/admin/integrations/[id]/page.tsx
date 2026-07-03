@@ -16,13 +16,13 @@ import {
   Label,
   Select,
   Textarea,
-  cn,
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { type SyncEntityStat, syncConnections, syncRuns } from '@beaconhs/db/schema'
 import { getConnector, toConnectorSummary } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
+import { RunPill, StatusPill } from '../_pills'
 import { DbMapper } from './_db-mapper'
 import { NangoConnect } from './_nango-connect'
 import {
@@ -42,20 +42,6 @@ const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   org_unit: 'Locations & Projects',
   equipment: 'Equipment',
-}
-
-const STATUS_PILL: Record<string, string> = {
-  connected: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  draft: 'bg-slate-50 text-slate-600 ring-slate-200',
-  error: 'bg-red-50 text-red-700 ring-red-200',
-  disabled: 'bg-slate-50 text-slate-500 ring-slate-200',
-}
-
-const RUN_PILL: Record<string, string> = {
-  success: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  partial: 'bg-amber-50 text-amber-700 ring-amber-200',
-  error: 'bg-red-50 text-red-700 ring-red-200',
-  running: 'bg-sky-50 text-sky-700 ring-sky-200',
 }
 
 function statSummary(stats: Record<string, SyncEntityStat>): string {
@@ -123,7 +109,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           <div>
             <Link
               href="/admin/integrations"
-              className="text-xs text-slate-400 hover:text-slate-600"
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             >
               ← Integrations
             </Link>
@@ -135,14 +121,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                 aria-label="Connection name"
                 className="max-w-[16rem] min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-2xl font-semibold text-slate-900 hover:border-slate-200 focus:border-teal-400 focus:bg-white focus:outline-none dark:text-slate-100 dark:hover:border-slate-700 dark:focus:bg-slate-900"
               />
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1',
-                  STATUS_PILL[conn.status] ?? STATUS_PILL.draft,
-                )}
-              >
-                {conn.status}
-              </span>
+              <StatusPill status={conn.status} />
               <Button
                 type="submit"
                 variant="ghost"
@@ -205,7 +184,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                               ))}
                             </Select>
                           ) : f.type === 'boolean' ? (
-                            <label className="flex items-center gap-2 text-sm text-slate-600">
+                            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                               <input
                                 type="checkbox"
                                 name={f.key}
@@ -351,29 +330,24 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                     No runs yet. Use “Run now” or set a schedule.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                     {runs.map((r) => (
                       <li key={r.id} className="flex items-start justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
-                                RUN_PILL[r.status] ?? RUN_PILL.running,
-                              )}
-                            >
-                              {r.status}
-                            </span>
+                            <RunPill status={r.status} />
                             <span className="text-xs text-slate-400">{r.trigger}</span>
                             {r.dryRun ? (
-                              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-200">
+                              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/30">
                                 preview
                               </span>
                             ) : null}
                           </div>
                           <p className="mt-1 text-xs text-slate-500">{statSummary(r.stats)}</p>
                           {r.error ? (
-                            <p className="mt-0.5 text-xs text-red-600">{r.error}</p>
+                            <p className="mt-0.5 text-xs text-red-600 dark:text-red-400">
+                              {r.error}
+                            </p>
                           ) : null}
                         </div>
                         <div className="shrink-0 text-right text-[11px] text-slate-400">
@@ -418,7 +392,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                       <option value="weekly">Weekly</option>
                     </Select>
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                     <input
                       type="checkbox"
                       name="enabled"
@@ -440,7 +414,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
               <CardHeader>
                 <CardTitle>How it works</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm text-slate-600">
+              <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                 <p>
                   Records are matched on a stable key, so re-running updates existing rows instead
                   of duplicating.

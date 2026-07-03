@@ -139,7 +139,6 @@ export default async function AdminRoleEditPage({
   const scopeOptions = canManageMembers ? await loadScopeOptions(ctx) : null
   const memberRows: RoleMember[] = scopeOptions
     ? members.map((m) => ({
-        membershipId: m.membershipId,
         assignmentId: m.assignmentId,
         name: m.name,
         email: m.email,

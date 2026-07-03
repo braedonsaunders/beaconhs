@@ -41,13 +41,34 @@ const STARTER_HTML =
   '<p style="font-size:13px;line-height:1.6;color:#334155;margin:0;">Drag content + record fields from the left. Use the Preview tab to see real pages.</p>' +
   '</div>'
 
+// Runtime whitelists mirroring the pdf_paper_size / pdf_orientation pg enums —
+// an unvalidated cast would let a crafted POST surface as a raw DB error.
+type PaperSize = 'letter' | 'a4' | 'legal'
+type Orientation = 'portrait' | 'landscape'
+
+function parsePaperSize(raw: unknown): PaperSize {
+  const v = String(raw ?? '')
+  return v === 'a4' || v === 'legal' ? v : 'letter'
+}
+
+function parseOrientation(raw: unknown): Orientation {
+  return String(raw ?? '') === 'landscape' ? 'landscape' : 'portrait'
+}
+
+// Keep margins in a printable range (schema default is 16mm).
+function clampMarginMm(raw: unknown): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return 16
+  return Math.min(50, Math.max(0, Math.round(n)))
+}
+
 export async function createPdfTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
   const subject = parseRecordSubject(String(formData.get('recordSubject') ?? ''))
-  const paperSize = String(formData.get('paperSize') ?? 'letter') as 'letter'
-  const orientation = String(formData.get('orientation') ?? 'portrait') as 'portrait'
+  const paperSize = parsePaperSize(formData.get('paperSize'))
+  const orientation = parseOrientation(formData.get('orientation'))
 
   const subjectFields = subject ? await loadSubjectFields(ctx, subject.type, subject.key) : []
   const mergeFields =
@@ -120,9 +141,9 @@ export async function savePdfTemplateDesign(input: {
         design: input.design,
         sourceHtml: input.sourceHtml,
         compiledHtml: compiled.html,
-        paperSize: input.paperSize,
-        orientation: input.orientation,
-        marginMm: input.marginMm,
+        paperSize: parsePaperSize(input.paperSize),
+        orientation: parseOrientation(input.orientation),
+        marginMm: clampMarginMm(input.marginMm),
         headerHtml: input.headerHtml,
         footerHtml: input.footerHtml,
         updatedAt: new Date(),

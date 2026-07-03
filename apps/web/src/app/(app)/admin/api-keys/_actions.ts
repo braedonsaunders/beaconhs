@@ -4,16 +4,17 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { apiKeys } from '@beaconhs/db/schema'
-import { assertNotImpersonating, can } from '@beaconhs/tenant'
+import { assertNotImpersonating } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { requireRequestContext } from '@/lib/auth'
 import { sanitizeApiPermissions } from '@/lib/api/permissions'
+import { requireApiKeyAdmin } from './_guard'
 
 export const REVEAL_COOKIE = 'bhs-api-key-reveal'
 
-async function requireApiKeyAdmin() {
-  const ctx = await requireRequestContext()
-  if (!ctx.isSuperAdmin && !can(ctx, 'admin.api-keys.manage')) redirect('/admin')
+/** Mutations additionally refuse impersonated sessions — an admin "viewing as"
+ *  someone must not mint or edit credentials. */
+async function requireApiKeyWriter() {
+  const ctx = await requireApiKeyAdmin()
   assertNotImpersonating(ctx, 'manage API keys')
   return ctx
 }
@@ -22,16 +23,20 @@ function readPermissions(formData: FormData): string[] {
   return sanitizeApiPermissions(formData.getAll('permissions').map(String))
 }
 
+// Date-only input, anchored to end-of-day UTC so it round-trips exactly with
+// the edit form's `toISOString().slice(0, 10)` display. Parsing in server-local
+// time made the shown date drift forward a day per save on any server west of
+// UTC.
 function parseExpiresAt(formData: FormData): Date | null {
   const raw = String(formData.get('expiresAt') ?? '').trim()
   if (!raw) return null
-  const parsed = new Date(`${raw}T23:59:59`)
+  const parsed = new Date(`${raw}T23:59:59Z`)
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
 export async function createApiKey(formData: FormData) {
   'use server'
-  const ctx = await requireApiKeyAdmin()
+  const ctx = await requireApiKeyWriter()
   const name = String(formData.get('name') ?? '').trim()
   const permissions = readPermissions(formData)
 
@@ -72,6 +77,7 @@ export async function createApiKey(formData: FormData) {
   cookieStore.set(REVEAL_COOKIE, secret, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
     path: '/admin/api-keys',
     maxAge: 60,
   })
@@ -80,7 +86,7 @@ export async function createApiKey(formData: FormData) {
 
 export async function updateApiKey(formData: FormData) {
   'use server'
-  const ctx = await requireApiKeyAdmin()
+  const ctx = await requireApiKeyWriter()
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
 
@@ -124,7 +130,7 @@ export async function updateApiKey(formData: FormData) {
 
 export async function revokeApiKey(formData: FormData) {
   'use server'
-  const ctx = await requireApiKeyAdmin()
+  const ctx = await requireApiKeyWriter()
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
 

@@ -219,13 +219,14 @@ export async function testOutbound(formData: FormData): Promise<{ ok: boolean; m
     .test({ tenantId: ctx.tenantId, db: ctx.db, config, secrets })
     .catch((e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }))
 
+  // Only status/lastError — lastRunAt means a real delivery and is stamped by
+  // the worker's dispatch path, not by connectivity tests.
   await ctx.db((tx) =>
     tx
       .update(tenantIntegrations)
       .set({
         status: result.ok ? (row.enabled ? 'ready' : 'draft') : 'error',
         lastError: result.ok ? null : (result.error ?? 'Test failed'),
-        lastRunAt: new Date(),
       })
       .where(eq(tenantIntegrations.id, id)),
   )

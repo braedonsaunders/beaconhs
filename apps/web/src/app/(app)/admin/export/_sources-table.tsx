@@ -139,14 +139,14 @@ export function ExportSourcesTable({
                         <ArrowUpRight size={14} />
                       </Link>
                     </Button>
+                    {/* Plain <a>: <Link> prefetches the /export.csv route handler,
+                        which runs the export query and records a phantom audit
+                        entry (see 7170384). Anchors don't prefetch. */}
                     <Button asChild size="sm">
-                      <Link
-                        href={entity.csvHref as any}
-                        onClick={(event) => event.stopPropagation()}
-                      >
+                      <a href={entity.csvHref} onClick={(event) => event.stopPropagation()}>
                         <Download size={14} className="mr-1.5" />
                         CSV
-                      </Link>
+                      </a>
                     </Button>
                   </div>
                 </TableCell>

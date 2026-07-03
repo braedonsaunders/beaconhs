@@ -228,18 +228,32 @@ export async function saveConfig(formData: FormData): Promise<void> {
   revalidatePath(`/admin/integrations/${id}`)
 }
 
+// Presets the scanner understands (apps/worker/src/lib/sync-scanner.ts). An
+// unknown token would persist but silently never run, so reject it.
+const SCHEDULE_PRESETS = new Set(['15min', 'hourly', '6h', 'daily', 'weekly'])
+
 export async function saveSchedule(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const scheduleRaw = String(formData.get('schedule') ?? '').trim()
+  if (scheduleRaw !== '' && scheduleRaw !== 'manual' && !SCHEDULE_PRESETS.has(scheduleRaw)) return
   const schedule = scheduleRaw === '' || scheduleRaw === 'manual' ? null : scheduleRaw
   const enabled =
     (formData.get('enabled') === 'on' || formData.get('enabled') === 'true') && !!schedule
   await ctx.db((tx) =>
     tx.update(syncConnections).set({ schedule, enabled }).where(eq(syncConnections.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'sync_connection',
+    entityId: id,
+    action: 'update',
+    summary: schedule
+      ? `Scheduled sync (${schedule}, ${enabled ? 'enabled' : 'disabled'})`
+      : 'Set sync to manual only',
+    after: { schedule, enabled },
+  })
   revalidatePath(`/admin/integrations/${id}`)
 }
 
@@ -291,6 +305,13 @@ export async function saveCsv(formData: FormData): Promise<void> {
       .set({ config, status: 'connected' })
       .where(eq(syncConnections.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'sync_connection',
+    entityId: id,
+    action: 'update',
+    summary: `Updated CSV import data (${entity || 'no entity'})`,
+    after: { entity, idColumn: idColumn ?? null, csvBytes: csv.length },
+  })
   revalidatePath(`/admin/integrations/${id}`)
 }
 
@@ -340,27 +361,6 @@ export async function previewNow(formData: FormData): Promise<void> {
 }
 
 // --- Typed actions (called from client islands) ---------------------------
-
-export async function testConnection(id: string): Promise<{ ok: boolean; message?: string }> {
-  const ctx = await guard()
-  if (!ctx) return { ok: false, message: 'Not allowed.' }
-  const conn = await loadConn(ctx, id)
-  if (!conn) return { ok: false, message: 'Connection not found.' }
-  const connector = getConnector(conn.connectorKey)
-  if (!connector?.test) return { ok: false, message: 'This connector has no test step.' }
-  const result = await connector.test(buildCtx(ctx, conn))
-  await ctx.db((tx) =>
-    tx
-      .update(syncConnections)
-      .set({
-        status: result.ok ? 'connected' : 'error',
-        lastError: result.ok ? null : (result.message ?? null),
-      })
-      .where(eq(syncConnections.id, id)),
-  )
-  revalidatePath(`/admin/integrations/${id}`)
-  return result
-}
 
 export async function introspectConnection(
   id: string,
@@ -437,6 +437,13 @@ export async function saveNangoModels(
     models: clean,
   }
   await ctx.db((tx) => tx.update(syncConnections).set({ config }).where(eq(syncConnections.id, id)))
+  await recordAudit(ctx, {
+    entityType: 'sync_connection',
+    entityId: id,
+    action: 'update',
+    summary: 'Updated Nango entity → model mapping',
+    after: { models: clean },
+  })
   revalidatePath(`/admin/integrations/${id}`)
   return { ok: true }
 }

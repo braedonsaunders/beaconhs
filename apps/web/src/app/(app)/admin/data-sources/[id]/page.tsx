@@ -79,20 +79,30 @@ async function addColumn(formData: FormData): Promise<void> {
   ) as DataSourceColumnType
   const key = slugify(String(formData.get('key') ?? '').trim() || label).replace(/-/g, '_')
 
-  await ctx.db(async (tx) => {
+  const added = await ctx.db(async (tx) => {
     const [src] = await tx
       .select({ columns: dataSources.columns })
       .from(dataSources)
       .where(eq(dataSources.id, id))
       .limit(1)
-    if (!src) return
+    if (!src) return false
     const cols = (src.columns as DataSourceColumn[]) ?? []
-    if (cols.some((c) => c.key === key)) return
+    if (cols.some((c) => c.key === key)) return false
     await tx
       .update(dataSources)
       .set({ columns: [...cols, { key, label, type }] })
       .where(eq(dataSources.id, id))
+    return true
   })
+  if (added) {
+    await recordAudit(ctx, {
+      entityType: 'data_source',
+      entityId: id,
+      action: 'update',
+      summary: `Added column "${label}"`,
+      after: { key, label, type },
+    })
+  }
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -103,16 +113,28 @@ async function deleteColumn(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const key = String(formData.get('key') ?? '')
   if (!id || !key) return
-  await ctx.db(async (tx) => {
+  const removed = await ctx.db(async (tx) => {
     const [src] = await tx
       .select({ columns: dataSources.columns })
       .from(dataSources)
       .where(eq(dataSources.id, id))
       .limit(1)
-    if (!src) return
-    const cols = ((src.columns as DataSourceColumn[]) ?? []).filter((c) => c.key !== key)
+    if (!src) return false
+    const before = (src.columns as DataSourceColumn[]) ?? []
+    const cols = before.filter((c) => c.key !== key)
+    if (cols.length === before.length) return false
     await tx.update(dataSources).set({ columns: cols }).where(eq(dataSources.id, id))
+    return true
   })
+  if (removed) {
+    await recordAudit(ctx, {
+      entityType: 'data_source',
+      entityId: id,
+      action: 'update',
+      summary: `Removed column "${key}"`,
+      before: { key },
+    })
+  }
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -122,26 +144,35 @@ async function resyncColumns(formData: FormData): Promise<void> {
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  await ctx.db(async (tx) => {
+  const resynced = await ctx.db(async (tx) => {
     const [src] = await tx
       .select({ config: dataSources.config })
       .from(dataSources)
       .where(eq(dataSources.id, id))
       .limit(1)
     const templateId = src?.config?.templateId
-    if (!templateId) return
+    if (!templateId) return false
     const [ver] = await tx
       .select({ schema: formTemplateVersions.schema })
       .from(formTemplateVersions)
       .where(eq(formTemplateVersions.templateId, templateId))
       .orderBy(desc(formTemplateVersions.version))
       .limit(1)
-    if (!ver?.schema) return
+    if (!ver?.schema) return false
     await tx
       .update(dataSources)
       .set({ columns: deriveColumnsFromSchema(ver.schema as FormSchemaV1) })
       .where(eq(dataSources.id, id))
+    return true
   })
+  if (resynced) {
+    await recordAudit(ctx, {
+      entityType: 'data_source',
+      entityId: id,
+      action: 'update',
+      summary: 'Resynced columns from the bound app',
+    })
+  }
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -170,23 +201,34 @@ async function addRow(formData: FormData): Promise<void> {
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  await ctx.db(async (tx) => {
+  const inserted = await ctx.db(async (tx) => {
     const [src] = await tx
       .select({ columns: dataSources.columns })
       .from(dataSources)
       .where(eq(dataSources.id, id))
       .limit(1)
-    if (!src) return
+    if (!src) return null
     const cols = (src.columns as DataSourceColumn[]) ?? []
     const data = readRowData(formData, cols)
     const [{ p } = { p: 0 }] = await tx
       .select({ p: sql<number>`coalesce(max(${dataSourceRows.position}), 0)` })
       .from(dataSourceRows)
       .where(eq(dataSourceRows.dataSourceId, id))
-    await tx
+    const [row] = await tx
       .insert(dataSourceRows)
       .values({ tenantId: ctx.tenantId, dataSourceId: id, data, position: Number(p ?? 0) + 10 })
+      .returning({ id: dataSourceRows.id })
+    return row?.id ?? null
   })
+  if (inserted) {
+    await recordAudit(ctx, {
+      entityType: 'data_source',
+      entityId: id,
+      action: 'update',
+      summary: 'Added a row',
+      metadata: { rowId: inserted },
+    })
+  }
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -197,17 +239,33 @@ async function updateRow(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   if (!id || !rowId) return
-  await ctx.db(async (tx) => {
+  const updated = await ctx.db(async (tx) => {
     const [src] = await tx
       .select({ columns: dataSources.columns })
       .from(dataSources)
       .where(eq(dataSources.id, id))
       .limit(1)
-    if (!src) return
+    if (!src) return false
     const cols = (src.columns as DataSourceColumn[]) ?? []
     const data = readRowData(formData, cols)
-    await tx.update(dataSourceRows).set({ data }).where(eq(dataSourceRows.id, rowId))
+    // Pin the row to the posted source so a crafted form can't rewrite a row
+    // that belongs to a different data source.
+    const rows = await tx
+      .update(dataSourceRows)
+      .set({ data })
+      .where(and(eq(dataSourceRows.id, rowId), eq(dataSourceRows.dataSourceId, id)))
+      .returning({ id: dataSourceRows.id })
+    return rows.length > 0
   })
+  if (updated) {
+    await recordAudit(ctx, {
+      entityType: 'data_source',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated a row',
+      metadata: { rowId },
+    })
+  }
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -218,9 +276,23 @@ async function deleteRow(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
   if (!id || !rowId) return
-  await ctx.db((tx) =>
-    tx.update(dataSourceRows).set({ deletedAt: new Date() }).where(eq(dataSourceRows.id, rowId)),
-  )
+  const deleted = await ctx.db(async (tx) => {
+    const rows = await tx
+      .update(dataSourceRows)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(dataSourceRows.id, rowId), eq(dataSourceRows.dataSourceId, id)))
+      .returning({ id: dataSourceRows.id })
+    return rows.length > 0
+  })
+  if (deleted) {
+    await recordAudit(ctx, {
+      entityType: 'data_source',
+      entityId: id,
+      action: 'update',
+      summary: 'Deleted a row',
+      metadata: { rowId },
+    })
+  }
   revalidatePath(`/admin/data-sources/${id}`)
 }
 
@@ -441,7 +513,7 @@ export default async function DataSourceDetailPage({
                                 return (
                                   <tr
                                     key={r.id}
-                                    className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800"
+                                    className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/40"
                                   >
                                     {cols.map((c) => (
                                       <td
@@ -469,7 +541,7 @@ export default async function DataSourceDetailPage({
                                         <input type="hidden" name="rowId" value={r.id} />
                                         <button
                                           type="submit"
-                                          className="rounded p-1 align-middle text-slate-400 hover:bg-red-50 hover:text-red-700"
+                                          className="rounded p-1 align-middle text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                                           title="Delete row"
                                         >
                                           <Trash2 size={13} />
@@ -609,7 +681,7 @@ export default async function DataSourceDetailPage({
                             <input type="hidden" name="key" value={c.key} />
                             <button
                               type="submit"
-                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                               title="Remove column"
                             >
                               <Trash2 size={12} />

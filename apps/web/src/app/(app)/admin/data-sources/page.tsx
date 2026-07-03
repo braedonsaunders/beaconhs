@@ -193,9 +193,11 @@ export default async function DataSourcesPage() {
         <header className="space-y-1">
           <div className="flex items-center gap-2">
             <Database size={22} className="text-teal-600" />
-            <h1 className="text-2xl font-semibold text-slate-900">Data sources</h1>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+              Data sources
+            </h1>
           </div>
-          <p className="max-w-2xl text-sm text-slate-500">
+          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             Reusable lists + live data that your apps bind to — for lookup auto-fill, cascading
             dropdowns, data tables and KPI / chart blocks. Build a <strong>reference</strong> list
             by hand, or surface an app&apos;s <strong>responses</strong> as live data.
@@ -215,21 +217,25 @@ export default async function DataSourcesPage() {
                 {sources.map((s) => (
                   <li
                     key={s.id}
-                    className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md"
+                    className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <Link href={`/admin/data-sources/${s.id}`} className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900">{s.name}</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">
+                            {s.name}
+                          </span>
                           <Badge variant={s.kind === 'responses' ? 'secondary' : 'outline'}>
                             {s.kind === 'responses' ? 'Live responses' : 'Reference'}
                           </Badge>
-                          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500">
+                          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                             {s.key}
                           </code>
                         </div>
                         {s.description ? (
-                          <p className="mt-1 text-sm text-slate-500">{s.description}</p>
+                          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            {s.description}
+                          </p>
                         ) : null}
                         <p className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
                           <span className="inline-flex items-center gap-1">
@@ -251,7 +257,7 @@ export default async function DataSourcesPage() {
                           </span>
                         </p>
                         {s.usage.length > 0 ? (
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                             {s.usage
                               .slice(0, 2)
                               .map((u) => u.templateName)
@@ -264,7 +270,7 @@ export default async function DataSourcesPage() {
                         <input type="hidden" name="id" value={s.id} />
                         <button
                           type="submit"
-                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700"
+                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                           title="Delete data source"
                         >
                           <Trash2 size={15} />
@@ -327,7 +333,7 @@ export default async function DataSourcesPage() {
               <CardHeader>
                 <CardTitle>How apps use these</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm text-slate-600">
+              <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                 <p>
                   In the app builder, add a <strong>Lookup</strong>, <strong>Data table</strong> or{' '}
                   <strong>KPI / chart</strong> element and bind it to a source here.

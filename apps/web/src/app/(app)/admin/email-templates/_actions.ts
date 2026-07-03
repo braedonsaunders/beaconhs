@@ -6,7 +6,7 @@
 // only. All mutations recordAudit (entityType='email_template').
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import { emailTemplates } from '@beaconhs/db/schema'
 import { renderEmail } from '@beaconhs/email-render'
@@ -22,6 +22,28 @@ import { inlineEmailCss } from '@/lib/email-inline'
 import { loadSubjectFields } from '@/lib/flows/subject-fields'
 
 const SUBJECT_TYPES = new Set(['module', 'form_template'])
+
+// Mirrors the email_template_category pg enum — an unvalidated cast would let
+// a crafted POST surface as a raw DB error.
+const CATEGORIES = new Set([
+  'general',
+  'notification',
+  'reminder',
+  'approval',
+  'digest',
+  'marketing',
+])
+type EmailTemplateCategory =
+  | 'general'
+  | 'notification'
+  | 'reminder'
+  | 'approval'
+  | 'digest'
+  | 'marketing'
+
+function parseCategory(raw: string): EmailTemplateCategory {
+  return CATEGORIES.has(raw) ? (raw as EmailTemplateCategory) : 'general'
+}
 
 function parseRecordSubject(raw: string): { type: string; key: string } | null {
   const idx = raw.indexOf(':')
@@ -50,7 +72,7 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return
-  const category = String(formData.get('category') ?? 'general')
+  const category = parseCategory(String(formData.get('category') ?? 'general'))
   const description = String(formData.get('description') ?? '').trim() || null
 
   // Tie the template to a record type so the builder exposes that type's fields.
@@ -84,7 +106,7 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
         key,
         name,
         description,
-        category: category as 'general',
+        category,
         recordSubjectType: subject?.type ?? null,
         recordSubjectKey: subject?.key ?? null,
         subjectTemplate: name,
@@ -142,31 +164,6 @@ export async function saveEmailTemplateDesign(input: {
   revalidatePath(`/admin/email-templates/${input.id}`)
   revalidatePath('/admin/email-templates')
   return { ok: true, warnings: compiled.errors }
-}
-
-export async function renameEmailTemplate(formData: FormData): Promise<void> {
-  const ctx = await requireManage()
-  const id = String(formData.get('id') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!id || !name) return
-  await ctx.db((tx) =>
-    tx.update(emailTemplates).set({ name, updatedAt: new Date() }).where(eq(emailTemplates.id, id)),
-  )
-  revalidatePath('/admin/email-templates')
-}
-
-export async function setEmailTemplateActive(formData: FormData): Promise<void> {
-  const ctx = await requireManage()
-  const id = String(formData.get('id') ?? '')
-  const isActive = String(formData.get('isActive') ?? '') === 'true'
-  if (!id) return
-  await ctx.db((tx) =>
-    tx
-      .update(emailTemplates)
-      .set({ isActive, updatedAt: new Date() })
-      .where(eq(emailTemplates.id, id)),
-  )
-  revalidatePath('/admin/email-templates')
 }
 
 export async function deleteEmailTemplate(formData: FormData): Promise<void> {

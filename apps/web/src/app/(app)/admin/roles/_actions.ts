@@ -555,13 +555,13 @@ export async function updateRoleMemberScope(formData: FormData): Promise<void> {
   assertCan(ctx, 'admin.users.manage')
   const roleId = String(formData.get('roleId') ?? '').trim()
   const assignmentId = String(formData.get('assignmentId') ?? '').trim()
-  const membershipId = String(formData.get('membershipId') ?? '').trim()
   const scope = parseRoleScope(String(formData.get('scope') ?? ''))
   if (!roleId || !assignmentId) return
 
   const result = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
+        membershipId: tenantUsers.id,
         userId: tenantUsers.userId,
         isSuperAdmin: user.isSuperAdmin,
         roleName: roles.name,
@@ -575,18 +575,20 @@ export async function updateRoleMemberScope(formData: FormData): Promise<void> {
     if (!row) return null
     if (row.userId === ctx.userId || (!ctx.isSuperAdmin && row.isSuperAdmin)) return null
     await tx.update(roleAssignments).set({ scope }).where(eq(roleAssignments.id, assignmentId))
-    return { roleName: row.roleName }
+    return { roleName: row.roleName, membershipId: row.membershipId }
   })
 
   if (!result) return
+  // Attribute the audit to the assignment's verified member — never the
+  // client-posted membershipId, which a tampered form could point elsewhere.
   await recordAudit(ctx, {
     entityType: 'tenant_user',
-    entityId: membershipId,
+    entityId: result.membershipId,
     action: 'update',
     summary: `Updated scope for role "${result.roleName}"`,
     metadata: { roleId, assignmentId, scope },
   })
-  revalidateRoleMembership(roleId, membershipId ? [membershipId] : [])
+  revalidateRoleMembership(roleId, [result.membershipId])
 }
 
 export async function removeRoleMember(formData: FormData): Promise<void> {
@@ -595,12 +597,12 @@ export async function removeRoleMember(formData: FormData): Promise<void> {
   assertCan(ctx, 'admin.users.manage')
   const roleId = String(formData.get('roleId') ?? '').trim()
   const assignmentId = String(formData.get('assignmentId') ?? '').trim()
-  const membershipId = String(formData.get('membershipId') ?? '').trim()
   if (!roleId || !assignmentId) return
 
   const result = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
+        membershipId: tenantUsers.id,
         userId: tenantUsers.userId,
         isSuperAdmin: user.isSuperAdmin,
         roleName: roles.name,
@@ -614,18 +616,20 @@ export async function removeRoleMember(formData: FormData): Promise<void> {
     if (!row) return null
     if (row.userId === ctx.userId || (!ctx.isSuperAdmin && row.isSuperAdmin)) return null
     await tx.delete(roleAssignments).where(eq(roleAssignments.id, assignmentId))
-    return { roleName: row.roleName }
+    return { roleName: row.roleName, membershipId: row.membershipId }
   })
 
   if (!result) return
+  // Attribute the audit to the assignment's verified member — never the
+  // client-posted membershipId, which a tampered form could point elsewhere.
   await recordAudit(ctx, {
     entityType: 'tenant_user',
-    entityId: membershipId,
+    entityId: result.membershipId,
     action: 'update',
     summary: `Removed from role "${result.roleName}"`,
     metadata: { roleId, assignmentId },
   })
-  revalidateRoleMembership(roleId, membershipId ? [membershipId] : [])
+  revalidateRoleMembership(roleId, [result.membershipId])
 }
 
 export async function updateRoleDetails(formData: FormData): Promise<void> {

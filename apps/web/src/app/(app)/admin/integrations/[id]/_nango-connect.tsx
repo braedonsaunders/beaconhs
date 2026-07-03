@@ -90,11 +90,13 @@ export function NangoConnect({
         <CardTitle>Source connection</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm">
+        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
           {connected ? (
-            <span className="text-emerald-700">Connected · {nangoConnectionId}</span>
+            <span className="text-emerald-700 dark:text-emerald-300">
+              Connected · {nangoConnectionId}
+            </span>
           ) : (
-            <span className="text-slate-500">Not connected yet.</span>
+            <span className="text-slate-500 dark:text-slate-400">Not connected yet.</span>
           )}
         </div>
 
@@ -124,11 +126,13 @@ export function NangoConnect({
           </div>
         </div>
 
-        <div className="space-y-2 border-t border-slate-100 pt-3">
+        <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
           <Label>Map entities to Nango models</Label>
           {entities.map((e) => (
             <div key={e} className="flex items-center gap-2">
-              <span className="w-40 shrink-0 text-sm text-slate-600">{ENTITY_LABELS[e] ?? e}</span>
+              <span className="w-40 shrink-0 text-sm text-slate-600 dark:text-slate-300">
+                {ENTITY_LABELS[e] ?? e}
+              </span>
               <Input
                 value={models[e] ?? ''}
                 onChange={(ev) => setModels((m) => ({ ...m, [e]: ev.target.value }))}

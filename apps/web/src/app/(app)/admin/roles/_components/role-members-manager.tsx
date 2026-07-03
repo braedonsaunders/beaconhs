@@ -20,7 +20,6 @@ import type { ScopeOptions } from '../../users/_scope-data'
 import { addRoleMembers, removeRoleMember, updateRoleMemberScope } from '../_actions'
 
 export type RoleMember = {
-  membershipId: string
   assignmentId: string
   name: string
   email: string
@@ -196,7 +195,6 @@ export function RoleMembersManager({
                       <form action={removeRoleMember}>
                         <input type="hidden" name="roleId" value={roleId} />
                         <input type="hidden" name="assignmentId" value={m.assignmentId} />
-                        <input type="hidden" name="membershipId" value={m.membershipId} />
                         <Button
                           type="submit"
                           variant="ghost"
@@ -221,7 +219,6 @@ export function RoleMembersManager({
                   >
                     <input type="hidden" name="roleId" value={roleId} />
                     <input type="hidden" name="assignmentId" value={m.assignmentId} />
-                    <input type="hidden" name="membershipId" value={m.membershipId} />
                     <ScopePicker
                       defaultScope={m.scope}
                       sites={scopeOptions.sites}

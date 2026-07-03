@@ -223,9 +223,11 @@ export function NavEditor({
   function reset() {
     if (!window.confirm('Reset the sidebar to defaults? This removes all customisations.')) return
     start(async () => {
-      await resetNavConfig()
+      // Rebuild client state from the returned defaults — `initialConfig` is
+      // the stale pre-reset prop and router.refresh() does not remount us.
+      const res = await resetNavConfig()
       toast.success('Reset to defaults')
-      setGroups(toEditor(initialConfig))
+      setGroups(toEditor(res.config))
       setDirty(false)
       router.refresh()
     })
@@ -236,14 +238,16 @@ export function NavEditor({
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Navigation</h1>
-          <p className="max-w-2xl text-sm text-slate-500">
+          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
             Customise the left sidebar for everyone in this workspace — reorder, rename, change
             icons, hide modules, and pin forms so they look like native modules.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {dirty ? (
-            <span className="text-xs font-medium text-amber-600">Unsaved changes</span>
+            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              Unsaved changes
+            </span>
           ) : null}
           <Button variant="outline" onClick={reset} disabled={pending}>
             <RotateCcw size={14} /> Reset
@@ -328,14 +332,14 @@ function GroupCard({
       dragListener={false}
       dragControls={controls}
       as="div"
-      className="rounded-xl border border-slate-200 bg-white shadow-sm"
+      className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
     >
-      <header className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
+      <header className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
         <button
           type="button"
           aria-label="Drag group to reorder"
           onPointerDown={(e) => controls.start(e)}
-          className="cursor-grab touch-none rounded p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+          className="cursor-grab touch-none rounded p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
         >
           <GripVertical size={18} />
         </button>
@@ -343,7 +347,7 @@ function GroupCard({
           value={group.label}
           onChange={(e) => onRenameGroup(e.target.value)}
           aria-label="Group name"
-          className="h-8 max-w-[18rem] border-transparent bg-transparent text-xs font-semibold tracking-wider text-slate-600 uppercase hover:border-slate-200 focus:border-slate-300"
+          className="h-8 max-w-[18rem] border-transparent bg-transparent text-xs font-semibold tracking-wider text-slate-600 uppercase hover:border-slate-200 focus:border-slate-300 dark:text-slate-300 dark:hover:border-slate-700 dark:focus:border-slate-600"
         />
         <Badge variant="secondary" className="text-[10px]">
           {group.items.length}
@@ -357,7 +361,7 @@ function GroupCard({
 
       <div className="p-2">
         {group.items.length === 0 ? (
-          <p className="px-2 py-5 text-center text-xs text-slate-400">
+          <p className="px-2 py-5 text-center text-xs text-slate-400 dark:text-slate-500">
             Empty group. Add a module, form, or link below.
           </p>
         ) : (
@@ -385,7 +389,7 @@ function GroupCard({
         <button
           type="button"
           onClick={onAdd}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-500 transition-colors hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700"
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-500 transition-colors hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-teal-600 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
         >
           <Plus size={14} /> Add item
         </button>
@@ -420,23 +424,25 @@ function ItemRow({
       dragListener={false}
       dragControls={controls}
       as="div"
-      className={`rounded-lg border bg-white ${hidden ? 'border-dashed border-slate-200 opacity-60' : 'border-slate-200'}`}
+      className={`rounded-lg border bg-white dark:bg-slate-900 ${hidden ? 'border-dashed border-slate-200 opacity-60 dark:border-slate-700' : 'border-slate-200 dark:border-slate-800'}`}
     >
       <div className="flex items-center gap-2 px-2 py-1.5">
         <button
           type="button"
           aria-label="Drag to reorder"
           onPointerDown={(e) => controls.start(e)}
-          className="cursor-grab touch-none rounded p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+          className="cursor-grab touch-none rounded p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
         >
           <GripVertical size={16} />
         </button>
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-50 text-slate-600 ring-1 ring-slate-200">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-slate-50 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
           <NavIcon iconKey={display.iconKey} size={15} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium text-slate-800">{display.label}</span>
+            <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+              {display.label}
+            </span>
             <Badge variant="secondary" className="text-[10px]">
               {display.type}
             </Badge>
@@ -451,7 +457,9 @@ function ItemRow({
               </Badge>
             ) : null}
           </div>
-          <div className="truncate text-[11px] text-slate-400">{display.sub}</div>
+          <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">
+            {display.sub}
+          </div>
         </div>
         <div className="flex items-center gap-0.5">
           <IconBtn
@@ -470,7 +478,7 @@ function ItemRow({
       </div>
 
       {editing ? (
-        <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-3">
+        <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-3 dark:border-slate-800 dark:bg-slate-800/40">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs">Label override</Label>
@@ -483,7 +491,7 @@ function ItemRow({
             <div className="space-y-1">
               <Label className="text-xs">Icon</Label>
               <div className="flex items-center gap-2">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-slate-200">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
                   <NavIcon iconKey={display.iconKey} size={16} />
                 </span>
                 <SearchSelect
@@ -547,8 +555,8 @@ function AddDrawer({
     >
       <div className="space-y-7">
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">Pin a form</h3>
-          <p className="text-xs text-slate-500">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Pin a form</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Surface any form template as a sidebar item — it behaves like a native module.
           </p>
           <SearchSelect
@@ -568,8 +576,8 @@ function AddDrawer({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">Add a module</h3>
-          <p className="text-xs text-slate-500">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Add a module</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Built-in app sections. Modules already in the sidebar are hidden from this list.
           </p>
           <SearchSelect
@@ -585,7 +593,9 @@ function AddDrawer({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">Add a custom link</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Add a custom link
+          </h3>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs">Label</Label>
@@ -638,8 +648,8 @@ function IconBtn({
       type="button"
       title={title}
       onClick={onClick}
-      className={`rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 ${
-        active ? 'bg-slate-100 text-slate-800' : ''
+      className={`rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 ${
+        active ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200' : ''
       }`}
     >
       {children}

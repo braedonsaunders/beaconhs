@@ -64,13 +64,17 @@ export async function saveNavConfig(
   return { ok: true }
 }
 
-export async function resetNavConfig(): Promise<{ ok: boolean }> {
+// Returns the materialised default config so the editor can rebuild its client
+// state — router.refresh() alone re-renders the server tree but does NOT
+// remount the client editor, which would keep showing the pre-reset layout.
+export async function resetNavConfig(): Promise<{ ok: boolean; config: TenantNavConfig }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'admin.nav.manage')
 
-  await ctx.db((tx) =>
-    tx.delete(tenantNavConfigs).where(eq(tenantNavConfigs.tenantId, ctx.tenantId)),
-  )
+  const config = await ctx.db(async (tx) => {
+    await tx.delete(tenantNavConfigs).where(eq(tenantNavConfigs.tenantId, ctx.tenantId))
+    return loadNavConfig(tx)
+  })
   await recordAudit(ctx, {
     entityType: 'tenant_nav_config',
     entityId: ctx.tenantId,
@@ -78,7 +82,7 @@ export async function resetNavConfig(): Promise<{ ok: boolean }> {
     summary: 'Sidebar navigation reset to defaults',
   })
   revalidatePath('/', 'layout')
-  return { ok: true }
+  return { ok: true, config }
 }
 
 // One-click "Pin to sidebar" used by the forms gallery. Appends a form item to

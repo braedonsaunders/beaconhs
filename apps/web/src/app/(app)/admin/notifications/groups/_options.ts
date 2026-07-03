@@ -4,7 +4,7 @@ import 'server-only'
 // grouping primitive a group can target (person / role / department / site /
 // trade / crew / person-group). RLS-bound to the caller's tenant.
 
-import { asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   crews,
   departments,
@@ -32,7 +32,7 @@ export async function loadAudienceOptions(ctx: RequestContext): Promise<Audience
       tx
         .select({ id: people.id, first: people.firstName, last: people.lastName })
         .from(people)
-        .where(eq(people.status, 'active'))
+        .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
         .orderBy(asc(people.lastName), asc(people.firstName))
         .limit(2000),
       tx.select({ key: roles.key, name: roles.name }).from(roles).orderBy(asc(roles.name)),
@@ -43,6 +43,7 @@ export async function loadAudienceOptions(ctx: RequestContext): Promise<Audience
       tx
         .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
         .from(orgUnits)
+        .where(isNull(orgUnits.deletedAt))
         .orderBy(asc(orgUnits.name)),
       tx.select({ id: trades.id, name: trades.name }).from(trades).orderBy(asc(trades.name)),
       tx.select({ id: crews.id, name: crews.name }).from(crews).orderBy(asc(crews.name)),

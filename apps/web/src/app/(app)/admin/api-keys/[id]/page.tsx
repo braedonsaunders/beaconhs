@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import {
   Badge,
@@ -12,21 +12,14 @@ import {
   Label,
 } from '@beaconhs/ui'
 import { apiKeys } from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
-import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { PERMISSION_GROUPS } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../../roles/_components/permission-matrix'
 import { revokeApiKey, updateApiKey } from '../_actions'
+import { requireApiKeyAdmin } from '../_guard'
 
 export const metadata = { title: 'API key' }
 export const dynamic = 'force-dynamic'
-
-async function requireApiKeyAdmin() {
-  const ctx = await requireRequestContext()
-  if (!ctx.isSuperAdmin && !can(ctx, 'admin.api-keys.manage')) redirect('/admin')
-  return ctx
-}
 
 function dateInputValue(value: Date | null): string {
   return value ? value.toISOString().slice(0, 10) : ''

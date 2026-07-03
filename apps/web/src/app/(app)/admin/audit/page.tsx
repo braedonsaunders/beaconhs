@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { and, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   DetailHeader,
@@ -52,7 +52,7 @@ export default async function AuditLogPage({
   // The audit log is a sensitive security/forensics surface — restrict reads.
   if (!can(ctx, 'admin.audit.read')) redirect('/admin')
 
-  const { rows, total } = await ctx.db(async (tx) => {
+  const { rows, total, entityTypes } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
@@ -71,11 +71,15 @@ export default async function AuditLogPage({
       .orderBy(desc(auditLog.occurredAt))
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
-    const [c] = await tx.select({ c: auditLog.id }).from(auditLog).where(whereClause).limit(1)
-    // crude total estimator: just return rows length for now if pagination would be misleading
+    const [c] = await tx.select({ n: count() }).from(auditLog).where(whereClause)
+    const types = await tx
+      .selectDistinct({ entityType: auditLog.entityType })
+      .from(auditLog)
+      .orderBy(asc(auditLog.entityType))
     return {
       rows: data,
-      total: data.length + (data.length === params.perPage ? params.perPage : 0),
+      total: Number(c?.n ?? 0),
+      entityTypes: types.map((t) => t.entityType),
     }
   })
 
@@ -96,6 +100,13 @@ export default async function AuditLogPage({
             label="Action"
             options={ACTION_OPTIONS}
           />
+          <FilterChips
+            basePath="/admin/audit"
+            currentParams={sp}
+            paramKey="entityType"
+            label="Entity"
+            options={entityTypes.map((t) => ({ value: t, label: t }))}
+          />
         </TableToolbar>
         {rows.length === 0 ? (
           <EmptyState title="No audit entries" />
@@ -114,18 +125,22 @@ export default async function AuditLogPage({
               <TableBody>
                 {rows.map(({ log, actor }) => (
                   <TableRow key={log.id}>
-                    <TableCell className="text-slate-600">
+                    <TableCell className="text-slate-600 dark:text-slate-300">
                       {new Date(log.occurredAt).toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-slate-700">{actor?.name ?? '—'}</TableCell>
+                    <TableCell className="text-slate-700 dark:text-slate-200">
+                      {actor?.name ?? '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{log.action}</Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">
+                    <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-300">
                       {log.entityType}
                       {log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}
                     </TableCell>
-                    <TableCell className="text-slate-900">{log.summary ?? '—'}</TableCell>
+                    <TableCell className="text-slate-900 dark:text-slate-100">
+                      {log.summary ?? '—'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

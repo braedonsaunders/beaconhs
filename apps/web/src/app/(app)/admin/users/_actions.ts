@@ -182,6 +182,9 @@ export async function resendInvite(formData: FormData): Promise<void> {
   if (!membershipId) return
   const member = await loadMember(ctx, membershipId)
   if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
+  }
   try {
     await auth.api.signInMagicLink({
       body: { email: member.account.email, callbackURL: '/dashboard' },
@@ -323,26 +326,6 @@ export async function assignRole(formData: FormData): Promise<void> {
   })
   revalidatePath(detailPath(membershipId))
   revalidatePath('/admin/users')
-}
-
-export async function updateAssignmentScope(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  const assignmentId = String(formData.get('assignmentId') ?? '')
-  const scope = parseRoleScope(String(formData.get('scope') ?? ''))
-  if (!assignmentId) return
-  await ctx.db((tx) =>
-    tx.update(roleAssignments).set({ scope }).where(eq(roleAssignments.id, assignmentId)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: 'Updated role scope',
-    metadata: { assignmentId, scope },
-  })
-  revalidatePath(detailPath(membershipId))
 }
 
 export async function removeAssignment(formData: FormData): Promise<void> {
@@ -623,6 +606,11 @@ export async function sendPasswordReset(formData: FormData): Promise<void> {
   if (!membershipId) return
   const member = await loadMember(ctx, membershipId)
   if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToTab(membershipId, 'security', {
+      error: 'Only a super-admin can change a super-admin account.',
+    })
+  }
   try {
     await auth.api.requestPasswordReset({
       body: { email: member.account.email, redirectTo: '/reset-password' },
