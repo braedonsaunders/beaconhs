@@ -38,6 +38,13 @@ export type ReportEntity = {
   /** Columns selectable for output AND filterable. Order is preserved. */
   columns: ReportEntityColumn[]
   defaultSort?: { column: string; direction: 'asc' | 'desc' }
+  /**
+   * The physical table carries a `deleted_at` soft-delete column. Executors
+   * (reports + BHQL) implicitly add `deleted_at IS NULL` so soft-deleted rows
+   * never surface — matching the module list pages and the report_* views.
+   * Views bake the filter in themselves and leave this unset.
+   */
+  softDelete?: boolean
 }
 
 export const REPORT_ENTITIES: ReportEntity[] = [
@@ -47,6 +54,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'incidents',
     description: 'Reported incidents (injury, near-miss, property, environmental, etc.)',
     table: 'incidents',
+    softDelete: true,
     columns: [
       { key: 'reference', label: 'Reference', kind: 'text' },
       { key: 'title', label: 'Title', kind: 'text' },
@@ -67,6 +75,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'corrective_actions',
     description: 'CAs assigned from inspections, audits, incidents, observations, etc.',
     table: 'corrective_actions',
+    softDelete: true,
     columns: [
       { key: 'reference', label: 'Reference', kind: 'text' },
       { key: 'title', label: 'Title', kind: 'text' },
@@ -85,6 +94,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'training',
     description: 'Earned training certificates per person.',
     table: 'training_records',
+    softDelete: true,
     columns: [
       { key: 'person_id', label: 'Person (id)', kind: 'uuid' },
       { key: 'course_id', label: 'Course (id)', kind: 'uuid' },
@@ -124,6 +134,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'inspections',
     description: 'Inspection records performed against an inspection_type.',
     table: 'inspection_records',
+    softDelete: true,
     columns: [
       { key: 'reference', label: 'Reference', kind: 'text' },
       { key: 'status', label: 'Status', kind: 'enum' },
@@ -139,6 +150,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'documents',
     description: 'Controlled documents in the document library.',
     table: 'documents',
+    softDelete: true,
     columns: [
       { key: 'key', label: 'Document key', kind: 'text' },
       { key: 'title', label: 'Title', kind: 'text' },
@@ -154,6 +166,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'equipment',
     description: 'Equipment items in the fleet.',
     table: 'equipment_items',
+    softDelete: true,
     columns: [
       { key: 'asset_tag', label: 'Asset tag', kind: 'text' },
       { key: 'name', label: 'Name', kind: 'text' },
@@ -269,6 +282,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'ppe',
     description: 'Individual PPE assets.',
     table: 'ppe_items',
+    softDelete: true,
     columns: [
       { key: 'serial_number', label: 'Serial', kind: 'text' },
       { key: 'size', label: 'Size', kind: 'text' },
@@ -289,6 +303,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Submitted form responses across all templates (JSHA, toolbox, inspections, custom).',
     table: 'form_responses',
+    softDelete: true,
     columns: [
       { key: 'template_id', label: 'Template (id)', kind: 'uuid' },
       { key: 'status', label: 'Status', kind: 'enum' },

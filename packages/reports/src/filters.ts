@@ -28,6 +28,23 @@ function joinParams(values: (string | number)[]): SQL {
   )
 }
 
+/** `col >= date_trunc(unit, now()) AND col < date_trunc(unit, now()) + 1 unit` —
+ *  the half-open current period for the "is today / this week / …" operators.
+ *  Pure SQL (no bound params) so the clause re-anchors to the DB clock. `unit`
+ *  is a compile-time literal, never user input. */
+function currentPeriodClause(colSql: SQL, unit: 'day' | 'week' | 'month' | 'year'): SQL {
+  return sql.join(
+    [
+      sql.raw('('),
+      colSql,
+      sql.raw(` >= date_trunc('${unit}', now()) AND `),
+      colSql,
+      sql.raw(` < date_trunc('${unit}', now()) + interval '1 ${unit}')`),
+    ],
+    sql.raw(''),
+  )
+}
+
 /** Default physical ref for a whitelisted column on the entity's own table.
  *  Routes through columnRef so synthetic expression columns (custom fields)
  *  filter correctly. */
@@ -93,7 +110,8 @@ export function compileRule(
     case 'is_false':
       return sql.join([colSql, sql.raw(' IS FALSE')], sql.raw(''))
     case 'contains':
-      return sql`${colSql} ILIKE ${'%' + String(v ?? '') + '%'}`
+      if (v === null || typeof v === 'undefined' || v === '') return null
+      return sql`${colSql} ILIKE ${'%' + String(v) + '%'}`
     case 'between_days_ago': {
       const days = Number(v ?? 30)
       if (!Number.isFinite(days)) return null
@@ -111,15 +129,18 @@ export function compileRule(
       return sql`${colSql} <= ${toDate.toISOString()}`
     }
     // Relative-date ops compile to pure SQL (no bound param) so they re-anchor to
-    // the DB clock on every run. date_trunc keeps them index-friendly.
+    // the DB clock on every run. date_trunc keeps them index-friendly. Each op is
+    // bounded on BOTH sides — "is this month" means within the current month, not
+    // "any time from the start of this month onwards" (which would sweep in
+    // future-dated due/expiry values).
     case 'since_today':
-      return sql.join([colSql, sql.raw(" >= date_trunc('day', now())")], sql.raw(''))
+      return currentPeriodClause(colSql, 'day')
     case 'this_week':
-      return sql.join([colSql, sql.raw(" >= date_trunc('week', now())")], sql.raw(''))
+      return currentPeriodClause(colSql, 'week')
     case 'this_month':
-      return sql.join([colSql, sql.raw(" >= date_trunc('month', now())")], sql.raw(''))
+      return currentPeriodClause(colSql, 'month')
     case 'this_year':
-      return sql.join([colSql, sql.raw(" >= date_trunc('year', now())")], sql.raw(''))
+      return currentPeriodClause(colSql, 'year')
     case 'before_now':
       return sql.join([colSql, sql.raw(' < now()')], sql.raw(''))
     default:

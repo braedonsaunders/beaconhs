@@ -46,6 +46,16 @@ export type RunCustomQueryOpts = {
   entityMap?: Record<string, ReportEntity>
 }
 
+/** AND the entity's implicit soft-delete predicate into a compiled WHERE so
+ *  soft-deleted rows never surface in custom reports — the same convention the
+ *  module list pages and the report_* views follow. */
+function withSoftDeleteFilter(entity: ReportEntity, where: SQL | null): SQL | null {
+  if (!entity.softDelete) return where
+  const notDeleted = sql.raw(`"${entity.table}"."deleted_at" IS NULL`)
+  if (!where) return notDeleted
+  return sql.join([notDeleted, sql.raw(' AND ('), where, sql.raw(')')], sql.raw(''))
+}
+
 export async function runCustomQuery(
   tx: Database,
   customQuery: unknown,
@@ -73,7 +83,7 @@ async function runRowQuery(
     throw new Error('Custom query requires at least one valid column')
   }
 
-  const where = compileCustomFilters(entity, q)
+  const where = withSoftDeleteFilter(entity, compileCustomFilters(entity, q))
   const sortCol = q.sort?.column ? entityColumnSql(entity, q.sort.column) : null
   const sortDir = q.sort?.direction === 'asc' ? 'ASC' : 'DESC'
   const limit = resolveLimit(q.limit, opts.maxRows)
@@ -181,7 +191,7 @@ async function runAggregateQuery(
   const dimSelect = breakouts.map((b, i) => `${dimExpr(entity, b)} AS "d${i}"`)
   const measSelect = measures.map((m, i) => `${measureExpr(entity, m)} AS "m${i}"`)
 
-  const where = compileCustomFilters(entity, q)
+  const where = withSoftDeleteFilter(entity, compileCustomFilters(entity, q))
   const whereSql = where ? sql.join([sql.raw('WHERE'), where], sql.raw(' ')) : sql.raw('')
 
   const groupBySql =

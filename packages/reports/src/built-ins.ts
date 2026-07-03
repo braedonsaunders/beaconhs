@@ -9,6 +9,8 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
+  complianceObligations,
+  complianceStatus,
   correctiveActions,
   documentAcknowledgments,
   documentAssignments,
@@ -25,11 +27,8 @@ import {
   people,
   ppeItems,
   tenantUsers,
-  trainingAudienceAssignmentRecords,
-  trainingAudienceAssignments,
-  trainingCourses,
-  trainingRecords,
 } from '@beaconhs/db/schema'
+import { extractRows } from './custom-query'
 import {
   formatLabel,
   isoDate,
@@ -42,6 +41,49 @@ import {
 
 type Filters = Record<string, unknown>
 
+/** Normalise a raw date value (postgres-js returns `date` columns as strings,
+ *  drizzle-mapped ones as Date) to YYYY-MM-DD for display. */
+function dayString(v: unknown): string | null {
+  if (v === null || typeof v === 'undefined') return null
+  if (v instanceof Date) return isoDate(v)
+  return String(v).slice(0, 10)
+}
+
+/** One row per person × course from the report_training_matrix view — the
+ *  LATEST record per active person and course, with soft-deleted rows and
+ *  inactive people already excluded. The view reads FORCE-RLS base tables, so
+ *  the caller's tenant scope holds. */
+type TrainingMatrixRow = {
+  employee_no: string | null
+  last_name: string
+  first_name: string
+  course_code: string
+  course_name: string
+  completed_on: unknown
+  expires_on: unknown
+}
+
+async function queryTrainingMatrixExpiring(
+  tx: Database,
+  fromIso: string | null,
+  toIso: string,
+): Promise<TrainingMatrixRow[]> {
+  const result = (await tx.execute(sql`
+    SELECT employee_no, last_name, first_name, course_code, course_name, completed_on, expires_on
+    FROM report_training_matrix
+    WHERE expires_on IS NOT NULL
+      ${fromIso ? sql`AND expires_on >= ${fromIso}` : sql``}
+      AND expires_on <= ${toIso}
+    ORDER BY expires_on ASC
+  `)) as unknown
+  return extractRows(result) as TrainingMatrixRow[]
+}
+
+/** Training-kind obligations in the unified compliance engine. The legacy
+ *  training_audience_assignment_records table is decommissioned — the
+ *  materialized compliance scoreboard is the live source of truth. */
+const TRAINING_COMPLIANCE_KINDS = ['training', 'cert_requirement'] as const
+
 // --- incidents_summary ------------------------------------------------------
 
 export async function queryIncidentsSummary(
@@ -53,6 +95,7 @@ export async function queryIncidentsSummary(
   const siteId = pickUuid(filters.siteOrgUnitId ?? filters.locationId)
 
   const where = and(
+    isNull(incidents.deletedAt),
     gte(incidents.occurredAt, range.from),
     lte(incidents.occurredAt, range.to),
     departmentId ? eq(incidents.departmentId, departmentId) : undefined,
@@ -143,34 +186,14 @@ export async function queryTrainingExpiring(
   _filters: Filters,
   range: ReportRange,
 ): Promise<ReportRunResult> {
-  const fromIso = isoDate(range.from)
-  const toIso = isoDate(range.to)
-  const rows = await tx
-    .select({
-      recordId: trainingRecords.id,
-      expiresOn: trainingRecords.expiresOn,
-      completedOn: trainingRecords.completedOn,
-      courseCode: trainingCourses.code,
-      courseName: trainingCourses.name,
-      personFirst: people.firstName,
-      personLast: people.lastName,
-      personEmployeeNo: people.employeeNo,
-    })
-    .from(trainingRecords)
-    .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-    .innerJoin(people, eq(people.id, trainingRecords.personId))
-    .where(
-      and(
-        isNotNull(trainingRecords.expiresOn),
-        gte(trainingRecords.expiresOn, fromIso),
-        lte(trainingRecords.expiresOn, toIso),
-      ),
-    )
-    .orderBy(asc(trainingRecords.expiresOn))
+  // Read the report_training_matrix view: latest record per active person ×
+  // course, soft-deleted rows and inactive people already excluded. Superseded
+  // certs never surface as "expiring".
+  const rows = await queryTrainingMatrixExpiring(tx, isoDate(range.from), isoDate(range.to))
 
   const byCourse = new Map<string, typeof rows>()
   for (const r of rows) {
-    const k = `${r.courseCode} — ${r.courseName}`
+    const k = `${r.course_code} — ${r.course_name}`
     const list = byCourse.get(k) ?? []
     list.push(r)
     byCourse.set(k, list)
@@ -191,10 +214,10 @@ export async function queryTrainingExpiring(
         subtitle: `${list.length} expiring`,
         columns: ['Employee #', 'Employee', 'Completed', 'Expires'],
         rows: list.map((r) => [
-          r.personEmployeeNo ?? null,
-          `${r.personLast}, ${r.personFirst}`,
-          r.completedOn ?? null,
-          r.expiresOn ?? null,
+          r.employee_no ?? null,
+          `${r.last_name}, ${r.first_name}`,
+          dayString(r.completed_on),
+          dayString(r.expires_on),
         ]),
       })
     }
@@ -242,7 +265,12 @@ export async function queryCorrectiveActionsOpen(
     })
     .from(correctiveActions)
     .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
-    .where(inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']))
+    .where(
+      and(
+        isNull(correctiveActions.deletedAt),
+        inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
+      ),
+    )
     .orderBy(asc(correctiveActions.dueOn))
 
   const byStatus = new Map<string, typeof rows>()
@@ -328,6 +356,7 @@ export async function queryInspectionsCompleted(
     .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
     .where(
       and(
+        isNull(formResponses.deletedAt),
         eq(formTemplates.category, 'inspection'),
         isNotNull(formResponses.submittedAt),
         gte(formResponses.submittedAt, range.from),
@@ -411,6 +440,7 @@ export async function queryDocumentsOverdueReview(
     .leftJoin(tenantUsers, eq(tenantUsers.id, documents.ownerTenantUserId))
     .where(
       and(
+        isNull(documents.deletedAt),
         isNotNull(documents.nextReviewOn),
         lte(documents.nextReviewOn, today),
         eq(documents.status, 'published'),
@@ -477,7 +507,13 @@ export async function querySafetyKpiSummary(
   const incRows = await tx
     .select({ severity: incidents.severity, c: count() })
     .from(incidents)
-    .where(and(gte(incidents.occurredAt, range.from), lte(incidents.occurredAt, range.to)))
+    .where(
+      and(
+        isNull(incidents.deletedAt),
+        gte(incidents.occurredAt, range.from),
+        lte(incidents.occurredAt, range.to),
+      ),
+    )
     .groupBy(incidents.severity)
 
   const [recordable] = await tx
@@ -485,6 +521,7 @@ export async function querySafetyKpiSummary(
     .from(incidents)
     .where(
       and(
+        isNull(incidents.deletedAt),
         gte(incidents.occurredAt, range.from),
         lte(incidents.occurredAt, range.to),
         inArray(incidents.severity, ['medical_aid', 'lost_time', 'fatality']),
@@ -495,6 +532,7 @@ export async function querySafetyKpiSummary(
     .from(incidents)
     .where(
       and(
+        isNull(incidents.deletedAt),
         gte(incidents.occurredAt, range.from),
         lte(incidents.occurredAt, range.to),
         eq(incidents.lostTime, true),
@@ -504,12 +542,13 @@ export async function querySafetyKpiSummary(
   const [openCa] = await tx
     .select({ c: count() })
     .from(correctiveActions)
-    .where(isNull(correctiveActions.closedAt))
+    .where(and(isNull(correctiveActions.deletedAt), isNull(correctiveActions.closedAt)))
   const [overdueCa] = await tx
     .select({ c: count() })
     .from(correctiveActions)
     .where(
       and(
+        isNull(correctiveActions.deletedAt),
         isNull(correctiveActions.closedAt),
         isNotNull(correctiveActions.dueOn),
         lte(correctiveActions.dueOn, today),
@@ -521,22 +560,37 @@ export async function querySafetyKpiSummary(
     .from(inspectionRecords)
     .where(
       and(
+        isNull(inspectionRecords.deletedAt),
         gte(inspectionRecords.occurredAt, range.from),
         lte(inspectionRecords.occurredAt, range.to),
         inArray(inspectionRecords.status, ['submitted', 'closed']),
       ),
     )
 
+  // Training compliance % from the unified engine: materialized compliance_status
+  // rows for training-kind obligations. 'completed' (and waived / not_applicable,
+  // which are satisfied states) count toward the numerator.
   const trainingComp = await tx
-    .select({ status: trainingAudienceAssignmentRecords.status, c: count() })
-    .from(trainingAudienceAssignmentRecords)
-    .groupBy(trainingAudienceAssignmentRecords.status)
+    .select({ status: complianceStatus.status, c: count() })
+    .from(complianceStatus)
+    .innerJoin(
+      complianceObligations,
+      eq(complianceObligations.id, complianceStatus.obligationId),
+    )
+    .where(
+      and(
+        isNull(complianceObligations.deletedAt),
+        eq(complianceObligations.status, 'active'),
+        inArray(complianceObligations.sourceModule, [...TRAINING_COMPLIANCE_KINDS]),
+      ),
+    )
+    .groupBy(complianceStatus.status)
   const trainingTotal = trainingComp.reduce((acc, r) => acc + Number(r.c), 0)
-  const trainingCompleted = trainingComp
-    .filter((r) => r.status === 'completed')
+  const trainingSatisfied = trainingComp
+    .filter((r) => r.status === 'completed' || r.status === 'waived' || r.status === 'not_applicable')
     .reduce((acc, r) => acc + Number(r.c), 0)
   const trainingPct =
-    trainingTotal === 0 ? null : Math.round((trainingCompleted / trainingTotal) * 100)
+    trainingTotal === 0 ? null : Math.round((trainingSatisfied / trainingTotal) * 100)
 
   const groups: ReportGroup[] = []
   groups.push({
@@ -558,7 +612,7 @@ export async function querySafetyKpiSummary(
       ['Overdue corrective actions', Number(overdueCa?.c ?? 0)],
       [
         'Training compliance',
-        trainingPct === null ? '—' : `${trainingPct}% (${trainingCompleted}/${trainingTotal})`,
+        trainingPct === null ? '—' : `${trainingPct}% (${trainingSatisfied}/${trainingTotal})`,
       ],
     ],
   })
@@ -599,14 +653,20 @@ export async function querySiteScorecard(
     .select({ siteId: incidents.siteOrgUnitId, siteName: orgUnits.name, c: count() })
     .from(incidents)
     .leftJoin(orgUnits, eq(orgUnits.id, incidents.siteOrgUnitId))
-    .where(and(gte(incidents.occurredAt, range.from), lte(incidents.occurredAt, range.to)))
+    .where(
+      and(
+        isNull(incidents.deletedAt),
+        gte(incidents.occurredAt, range.from),
+        lte(incidents.occurredAt, range.to),
+      ),
+    )
     .groupBy(incidents.siteOrgUnitId, orgUnits.name)
 
   const caPerSite = await tx
     .select({ siteId: correctiveActions.siteOrgUnitId, siteName: orgUnits.name, c: count() })
     .from(correctiveActions)
     .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
-    .where(isNull(correctiveActions.closedAt))
+    .where(and(isNull(correctiveActions.deletedAt), isNull(correctiveActions.closedAt)))
     .groupBy(correctiveActions.siteOrgUnitId, orgUnits.name)
 
   const inspPerSite = await tx
@@ -615,6 +675,7 @@ export async function querySiteScorecard(
     .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
     .where(
       and(
+        isNull(inspectionRecords.deletedAt),
         gte(inspectionRecords.occurredAt, range.from),
         lte(inspectionRecords.occurredAt, range.to),
         inArray(inspectionRecords.status, ['submitted', 'closed']),
@@ -704,6 +765,7 @@ export async function queryOverdueRollup(
     .from(correctiveActions)
     .where(
       and(
+        isNull(correctiveActions.deletedAt),
         isNull(correctiveActions.closedAt),
         isNotNull(correctiveActions.dueOn),
         lte(correctiveActions.dueOn, today),
@@ -711,23 +773,21 @@ export async function queryOverdueRollup(
     )
     .orderBy(asc(correctiveActions.dueOn))
 
-  const trgRows = await tx
-    .select({
-      person: sql<string>`(${people.lastName} || ', ' || ${people.firstName})`,
-      course: trainingCourses.name,
-      expiresOn: trainingRecords.expiresOn,
-    })
-    .from(trainingRecords)
-    .innerJoin(people, eq(people.id, trainingRecords.personId))
-    .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-    .where(and(isNotNull(trainingRecords.expiresOn), lte(trainingRecords.expiresOn, today)))
-    .orderBy(asc(trainingRecords.expiresOn))
+  // Expired certs from report_training_matrix: latest record per active person ×
+  // course, so a renewed cert no longer shows the superseded expired row.
+  const trgMatrix = await queryTrainingMatrixExpiring(tx, null, today)
+  const trgRows = trgMatrix.map((r) => ({
+    person: `${r.last_name}, ${r.first_name}`,
+    course: r.course_name,
+    expiresOn: dayString(r.expires_on),
+  }))
 
   const docRows = await tx
     .select({ key: documents.key, title: documents.title, nextReviewOn: documents.nextReviewOn })
     .from(documents)
     .where(
       and(
+        isNull(documents.deletedAt),
         isNotNull(documents.nextReviewOn),
         lte(documents.nextReviewOn, today),
         eq(documents.status, 'published'),
@@ -744,6 +804,7 @@ export async function queryOverdueRollup(
     .from(equipmentItems)
     .where(
       and(
+        isNull(equipmentItems.deletedAt),
         eq(equipmentItems.requiresAnnualInspection, true),
         isNotNull(equipmentItems.nextAnnualInspectionDue),
         lte(equipmentItems.nextAnnualInspectionDue, today),
@@ -760,6 +821,7 @@ export async function queryOverdueRollup(
     .from(ppeItems)
     .where(
       and(
+        isNull(ppeItems.deletedAt),
         isNotNull(ppeItems.nextAnnualInspectionDue),
         lte(ppeItems.nextAnnualInspectionDue, today),
       ),
@@ -858,6 +920,7 @@ export async function queryLoneWorkerSummary(
     .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
     .where(
       and(
+        isNull(formResponses.deletedAt),
         isNotNull(formResponses.monitorStatus),
         isNotNull(formResponses.submittedAt),
         gte(formResponses.submittedAt, range.from),
@@ -927,23 +990,26 @@ export async function queryTrainingComplianceSnapshot(
   tx: Database,
   _filters: Filters,
 ): Promise<ReportRunResult> {
+  // Materialized compliance scoreboard for training-kind obligations, grouped by
+  // obligation × status. The legacy training_audience_assignment_records table is
+  // decommissioned — compliance_status is the live source of truth.
   const rows = await tx
     .select({
-      assignmentId: trainingAudienceAssignments.id,
-      name: trainingAudienceAssignments.name,
-      status: trainingAudienceAssignmentRecords.status,
+      obligationId: complianceObligations.id,
+      name: complianceObligations.title,
+      status: complianceStatus.status,
       c: count(),
     })
-    .from(trainingAudienceAssignmentRecords)
-    .innerJoin(
-      trainingAudienceAssignments,
-      eq(trainingAudienceAssignments.id, trainingAudienceAssignmentRecords.assignmentId),
+    .from(complianceStatus)
+    .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
+    .where(
+      and(
+        isNull(complianceObligations.deletedAt),
+        eq(complianceObligations.status, 'active'),
+        inArray(complianceObligations.sourceModule, [...TRAINING_COMPLIANCE_KINDS]),
+      ),
     )
-    .groupBy(
-      trainingAudienceAssignments.id,
-      trainingAudienceAssignments.name,
-      trainingAudienceAssignmentRecords.status,
-    )
+    .groupBy(complianceObligations.id, complianceObligations.title, complianceStatus.status)
 
   type Bucket = {
     name: string
@@ -954,10 +1020,11 @@ export async function queryTrainingComplianceSnapshot(
     total: number
     pct: number
   }
+  const bucketKeys = ['pending', 'in_progress', 'completed', 'overdue'] as const
   const byAsg = new Map<string, Bucket>()
   for (const r of rows) {
     const b =
-      byAsg.get(r.assignmentId) ??
+      byAsg.get(r.obligationId) ??
       ({
         name: r.name,
         pending: 0,
@@ -967,11 +1034,19 @@ export async function queryTrainingComplianceSnapshot(
         total: 0,
         pct: 0,
       } as Bucket)
-    b[r.status as keyof Pick<Bucket, 'pending' | 'in_progress' | 'completed' | 'overdue'>] = Number(
-      r.c,
-    )
-    b.total += Number(r.c)
-    byAsg.set(r.assignmentId, b)
+    // compliance_status has extra states (expiring/waived/not_applicable) beyond
+    // the four displayed columns; roll them into the total and treat satisfied
+    // states as completed for the coverage %.
+    const n = Number(r.c)
+    if ((bucketKeys as readonly string[]).includes(r.status)) {
+      b[r.status as (typeof bucketKeys)[number]] += n
+    } else if (r.status === 'expiring') {
+      b.in_progress += n
+    } else if (r.status === 'waived' || r.status === 'not_applicable') {
+      b.completed += n
+    }
+    b.total += n
+    byAsg.set(r.obligationId, b)
   }
   const list = [...byAsg.values()].map((b) => ({
     ...b,
@@ -981,8 +1056,8 @@ export async function queryTrainingComplianceSnapshot(
 
   const groups: ReportGroup[] = [
     {
-      title: 'Audience assignment compliance',
-      columns: ['Assignment', 'Completed', 'In-progress', 'Pending', 'Overdue', 'Total', '%'],
+      title: 'Training obligation compliance',
+      columns: ['Obligation', 'Completed', 'In-progress', 'Pending', 'Overdue', 'Total', '%'],
       rows: list.map((b) => [
         b.name,
         b.completed,
@@ -1000,8 +1075,8 @@ export async function queryTrainingComplianceSnapshot(
   if (list.length > 0) {
     const top = list.slice(0, 12)
     charts.push({
-      id: 'per-assignment',
-      title: 'Compliance by assignment',
+      id: 'per-obligation',
+      title: 'Compliance by obligation',
       type: 'bar',
       stacked: true,
       xLabels: top.map((b) => b.name),
@@ -1020,7 +1095,7 @@ export async function queryTrainingComplianceSnapshot(
   return {
     groups,
     summary: [
-      { label: 'Assignments', value: list.length },
+      { label: 'Obligations', value: list.length },
       { label: 'Records', value: total },
       { label: 'Overall %', value: overall === null ? '—' : `${overall}%` },
     ],
@@ -1050,6 +1125,7 @@ export async function queryDocumentComplianceSnapshot(
       documentAcknowledgments,
       eq(documentAcknowledgments.documentId, documentAssignments.documentId),
     )
+    .where(and(isNull(documentAssignments.deletedAt), isNull(documents.deletedAt)))
     .groupBy(
       documentAssignments.id,
       documentAssignments.title,
