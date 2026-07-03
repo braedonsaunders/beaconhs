@@ -19,6 +19,8 @@ export type OrgNode = {
   jobTitle: string | null
   managerPersonId: string | null
   reports: OrgNode[]
+  /** Set when this node was promoted to a root because its manager chain loops. */
+  inCycle?: boolean
 }
 
 export function TreeNode({
@@ -46,7 +48,7 @@ export function TreeNode({
       className="group"
       style={{ marginLeft: depth === 0 ? 0 : '1.5rem' }}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/30">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/30 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700 dark:hover:bg-teal-950/30">
         <ChevronRight
           size={14}
           className={
@@ -58,14 +60,17 @@ export function TreeNode({
           <div className="flex flex-wrap items-baseline gap-x-2">
             <Link
               href={`/people/${node.id}`}
-              className="font-medium text-slate-900 hover:text-teal-700 hover:underline"
+              className="font-medium text-slate-900 hover:text-teal-700 hover:underline dark:text-slate-100 dark:hover:text-teal-400"
               onClick={(e) => e.stopPropagation()}
             >
               {node.firstName} {node.lastName}
             </Link>
-            {node.jobTitle ? <span className="text-xs text-slate-500">{node.jobTitle}</span> : null}
+            {node.jobTitle ? (
+              <span className="text-xs text-slate-500 dark:text-slate-400">{node.jobTitle}</span>
+            ) : null}
           </div>
         </div>
+        {node.inCycle ? <Badge variant="warning">Reporting loop</Badge> : null}
         {hasReports ? (
           <Badge variant="secondary">
             {node.reports.length} report{node.reports.length === 1 ? '' : 's'}
@@ -73,7 +78,7 @@ export function TreeNode({
         ) : null}
         <Link
           href={`/people/org-chart?root=${node.id}`}
-          className="rounded px-1.5 py-0.5 text-[11px] text-teal-700 hover:bg-teal-50 hover:underline"
+          className="rounded px-1.5 py-0.5 text-[11px] text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-950"
           onClick={(e) => e.stopPropagation()}
           title="Focus on this person's subtree"
         >
@@ -81,7 +86,7 @@ export function TreeNode({
         </Link>
       </summary>
       {hasReports ? (
-        <div className="mt-1 space-y-1 border-l border-slate-200 pl-3">
+        <div className="mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-800">
           {node.reports.map((r) => (
             <TreeNode key={r.id} node={r} depth={depth + 1} seen={nextSeen} />
           ))}

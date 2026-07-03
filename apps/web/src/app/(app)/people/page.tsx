@@ -5,6 +5,7 @@ import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { buildExportHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
@@ -17,6 +18,8 @@ import { PeopleRecordsTable, type PeopleTableRow } from './_records-table'
 export const metadata = { title: 'People' }
 
 const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade', 'status'] as const
+const STATUS_FILTERS = ['active', 'inactive', 'terminated', 'all'] as const
+type StatusFilter = (typeof STATUS_FILTERS)[number]
 
 export default async function PeoplePage({
   searchParams,
@@ -25,9 +28,15 @@ export default async function PeoplePage({
 }) {
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
-  const statusFilter = pickString(sp.status) ?? 'active'
+  // people.status is a Postgres enum — validate the param so a hand-edited URL
+  // can't reach the query and fail at cast time.
+  const rawStatus = pickString(sp.status) ?? 'active'
+  const statusFilter: StatusFilter = (STATUS_FILTERS as readonly string[]).includes(rawStatus)
+    ? (rawStatus as StatusFilter)
+    : 'active'
   const departmentFilter = pickString(sp.department) ?? null
   const ctx = await requireRequestContext()
+  const canManage = canManageModule(ctx, 'people')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'admin.users.manage')
 
   const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
@@ -44,7 +53,7 @@ export default async function PeoplePage({
     if (departmentFilter) baseFilters.push(eq(people.departmentId, departmentFilter))
     const filters = [...baseFilters]
     if (statusFilter !== 'all') {
-      filters.push(eq(people.status, statusFilter as 'active' | 'inactive' | 'terminated'))
+      filters.push(eq(people.status, statusFilter))
     }
     const whereClause = and(...filters)
 
@@ -123,17 +132,21 @@ export default async function PeoplePage({
             description="Your organization's directory of workers, contractors, and supervisors."
             actions={
               <div className="flex items-center gap-2">
-                <Link href="/people/import">
-                  <Button variant="outline">Import people</Button>
-                </Link>
+                {canManage ? (
+                  <Link href="/people/import">
+                    <Button variant="outline">Import people</Button>
+                  </Link>
+                ) : null}
                 {canExport ? (
                   <a href={buildExportHref('/people/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>
                   </a>
                 ) : null}
-                <Link href="/people/new">
-                  <Button>Add person</Button>
-                </Link>
+                {canManage ? (
+                  <Link href="/people/new">
+                    <Button>Add person</Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />
@@ -148,6 +161,11 @@ export default async function PeoplePage({
               options={[
                 { value: 'active', label: 'Active', count: statusCounts.active ?? 0 },
                 { value: 'inactive', label: 'Inactive', count: statusCounts.inactive ?? 0 },
+                {
+                  value: 'terminated',
+                  label: 'Terminated',
+                  count: statusCounts.terminated ?? 0,
+                },
                 { value: 'all', label: 'All', count: allCount },
               ]}
             />
@@ -172,9 +190,11 @@ export default async function PeoplePage({
           title={params.q ? `No people match "${params.q}"` : 'No people'}
           description="Add people individually, or import them in bulk from a CSV file."
           action={
-            <Link href="/people/new">
-              <Button>Add person</Button>
-            </Link>
+            canManage ? (
+              <Link href="/people/new">
+                <Button>Add person</Button>
+              </Link>
+            ) : null
           }
         />
       ) : (
@@ -187,6 +207,8 @@ export default async function PeoplePage({
             currentParams={sp}
             sort={params.sort}
             dir={params.dir}
+            canManage={canManage}
+            canExport={canExport}
           />
           <Pagination
             basePath="/people"

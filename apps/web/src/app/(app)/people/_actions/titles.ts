@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   jobTitleTaskAcknowledgments,
   jobTitleTasks,
@@ -18,6 +18,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { storeSignatureValue } from '@/lib/signature-storage'
+import { assertCanActOnPerson } from '../_lib/person-access'
 
 // ---------- title CRUD --------------------------------------------------
 
@@ -123,6 +124,7 @@ export async function deleteTitle(formData: FormData): Promise<void> {
 
 export async function assignTitleToPerson(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const titleId = String(formData.get('titleId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   const isPrimary =
@@ -135,11 +137,21 @@ export async function assignTitleToPerson(formData: FormData): Promise<void> {
         .update(personTitleAssignments)
         .set({ isPrimary: false })
         .where(eq(personTitleAssignments.personId, personId))
+      // If the assignment already exists (double-submit, re-assign), promote it
+      // instead of no-op'ing — otherwise the clear above leaves zero primaries.
+      await tx
+        .insert(personTitleAssignments)
+        .values({ tenantId: ctx.tenantId, titleId, personId, isPrimary: true })
+        .onConflictDoUpdate({
+          target: [personTitleAssignments.titleId, personTitleAssignments.personId],
+          set: { isPrimary: true },
+        })
+    } else {
+      await tx
+        .insert(personTitleAssignments)
+        .values({ tenantId: ctx.tenantId, titleId, personId, isPrimary: false })
+        .onConflictDoNothing()
     }
-    await tx
-      .insert(personTitleAssignments)
-      .values({ tenantId: ctx.tenantId, titleId, personId, isPrimary })
-      .onConflictDoNothing()
     await refreshTitleCache(tx, ctx.tenantId, [personId])
   })
   await recordAudit(ctx, {
@@ -155,6 +167,7 @@ export async function assignTitleToPerson(formData: FormData): Promise<void> {
 
 export async function unassignTitleFromPerson(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const titleId = String(formData.get('titleId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!titleId || !personId) return
@@ -182,6 +195,7 @@ export async function unassignTitleFromPerson(formData: FormData): Promise<void>
 
 export async function setPrimaryTitle(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const titleId = String(formData.get('titleId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!titleId || !personId) return
@@ -347,11 +361,28 @@ export async function acknowledgeTitleTask(formData: FormData): Promise<void> {
   const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '').trim() || null
   const notes = String(formData.get('notes') ?? '').trim() || null
   if (!taskId || !personId) return
-  const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
-  const task = await ctx.db(async (tx) => {
+  // Acknowledgements are compliance sign-offs: only a people-module manager may
+  // record one on someone else's behalf; everyone else can only sign for their
+  // own linked person record.
+  await assertCanActOnPerson(ctx, personId)
+  const { task, holdsTitle } = await ctx.db(async (tx) => {
     const [t] = await tx.select().from(jobTitleTasks).where(eq(jobTitleTasks.id, taskId)).limit(1)
-    return t
+    if (!t) return { task: null, holdsTitle: false }
+    const [a] = await tx
+      .select({ id: personTitleAssignments.id })
+      .from(personTitleAssignments)
+      .where(
+        and(
+          eq(personTitleAssignments.titleId, t.titleId),
+          eq(personTitleAssignments.personId, personId),
+        ),
+      )
+      .limit(1)
+    return { task: t, holdsTitle: Boolean(a) }
   })
+  if (!task) throw new Error('Task not found')
+  if (!holdsTitle) throw new Error('Person does not hold the title for this task')
+  const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
   await ctx.db((tx) =>
     tx
       .insert(jobTitleTaskAcknowledgments)
@@ -387,6 +418,7 @@ export async function revokeTitleTaskAck(formData: FormData): Promise<void> {
   const taskId = String(formData.get('taskId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!taskId || !personId) return
+  await assertCanActOnPerson(ctx, personId)
   const task = await ctx.db(async (tx) => {
     const [t] = await tx.select().from(jobTitleTasks).where(eq(jobTitleTasks.id, taskId)).limit(1)
     return t

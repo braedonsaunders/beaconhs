@@ -18,11 +18,16 @@ import {
   people,
   personGroupMemberships,
   personGroups,
+  syncConnections,
+  syncCrosswalk,
   trades,
 } from '@beaconhs/db/schema'
+import { assertCan, assertNotImpersonating } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
+import type { Database } from '@beaconhs/db'
 
 export type BulkActionResult =
   | { ok: true; updated: number; skipped: number }
@@ -39,6 +44,29 @@ function makeBatchId(): string {
 }
 
 /**
+ * Ids of the given people that are actively synced from an external system.
+ * Sync-owned fields (department, status, …) on those people must not be
+ * bulk-written here — the source system owns them and the next run would
+ * silently clobber the change back. Batched twin of getPersonSyncOrigin.
+ */
+async function activelySyncedPersonIds(tx: Database, personIds: string[]): Promise<Set<string>> {
+  if (personIds.length === 0) return new Set()
+  const rows = await tx
+    .select({ personId: syncCrosswalk.canonicalId })
+    .from(syncCrosswalk)
+    .innerJoin(syncConnections, eq(syncConnections.id, syncCrosswalk.connectionId))
+    .where(
+      and(
+        eq(syncCrosswalk.entity, 'people'),
+        inArray(syncCrosswalk.canonicalId, personIds),
+        eq(syncConnections.enabled, true),
+        isNull(syncConnections.deletedAt),
+      ),
+    )
+  return new Set(rows.map((r) => r.personId))
+}
+
+/**
  * Add N people to a single person_group. Idempotent — re-running with the
  * same set is a no-op (uniqueMembership index + onConflictDoNothing).
  */
@@ -47,6 +75,7 @@ export async function bulkAssignPeopleToGroup(args: {
   groupId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
   if (!args.groupId) return { ok: false, error: 'Pick a group.' }
   const ids = args.personIds.slice(0, MAX_BULK)
@@ -135,6 +164,7 @@ export async function bulkAssignPeopleToDepartment(args: {
   departmentId: string
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
   if (!args.departmentId) return { ok: false, error: 'Pick a department.' }
   const ids = args.personIds.slice(0, MAX_BULK)
@@ -155,7 +185,13 @@ export async function bulkAssignPeopleToDepartment(args: {
       .select({ id: people.id })
       .from(people)
       .where(and(inArray(people.id, ids), isNull(people.deletedAt)))
-    const validIds = validRows.map((r) => r.id)
+    // Department is sync-owned: skip actively-synced people (the source system
+    // would clobber the change back on its next run) and report them as skipped.
+    const synced = await activelySyncedPersonIds(
+      tx,
+      validRows.map((r) => r.id),
+    )
+    const validIds = validRows.map((r) => r.id).filter((id) => !synced.has(id))
     const skipped = ids.length - validIds.length
 
     if (validIds.length === 0) return { updated: 0, skipped }
@@ -204,6 +240,7 @@ export async function bulkSetPeopleStatus(args: {
   status: PeopleStatus
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
   if (!['active', 'inactive', 'terminated'].includes(args.status)) {
     return { ok: false, error: 'Invalid status.' }
@@ -216,7 +253,11 @@ export async function bulkSetPeopleStatus(args: {
       .select({ id: people.id, status: people.status, deletedAt: people.deletedAt })
       .from(people)
       .where(inArray(people.id, ids))
-    const editable = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
+    const notDeleted = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
+    // Status is sync-owned: skip actively-synced people so the bulk change
+    // doesn't silently fight the source system.
+    const synced = await activelySyncedPersonIds(tx, notDeleted)
+    const editable = notDeleted.filter((id) => !synced.has(id))
     const skipped = rows.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
     await tx.update(people).set({ status: args.status }).where(inArray(people.id, editable))
@@ -253,6 +294,11 @@ export async function bulkSetPeopleStatus(args: {
 
 export async function bulkExportPeopleCsv(args: { personIds: string[] }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
+  // Same gate as /people/export.csv (requireExportContext + admin.users.manage):
+  // this returns the identical PII, so it must never be a weaker path.
+  assertCan(ctx, 'admin.data.export')
+  assertCan(ctx, 'admin.users.manage')
+  assertNotImpersonating(ctx, 'export')
   if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
   const ids = args.personIds.slice(0, MAX_BULK)
   const batchId = makeBatchId()
@@ -263,7 +309,7 @@ export async function bulkExportPeopleCsv(args: { personIds: string[] }): Promis
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
-      .where(inArray(people.id, ids))
+      .where(and(inArray(people.id, ids), isNull(people.deletedAt)))
       .orderBy(asc(people.lastName), asc(people.firstName)),
   )
 

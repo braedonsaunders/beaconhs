@@ -12,14 +12,17 @@ import {
   Label,
 } from '@beaconhs/ui'
 import { orgUnits } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'New location' }
 
 async function createLocation(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.org.manage')
   const name = String(formData.get('name') ?? '').trim()
   const code = String(formData.get('code') ?? '').trim() || null
   if (!name) throw new Error('Name is required')
@@ -55,64 +58,70 @@ async function createLocation(formData: FormData) {
   redirect('/locations')
 }
 
-export default function NewLocationPage() {
+export default async function NewLocationPage() {
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'admin.org.manage')) redirect('/locations')
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
-      <DetailHeader
-        back={{ href: '/locations', label: 'Back to locations' }}
-        title="Add location"
-      />
-      <Card>
-        <CardContent className="pt-6">
-          <form action={createLocation} className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Location name" required className="sm:col-span-2">
-                <Input name="name" required autoComplete="organization" />
-              </Field>
-              <Field label="Location code">
-                <Input name="code" placeholder="e.g. ACME-01" />
-              </Field>
-            </div>
-
-            <div className="pt-2">
-              <h2 className="mb-2 text-sm font-semibold text-slate-700">Mailing address</h2>
+    <PageContainer>
+      <div className="mx-auto max-w-2xl space-y-6">
+        <DetailHeader
+          back={{ href: '/locations', label: 'Back to locations' }}
+          title="Add location"
+        />
+        <Card>
+          <CardContent className="pt-6">
+            <form action={createLocation} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Address line 1" className="sm:col-span-2">
-                  <Input name="addressLine1" autoComplete="address-line1" />
+                <Field label="Location name" required className="sm:col-span-2">
+                  <Input name="name" required autoComplete="organization" />
                 </Field>
-                <Field label="Address line 2" className="sm:col-span-2">
-                  <Input name="addressLine2" autoComplete="address-line2" />
-                </Field>
-                <Field label="City">
-                  <Input name="addressCity" autoComplete="address-level2" />
-                </Field>
-                <Field label="Region / Province">
-                  <Input name="addressRegion" autoComplete="address-level1" />
-                </Field>
-                <Field label="Postal / Zip">
-                  <Input name="addressPostal" autoComplete="postal-code" />
-                </Field>
-                <Field label="Country">
-                  <Input name="addressCountry" autoComplete="country-name" />
+                <Field label="Location code">
+                  <Input name="code" placeholder="e.g. ACME-01" />
                 </Field>
               </div>
-            </div>
 
-            <Alert variant="info">
-              <AlertTitle>Hierarchy</AlertTitle>
-              <AlertDescription>
-                Locations sit at the top of the org tree. Add projects and sites underneath from the
-                location's detail page.
-              </AlertDescription>
-            </Alert>
+              <div className="pt-2">
+                <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  Mailing address
+                </h2>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Address line 1" className="sm:col-span-2">
+                    <Input name="addressLine1" autoComplete="address-line1" />
+                  </Field>
+                  <Field label="Address line 2" className="sm:col-span-2">
+                    <Input name="addressLine2" autoComplete="address-line2" />
+                  </Field>
+                  <Field label="City">
+                    <Input name="addressCity" autoComplete="address-level2" />
+                  </Field>
+                  <Field label="Region / Province">
+                    <Input name="addressRegion" autoComplete="address-level1" />
+                  </Field>
+                  <Field label="Postal / Zip">
+                    <Input name="addressPostal" autoComplete="postal-code" />
+                  </Field>
+                  <Field label="Country">
+                    <Input name="addressCountry" autoComplete="country-name" />
+                  </Field>
+                </div>
+              </div>
 
-            <div className="flex items-center justify-end gap-2">
-              <Button type="submit">Create location</Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+              <Alert variant="info">
+                <AlertTitle>Hierarchy</AlertTitle>
+                <AlertDescription>
+                  Locations sit at the top of the org tree. Add projects and sites underneath from
+                  the location's detail page.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button type="submit">Create location</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </PageContainer>
   )
 }
 

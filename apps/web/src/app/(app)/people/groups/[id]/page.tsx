@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Trash2, Users } from 'lucide-react'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -33,21 +33,45 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
   const data = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(personGroups).where(eq(personGroups.id, id)).limit(1)
     if (!row) return null
-    const candidates = await tx
+    // Addable people: active, not soft-deleted (the active-picker rule).
+    const activePeople = await tx
       .select({
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
         employeeNo: people.employeeNo,
+        status: people.status,
       })
       .from(people)
-      .where(eq(people.status, 'active'))
+      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
       .orderBy(asc(people.lastName), asc(people.firstName))
     const members = await tx
       .select({ personId: personGroupMemberships.personId })
       .from(personGroupMemberships)
       .where(eq(personGroupMemberships.groupId, id))
-    return { row, candidates, memberIds: members.map((m) => m.personId) }
+    const memberIds = members.map((m) => m.personId)
+    // Existing members must render regardless of status, or an inactive /
+    // terminated member is counted but impossible to see or remove.
+    const memberPeople =
+      memberIds.length > 0
+        ? await tx
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              employeeNo: people.employeeNo,
+              status: people.status,
+            })
+            .from(people)
+            .where(inArray(people.id, memberIds))
+            .orderBy(asc(people.lastName), asc(people.firstName))
+        : []
+    const byId = new Map(activePeople.map((p) => [p.id, p]))
+    for (const p of memberPeople) byId.set(p.id, p)
+    const candidates = Array.from(byId.values()).sort(
+      (a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName),
+    )
+    return { row, candidates, memberIds }
   })
   if (!data) notFound()
   const { row, candidates, memberIds } = data
@@ -158,13 +182,20 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                     <li key={c.id}>
                       <Link
                         href={`/people/${c.id}`}
-                        className="block rounded border border-slate-200 px-3 py-2 hover:border-teal-400 hover:bg-teal-50"
+                        className="block rounded border border-slate-200 px-3 py-2 hover:border-teal-400 hover:bg-teal-50 dark:border-slate-700 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
                       >
-                        <div className="font-medium">
-                          {c.lastName}, {c.firstName}
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {c.lastName}, {c.firstName}
+                          </span>
+                          {c.status !== 'active' ? (
+                            <Badge variant="warning">{c.status}</Badge>
+                          ) : null}
                         </div>
                         {c.employeeNo ? (
-                          <div className="text-xs text-slate-500">{c.employeeNo}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {c.employeeNo}
+                          </div>
                         ) : null}
                       </Link>
                     </li>

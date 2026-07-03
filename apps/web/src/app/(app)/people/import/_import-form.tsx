@@ -124,8 +124,8 @@ export function ImportPeopleForm({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-            <div className="mb-1 font-medium text-slate-700">
+          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            <div className="mb-1 font-medium text-slate-700 dark:text-slate-300">
               Expected columns (header row required)
             </div>
             <div className="flex flex-wrap gap-1">
@@ -140,7 +140,7 @@ export function ImportPeopleForm({
                 </Badge>
               ))}
             </div>
-            <div className="mt-1 text-[11px] text-slate-500">
+            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
               <span className="inline-flex items-center gap-1">
                 <Badge variant="destructive" className="px-1.5 py-0">
                   required
@@ -154,7 +154,7 @@ export function ImportPeopleForm({
                 everything else
               </span>
             </div>
-            <div className="mt-1 text-[11px] text-slate-500">
+            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
               hire_date must be in YYYY-MM-DD format. department / trade are matched by name to
               existing records (case-insensitive).
             </div>
@@ -199,7 +199,7 @@ export function ImportPeopleForm({
             </div>
           </div>
           {headerError ? (
-            <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
               <div>{headerError}</div>
             </div>
@@ -237,7 +237,9 @@ export function ImportPeopleForm({
                   {rows.map((r) => (
                     <TableRow
                       key={r.lineNo}
-                      className={r.errors.length > 0 ? 'bg-rose-50/50' : undefined}
+                      className={
+                        r.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-950/30' : undefined
+                      }
                     >
                       <TableCell className="font-mono text-xs text-slate-500">{r.lineNo}</TableCell>
                       <TableCell className="font-medium">
@@ -258,7 +260,7 @@ export function ImportPeopleForm({
                         ) : (
                           <div className="space-y-0.5">
                             {r.errors.map((e, i) => (
-                              <div key={i} className="text-[11px] text-rose-700">
+                              <div key={i} className="text-[11px] text-rose-700 dark:text-rose-400">
                                 {e}
                               </div>
                             ))}
@@ -270,7 +272,7 @@ export function ImportPeopleForm({
                 </TableBody>
               </Table>
             </div>
-            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
               <Button type="button" onClick={submit} disabled={pending || validRows.length === 0}>
                 {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                 Import {validRows.length} {validRows.length === 1 ? 'person' : 'people'}
@@ -281,9 +283,9 @@ export function ImportPeopleForm({
       ) : null}
 
       {result?.ok ? (
-        <Card className="border-emerald-200">
+        <Card className="border-emerald-200 dark:border-emerald-900">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
+            <CardTitle className="flex items-center gap-2 text-base text-emerald-800 dark:text-emerald-300">
               <CheckCircle2 size={16} />
               Import complete
             </CardTitle>
@@ -294,9 +296,9 @@ export function ImportPeopleForm({
               <span className="font-semibold">{result.skipped}</span>
             </div>
             {result.errors.length > 0 ? (
-              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs">
-                <div className="mb-1 font-medium text-rose-800">Errors</div>
-                <ul className="space-y-0.5 text-rose-700">
+              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs dark:border-rose-900 dark:bg-rose-950/40">
+                <div className="mb-1 font-medium text-rose-800 dark:text-rose-300">Errors</div>
+                <ul className="space-y-0.5 text-rose-700 dark:text-rose-400">
                   {result.errors.map((e, i) => (
                     <li key={i}>
                       Line {e.line}: {e.reason}

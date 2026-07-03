@@ -10,9 +10,10 @@
 // Missing department/trade rows are simply left null rather than auto-created.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq } from 'drizzle-orm'
+import { asc } from 'drizzle-orm'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
 export type ImportRow = {
@@ -32,13 +33,21 @@ export type ImportResult = {
   errors: { line: number; reason: string }[]
 }
 
+const MAX_IMPORT_ROWS = 1000
+
 export async function importPeopleCsv(args: { rows: ImportRow[] }): Promise<ImportResult> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const batchId = `imp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
   if (args.rows.length === 0) {
     return { ok: true, created: 0, skipped: 0, errors: [] }
   }
+
+  // Hard cap per call — matches the bulk-action pattern so a single request
+  // can't insert an unbounded number of rows. Larger files import in batches.
+  const overflow = Math.max(0, args.rows.length - MAX_IMPORT_ROWS)
+  const rows = args.rows.slice(0, MAX_IMPORT_ROWS)
 
   // Pre-load lookup maps so we don't re-query inside the row loop.
   const [allDepts, allTrades] = await ctx.db(async (tx) => {
@@ -54,8 +63,8 @@ export async function importPeopleCsv(args: { rows: ImportRow[] }): Promise<Impo
   const errors: { line: number; reason: string }[] = []
   const createdIds: string[] = []
 
-  for (let i = 0; i < args.rows.length; i++) {
-    const row = args.rows[i]!
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
     const lineNo = i + 2 // header is line 1
     const firstName = row.firstName.trim()
     const lastName = row.lastName.trim()
@@ -103,6 +112,16 @@ export async function importPeopleCsv(args: { rows: ImportRow[] }): Promise<Impo
     }
   }
 
+  if (overflow > 0) {
+    skipped += overflow
+    errors.push({
+      line: MAX_IMPORT_ROWS + 2,
+      reason: `Import is limited to ${MAX_IMPORT_ROWS} rows per batch — ${overflow} ${
+        overflow === 1 ? 'row was' : 'rows were'
+      } not processed. Import the remainder as a second batch.`,
+    })
+  }
+
   // One summary audit per import, plus per-person audit for traceability.
   for (const id of createdIds) {
     await recordAudit(ctx, {
@@ -137,6 +156,7 @@ export async function listImportLookups(): Promise<{
   trades: string[]
 }> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   return ctx.db(async (tx) => {
     const d = await tx
       .select({ name: departments.name })

@@ -13,7 +13,7 @@ import {
   Truck,
   Users,
 } from 'lucide-react'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -40,6 +40,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
 import { getTenantHierarchy, levelLabel, type TenantHierarchy } from '@/lib/org-hierarchy'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -124,14 +125,28 @@ async function loadIncidentsForUnits(
   orgUnitIds: string[],
 ) {
   if (orgUnitIds.length === 0) return []
-  return ctx.db((tx) =>
-    tx
+  return ctx.db(async (tx) => {
+    // Honor the viewer's incidents read tier — the same predicate the
+    // /incidents list applies, so this tab can't be used to enumerate
+    // incidents the viewer couldn't otherwise see.
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'incidents',
+      ownerCols: [incidents.reportedByTenantUserId],
+      siteCol: incidents.siteOrgUnitId,
+    })
+    return tx
       .select()
       .from(incidents)
-      .where(inArray(incidents.siteOrgUnitId, orgUnitIds))
+      .where(
+        and(
+          inArray(incidents.siteOrgUnitId, orgUnitIds),
+          isNull(incidents.deletedAt),
+          ...(vis ? [vis] : []),
+        ),
+      )
       .orderBy(desc(incidents.occurredAt))
-      .limit(100),
-  )
+      .limit(100)
+  })
 }
 
 async function loadEquipmentForUnits(
@@ -305,21 +320,23 @@ async function renderCustomer({
             </>
           }
           actions={
-            unit.deletedAt ? (
-              <form action={restoreLocation}>
-                <input type="hidden" name="id" value={unit.id} />
-                <Button type="submit" variant="outline" size="sm">
-                  Restore
-                </Button>
-              </form>
-            ) : (
-              <form action={archiveLocation}>
-                <input type="hidden" name="id" value={unit.id} />
-                <Button type="submit" variant="outline" size="sm">
-                  Archive
-                </Button>
-              </form>
-            )
+            canManage ? (
+              unit.deletedAt ? (
+                <form action={restoreLocation}>
+                  <input type="hidden" name="id" value={unit.id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    Restore
+                  </Button>
+                </form>
+              ) : (
+                <form action={archiveLocation}>
+                  <input type="hidden" name="id" value={unit.id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    Archive
+                  </Button>
+                </form>
+              )
+            ) : undefined
           }
         />
       }

@@ -158,6 +158,7 @@ export async function setGroupMembership(formData: FormData): Promise<void> {
 
 export async function togglePersonInGroup(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const groupId = String(formData.get('groupId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!groupId || !personId) return

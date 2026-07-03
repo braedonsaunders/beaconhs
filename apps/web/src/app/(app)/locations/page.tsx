@@ -182,9 +182,11 @@ export default async function LocationsPage({
                     <Button variant="outline">Export CSV</Button>
                   </a>
                 ) : null}
-                <Link href="/locations/new">
-                  <Button>Add location</Button>
-                </Link>
+                {canManage ? (
+                  <Link href="/locations/new">
+                    <Button>Add location</Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />
@@ -221,7 +223,7 @@ export default async function LocationsPage({
               : 'Add a location to track projects, sites, and on-site contacts.'
           }
           action={
-            statusFilter === 'archived' ? null : (
+            statusFilter === 'archived' || !canManage ? null : (
               <Link href="/locations/new">
                 <Button>Add location</Button>
               </Link>

@@ -6,7 +6,7 @@
 // for the matching hints and renders the form.
 
 import { DetailHeader } from '@beaconhs/ui'
-import { requireRequestContext } from '@/lib/auth'
+import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { listImportLookups } from '../_actions/import'
 import { ImportPeopleForm } from './_import-form'
@@ -15,7 +15,7 @@ export const metadata = { title: 'Import people' }
 export const dynamic = 'force-dynamic'
 
 export default async function ImportPeoplePage() {
-  await requireRequestContext()
+  await requireModuleManage('people')
   const lookups = await listImportLookups()
 
   return (

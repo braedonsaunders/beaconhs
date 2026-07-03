@@ -6,12 +6,12 @@
 // `people.signature_attachment_id` because there's exactly one per person and
 // any number of forms / inspections / lift plans want to render it inline.
 
-import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { people, personFiles } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { assertCanActOnPerson } from '../_lib/person-access'
 
 const ALLOWED_KINDS = new Set(['resume', 'certification', 'id_copy', 'other'])
 
@@ -24,6 +24,7 @@ export async function addPersonFile(args: {
   const ctx = await requireRequestContext()
   if (!args.personId) return { ok: false, error: 'Missing personId' }
   if (!args.attachmentId) return { ok: false, error: 'Missing attachmentId' }
+  await assertCanActOnPerson(ctx, args.personId)
   const label = args.label.trim()
   if (!label) return { ok: false, error: 'Label is required' }
   const kind = ALLOWED_KINDS.has(args.kind) ? args.kind : 'other'
@@ -60,6 +61,7 @@ export async function deletePersonFile(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!id || !personId) return
+  await assertCanActOnPerson(ctx, personId)
 
   const before = await ctx.db(async (tx) => {
     const [r] = await tx
@@ -92,6 +94,7 @@ export async function setPersonSignature(args: {
   const ctx = await requireRequestContext()
   if (!args.personId) return { ok: false, error: 'Missing personId' }
   if (!args.attachmentId) return { ok: false, error: 'Missing attachmentId' }
+  await assertCanActOnPerson(ctx, args.personId)
 
   const before = await ctx.db(async (tx) => {
     const [r] = await tx
@@ -126,6 +129,7 @@ export async function clearPersonSignature(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   const personId = String(formData.get('personId') ?? '')
   if (!personId) return
+  await assertCanActOnPerson(ctx, personId)
 
   await ctx.db((tx) =>
     tx.update(people).set({ signatureAttachmentId: null }).where(eq(people.id, personId)),

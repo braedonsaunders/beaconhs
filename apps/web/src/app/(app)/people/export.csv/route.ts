@@ -1,26 +1,35 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
-import { parseListParams } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade'] as const
+const STATUS_FILTERS = ['active', 'inactive', 'terminated', 'all'] as const
+type StatusFilter = (typeof STATUS_FILTERS)[number]
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
+  // Mirror the /people list's filters exactly so the export matches what the
+  // user sees: default status=active, optional department, never soft-deleted.
+  const rawStatus = pickString(sp.status) ?? 'active'
+  const statusFilter: StatusFilter = (STATUS_FILTERS as readonly string[]).includes(rawStatus)
+    ? (rawStatus as StatusFilter)
+    : 'active'
+  const departmentFilter = pickString(sp.department) ?? null
   const ctx = await requireExportContext()
   assertCan(ctx, 'admin.users.manage')
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(people.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(
@@ -30,7 +39,9 @@ export async function GET(req: NextRequest) {
       )
       if (cond) filters.push(cond)
     }
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
+    if (statusFilter !== 'all') filters.push(eq(people.status, statusFilter))
+    if (departmentFilter) filters.push(eq(people.departmentId, departmentFilter))
+    const whereClause = and(...filters)
 
     const orderBy =
       params.sort === 'name'
@@ -63,7 +74,10 @@ export async function GET(req: NextRequest) {
     entityType: 'people',
     action: 'export',
     summary: `Exported ${rows.length} people to CSV`,
-    metadata: { format: 'csv', filters: { q: params.q ?? null } },
+    metadata: {
+      format: 'csv',
+      filters: { q: params.q ?? null, status: statusFilter, department: departmentFilter },
+    },
   })
 
   const columns = csvColumns([

@@ -15,6 +15,12 @@ import { recordAudit } from '@/lib/audit'
 
 const BASE = '/people/departments'
 
+/** True when the error is the tenant-scoped unique-name violation. */
+function isDuplicateNameError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /departments_tenant_name_ux/.test(msg)
+}
+
 export async function saveDepartment(input: {
   id?: string
   name: string
@@ -45,8 +51,11 @@ export async function saveDepartment(input: {
           .set({ name, code, description })
           .where(eq(departments.id, input.id!)),
       )
-    } catch {
-      return { ok: false, error: 'A department with that name already exists.' }
+    } catch (err) {
+      if (isDuplicateNameError(err)) {
+        return { ok: false, error: 'A department with that name already exists.' }
+      }
+      throw err
     }
     await recordAudit(ctx, {
       entityType: 'department',
@@ -69,8 +78,11 @@ export async function saveDepartment(input: {
         .returning(),
     )
     createdId = row?.id ?? null
-  } catch {
-    return { ok: false, error: 'A department with that name already exists.' }
+  } catch (err) {
+    if (isDuplicateNameError(err)) {
+      return { ok: false, error: 'A department with that name already exists.' }
+    }
+    throw err
   }
   if (createdId) {
     await recordAudit(ctx, {

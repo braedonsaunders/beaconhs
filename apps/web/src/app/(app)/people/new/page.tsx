@@ -11,11 +11,11 @@ import {
   Input,
   Label,
   Select,
-  Textarea,
 } from '@beaconhs/ui'
 import { crews, departments, trades } from '@beaconhs/db/schema'
 import { people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { revalidatePath } from 'next/cache'
 import { PageContainer } from '@/components/page-layout'
@@ -25,6 +25,7 @@ export const metadata = { title: 'New person' }
 async function createPerson(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'people')
   const firstName = String(formData.get('firstName') ?? '').trim()
   const lastName = String(formData.get('lastName') ?? '').trim()
   const employeeNo = String(formData.get('employeeNo') ?? '').trim() || null
@@ -69,7 +70,7 @@ async function createPerson(formData: FormData) {
 }
 
 export default async function NewPersonPage() {
-  const ctx = await requireRequestContext()
+  const ctx = await requireModuleManage('people')
   const [depts, allTrades, allCrews] = await ctx.db(async (tx) => {
     const d = await tx.select().from(departments).orderBy(asc(departments.name))
     const t = await tx.select().from(trades).orderBy(asc(trades.name))

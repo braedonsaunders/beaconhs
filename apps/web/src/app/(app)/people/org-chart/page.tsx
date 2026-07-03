@@ -70,6 +70,24 @@ export default async function OrgChartPage({
     roots = Array.from(byId.values()).filter(
       (n) => !n.managerPersonId || !byId.has(n.managerPersonId),
     )
+    // People in a manager cycle (A reports to B, B reports to A) all have a
+    // manager that exists, so none qualifies as a root and the whole cycle —
+    // plus everyone under it — would silently vanish from the chart. Promote
+    // one representative per unreachable cluster to a flagged top-level node.
+    const reachable = new Set<string>()
+    const visit = (n: OrgNode): void => {
+      if (reachable.has(n.id)) return
+      reachable.add(n.id)
+      for (const r of n.reports) visit(r)
+    }
+    for (const r of roots) visit(r)
+    for (const n of byId.values()) {
+      if (!reachable.has(n.id)) {
+        n.inCycle = true
+        roots.push(n)
+        visit(n)
+      }
+    }
   }
 
   const totalPeople = rows.length

@@ -17,6 +17,8 @@ export type Candidate = {
   firstName: string
   lastName: string
   employeeNo: string | null
+  /** Person status — non-active members render with a hint and are not re-addable. */
+  status?: 'active' | 'inactive' | 'terminated'
 }
 
 export function MemberPicker({
@@ -54,6 +56,9 @@ export function MemberPicker({
     () =>
       candidates
         .filter((c) => !selectedMembers.has(c.id))
+        // Only active people are addable — a removed inactive member must not
+        // reappear as a candidate.
+        .filter((c) => (c.status ?? 'active') === 'active')
         .filter((c) => matches(c, leftQuery))
         .sort(compareByName),
     [candidates, selectedMembers, leftQuery],
@@ -175,9 +180,11 @@ export function MemberPicker({
           emptyLabel={emptyMembersLabel}
         />
       </div>
-      <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
+      <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
         {savedAt ? (
-          <span className="text-xs text-emerald-700">Saved {formatRelative(savedAt)}</span>
+          <span className="text-xs text-emerald-700 dark:text-emerald-400">
+            Saved {formatRelative(savedAt)}
+          </span>
         ) : null}
         <Button type="button" onClick={save} disabled={pending}>
           {pending ? 'Saving…' : `Save (${selectedMembers.size} members)`}
@@ -205,9 +212,11 @@ function ListColumn({
   emptyLabel?: string
 }) {
   return (
-    <div className="flex h-[420px] flex-col rounded-md border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 p-2">
-        <Label className="text-[11px] tracking-wide text-slate-500 uppercase">{label}</Label>
+    <div className="flex h-[420px] flex-col rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div className="border-b border-slate-100 p-2 dark:border-slate-800">
+        <Label className="text-[11px] tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          {label}
+        </Label>
         <div className="relative mt-1">
           <Search
             size={12}
@@ -233,14 +242,21 @@ function ListColumn({
                   key={c.id}
                   onClick={(e) => onToggle(c.id, e)}
                   className={`cursor-pointer rounded px-2 py-1 ${
-                    isOn ? 'bg-teal-100 text-teal-900' : 'hover:bg-slate-50'
+                    isOn
+                      ? 'bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
                   <span className="font-medium">
                     {c.lastName}, {c.firstName}
                   </span>
                   {c.employeeNo ? (
-                    <span className="ml-1 text-slate-400">· {c.employeeNo}</span>
+                    <span className="ml-1 text-slate-400 dark:text-slate-500">
+                      · {c.employeeNo}
+                    </span>
+                  ) : null}
+                  {c.status && c.status !== 'active' ? (
+                    <span className="ml-1 text-amber-600 dark:text-amber-400">({c.status})</span>
                   ) : null}
                 </li>
               )

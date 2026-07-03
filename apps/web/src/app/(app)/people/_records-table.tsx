@@ -32,6 +32,8 @@ export function PeopleRecordsTable({
   currentParams,
   sort,
   dir,
+  canManage,
+  canExport,
 }: {
   rows: PeopleTableRow[]
   groups: GroupOption[]
@@ -40,8 +42,14 @@ export function PeopleRecordsTable({
   currentParams: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
+  /** Viewer may run the bulk mutations (group / department / status). */
+  canManage: boolean
+  /** Viewer may export the selected rows to CSV. */
+  canExport: boolean
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // No bulk action is available to this viewer — skip the selection UI entirely.
+  const canBulk = canManage || canExport
 
   const allSelected = useMemo(
     () => rows.length > 0 && rows.every((r) => selected.has(r.id)),
@@ -77,7 +85,9 @@ export function PeopleRecordsTable({
             key={r.id}
             href={`/people/${r.id}`}
             leading={
-              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              canBulk ? (
+                <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              ) : undefined
             }
             avatarName={`${r.lastName}, ${r.firstName}`}
             reference={r.employeeNo ?? undefined}
@@ -109,9 +119,11 @@ export function PeopleRecordsTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-              <th className="w-8 px-3 py-2">
-                <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
-              </th>
+              {canBulk ? (
+                <th className="w-8 px-3 py-2">
+                  <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
+                </th>
+              ) : null}
               <SortTh column="name" {...sortProps}>
                 Name
               </SortTh>
@@ -144,9 +156,11 @@ export function PeopleRecordsTable({
                       : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/60'
                   }
                 >
-                  <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
-                  </td>
+                  {canBulk ? (
+                    <td className="w-8 px-3 py-2">
+                      <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2">
                     <Link
                       href={`/people/${r.id}` as any}
@@ -186,12 +200,16 @@ export function PeopleRecordsTable({
           </tbody>
         </table>
       </div>
-      <BulkPeopleBar
-        selectedIds={Array.from(selected)}
-        onClear={clear}
-        groups={groups}
-        departments={departments}
-      />
+      {canBulk ? (
+        <BulkPeopleBar
+          selectedIds={Array.from(selected)}
+          onClear={clear}
+          groups={groups}
+          departments={departments}
+          canManage={canManage}
+          canExport={canExport}
+        />
+      ) : null}
     </>
   )
 }

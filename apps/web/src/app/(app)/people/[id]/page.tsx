@@ -77,6 +77,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
+import { moduleScopeWhere } from '@/lib/visibility'
 import { getPersonSyncOrigin, SYNC_OWNED_PERSON_FIELDS } from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
 import { togglePersonInGroup } from '../_actions/groups'
@@ -144,7 +145,11 @@ async function updatePersonField(formData: FormData) {
   if (!EDITABLE_FIELDS.has(field)) throw new Error('Field not allowed')
 
   const { before, synced } = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(people).where(eq(people.id, id)).limit(1)
+    const [row] = await tx
+      .select()
+      .from(people)
+      .where(and(eq(people.id, id), isNull(people.deletedAt)))
+      .limit(1)
     const origin = row ? await getPersonSyncOrigin(tx, id) : null
     return { before: row, synced: origin != null }
   })
@@ -218,9 +223,27 @@ export default async function PersonDetailPage({
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .leftJoin(crews, eq(crews.id, people.crewId))
-      .where(eq(people.id, id))
+      .where(and(eq(people.id, id), isNull(people.deletedAt)))
       .limit(1)
     if (!row) return null
+
+    // Incident data on this page must honor the viewer's incidents read tier —
+    // same predicate the /incidents list applies, plus "the profile person is
+    // me" so workers still see their own involvement on their own page.
+    const [involvementVis, injuryVis] = await Promise.all([
+      moduleScopeWhere(ctx, tx, {
+        prefix: 'incidents',
+        ownerCols: [incidents.reportedByTenantUserId],
+        siteCol: incidents.siteOrgUnitId,
+        personCol: incidentPeople.personId,
+      }),
+      moduleScopeWhere(ctx, tx, {
+        prefix: 'incidents',
+        ownerCols: [incidents.reportedByTenantUserId],
+        siteCol: incidents.siteOrgUnitId,
+        personCol: incidentInjuries.personId,
+      }),
+    ])
 
     const [
       training,
@@ -276,13 +299,25 @@ export default async function PersonDetailPage({
         .select({ link: incidentPeople, incident: incidents })
         .from(incidentPeople)
         .innerJoin(incidents, eq(incidents.id, incidentPeople.incidentId))
-        .where(eq(incidentPeople.personId, id))
+        .where(
+          and(
+            eq(incidentPeople.personId, id),
+            isNull(incidents.deletedAt),
+            ...(involvementVis ? [involvementVis] : []),
+          ),
+        )
         .orderBy(desc(incidents.occurredAt)),
       tx
         .select({ injury: incidentInjuries, incident: incidents })
         .from(incidentInjuries)
         .innerJoin(incidents, eq(incidents.id, incidentInjuries.incidentId))
-        .where(eq(incidentInjuries.personId, id))
+        .where(
+          and(
+            eq(incidentInjuries.personId, id),
+            isNull(incidents.deletedAt),
+            ...(injuryVis ? [injuryVis] : []),
+          ),
+        )
         .orderBy(desc(incidents.occurredAt)),
       tx
         .select({ item: ppeItems, type: ppeTypes })
@@ -374,7 +409,7 @@ export default async function PersonDetailPage({
           employeeNo: people.employeeNo,
         })
         .from(people)
-        .where(and(ne(people.id, id), eq(people.status, 'active')))
+        .where(and(ne(people.id, id), eq(people.status, 'active'), isNull(people.deletedAt)))
         .orderBy(asc(people.lastName), asc(people.firstName)),
       getPersonSyncOrigin(tx, id),
     ])
@@ -459,6 +494,11 @@ export default async function PersonDetailPage({
   const openDrawer = typeof sp.drawer === 'string' ? sp.drawer : null
   const basePathForDrawer = `/people/${id}${active === 'overview' ? '' : `?tab=${active}`}`
   const synced = syncOrigin != null
+  // Files and the saved signature are manage-or-self: a person may maintain
+  // their own; everyone else needs the module permission (the server actions
+  // re-assert this).
+  const isSelf = person.userId != null && person.userId === ctx.userId
+  const canEditFiles = canEdit || isSelf
   // A field's input is read-only when the viewer lacks edit permission, OR the
   // person is synced and this is a sync-owned field.
   const fieldDisabled = (field: string) => !canEdit || (synced && SYNC_OWNED_FIELDS.has(field))
@@ -632,35 +672,39 @@ export default async function PersonDetailPage({
                     <img
                       src={signatureUrl}
                       alt={`${person.firstName} ${person.lastName} signature`}
-                      className="max-h-16 w-full rounded border border-slate-200 bg-white object-contain p-1"
+                      className="max-h-16 w-full rounded border border-slate-200 bg-white object-contain p-1 dark:border-slate-700"
                     />
-                    <div className="flex items-center gap-1">
-                      <Link href={`${basePath}?drawer=signature-upload`} className="flex-1">
-                        <Button variant="outline" size="sm" className="w-full">
-                          Replace
-                        </Button>
-                      </Link>
-                      <form action={clearPersonSignature} className="inline">
-                        <input type="hidden" name="personId" value={person.id} />
-                        <Button
-                          type="submit"
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </form>
-                    </div>
+                    {canEditFiles ? (
+                      <div className="flex items-center gap-1">
+                        <Link href={`${basePath}?drawer=signature-upload`} className="flex-1">
+                          <Button variant="outline" size="sm" className="w-full">
+                            Replace
+                          </Button>
+                        </Link>
+                        <form action={clearPersonSignature} className="inline">
+                          <input type="hidden" name="personId" value={person.id} />
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </form>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
-                  <div className="space-y-2 text-xs text-slate-500">
+                  <div className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
                     <p>No signature on file.</p>
-                    <Link href={`${basePath}?drawer=signature-upload`} className="block">
-                      <Button variant="outline" size="sm" className="w-full">
-                        Upload signature
-                      </Button>
-                    </Link>
+                    {canEditFiles ? (
+                      <Link href={`${basePath}?drawer=signature-upload`} className="block">
+                        <Button variant="outline" size="sm" className="w-full">
+                          Upload signature
+                        </Button>
+                      </Link>
+                    ) : null}
                   </div>
                 )}
               </CardContent>
@@ -937,7 +981,12 @@ export default async function PersonDetailPage({
             ) : null}
 
             {active === 'groups' ? (
-              <GroupsTab personId={person.id} memberships={personGroupRows} allGroups={allGroups} />
+              <GroupsTab
+                personId={person.id}
+                memberships={personGroupRows}
+                allGroups={allGroups}
+                canEdit={canEdit}
+              />
             ) : null}
 
             {active === 'title' ? (
@@ -947,6 +996,8 @@ export default async function PersonDetailPage({
                 allTitles={allTitles}
                 titleTasks={titleTasks}
                 ackByTaskId={ackByTaskId}
+                canEdit={canEdit}
+                canAcknowledge={canEdit || isSelf}
               />
             ) : null}
 
@@ -1220,9 +1271,11 @@ export default async function PersonDetailPage({
                         <Paperclip size={16} />
                         Personal files ({fileRows.length})
                       </span>
-                      <Link href={`${basePath}?tab=documents&drawer=upload-person-file`}>
-                        <Button size="sm">Upload file</Button>
-                      </Link>
+                      {canEditFiles ? (
+                        <Link href={`${basePath}?tab=documents&drawer=upload-person-file`}>
+                          <Button size="sm">Upload file</Button>
+                        </Link>
+                      ) : null}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -1268,19 +1321,21 @@ export default async function PersonDetailPage({
                                 {new Date(file.uploadedAt).toLocaleDateString()}
                               </TableCell>
                               <TableCell>
-                                <form action={deletePersonFile} className="inline">
-                                  <input type="hidden" name="id" value={file.id} />
-                                  <input type="hidden" name="personId" value={person.id} />
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-500 hover:text-red-700"
-                                    title="Delete file"
-                                  >
-                                    <Trash2 size={14} />
-                                  </Button>
-                                </form>
+                                {canEditFiles ? (
+                                  <form action={deletePersonFile} className="inline">
+                                    <input type="hidden" name="id" value={file.id} />
+                                    <input type="hidden" name="personId" value={person.id} />
+                                    <Button
+                                      type="submit"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-red-500 hover:text-red-700"
+                                      title="Delete file"
+                                    >
+                                      <Trash2 size={14} />
+                                    </Button>
+                                  </form>
+                                ) : null}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1473,15 +1528,17 @@ export default async function PersonDetailPage({
           </div>
         </div>
       </div>
-      <PersonFilesDrawers
-        personId={person.id}
-        openDrawer={
-          openDrawer === 'upload-person-file' || openDrawer === 'signature-upload'
-            ? openDrawer
-            : null
-        }
-        closeHref={basePathForDrawer}
-      />
+      {canEditFiles ? (
+        <PersonFilesDrawers
+          personId={person.id}
+          openDrawer={
+            openDrawer === 'upload-person-file' || openDrawer === 'signature-upload'
+              ? openDrawer
+              : null
+          }
+          closeHref={basePathForDrawer}
+        />
+      ) : null}
     </PageContainer>
   )
 }
@@ -1505,10 +1562,16 @@ function Stat({
   tone: 'success' | 'warning' | 'destructive'
 }) {
   const colour =
-    tone === 'success' ? 'text-emerald-700' : tone === 'warning' ? 'text-amber-700' : 'text-red-700'
+    tone === 'success'
+      ? 'text-emerald-700 dark:text-emerald-400'
+      : tone === 'warning'
+        ? 'text-amber-700 dark:text-amber-400'
+        : 'text-red-700 dark:text-red-400'
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs tracking-wide text-slate-500 uppercase">{label}</div>
+    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        {label}
+      </div>
       <div className={`mt-1 text-2xl font-semibold tabular-nums ${colour}`}>{value}</div>
     </div>
   )
@@ -1520,6 +1583,7 @@ function GroupsTab({
   personId,
   memberships,
   allGroups,
+  canEdit,
 }: {
   personId: string
   memberships: {
@@ -1527,6 +1591,7 @@ function GroupsTab({
     group: typeof personGroups.$inferSelect
   }[]
   allGroups: (typeof personGroups.$inferSelect)[]
+  canEdit: boolean
 }) {
   const memberIds = new Set(memberships.map((m) => m.group.id))
   const candidates = allGroups.filter((g) => !memberIds.has(g.id))
@@ -1548,7 +1613,7 @@ function GroupsTab({
               {memberships.map(({ group }) => (
                 <li
                   key={group.id}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
                   style={group.color ? { borderColor: group.color, color: group.color } : undefined}
                 >
                   {group.color ? (
@@ -1560,24 +1625,26 @@ function GroupsTab({
                   <Link href={`/people/groups/${group.id}`} className="hover:underline">
                     {group.name}
                   </Link>
-                  <form action={togglePersonInGroup} className="inline">
-                    <input type="hidden" name="groupId" value={group.id} />
-                    <input type="hidden" name="personId" value={personId} />
-                    <button
-                      type="submit"
-                      title="Remove from group"
-                      className="text-slate-400 hover:text-red-600"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </form>
+                  {canEdit ? (
+                    <form action={togglePersonInGroup} className="inline">
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="personId" value={personId} />
+                      <button
+                        type="submit"
+                        title="Remove from group"
+                        className="text-slate-400 hover:text-red-600"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </form>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
-      {candidates.length > 0 ? (
+      {canEdit && candidates.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Available groups</CardTitle>
@@ -1587,7 +1654,7 @@ function GroupsTab({
               {candidates.map((g) => (
                 <li
                   key={g.id}
-                  className="flex items-center justify-between rounded border border-slate-200 px-3 py-2"
+                  className="flex items-center justify-between rounded border border-slate-200 px-3 py-2 dark:border-slate-700"
                 >
                   <div className="flex items-center gap-2">
                     {g.color ? (
@@ -1623,6 +1690,8 @@ function TitleTab({
   allTitles,
   titleTasks,
   ackByTaskId,
+  canEdit,
+  canAcknowledge,
 }: {
   personId: string
   titlesHeld: {
@@ -1632,6 +1701,8 @@ function TitleTab({
   allTitles: (typeof personTitles.$inferSelect)[]
   titleTasks: (typeof jobTitleTasks.$inferSelect)[]
   ackByTaskId: Map<string, typeof jobTitleTaskAcknowledgments.$inferSelect>
+  canEdit: boolean
+  canAcknowledge: boolean
 }) {
   const heldIds = new Set(titlesHeld.map((t) => t.title.id))
   const candidates = allTitles.filter((t) => !heldIds.has(t.id))
@@ -1659,7 +1730,7 @@ function TitleTab({
               {titlesHeld.map(({ assignment, title }) => (
                 <li
                   key={assignment.id}
-                  className="flex items-center justify-between gap-3 rounded border border-slate-200 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-700"
                 >
                   <Link
                     href={`/people/titles/${title.id}`}
@@ -1669,7 +1740,7 @@ function TitleTab({
                   </Link>
                   {assignment.isPrimary ? (
                     <Badge variant="success">Primary</Badge>
-                  ) : (
+                  ) : canEdit ? (
                     <form action={setPrimaryTitle} className="inline">
                       <input type="hidden" name="titleId" value={title.id} />
                       <input type="hidden" name="personId" value={personId} />
@@ -1677,27 +1748,29 @@ function TitleTab({
                         Make primary
                       </Button>
                     </form>
-                  )}
-                  <form action={unassignTitleFromPerson} className="inline">
-                    <input type="hidden" name="titleId" value={title.id} />
-                    <input type="hidden" name="personId" value={personId} />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 size={12} />
-                    </Button>
-                  </form>
+                  ) : null}
+                  {canEdit ? (
+                    <form action={unassignTitleFromPerson} className="inline">
+                      <input type="hidden" name="titleId" value={title.id} />
+                      <input type="hidden" name="personId" value={personId} />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </form>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
-          {candidates.length > 0 ? (
+          {canEdit && candidates.length > 0 ? (
             <form
               action={assignTitleToPerson}
-              className="mt-3 flex items-end gap-2 border-t border-slate-100 pt-3"
+              className="mt-3 flex items-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800"
             >
               <input type="hidden" name="personId" value={personId} />
               <div className="min-w-0 flex-1 space-y-1">
@@ -1743,36 +1816,47 @@ function TitleTab({
                   return (
                     <li
                       key={t.id}
-                      className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2"
+                      className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-700"
                     >
-                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         {i + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-900">{t.task}</div>
+                        <div className="font-medium text-slate-900 dark:text-slate-100">
+                          {t.task}
+                        </div>
                         {t.description ? (
-                          <div className="text-xs text-slate-500">{t.description}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {t.description}
+                          </div>
                         ) : null}
                         {ack ? (
-                          <div className="mt-0.5 text-xs text-emerald-700">
+                          <div className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">
                             Acknowledged {new Date(ack.acknowledgedAt).toLocaleDateString()}
                           </div>
                         ) : null}
                       </div>
                       {ack ? (
-                        <form action={revokeTitleTaskAck} className="inline">
-                          <input type="hidden" name="taskId" value={t.id} />
-                          <input type="hidden" name="personId" value={personId} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="ghost"
-                            className="text-emerald-700"
-                          >
-                            <CheckSquare size={14} />
-                          </Button>
-                        </form>
-                      ) : (
+                        canAcknowledge ? (
+                          <form action={revokeTitleTaskAck} className="inline">
+                            <input type="hidden" name="taskId" value={t.id} />
+                            <input type="hidden" name="personId" value={personId} />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="ghost"
+                              className="text-emerald-700 dark:text-emerald-400"
+                            >
+                              <CheckSquare size={14} />
+                            </Button>
+                          </form>
+                        ) : (
+                          <CheckSquare
+                            size={14}
+                            className="mt-1 text-emerald-700 dark:text-emerald-400"
+                          />
+                        )
+                      ) : canAcknowledge ? (
                         <form action={acknowledgeTitleTask} className="inline">
                           <input type="hidden" name="taskId" value={t.id} />
                           <input type="hidden" name="personId" value={personId} />
@@ -1781,6 +1865,8 @@ function TitleTab({
                             Acknowledge
                           </Button>
                         </form>
+                      ) : (
+                        <Square size={14} className="mt-1 text-slate-300 dark:text-slate-600" />
                       )}
                     </li>
                   )
