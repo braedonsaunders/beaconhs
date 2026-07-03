@@ -175,10 +175,15 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
           })
           .where(eq(syncConnections.id, connectionId))
       } else {
+        // Only advance the cursor on a clean run. On 'error' or 'partial' keep
+        // cursorBefore so any failed rows fall back inside the next pull's
+        // window and are re-covered — upserts are idempotent via the crosswalk,
+        // so re-pulling already-succeeded rows is a no-op.
+        const advanceCursor = status === 'success'
         await tx
           .update(syncConnections)
           .set({
-            cursor: status === 'error' ? cursorBefore : cursorAfter,
+            cursor: advanceCursor ? cursorAfter : cursorBefore,
             lastRunId: runId,
             lastRunAt: completedAt,
             lastStatus: status,
@@ -257,12 +262,24 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
   }
 
   for (const batch of chunk(records, BATCH)) {
+    // Accumulate stats + seen ids into a batch-local delta and merge them into
+    // the run totals only after the transaction commits. If the batch tx throws
+    // every DB write rolls back, so keeping the in-memory counts would claim
+    // creations/updates that never landed and mark the rolled-back ids as seen
+    // (which the archive policy would then honour). On rollback we merge only a
+    // per-record failed count instead.
+    const batchStats: Record<string, SyncEntityStat> = {}
+    const batchSeen: Record<SyncEntityKey, Set<string>> = {
+      people: new Set(),
+      org_unit: new Set(),
+      equipment: new Set(),
+    }
     try {
       await withTenant(db, tenantId, async (tx) => {
         for (const rec of batch) {
-          const s = (stats[rec.entity] ??= emptyStat())
+          const s = (batchStats[rec.entity] ??= emptyStat())
           s.pulled++
-          seen[rec.entity].add(rec.externalId)
+          batchSeen[rec.entity].add(rec.externalId)
           try {
             const res = await upsertRecord(
               tx,
@@ -277,7 +294,7 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
               },
               rec,
             )
-            actionStat(stats, rec.entity, res.action)
+            actionStat(batchStats, rec.entity, res.action)
             await recordChange(tx, rec, res)
           } catch (e) {
             const message = errMsg(e)
@@ -287,7 +304,16 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
           }
         }
       })
+      // Committed — fold the batch delta into the run totals.
+      for (const [entity, bs] of Object.entries(batchStats)) {
+        const s = (stats[entity] ??= emptyStat())
+        for (const k of Object.keys(bs) as (keyof SyncEntityStat)[]) s[k] += bs[k]
+      }
+      for (const entity of Object.keys(batchSeen) as SyncEntityKey[]) {
+        for (const id of batchSeen[entity]) seen[entity].add(id)
+      }
     } catch (e) {
+      // Rolled back — nothing landed; count only failures for the batch.
       for (const rec of batch) {
         const s = (stats[rec.entity] ??= emptyStat())
         s.failed++

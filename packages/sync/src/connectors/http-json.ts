@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type {
   CanonicalEquipment,
   CanonicalRecord,
@@ -6,7 +5,17 @@ import type {
   ConnectorRunContext,
   SyncEntityKey,
 } from '../types'
-import { fieldFromPath, getPath, renderTemplate, type SourceRow } from '../transform'
+import {
+  datePart,
+  fieldFromPath,
+  getPath,
+  hashRow,
+  numPart,
+  orgLevel,
+  renderTemplate,
+  splitName,
+  type SourceRow,
+} from '../transform'
 
 type HttpMethod = 'GET' | 'POST'
 
@@ -31,10 +40,6 @@ type HttpJsonConfig = {
 type Mapping = {
   columns?: Record<string, string>
   values?: Record<string, string>
-}
-
-function hashRow(o: unknown): string {
-  return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
 }
 
 function parseJsonObject(raw: string | undefined, label: string): Record<string, unknown> {
@@ -76,34 +81,6 @@ function field(row: SourceRow, mapping: Mapping, key: string): string | null {
   return fieldFromPath(row, mapping.columns?.[key])
 }
 
-function splitName(full: string | null): { first: string; last: string } {
-  const s = String(full ?? '').trim()
-  if (!s) return { first: '', last: '' }
-  if (s.includes(',')) {
-    const [last, first] = s.split(',', 2)
-    return { first: (first ?? '').trim(), last: (last ?? '').trim() }
-  }
-  const parts = s.split(/\s+/)
-  return {
-    first: parts.slice(0, -1).join(' ') || (parts[0] ?? ''),
-    last: parts.length > 1 ? (parts[parts.length - 1] ?? '') : '',
-  }
-}
-
-function datePart(v: string | null): string | null {
-  if (!v) return null
-  const m = v.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (m) return m[1] ?? null
-  const t = Date.parse(v)
-  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
-}
-
-function numPart(v: string | null): number | null {
-  if (v == null || v === '') return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
-
 function status(v: string | null): 'active' | 'inactive' | 'terminated' | undefined {
   const s = String(v ?? '')
     .trim()
@@ -123,16 +100,6 @@ function equipmentStatus(v: string | null): CanonicalEquipment['status'] | undef
   }
   if (s === 'active') return 'in_service'
   if (s === 'inactive') return 'out_of_service'
-  return undefined
-}
-
-function orgLevel(v: string | null): 'customer' | 'project' | 'site' | 'area' | undefined {
-  const s = String(v ?? '')
-    .trim()
-    .toLowerCase()
-  if (['customer', 'project', 'site', 'area'].includes(s)) {
-    return s as 'customer' | 'project' | 'site' | 'area'
-  }
   return undefined
 }
 
@@ -362,6 +329,7 @@ export const httpJsonConnector: Connector = {
     const out: CanonicalRecord[] = []
     let cursor = cursorText(ctx.since?.default)
     let nextCursor: string | null = null
+    let truncated = false
     const maxPages = Math.max(1, Math.min(Number(cfg.maxPages ?? 1) || 1, 50))
 
     for (let page = 0; page < maxPages; page++) {
@@ -374,13 +342,26 @@ export const httpJsonConnector: Connector = {
       }
       nextCursor = cfg.nextCursorPath ? cursorText(getPath(payload, cfg.nextCursorPath)) : null
       if (!nextCursor || nextCursor === cursor) break
+      if (page === maxPages - 1) {
+        // Page cap hit with more data behind the cursor — this pull is a
+        // partial snapshot, never a full one.
+        truncated = true
+        break
+      }
       cursor = nextCursor
+    }
+
+    if (truncated) {
+      ctx.log(
+        'warn',
+        `Stopped after ${maxPages} page(s) with more data remaining; treating the pull as incremental so the missing-record policy is not applied to a partial snapshot.`,
+      )
     }
 
     return {
       records: out,
       nextCursor: nextCursor ? { default: nextCursor } : undefined,
-      mode: ctx.since?.default ? 'incremental' : 'full',
+      mode: ctx.since?.default || truncated ? 'incremental' : 'full',
     }
   },
 }

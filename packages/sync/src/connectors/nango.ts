@@ -6,7 +6,7 @@
 // Server config: NANGO_SECRET_KEY (+ optional NANGO_HOST). A per-connection
 // secret key may override the env default.
 
-import { createHash } from 'node:crypto'
+import { datePart, hashRow } from '../transform'
 import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
 
 interface NangoConfig {
@@ -64,10 +64,6 @@ function fld(
   const m = map?.[field]
   return m ? pick(rec, [m]) : pick(rec, defaults)
 }
-function hashRec(o: unknown): string {
-  return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
-}
-
 function mapNango(
   entity: SyncEntityKey,
   rec: Record<string, unknown>,
@@ -97,11 +93,13 @@ function mapNango(
         phone: fld(rec, map, 'phone', ['phone', 'phone_number', 'mobile_phone']),
         jobTitle: fld(rec, map, 'jobTitle', ['title', 'job_title', 'jobTitle']),
         departmentName: fld(rec, map, 'departmentName', ['department', 'department_name']),
-        hireDate: fld(rec, map, 'hireDate', ['hire_date', 'start_date', 'startDate', 'hireDate']),
+        hireDate: datePart(
+          fld(rec, map, 'hireDate', ['hire_date', 'start_date', 'startDate', 'hireDate']),
+        ),
       }
       if (!data.firstName && !data.lastName) return null
       const externalId =
-        pick(rec, ['id', 'employee_id', '_nango_id']) || data.employeeNo || hashRec(rec)
+        pick(rec, ['id', 'employee_id', '_nango_id']) || data.employeeNo || hashRow(rec)
       return { entity: 'people', externalId, data }
     }
     case 'org_unit': {
@@ -110,7 +108,7 @@ function mapNango(
         code: fld(rec, map, 'code', ['code', 'number', 'external_id']),
       }
       if (!data.name) return null
-      const externalId = pick(rec, ['id', '_nango_id']) || data.code || hashRec(rec)
+      const externalId = pick(rec, ['id', '_nango_id']) || data.code || hashRow(rec)
       return { entity: 'org_unit', externalId, data }
     }
     case 'equipment': {
@@ -121,7 +119,7 @@ function mapNango(
         typeName: fld(rec, map, 'typeName', ['type', 'category']),
       }
       if (!data.assetTag) return null
-      const externalId = pick(rec, ['id', '_nango_id']) || data.assetTag || hashRec(rec)
+      const externalId = pick(rec, ['id', '_nango_id']) || data.assetTag || hashRow(rec)
       return { entity: 'equipment', externalId, data }
     }
   }

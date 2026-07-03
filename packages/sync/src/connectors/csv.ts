@@ -2,8 +2,8 @@
 // columns are auto-matched to canonical fields by header name, with an optional
 // explicit mapping override. No credentials — fully self-contained.
 
-import { createHash } from 'node:crypto'
 import { parseCsv } from '../csv'
+import { datePart, hashRow, splitName } from '../transform'
 import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
 
 type CsvConfig = {
@@ -15,6 +15,7 @@ type CsvConfig = {
 }
 
 const PEOPLE_ALIASES: Record<string, string[]> = {
+  fullName: ['fullname', 'name', 'employeename', 'employee'],
   firstName: ['firstname', 'first', 'givenname', 'fname'],
   lastName: ['lastname', 'last', 'surname', 'familyname', 'lname'],
   employeeNo: ['employeeno', 'employeenumber', 'empno', 'employeeid', 'payrollid', 'badge'],
@@ -75,17 +76,6 @@ function resolveHeaders(
   return out
 }
 
-function normDate(v: string | null): string | null {
-  if (!v) return null
-  const s = v.trim()
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
-  const mdy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)
-  if (mdy) return `${mdy[3]}-${(mdy[1] ?? '').padStart(2, '0')}-${(mdy[2] ?? '').padStart(2, '0')}`
-  const t = Date.parse(s)
-  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
-}
-
 function normLevel(v: string | null): 'customer' | 'project' | 'site' | 'area' | undefined {
   if (!v) return undefined
   const s = v.toLowerCase()
@@ -94,10 +84,6 @@ function normLevel(v: string | null): 'customer' | 'project' | 'site' | 'area' |
   if (s.startsWith('area') || s.startsWith('zone')) return 'area'
   if (s.startsWith('site') || s.startsWith('loc')) return 'site'
   return undefined
-}
-
-function hashRow(o: unknown): string {
-  return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
 }
 
 export const csvConnector: Connector = {
@@ -145,9 +131,12 @@ export const csvConnector: Connector = {
       const idRaw = idCol ? (row[idCol] ?? '').trim() || null : null
       switch (entity) {
         case 'people': {
+          const fullName = get(row, 'fullName')
+          const parsed = splitName(fullName)
           const data = {
-            firstName: get(row, 'firstName') ?? '',
-            lastName: get(row, 'lastName') ?? '',
+            fullName,
+            firstName: get(row, 'firstName') ?? parsed.first,
+            lastName: get(row, 'lastName') ?? parsed.last,
             employeeNo: get(row, 'employeeNo'),
             externalEmployeeId: get(row, 'externalEmployeeId'),
             email: get(row, 'email'),
@@ -155,7 +144,7 @@ export const csvConnector: Connector = {
             jobTitle: get(row, 'jobTitle'),
             departmentName: get(row, 'departmentName'),
             tradeName: get(row, 'tradeName'),
-            hireDate: normDate(get(row, 'hireDate')),
+            hireDate: datePart(get(row, 'hireDate')),
           }
           out.push({ entity: 'people', externalId: idRaw || data.employeeNo || hashRow(row), data })
           break

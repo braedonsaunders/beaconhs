@@ -311,6 +311,34 @@ async function selectPerson(tx: Database, id: string) {
   return row ?? null
 }
 
+// Same as selectPerson but does NOT filter soft-deleted rows — used to detect a
+// crosswalk-linked row that was locally archived, so we restore/conflict it
+// instead of inserting a shadow duplicate.
+async function selectPersonAnyState(tx: Database, id: string) {
+  const [row] = await tx
+    .select({
+      id: people.id,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      employeeNo: people.employeeNo,
+      externalEmployeeId: people.externalEmployeeId,
+      email: people.email,
+      phone: people.phone,
+      jobTitle: people.jobTitle,
+      hireDate: people.hireDate,
+      status: people.status,
+      departmentId: people.departmentId,
+      tradeId: people.tradeId,
+      metadata: people.metadata,
+      updatedAt: people.updatedAt,
+      deletedAt: people.deletedAt,
+    })
+    .from(people)
+    .where(eq(people.id, id))
+    .limit(1)
+  return row ?? null
+}
+
 async function findPersonByExternalEmployeeId(
   tx: Database,
   ctx: UpsertCtx,
@@ -448,6 +476,53 @@ async function updatePerson(
   }
 }
 
+// A crosswalk link resolved to a row that no longer counts as active. Either it
+// was locally archived (soft-deleted) — restore or conflict per ownership — or
+// it was hard-deleted / lost, in which case a fresh insert is correct.
+async function restorePersonOrConflict(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  link: { canonicalId: string; lastSyncedAt: Date | string },
+  fields: PersonFields,
+  rowHash: string,
+  metadata: JsonRecord | undefined,
+): Promise<UpsertResult | null> {
+  const archived = await selectPersonAnyState(tx, link.canonicalId)
+  if (!archived || !archived.deletedAt) return null // gone entirely — caller inserts
+  const before = snap(archived)
+  const after = personAfter(fields, before, metadata)
+  if (isManualConflict(ctx, archived, link)) {
+    return {
+      action: 'conflict',
+      canonicalId: archived.id,
+      rowHash,
+      before,
+      after: { ...after, id: archived.id },
+      diff: diff(before, { ...after, id: archived.id }),
+      message: 'Record was archived locally after the last sync; ownership policy requires review.',
+    }
+  }
+  // source_wins — un-archive and update in place rather than shadow a duplicate.
+  if (!ctx.dryRun) {
+    await tx
+      .update(people)
+      .set({ ...withPeopleMetadata(fields, metadata), deletedAt: null })
+      .where(eq(people.id, archived.id))
+    await linkCrosswalk(tx, ctx, 'people', externalId, archived.id, rowHash)
+    rememberPersonLookup(ctx, archived.id, fields)
+  }
+  return {
+    action: 'updated',
+    canonicalId: archived.id,
+    rowHash,
+    before,
+    after: { ...after, id: archived.id },
+    diff: diff(before, { ...after, id: archived.id }),
+    message: 'Restored a locally archived record from the source.',
+  }
+}
+
 async function upsertPerson(
   tx: Database,
   ctx: UpsertCtx,
@@ -482,7 +557,24 @@ async function upsertPerson(
   const link = await findCrosswalk(tx, ctx, 'people', externalId)
   if (link) {
     const beforeRow = await selectPerson(tx, link.canonicalId)
-    if (!beforeRow) return createPerson(tx, ctx, externalId, fields, rowHash, metadata)
+    if (!beforeRow) {
+      const restored = await restorePersonOrConflict(
+        tx,
+        ctx,
+        externalId,
+        link,
+        fields,
+        rowHash,
+        metadata,
+      )
+      if (restored) {
+        if (!ctx.dryRun && restored.action !== 'conflict') {
+          await touchCrosswalk(tx, ctx, link.id, rowHash)
+        }
+        return restored
+      }
+      return createPerson(tx, ctx, externalId, fields, rowHash, metadata)
+    }
     if (link.rowHash === rowHash) {
       await touchCrosswalk(tx, ctx, link.id)
       rememberPersonLookup(ctx, link.canonicalId, fields)
@@ -556,6 +648,28 @@ async function selectOrgUnit(tx: Database, id: string) {
     })
     .from(orgUnits)
     .where(and(eq(orgUnits.id, id), isNull(orgUnits.deletedAt)))
+    .limit(1)
+  return row ?? null
+}
+
+async function selectOrgUnitAnyState(tx: Database, id: string) {
+  const [row] = await tx
+    .select({
+      id: orgUnits.id,
+      level: orgUnits.level,
+      name: orgUnits.name,
+      code: orgUnits.code,
+      parentId: orgUnits.parentId,
+      lat: orgUnits.lat,
+      lng: orgUnits.lng,
+      geofenceMeters: orgUnits.geofenceMeters,
+      address: orgUnits.address,
+      metadata: orgUnits.metadata,
+      updatedAt: orgUnits.updatedAt,
+      deletedAt: orgUnits.deletedAt,
+    })
+    .from(orgUnits)
+    .where(eq(orgUnits.id, id))
     .limit(1)
   return row ?? null
 }
@@ -655,6 +769,49 @@ async function updateOrgUnit(
   }
 }
 
+async function restoreOrgUnitOrConflict(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  link: { canonicalId: string; lastSyncedAt: Date | string },
+  fields: OrgUnitFields,
+  rowHash: string,
+  metadata: JsonRecord | undefined,
+): Promise<UpsertResult | null> {
+  const archived = await selectOrgUnitAnyState(tx, link.canonicalId)
+  if (!archived || !archived.deletedAt) return null
+  const before = snap(archived)
+  const after = { ...orgUnitAfter(fields, before, metadata), id: archived.id }
+  if (isManualConflict(ctx, archived, link)) {
+    return {
+      action: 'conflict',
+      canonicalId: archived.id,
+      rowHash,
+      before,
+      after,
+      diff: diff(before, after),
+      message: 'Record was archived locally after the last sync; ownership policy requires review.',
+    }
+  }
+  if (!ctx.dryRun) {
+    await tx
+      .update(orgUnits)
+      .set({ ...withOrgUnitMetadata(fields, metadata), deletedAt: null })
+      .where(eq(orgUnits.id, archived.id))
+    await linkCrosswalk(tx, ctx, 'org_unit', externalId, archived.id, rowHash)
+    if (fields.code) ctx.lookups.orgUnitIdByCode.set(fields.code.toLowerCase(), archived.id)
+  }
+  return {
+    action: 'updated',
+    canonicalId: archived.id,
+    rowHash,
+    before,
+    after,
+    diff: diff(before, after),
+    message: 'Restored a locally archived record from the source.',
+  }
+}
+
 async function upsertOrgUnit(
   tx: Database,
   ctx: UpsertCtx,
@@ -685,7 +842,24 @@ async function upsertOrgUnit(
   const link = await findCrosswalk(tx, ctx, 'org_unit', externalId)
   if (link) {
     const beforeRow = await selectOrgUnit(tx, link.canonicalId)
-    if (!beforeRow) return createOrgUnit(tx, ctx, externalId, fields, rowHash, metadata)
+    if (!beforeRow) {
+      const restored = await restoreOrgUnitOrConflict(
+        tx,
+        ctx,
+        externalId,
+        link,
+        fields,
+        rowHash,
+        metadata,
+      )
+      if (restored) {
+        if (!ctx.dryRun && restored.action !== 'conflict') {
+          await touchCrosswalk(tx, ctx, link.id, rowHash)
+        }
+        return restored
+      }
+      return createOrgUnit(tx, ctx, externalId, fields, rowHash, metadata)
+    }
     if (link.rowHash === rowHash) {
       await touchCrosswalk(tx, ctx, link.id)
       if (code) ctx.lookups.orgUnitIdByCode.set(code.toLowerCase(), link.canonicalId)
@@ -752,6 +926,26 @@ async function selectEquipment(tx: Database, id: string) {
     })
     .from(equipmentItems)
     .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+    .limit(1)
+  return row ?? null
+}
+
+async function selectEquipmentAnyState(tx: Database, id: string) {
+  const [row] = await tx
+    .select({
+      id: equipmentItems.id,
+      assetTag: equipmentItems.assetTag,
+      name: equipmentItems.name,
+      serialNumber: equipmentItems.serialNumber,
+      description: equipmentItems.description,
+      status: equipmentItems.status,
+      typeId: equipmentItems.typeId,
+      metadata: equipmentItems.metadata,
+      updatedAt: equipmentItems.updatedAt,
+      deletedAt: equipmentItems.deletedAt,
+    })
+    .from(equipmentItems)
+    .where(eq(equipmentItems.id, id))
     .limit(1)
   return row ?? null
 }
@@ -856,6 +1050,48 @@ async function updateEquipment(
   }
 }
 
+async function restoreEquipmentOrConflict(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  link: { canonicalId: string; lastSyncedAt: Date | string },
+  fields: EquipFields,
+  rowHash: string,
+  metadata: JsonRecord | undefined,
+): Promise<UpsertResult | null> {
+  const archived = await selectEquipmentAnyState(tx, link.canonicalId)
+  if (!archived || !archived.deletedAt) return null
+  const before = snap(archived)
+  const after = { ...equipmentAfter(fields, before, metadata), id: archived.id }
+  if (isManualConflict(ctx, archived, link)) {
+    return {
+      action: 'conflict',
+      canonicalId: archived.id,
+      rowHash,
+      before,
+      after,
+      diff: diff(before, after),
+      message: 'Record was archived locally after the last sync; ownership policy requires review.',
+    }
+  }
+  if (!ctx.dryRun) {
+    await tx
+      .update(equipmentItems)
+      .set({ ...withEquipmentMetadata(fields, metadata), deletedAt: null })
+      .where(eq(equipmentItems.id, archived.id))
+    await linkCrosswalk(tx, ctx, 'equipment', externalId, archived.id, rowHash)
+  }
+  return {
+    action: 'updated',
+    canonicalId: archived.id,
+    rowHash,
+    before,
+    after,
+    diff: diff(before, after),
+    message: 'Restored a locally archived record from the source.',
+  }
+}
+
 async function upsertEquipment(
   tx: Database,
   ctx: UpsertCtx,
@@ -883,7 +1119,24 @@ async function upsertEquipment(
   const link = await findCrosswalk(tx, ctx, 'equipment', externalId)
   if (link) {
     const beforeRow = await selectEquipment(tx, link.canonicalId)
-    if (!beforeRow) return createEquipment(tx, ctx, externalId, fields, rowHash, metadata)
+    if (!beforeRow) {
+      const restored = await restoreEquipmentOrConflict(
+        tx,
+        ctx,
+        externalId,
+        link,
+        fields,
+        rowHash,
+        metadata,
+      )
+      if (restored) {
+        if (!ctx.dryRun && restored.action !== 'conflict') {
+          await touchCrosswalk(tx, ctx, link.id, rowHash)
+        }
+        return restored
+      }
+      return createEquipment(tx, ctx, externalId, fields, rowHash, metadata)
+    }
     if (link.rowHash === rowHash) {
       await touchCrosswalk(tx, ctx, link.id)
       return { action: 'unchanged', canonicalId: link.canonicalId, rowHash }

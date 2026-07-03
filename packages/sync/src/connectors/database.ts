@@ -4,10 +4,9 @@
 // secret. Incremental sync is opt-in per mapping with cursorColumn; full pulls
 // remain the default and are idempotent via the crosswalk.
 
-import { createHash } from 'node:crypto'
 import { connectDb, type DbConn, type DbKind } from '../db-drivers'
 import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
-import { renderTemplate } from '../transform'
+import { datePart, hashRow, numPart, orgLevel, renderTemplate, splitName } from '../transform'
 
 type FieldValues = Record<string, string>
 
@@ -102,38 +101,6 @@ function val(row: Record<string, unknown>, col: string | undefined | null): stri
   return s === '' ? null : s
 }
 
-function datePart(v: string | null): string | null {
-  if (!v) return null
-  const m = v.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (m) return m[1] ?? null
-  const t = Date.parse(v)
-  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
-}
-
-function numPart(v: string | null): number | null {
-  if (v == null || v === '') return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
-
-function hashRow(o: unknown): string {
-  return createHash('sha256').update(JSON.stringify(o)).digest('hex').slice(0, 16)
-}
-
-function splitName(full: string | null): { first: string; last: string } {
-  const s = String(full ?? '').trim()
-  if (!s) return { first: '', last: '' }
-  if (s.includes(',')) {
-    const [last, first] = s.split(',', 2)
-    return { first: (first ?? '').trim(), last: (last ?? '').trim() }
-  }
-  const parts = s.split(/\s+/)
-  return {
-    first: parts.slice(0, -1).join(' ') || (parts[0] ?? ''),
-    last: parts.length > 1 ? (parts[parts.length - 1] ?? '') : '',
-  }
-}
-
 function boolish(v: string | null): boolean | null {
   if (v == null) return null
   const s = v.trim().toLowerCase()
@@ -156,16 +123,6 @@ function personStatus(
   if (['term', 'terminated', 'closed'].includes(s)) return 'terminated'
   const inactive = boolish(inactiveValue)
   if (inactive != null) return inactive ? 'inactive' : 'active'
-  return undefined
-}
-
-function orgLevel(v: string | null): 'customer' | 'project' | 'site' | 'area' | undefined {
-  const s = String(v ?? '')
-    .trim()
-    .toLowerCase()
-  if (['customer', 'project', 'site', 'area'].includes(s)) {
-    return s as 'customer' | 'project' | 'site' | 'area'
-  }
   return undefined
 }
 
