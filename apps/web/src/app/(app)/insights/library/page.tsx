@@ -6,7 +6,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { canCreateInsights, canViewInsights } from '../_access'
 import { loadCardsForPalette } from '../cards/_data'
 import { ensureSystemCards } from '../_system-cards'
-import { loadLibrary } from './_data'
+import { loadLibraryDashboards } from './_data'
 import { LibraryTabs } from './_library-tabs.client'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,10 @@ export default async function LibraryPage() {
   // Seed the built-in BHQL cards (idempotent) so the Library is populated even
   // when this page is the first one the user lands on.
   await ensureSystemCards(ctx)
-  const [cards, lib] = await Promise.all([loadCardsForPalette(ctx), loadLibrary(ctx)])
+  const [cards, dashboards] = await Promise.all([
+    loadCardsForPalette(ctx),
+    loadLibraryDashboards(ctx),
+  ])
 
   return (
     <div className="app-scroll min-h-0 flex-1 space-y-5 overflow-y-auto p-4 lg:p-6">
@@ -50,7 +53,7 @@ export default async function LibraryPage() {
           vizType: c.vizType,
           status: c.status,
         }))}
-        dashboards={lib.dashboards}
+        dashboards={dashboards}
       />
     </div>
   )

@@ -66,21 +66,35 @@ export function resolveParamValues(
   return out
 }
 
-/** Build the filter clause one param value contributes to a card. Arrays use
- *  `in`; scalars use `eq`. The field is whitelisted again by the compiler. */
-function ruleFor(field: string, value: unknown): ReportRule | null {
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** Build the filter clause(s) one param value contributes to a card. Arrays use
+ *  `in`; date params expand to a whole-day range (a bare `eq` against a
+ *  timestamp column would only match rows at exactly midnight and silently drop
+ *  everything else); other scalars use `eq`. The field is whitelisted again by
+ *  the compiler. */
+function rulesFor(field: string, value: unknown, type?: DashboardParam['type']): ReportRule[] {
   if (Array.isArray(value)) {
     const vals = value.filter(isSet) as (string | number)[]
-    if (!vals.length) return null
+    if (!vals.length) return []
     const allNum = vals.every((v) => typeof v === 'number')
-    return { field, op: 'in', value: allNum ? (vals as number[]) : vals.map(String) }
+    return [{ field, op: 'in', value: allNum ? (vals as number[]) : vals.map(String) }]
   }
-  if (!isSet(value)) return null
-  return { field, op: 'eq', value: value as string | number }
+  if (!isSet(value)) return []
+  if (type === 'date' && DAY_RE.test(String(value))) {
+    const day = String(value)
+    return [
+      { field, op: 'gte', value: day },
+      // End-of-day bound: works for both date and timestamp(tz) columns.
+      { field, op: 'lte', value: `${day}T23:59:59.999999` },
+    ]
+  }
+  return [{ field, op: 'eq', value: value as string | number }]
 }
 
-/** Pure. Append an AND-ed `ReportRule` to the card's first stage filter for each
+/** Pure. Append AND-ed `ReportRule`s to the card's first stage filter for each
  *  (param → {cardId, field}) mapping that targets THIS card and has a set value.
+ *  `params` supplies each param's type so date values compile as day ranges.
  *  Returns the query unchanged when nothing applies. The appended rules are
  *  always AND-ed against the card's own filter, even when that filter is an OR
  *  group, so a parameter can only ever narrow a card — never widen it. */
@@ -89,18 +103,19 @@ export function applyParams(
   paramValues: Record<string, unknown>,
   paramMap: DashboardParamMap,
   cardId: string,
+  params: DashboardParam[] = [],
 ): BhqlQuery {
   const stage = query.stages[0]
   if (!stage) return query
 
+  const typeByKey = new Map(params.map((p) => [p.key, p.type]))
   const rules: ReportRule[] = []
   for (const [paramKey, targets] of Object.entries(paramMap ?? {})) {
     const value = paramValues[paramKey]
     if (!isSet(value) && !Array.isArray(value)) continue
     for (const t of targets) {
       if (t.cardId !== cardId) continue
-      const rule = ruleFor(t.field, value)
-      if (rule) rules.push(rule)
+      rules.push(...rulesFor(t.field, value, typeByKey.get(paramKey)))
     }
   }
   if (rules.length === 0) return query

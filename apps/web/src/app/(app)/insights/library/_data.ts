@@ -1,35 +1,19 @@
 import 'server-only'
 
-// The Insights library: published Cards + dashboards, filtered at READ TIME by
-// role visibility (mirrors the Forms gallery). Never trust the client — the
-// filter happens here, on the server, under RLS.
+// The Insights library's dashboards list: published dashboards, filtered at
+// READ TIME by role visibility (mirrors the Forms gallery). Never trust the
+// client — the filter happens here, on the server, under RLS. Cards come from
+// loadCardsForPalette (the single cards source).
 
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
-import { insightCards, insightDashboardPins, insightDashboards } from '@beaconhs/db/schema'
+import { insightDashboardPins, insightDashboards } from '@beaconhs/db/schema'
 import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
 
-export type LibraryCard = { id: string; name: string; description: string | null; vizType: string }
 export type LibraryDashboard = { id: string; name: string; pinned: boolean }
 
-export async function loadLibrary(
-  ctx: RequestContext,
-): Promise<{ cards: LibraryCard[]; dashboards: LibraryDashboard[] }> {
+export async function loadLibraryDashboards(ctx: RequestContext): Promise<LibraryDashboard[]> {
   const roleKeys = await getInsightRoleKeys(ctx)
-
-  const cardRows = await ctx.db((tx) =>
-    tx
-      .select({
-        id: insightCards.id,
-        name: insightCards.name,
-        description: insightCards.description,
-        vizType: insightCards.vizType,
-        allowedRoles: insightCards.allowedRoles,
-      })
-      .from(insightCards)
-      .where(and(eq(insightCards.status, 'published'), isNull(insightCards.deletedAt)))
-      .orderBy(desc(insightCards.publishedAt)),
-  )
 
   const dashRows = await ctx.db((tx) =>
     tx
@@ -51,12 +35,7 @@ export async function loadLibrary(
   )
   const pinnedSet = new Set(pins.map((p) => p.dashboardId))
 
-  return {
-    cards: cardRows
-      .filter((c) => canSeePublishedInsight(ctx, c.allowedRoles, roleKeys))
-      .map((c) => ({ id: c.id, name: c.name, description: c.description, vizType: c.vizType })),
-    dashboards: dashRows
-      .filter((d) => canSeePublishedInsight(ctx, d.allowedRoles, roleKeys))
-      .map((d) => ({ id: d.id, name: d.name, pinned: pinnedSet.has(d.id) })),
-  }
+  return dashRows
+    .filter((d) => canSeePublishedInsight(ctx, d.allowedRoles, roleKeys))
+    .map((d) => ({ id: d.id, name: d.name, pinned: pinnedSet.has(d.id) }))
 }

@@ -52,26 +52,35 @@ const PALETTE = [
 const AXIS_TEXT = '#94a3b8'
 const SPLIT_LINE = 'rgba(148, 163, 184, 0.18)'
 
-export function VizChart({ spec, height }: { spec: VizChartSpec; height?: number }) {
+export function VizChart({
+  spec,
+  height,
+  donut = false,
+}: {
+  spec: VizChartSpec
+  height?: number
+  /** Pie family: render with a hollow centre (the 'donut' viz type). */
+  donut?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const chart = echarts.init(el, undefined, { renderer: 'svg' })
-    chart.setOption(buildOption(spec))
+    chart.setOption(buildOption(spec, donut))
     const ro = new ResizeObserver(() => chart.resize())
     ro.observe(el)
     return () => {
       ro.disconnect()
       chart.dispose()
     }
-  }, [spec])
+  }, [spec, donut])
 
   return <div ref={ref} style={height ? { height } : undefined} className="h-full min-h-0 w-full" />
 }
 
-function buildOption(spec: VizChartSpec): echarts.EChartsCoreOption {
+function buildOption(spec: VizChartSpec, donut: boolean): echarts.EChartsCoreOption {
   const multi = spec.series.length > 1
   const base: echarts.EChartsCoreOption = {
     color: PALETTE,
@@ -91,7 +100,6 @@ function buildOption(spec: VizChartSpec): echarts.EChartsCoreOption {
   }
 
   if (spec.kind === 'pie') {
-    const donut = false
     return {
       ...base,
       series: [

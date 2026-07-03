@@ -37,7 +37,7 @@ import type {
   InsightCardConfig,
   ReportRuleGroup,
 } from '@beaconhs/db/schema'
-import { ExpressionField, exprLabel, type ExprField } from './expression-field.client'
+import { ExpressionField, exprLabel } from './expression-field.client'
 import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { VizIcon } from '../../_viz/viz-icon'
 import { createCard, generateCard, previewCard, updateCard } from '../_actions'
@@ -296,10 +296,6 @@ export function CardStudio({
   const [measures, setMeasures] = useState<MeasureRow[]>(decoded.measures)
   const [filters, setFilters] = useState<FilterRow[]>(decoded.filters)
   const [pivotOn, setPivotOn] = useState(decoded.pivotOn)
-  // Computed-expression measures/breakouts (e.g. datediff, CASE buckets) are not
-  // yet editable in the structured rail — held verbatim so the card round-trips.
-  const [extraAggs, setExtraAggs] = useState<BhqlExprMeasure[]>(decoded.extraAggs)
-  const [extraBreakouts, setExtraBreakouts] = useState<BhqlBreakout[]>(decoded.extraBreakouts)
   const [crossMetrics, setCrossMetrics] = useState<CrossMetricRow[]>(decoded.crossMetrics)
   const [matrixSpec, setMatrixSpec] = useState<MatrixSpec>(
     () => decoded.matrixSpec ?? defaultMatrixSpec(entities, entityMap),
@@ -436,9 +432,6 @@ export function CardStudio({
       used.add(a)
       return a
     }
-    // Reserve passthrough (expression) aliases so generated ones don't collide.
-    for (const eb of extraBreakouts) used.add(eb.alias)
-    for (const ea of extraAggs) used.add(ea.alias)
     const bks: BhqlBreakout[] = []
     for (const b of breakouts) {
       if (b.expr) bks.push({ expr: b.expr, alias: uniq('col') })
@@ -450,7 +443,6 @@ export function CardStudio({
           unnest: b.unnest,
         })
     }
-    bks.push(...extraBreakouts)
     const whereToGroup = (w?: MeasureWhere): ReportRuleGroup | undefined => {
       if (!w || !w.field) return undefined
       const needsValue = w.op !== 'is_null' && w.op !== 'is_not_null'
@@ -506,12 +498,6 @@ export function CardStudio({
         outputAliases.push(a)
       }
     }
-    // Passthrough custom-expression measures (verbatim, with their own aliases).
-    for (const ea of extraAggs) {
-      mss.push(ea)
-      outputAliases.push(ea.alias)
-    }
-
     // Cross-table rates: a measure on ANOTHER source joined to the primary grain,
     // divided into a calc. With breakouts each maps to a field on the other source;
     // with none, the two single-row aggregates cross-join (a scalar rate).
@@ -589,8 +575,6 @@ export function CardStudio({
     filters,
     pivotOn,
     cols,
-    extraAggs,
-    extraBreakouts,
     crossMetrics,
     matrixSpec,
   ])
@@ -670,8 +654,6 @@ export function CardStudio({
       setMeasures(d.measures)
       setFilters(d.filters)
       setPivotOn(d.pivotOn)
-      setExtraAggs(d.extraAggs)
-      setExtraBreakouts(d.extraBreakouts)
       setCrossMetrics(d.crossMetrics)
       if (d.matrixSpec) setMatrixSpec(d.matrixSpec)
       setVizType(r.suggestedViz)
@@ -2268,10 +2250,6 @@ function decodeQuery(query: BhqlQuery | null): {
   measures: MeasureRow[]
   filters: FilterRow[]
   pivotOn: boolean
-  /** Computed-expression measures/breakouts carried through edits verbatim
-   *  (no structured editor yet), so an expression card round-trips losslessly. */
-  extraAggs: BhqlExprMeasure[]
-  extraBreakouts: BhqlBreakout[]
   /** Cross-table rates (numerator ÷ a measure on another source). */
   crossMetrics: CrossMetricRow[]
   /** A coverage matrix (spine query) → the guided matrix editor. */
@@ -2286,8 +2264,6 @@ function decodeQuery(query: BhqlQuery | null): {
       measures: [],
       filters: [],
       pivotOn: false,
-      extraAggs: [],
-      extraBreakouts: [],
       crossMetrics: [],
     }
   }
@@ -2367,8 +2343,6 @@ function decodeQuery(query: BhqlQuery | null): {
       measures: [],
       filters: [],
       pivotOn: true,
-      extraAggs: [],
-      extraBreakouts: [],
       crossMetrics: [],
       matrixSpec,
     }
@@ -2390,7 +2364,6 @@ function decodeQuery(query: BhqlQuery | null): {
   const breakouts: BreakoutRow[] = (stage.breakouts ?? []).map((b) =>
     b.expr ? { field: '', expr: b.expr } : { field: b.field ?? '', bin: b.bin, unnest: b.unnest },
   )
-  const extraBreakouts: BhqlBreakout[] = []
 
   // Reconstruct measures. A calc (ratio) measure is re-hydrated into ONE row —
   // fn/field/where from its numerator base, denFn/denField/denWhere from its
@@ -2399,8 +2372,6 @@ function decodeQuery(query: BhqlQuery | null): {
   // silently decomposing into two plain measures with the ratio lost. Custom
   // (expr) measures are carried through verbatim (no structured editor yet).
   const aggs = stage.aggregations ?? []
-  // Custom-expression measures decode into editable rows (below), not passthrough.
-  const extraAggs: BhqlExprMeasure[] = []
   const baseByAlias = new Map<string, BhqlMeasure>()
   const consumed = new Set<string>()
   for (const m of aggs) {
@@ -2500,12 +2471,7 @@ function decodeQuery(query: BhqlQuery | null): {
       measures.push({ fn: m.fn, field: m.field, where: groupToWhere(m.filter) })
     }
   }
-  const isSummarize =
-    breakouts.length > 0 ||
-    measures.length > 0 ||
-    extraAggs.length > 0 ||
-    extraBreakouts.length > 0 ||
-    crossMetrics.length > 0
+  const isSummarize = breakouts.length > 0 || measures.length > 0 || crossMetrics.length > 0
   return {
     entityKey: stage.source,
     mode: isSummarize ? 'summarize' : 'rows',
@@ -2514,8 +2480,6 @@ function decodeQuery(query: BhqlQuery | null): {
     measures,
     filters,
     pivotOn: query?.display === 'pivot' && Boolean(query.pivot),
-    extraAggs,
-    extraBreakouts,
     crossMetrics,
   }
 }

@@ -2,33 +2,51 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Globe, Loader2, Lock, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@beaconhs/ui'
+import { PublishControl, type PublishRoleOption } from '../../_publish-control.client'
 import { deleteCard, publishCard, unpublishCard } from '../_actions'
 
 export function CardToolbar({
   id,
   status,
   canPublish,
+  roles,
+  allowedRoles,
 }: {
   id: string
   status: 'draft' | 'published'
   canPublish: boolean
+  roles: PublishRoleOption[]
+  allowedRoles: string[] | null
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [published, setPublished] = useState(status === 'published')
 
-  function togglePublish() {
+  function publish(nextAllowedRoles: string[] | null) {
     start(async () => {
-      const r = published ? await unpublishCard(id) : await publishCard({ id })
+      const r = await publishCard({ id, allowedRoles: nextAllowedRoles })
       if (!r.ok) {
         toast.error(r.error)
         return
       }
-      setPublished(!published)
-      toast.success(published ? 'Unpublished' : 'Published to library')
+      setPublished(true)
+      toast.success('Published to library')
+      router.refresh()
+    })
+  }
+
+  function unpublish() {
+    start(async () => {
+      const r = await unpublishCard(id)
+      if (!r.ok) {
+        toast.error(r.error)
+        return
+      }
+      setPublished(false)
+      toast.success('Unpublished')
       router.refresh()
     })
   }
@@ -50,22 +68,14 @@ export function CardToolbar({
   return (
     <div className="flex items-center gap-2">
       {canPublish ? (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={togglePublish}
-          disabled={pending}
-          className="h-9 text-xs"
-        >
-          {pending ? (
-            <Loader2 size={13} className="mr-1 animate-spin" />
-          ) : published ? (
-            <Lock size={13} className="mr-1" />
-          ) : (
-            <Globe size={13} className="mr-1" />
-          )}
-          {published ? 'Unpublish' : 'Publish'}
-        </Button>
+        <PublishControl
+          status={published ? 'published' : 'draft'}
+          roles={roles}
+          initialAllowedRoles={allowedRoles}
+          pending={pending}
+          onPublish={publish}
+          onUnpublish={unpublish}
+        />
       ) : null}
       <Button
         type="button"

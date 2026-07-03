@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import {
   resultShapeOf,
   suggestViz,
@@ -13,7 +13,8 @@ import { runBhql, validateBhqlWithCustomFields } from '@beaconhs/analytics/serve
 import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
-import { canCreateInsights, canPublishInsights, canViewInsights } from '../_access'
+import { recordAudit } from '@/lib/audit'
+import { canCreateInsights, canPublishInsights } from '../_access'
 import { generateBhqlFromPrompt } from './_lib/ai-card'
 
 type Ok<T = {}> = { ok: true } & T
@@ -29,12 +30,15 @@ function columnsForSuggest(result: BhqlResult): ResultColumn[] {
     : [...result.rowDimensions, ...result.columnDimensions, ...result.valueMeasures]
 }
 
-/** Run a draft query live for the builder preview (row-capped, under RLS). */
+/** Run a draft query live for the builder preview (row-capped, under RLS).
+ *  Builder-only: this executes an arbitrary client-supplied query (including
+ *  raw-row projections over any registry entity), so it is gated exactly like
+ *  the studio that calls it — view access alone is not enough. */
 export async function previewCard(payload: {
   query: unknown
 }): Promise<Ok<{ result: BhqlResult; suggestedViz: VizKey }> | Err> {
   const ctx = await requireRequestContext()
-  if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
+  if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
   try {
     const result = await ctx.db(async (tx) => {
       const query = await validateBhqlWithCustomFields(tx, payload.query)
@@ -125,20 +129,32 @@ export async function createCard(input: {
       })
       .returning({ id: insightCards.id }),
   )
+  if (!row) return { ok: false, error: 'Could not create the Card.' }
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created Insights card "${input.name.trim().slice(0, 120) || 'Untitled card'}"`,
+  })
   revalidatePath('/insights')
-  return row ? { ok: true, id: row.id } : { ok: false, error: 'Could not create the Card.' }
+  return { ok: true, id: row.id }
 }
 
-async function ownsOrManages(ctx: Awaited<ReturnType<typeof requireRequestContext>>, id: string) {
+/** The live (non-deleted) card, when the caller may manage it (owner or
+ *  super-admin). Soft-deleted cards are invisible to every mutation. */
+async function ownedCard(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  id: string,
+): Promise<{ name: string } | null> {
   const [row] = await ctx.db((tx) =>
     tx
-      .select({ createdBy: insightCards.createdBy })
+      .select({ createdBy: insightCards.createdBy, name: insightCards.name })
       .from(insightCards)
-      .where(eq(insightCards.id, id))
+      .where(and(eq(insightCards.id, id), isNull(insightCards.deletedAt)))
       .limit(1),
   )
-  if (!row) return false
-  return ctx.isSuperAdmin || row.createdBy === ctx.userId
+  if (!row) return null
+  return ctx.isSuperAdmin || row.createdBy === ctx.userId ? { name: row.name } : null
 }
 
 export async function updateCard(input: {
@@ -152,20 +168,20 @@ export async function updateCard(input: {
   config?: InsightCardConfig | null
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!canCreateInsights(ctx) || !(await ownsOrManages(ctx, input.id))) {
-    return { ok: false, error: 'Card not found.' }
-  }
+  if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t edit Cards.' }
+  if (!(await ownedCard(ctx, input.id))) return { ok: false, error: 'Card not found.' }
   let query
   try {
     query = await ctx.db((tx) => validateBhqlWithCustomFields(tx, input.query))
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }
+  const name = input.name.trim().slice(0, 120) || 'Untitled card'
   await ctx.db((tx) =>
     tx
       .update(insightCards)
       .set({
-        name: input.name.trim().slice(0, 120) || 'Untitled card',
+        name,
         description: input.description?.trim().slice(0, 500) || null,
         kind: input.kind ?? 'question',
         query,
@@ -175,16 +191,30 @@ export async function updateCard(input: {
       })
       .where(eq(insightCards.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: input.id,
+    action: 'update',
+    summary: `Updated Insights card "${name}"`,
+  })
   revalidatePath('/insights')
   return { ok: true }
 }
 
 export async function deleteCard(id: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsOrManages(ctx, id))) return { ok: false, error: 'Card not found.' }
+  if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t delete Cards.' }
+  const card = await ownedCard(ctx, id)
+  if (!card) return { ok: false, error: 'Card not found.' }
   await ctx.db((tx) =>
     tx.update(insightCards).set({ deletedAt: new Date() }).where(eq(insightCards.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: id,
+    action: 'delete',
+    summary: `Deleted Insights card "${card.name}"`,
+  })
   revalidatePath('/insights')
   return { ok: true }
 }
@@ -194,33 +224,49 @@ export async function publishCard(input: {
   allowedRoles?: string[] | null
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!canPublishInsights(ctx) || !(await ownsOrManages(ctx, input.id))) {
-    return { ok: false, error: 'Card not found.' }
-  }
+  if (!canPublishInsights(ctx)) return { ok: false, error: 'You can’t publish Cards.' }
+  const card = await ownedCard(ctx, input.id)
+  if (!card) return { ok: false, error: 'Card not found.' }
+  const allowedRoles = input.allowedRoles && input.allowedRoles.length ? input.allowedRoles : null
   await ctx.db((tx) =>
     tx
       .update(insightCards)
       .set({
         status: 'published',
-        allowedRoles: input.allowedRoles && input.allowedRoles.length ? input.allowedRoles : null,
+        allowedRoles,
         publishedBy: ctx.userId,
         publishedAt: new Date(),
       })
       .where(eq(insightCards.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: input.id,
+    action: 'publish',
+    summary: `Published Insights card "${card.name}" to the library`,
+    metadata: { allowedRoles },
+  })
   revalidatePath('/insights')
   return { ok: true }
 }
 
 export async function unpublishCard(id: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsOrManages(ctx, id))) return { ok: false, error: 'Card not found.' }
+  if (!canPublishInsights(ctx)) return { ok: false, error: 'You can’t unpublish Cards.' }
+  const card = await ownedCard(ctx, id)
+  if (!card) return { ok: false, error: 'Card not found.' }
   await ctx.db((tx) =>
     tx
       .update(insightCards)
       .set({ status: 'draft', publishedAt: null })
-      .where(and(eq(insightCards.id, id))),
+      .where(eq(insightCards.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: id,
+    action: 'update',
+    summary: `Unpublished Insights card "${card.name}"`,
+  })
   revalidatePath('/insights')
   return { ok: true }
 }

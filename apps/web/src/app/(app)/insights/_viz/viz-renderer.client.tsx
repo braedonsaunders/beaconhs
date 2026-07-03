@@ -115,7 +115,8 @@ export function VizRenderer({
         </div>
       )
     }
-    return <VizChart spec={spec} />
+    // buildChartSpec collapses pie + donut to kind 'pie'; carry which one here.
+    return <VizChart spec={spec} donut={vizType === 'donut'} />
   }
 
   return (

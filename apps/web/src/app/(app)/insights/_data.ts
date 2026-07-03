@@ -1,8 +1,8 @@
-// Data for the Insights dashboards — reuses the personal-dashboard cross-module
-// metrics + the journal aggregates, trimmed to a lean serializable payload that
-// the client widgets render (charts, KPIs).
+// Data for the Insights dashboards: the user's dashboard tabs and the
+// server-compiled Card renders (each under RLS). Every metric widget is a
+// BHQL-backed system card; the only bespoke payload left is the AI flag.
 
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import {
   insightDashboardPins,
   insightDashboards,
@@ -14,9 +14,6 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { runBhql } from '@beaconhs/analytics/server'
 import type { BhqlResult } from '@beaconhs/analytics'
-import { getTenantAiConfig } from '@/lib/ai-config'
-import { loadDashboardMetrics } from '../dashboard/_metrics'
-import { getInsights } from '../journals/_insights'
 import { applyParams } from './_params'
 import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
 import { DEFAULT_INSIGHT_LAYOUT } from './_widgets'
@@ -71,9 +68,13 @@ export async function loadDashboardCardRenders(
   cards: Array<
     Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>
   >,
-  opts: { paramValues?: Record<string, unknown>; paramMap?: DashboardParamMap } = {},
+  opts: {
+    paramValues?: Record<string, unknown>
+    paramMap?: DashboardParamMap
+    params?: DashboardParam[]
+  } = {},
 ): Promise<CardRender[]> {
-  const { paramValues = {}, paramMap = {} } = opts
+  const { paramValues = {}, paramMap = {}, params = [] } = opts
   return Promise.all(
     cards.map(async (c) => {
       const base = {
@@ -92,7 +93,7 @@ export async function loadDashboardCardRenders(
         }
       }
       try {
-        const query = applyParams(c.query, paramValues, paramMap, c.id)
+        const query = applyParams(c.query, paramValues, paramMap, c.id, params)
         const result = await runCardCached(ctx, query, `${ctx.tenantId}:${JSON.stringify(query)}`)
         return { ...base, result, error: null }
       } catch (e) {
@@ -115,6 +116,8 @@ export type InsightDashboardRow = {
   /** True for the user's own dashboards; false for pinned (others') ones. */
   owned: boolean
   status: 'draft' | 'published'
+  /** Publish restriction (role keys); null/empty = everyone. */
+  allowedRoles: string[] | null
 }
 
 /** The user's /insights tabs = their OWN dashboards + the published dashboards
@@ -140,6 +143,7 @@ export async function loadDashboards(
         params: insightDashboards.params,
         paramMap: insightDashboards.paramMap,
         status: insightDashboards.status,
+        allowedRoles: insightDashboards.allowedRoles,
         createdAt: insightDashboards.createdAt,
       })
       .from(insightDashboards)
@@ -173,8 +177,25 @@ export async function loadDashboards(
   const roleKeys = await getInsightRoleKeys(ctx)
 
   if (owned.length === 0 && pinned.length === 0) {
-    const [created] = await ctx.db((tx) =>
-      tx
+    // Check + insert in ONE transaction guarded by a per-(tenant, user) advisory
+    // lock — several first-loads can race (two tabs, prefetch + click) and a bare
+    // select-then-insert would double-seed the default (mirrors ensureSystemCards).
+    const created = await ctx.db(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`${ctx.tenantId}:${ctx.userId}:insight-default`}))`,
+      )
+      const [existing] = await tx
+        .select({
+          id: insightDashboards.id,
+          name: insightDashboards.name,
+          layout: insightDashboards.layout,
+        })
+        .from(insightDashboards)
+        .where(and(eq(insightDashboards.userId, ctx.userId), isNull(insightDashboards.deletedAt)))
+        .orderBy(asc(insightDashboards.createdAt))
+        .limit(1)
+      if (existing) return existing
+      const [row] = await tx
         .insert(insightDashboards)
         .values({
           tenantId: ctx.tenantId,
@@ -187,8 +208,9 @@ export async function loadDashboards(
           id: insightDashboards.id,
           name: insightDashboards.name,
           layout: insightDashboards.layout,
-        }),
-    )
+        })
+      return row
+    })
     return created
       ? [
           {
@@ -199,6 +221,7 @@ export async function loadDashboards(
             paramMap: {},
             owned: true,
             status: 'draft' as const,
+            allowedRoles: null,
           },
         ]
       : []
@@ -213,6 +236,7 @@ export async function loadDashboards(
       paramMap: r.paramMap,
       owned: true,
       status: r.status,
+      allowedRoles: r.allowedRoles,
     })),
     ...pinned
       .filter((r) => canSeePublishedInsight(ctx, r.allowedRoles, roleKeys))
@@ -224,100 +248,7 @@ export async function loadDashboards(
         paramMap: r.paramMap,
         owned: false,
         status: r.status,
+        allowedRoles: r.allowedRoles,
       })),
   ]
-}
-
-export type InsightsData = {
-  generatedAt: string
-  aiEnabled: boolean
-  kpi: {
-    incidents30: number
-    incidentsPrev30: number
-    openCAs: number
-    overdueCAs: number
-    submissionsToday: number
-    expiringCerts: number
-    lwActive: number
-    ppeOpenIssues: number
-    ppeOverdue: number
-    peopleCount: number
-    inspectionsThisMonth: number
-    daysSinceRecordable: number | null
-  }
-  trir: { value: number | null; prev: number | null; trend: (number | null)[] }
-  dart: { value: number | null; prev: number | null; trend: (number | null)[] }
-  trainingPct: number | null
-  trainingTrend: (number | null)[]
-  docPct: number | null
-  docTrend: (number | null)[]
-  caBuckets: { lt7: number; lt30: number; lt60: number; ge60: number }
-  severity: { label: string; value: number }[]
-  topSites: { name: string; value: number }[]
-  journal: {
-    total: number
-    submitted: number
-    drafts: number
-    people: number
-    last30: number
-    byWeek: { week: string; count: number }[]
-    bySite: { name: string; count: number }[]
-    byDow: number[]
-    topTags: { tag: string; count: number }[]
-  }
-}
-
-export async function loadInsightsData(ctx: RequestContext): Promise<InsightsData> {
-  const [m, j, aiConfig] = await Promise.all([
-    loadDashboardMetrics(ctx),
-    getInsights(ctx),
-    getTenantAiConfig(ctx),
-  ])
-
-  return {
-    generatedAt: new Date().toISOString(),
-    aiEnabled: aiConfig !== null,
-    kpi: {
-      incidents30: m.incidents30,
-      incidentsPrev30: m.incidentsPrev30,
-      openCAs: m.openCAs,
-      overdueCAs: m.overdueCAs,
-      submissionsToday: m.submissionsToday,
-      expiringCerts: m.expiringCertsCount,
-      lwActive: m.lwActive,
-      ppeOpenIssues: m.ppeOpenIssues,
-      ppeOverdue: m.ppeInspectionsOverdue,
-      peopleCount: m.peopleCount,
-      inspectionsThisMonth: m.inspectionsThisMonth,
-      daysSinceRecordable: m.daysSinceLastRecordable,
-    },
-    trir: { value: m.trir.value, prev: m.trir.prevValue, trend: [...m.trir.trend] },
-    dart: { value: m.dart.value, prev: m.dart.prevValue, trend: [...m.dart.trend] },
-    trainingPct: m.trainingCompliancePct,
-    trainingTrend: [...m.trainingComplianceTrend],
-    docPct: m.documentCompliancePct,
-    docTrend: [...m.documentComplianceTrend],
-    caBuckets: m.openCABuckets,
-    severity: [
-      { label: 'Fatality', value: m.severityDistribution.fatality },
-      { label: 'Lost time', value: m.severityDistribution.lostTime },
-      { label: 'Medical aid', value: m.severityDistribution.medicalAid },
-      { label: 'First aid', value: m.severityDistribution.firstAid },
-      { label: 'Near miss', value: m.severityDistribution.nearMiss },
-      { label: 'No injury', value: m.severityDistribution.noInjury },
-      { label: 'Property', value: m.severityDistribution.propertyDamage },
-    ],
-    topSites: m.topSitesByIncidents.map((s) => ({ name: s.siteName, value: s.incidents })),
-    journal: {
-      total: j.total,
-      submitted: j.submitted,
-      drafts: j.drafts,
-      people: j.people,
-      last30: j.last30,
-      byWeek: j.byWeek,
-      bySite: j.bySite,
-      byDow: j.byDow,
-      topTags: j.topTags,
-    },
-  }
 }

@@ -199,8 +199,10 @@ export function InsightsGrid({
                     </button>
                   ) : null}
                   {nodes[w.id] ?? (
-                    <div className="grid h-full place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
-                      Missing “{w.id}”
+                    <div className="grid h-full place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-3 text-center text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
+                      {editing
+                        ? 'This card loads after you save the dashboard.'
+                        : 'This card isn’t available to you.'}
                     </div>
                   )}
                 </div>

@@ -7,16 +7,17 @@
 import { useMemo, useRef, useState, useTransition, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Globe, Library, Loader2, Lock, Plus, Save, Settings, Trash2 } from 'lucide-react'
+import { Library, Loader2, Plus, Save, Settings, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, cn } from '@beaconhs/ui'
 import { vizDef, type AnalyticsEntity } from '@beaconhs/analytics'
 import type { DashboardParam, DashboardParamMap } from '@beaconhs/db/schema'
 import { InsightsGrid, type GridItem } from './_grid'
 import { DashboardFilters, type ParamCard } from './_filter-bar.client'
-import { WidgetView } from './_widget-view'
+import { JournalAnalysisWidget } from './_ai-widget'
 import { CardCell } from './_viz/card-cell.client'
-import { INSIGHT_CATEGORY_LABELS, INSIGHT_WIDGETS } from './_widgets'
+import { PublishControl, type PublishRoleOption } from './_publish-control.client'
+import { INSIGHT_CATEGORY_LABELS, LEGACY_INSIGHT_WIDGETS } from './_widgets'
 import {
   createDashboard,
   deleteDashboard,
@@ -26,7 +27,7 @@ import {
   saveDashboardParams,
   unpublishDashboard,
 } from './_actions'
-import type { CardRender, InsightDashboardRow, InsightsData } from './_data'
+import type { CardRender, InsightDashboardRow } from './_data'
 import type { CardRow } from './cards/_data'
 
 type Board = {
@@ -37,21 +38,26 @@ type Board = {
   paramMap: DashboardParamMap
   owned: boolean
   status: 'draft' | 'published'
+  allowedRoles: string[] | null
 }
 
 export function InsightsWorkspace({
   initialDashboards,
-  data,
+  aiEnabled,
   paletteCards,
   cardRenders,
   canCreate,
+  canPublish,
+  roles,
   entities,
 }: {
   initialDashboards: InsightDashboardRow[]
-  data: InsightsData
+  aiEnabled: boolean
   paletteCards: CardRow[]
   cardRenders: Record<string, CardRender>
   canCreate: boolean
+  canPublish: boolean
+  roles: PublishRoleOption[]
   entities: AnalyticsEntity[]
 }) {
   const router = useRouter()
@@ -64,13 +70,14 @@ export function InsightsWorkspace({
       paramMap: d.paramMap,
       owned: d.owned,
       status: d.status,
+      allowedRoles: d.allowedRoles,
     })),
   )
   const [activeId, setActiveId] = useState<string | null>(boards[0]?.id ?? null)
   const [editing, setEditing] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(true)
   const [saving, startSave] = useTransition()
-  const [, startBusy] = useTransition()
+  const [busy, startBusy] = useTransition()
   const baselines = useRef<Record<string, string>>(
     Object.fromEntries(boards.map((b) => [b.id, JSON.stringify(b.widgets)])),
   )
@@ -79,10 +86,12 @@ export function InsightsWorkspace({
   const dirty = active ? JSON.stringify(active.widgets) !== baselines.current[active.id] : false
 
   // Card renders are keyed by `${dashboardId}:${cardId}` so each board sees its
-  // own params applied. Resolve the active board's cards into the node map.
+  // own params applied. Resolve the active board's cards into the node map; the
+  // AI journal analysis is the one remaining bespoke (non-card) widget.
   const nodes = useMemo(() => {
-    const r: Record<string, ReactNode> = {}
-    for (const w of INSIGHT_WIDGETS) r[w.id] = <WidgetView id={w.id} data={data} />
+    const r: Record<string, ReactNode> = {
+      'ai-analysis': <JournalAnalysisWidget aiEnabled={aiEnabled} />,
+    }
     if (active) {
       for (const w of active.widgets) {
         const render = cardRenders[`${active.id}:${w.id}`]
@@ -90,7 +99,7 @@ export function InsightsWorkspace({
       }
     }
     return r
-  }, [data, cardRenders, active])
+  }, [aiEnabled, cardRenders, active])
 
   // The cards currently placed on the active board + their entity columns — the
   // targets the filter-settings drawer maps params onto.
@@ -116,9 +125,11 @@ export function InsightsWorkspace({
     return out
   }, [active, cardsById, entityMap])
 
+  // Only widgets WITHOUT a system card appear in the widget section — every
+  // BHQL built-in is already a published Card and would otherwise show twice.
   const paletteItems = useMemo<GridItem[]>(
     () => [
-      ...INSIGHT_WIDGETS.map((w) => ({
+      ...LEGACY_INSIGHT_WIDGETS.map((w) => ({
         id: w.id,
         label: w.label,
         description: w.description,
@@ -190,6 +201,7 @@ export function InsightsWorkspace({
           paramMap: {},
           owned: true,
           status: 'draft' as const,
+          allowedRoles: null,
         },
       ])
       baselines.current[r.id] = JSON.stringify([])
@@ -244,20 +256,35 @@ export function InsightsWorkspace({
     })
   }
 
-  function togglePublish() {
+  function publish(allowedRoles: string[] | null) {
     if (!active) return
-    const next = active.status === 'published' ? 'draft' : 'published'
     startBusy(async () => {
-      const r =
-        active.status === 'published'
-          ? await unpublishDashboard(active.id)
-          : await publishDashboard({ id: active.id })
+      const r = await publishDashboard({ id: active.id, allowedRoles })
       if (!r.ok) {
         toast.error(r.error)
         return
       }
-      setBoards((bs) => bs.map((b) => (b.id === active.id ? { ...b, status: next } : b)))
-      toast.success(next === 'published' ? 'Published to library' : 'Unpublished')
+      setBoards((bs) =>
+        bs.map((b) =>
+          b.id === active.id ? { ...b, status: 'published' as const, allowedRoles } : b,
+        ),
+      )
+      toast.success('Published to library')
+    })
+  }
+
+  function unpublish() {
+    if (!active) return
+    startBusy(async () => {
+      const r = await unpublishDashboard(active.id)
+      if (!r.ok) {
+        toast.error(r.error)
+        return
+      }
+      setBoards((bs) =>
+        bs.map((b) => (b.id === active.id ? { ...b, status: 'draft' as const } : b)),
+      )
+      toast.success('Unpublished')
     })
   }
 
@@ -329,14 +356,19 @@ export function InsightsWorkspace({
               >
                 <Plus size={13} className="mr-1" /> {paletteOpen ? 'Hide library' : 'Add content'}
               </Button>
-              <Button type="button" variant="ghost" onClick={togglePublish} className="h-8 text-xs">
-                {active.status === 'published' ? (
-                  <Lock size={13} className="mr-1" />
-                ) : (
-                  <Globe size={13} className="mr-1" />
-                )}
-                {active.status === 'published' ? 'Unpublish' : 'Publish'}
-              </Button>
+              {canPublish ? (
+                <PublishControl
+                  key={active.id}
+                  status={active.status}
+                  roles={roles}
+                  initialAllowedRoles={active.allowedRoles}
+                  pending={busy}
+                  onPublish={publish}
+                  onUnpublish={unpublish}
+                  buttonVariant="ghost"
+                  buttonClassName="h-8 text-xs"
+                />
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"

@@ -6,6 +6,7 @@ import { runBhql } from '@beaconhs/analytics/server'
 import type { BhqlResult } from '@beaconhs/analytics'
 import { requireRequestContext } from '@/lib/auth'
 import { canPublishInsights, canViewInsights } from '../../_access'
+import { loadInsightRoleOptions } from '../../_visibility'
 import { loadCard } from '../_data'
 import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { AiCardView } from '../../_viz/ai-card-view.client'
@@ -20,6 +21,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   const card = await loadCard(ctx, id)
   if (!card) notFound()
   const canEdit = ctx.isSuperAdmin || card.createdBy === ctx.userId
+  const canPublish = canPublishInsights(ctx)
+  const roleOptions = canEdit && canPublish ? await loadInsightRoleOptions(ctx) : []
 
   const isAi = card.kind === 'ai'
   const aiPrompt = card.config?.kind === 'ai' ? card.config.prompt : undefined
@@ -51,11 +54,13 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
             >
               {card.status === 'published' ? 'Published' : 'Draft'}
             </span>
-            <Link href={`/insights/cards/${card.id}/export`}>
+            {/* Plain <a>, NOT <Link>: the export is a route handler and Link
+                prefetch would fire real (audited) exports on every page view. */}
+            <a href={`/insights/cards/${card.id}/export`}>
               <Button type="button" variant="outline" className="h-9 text-xs">
                 <Download size={13} className="mr-1" /> CSV
               </Button>
-            </Link>
+            </a>
             {canEdit ? (
               <>
                 <Link href={`/insights/cards/${card.id}/edit`}>
@@ -66,7 +71,9 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
                 <CardToolbar
                   id={card.id}
                   status={card.status}
-                  canPublish={canPublishInsights(ctx)}
+                  canPublish={canPublish}
+                  roles={roleOptions}
+                  allowedRoles={card.allowedRoles}
                 />
               </>
             ) : null}

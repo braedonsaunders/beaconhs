@@ -1,22 +1,28 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
+  insightCards,
   insightDashboardPins,
   insightDashboards,
   type DashboardParam,
   type DashboardParamMap,
+  type InsightDashboardLayout,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { canPublishInsights, canViewInsights } from './_access'
 import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
 import { INSIGHT_WIDGET_MAP } from './_widgets'
 
 type Ok<T = {}> = { ok: true } & T
 type Err = { ok: false; error: string }
+
+/** A widget id is EITHER a built-in widget key OR an insight_cards.id (uuid). */
+const UUID_RE = /^[0-9a-f-]{36}$/i
 
 const LayoutSchema = z.object({
   widgets: z
@@ -32,19 +38,30 @@ const LayoutSchema = z.object({
     .max(64),
 })
 
-async function ownsDashboard(ctx: RequestContext, id: string): Promise<boolean> {
+/** The live (non-deleted) dashboard, when the caller owns it. */
+async function ownedDashboard(
+  ctx: RequestContext,
+  id: string,
+): Promise<{ name: string; layout: InsightDashboardLayout } | null> {
   const [d] = await ctx.db((tx) =>
     tx
-      .select({ id: insightDashboards.id })
+      .select({ name: insightDashboards.name, layout: insightDashboards.layout })
       .from(insightDashboards)
-      .where(and(eq(insightDashboards.id, id), eq(insightDashboards.userId, ctx.userId)))
+      .where(
+        and(
+          eq(insightDashboards.id, id),
+          eq(insightDashboards.userId, ctx.userId),
+          isNull(insightDashboards.deletedAt),
+        ),
+      )
       .limit(1),
   )
-  return Boolean(d)
+  return d ?? null
 }
 
 export async function createDashboard(name: string): Promise<Ok<{ id: string }> | Err> {
   const ctx = await requireRequestContext()
+  if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
   const clean = name.trim().slice(0, 60) || 'New dashboard'
   const [{ maxOrder } = { maxOrder: -1 }] = await ctx.db((tx) =>
     tx
@@ -64,13 +81,21 @@ export async function createDashboard(name: string): Promise<Ok<{ id: string }> 
       })
       .returning({ id: insightDashboards.id }),
   )
+  if (!row) return { ok: false, error: 'Could not create dashboard.' }
+  await recordAudit(ctx, {
+    entityType: 'insight_dashboard',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created Insights dashboard "${clean}"`,
+  })
   revalidatePath('/insights')
-  return row ? { ok: true, id: row.id } : { ok: false, error: 'Could not create dashboard.' }
+  return { ok: true, id: row.id }
 }
 
 export async function renameDashboard(id: string, name: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsDashboard(ctx, id))) return { ok: false, error: 'Dashboard not found.' }
+  if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
+  if (!(await ownedDashboard(ctx, id))) return { ok: false, error: 'Dashboard not found.' }
   await ctx.db((tx) =>
     tx
       .update(insightDashboards)
@@ -83,8 +108,20 @@ export async function renameDashboard(id: string, name: string): Promise<Ok | Er
 
 export async function deleteDashboard(id: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsDashboard(ctx, id))) return { ok: false, error: 'Dashboard not found.' }
-  await ctx.db((tx) => tx.delete(insightDashboards).where(eq(insightDashboards.id, id)))
+  if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
+  const dashboard = await ownedDashboard(ctx, id)
+  if (!dashboard) return { ok: false, error: 'Dashboard not found.' }
+  // Soft delete — insight_dashboards carries deletedAt and every reader filters
+  // on it, matching the cards' delete model.
+  await ctx.db((tx) =>
+    tx.update(insightDashboards).set({ deletedAt: new Date() }).where(eq(insightDashboards.id, id)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'insight_dashboard',
+    entityId: id,
+    action: 'delete',
+    summary: `Deleted Insights dashboard "${dashboard.name}"`,
+  })
   revalidatePath('/insights')
   return { ok: true }
 }
@@ -94,11 +131,10 @@ export async function saveDashboardLayout(input: {
   layout: unknown
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsDashboard(ctx, input.id))) return { ok: false, error: 'Dashboard not found.' }
+  if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
+  if (!(await ownedDashboard(ctx, input.id))) return { ok: false, error: 'Dashboard not found.' }
   const parsed = LayoutSchema.safeParse(input.layout)
   if (!parsed.success) return { ok: false, error: 'Invalid layout.' }
-  // A widget id is EITHER a built-in widget key OR an insight_cards.id (uuid).
-  const UUID_RE = /^[0-9a-f-]{36}$/i
   const widgets = parsed.data.widgets.filter(
     (w) => INSIGHT_WIDGET_MAP.has(w.id) || UUID_RE.test(w.id),
   )
@@ -142,7 +178,8 @@ export async function saveDashboardParams(input: {
   paramMap: unknown
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsDashboard(ctx, input.id))) return { ok: false, error: 'Dashboard not found.' }
+  if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
+  if (!(await ownedDashboard(ctx, input.id))) return { ok: false, error: 'Dashboard not found.' }
 
   const parsed = ParamsSchema.safeParse({ params: input.params, paramMap: input.paramMap })
   if (!parsed.success) return { ok: false, error: 'Invalid parameters.' }
@@ -175,33 +212,75 @@ export async function publishDashboard(input: {
   allowedRoles?: string[] | null
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!canPublishInsights(ctx) || !(await ownsDashboard(ctx, input.id))) {
-    return { ok: false, error: 'Dashboard not found.' }
+  if (!canPublishInsights(ctx)) return { ok: false, error: 'You can’t publish dashboards.' }
+  const dashboard = await ownedDashboard(ctx, input.id)
+  if (!dashboard) return { ok: false, error: 'Dashboard not found.' }
+
+  // A published dashboard is rendered through each VIEWER's card palette, which
+  // excludes other users' drafts — so draft cards on the layout would silently
+  // vanish for every viewer. Require them to be published first.
+  const cardIds = dashboard.layout.widgets.map((w) => w.id).filter((id) => UUID_RE.test(id))
+  if (cardIds.length > 0) {
+    const drafts = await ctx.db((tx) =>
+      tx
+        .select({ name: insightCards.name })
+        .from(insightCards)
+        .where(
+          and(
+            inArray(insightCards.id, cardIds),
+            eq(insightCards.status, 'draft'),
+            isNull(insightCards.deletedAt),
+          ),
+        ),
+    )
+    if (drafts.length > 0) {
+      return {
+        ok: false,
+        error: `Publish the cards on this dashboard first: ${drafts.map((d) => d.name).join(', ')}.`,
+      }
+    }
   }
+
+  const allowedRoles = input.allowedRoles && input.allowedRoles.length ? input.allowedRoles : null
   await ctx.db((tx) =>
     tx
       .update(insightDashboards)
       .set({
         status: 'published',
-        allowedRoles: input.allowedRoles && input.allowedRoles.length ? input.allowedRoles : null,
+        allowedRoles,
         publishedBy: ctx.userId,
         publishedAt: new Date(),
       })
       .where(eq(insightDashboards.id, input.id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'insight_dashboard',
+    entityId: input.id,
+    action: 'publish',
+    summary: `Published Insights dashboard "${dashboard.name}" to the library`,
+    metadata: { allowedRoles },
+  })
   revalidatePath('/insights')
   return { ok: true }
 }
 
 export async function unpublishDashboard(id: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  if (!(await ownsDashboard(ctx, id))) return { ok: false, error: 'Dashboard not found.' }
+  if (!canPublishInsights(ctx)) return { ok: false, error: 'You can’t unpublish dashboards.' }
+  const dashboard = await ownedDashboard(ctx, id)
+  if (!dashboard) return { ok: false, error: 'Dashboard not found.' }
   await ctx.db((tx) =>
     tx
       .update(insightDashboards)
       .set({ status: 'draft', publishedAt: null })
       .where(eq(insightDashboards.id, id)),
   )
+  await recordAudit(ctx, {
+    entityType: 'insight_dashboard',
+    entityId: id,
+    action: 'update',
+    summary: `Unpublished Insights dashboard "${dashboard.name}"`,
+  })
   revalidatePath('/insights')
   return { ok: true }
 }
@@ -217,7 +296,7 @@ export async function pinDashboard(dashboardId: string): Promise<Ok | Err> {
         allowedRoles: insightDashboards.allowedRoles,
       })
       .from(insightDashboards)
-      .where(eq(insightDashboards.id, dashboardId))
+      .where(and(eq(insightDashboards.id, dashboardId), isNull(insightDashboards.deletedAt)))
       .limit(1),
   )
   const roleKeys = await getInsightRoleKeys(ctx)
@@ -240,6 +319,7 @@ export async function pinDashboard(dashboardId: string): Promise<Ok | Err> {
 
 export async function unpinDashboard(dashboardId: string): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
+  if (!canViewInsights(ctx)) return { ok: false, error: 'No access.' }
   await ctx.db((tx) =>
     tx
       .delete(insightDashboardPins)

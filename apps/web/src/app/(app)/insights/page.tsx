@@ -1,16 +1,12 @@
 import { redirect } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
-import { canCreateInsights, canViewInsights } from './_access'
-import {
-  loadDashboardCardRenders,
-  loadDashboards,
-  loadInsightsData,
-  type CardRender,
-} from './_data'
-import { discoverEntitiesWithCustomFields } from '@beaconhs/analytics/server'
-import { loadCardsForPalette, type CardRow } from './cards/_data'
+import { getTenantAiConfig } from '@/lib/ai-config'
+import { canCreateInsights, canPublishInsights, canViewInsights } from './_access'
+import { loadDashboardCardRenders, loadDashboards, type CardRender } from './_data'
+import { loadCardsForPalette, loadStudioEntities, type CardRow } from './cards/_data'
 import { resolveParamValues } from './_params'
 import { ensureSystemCards } from './_system-cards'
+import { loadInsightRoleOptions } from './_visibility'
 import { BUILTIN_QUERIES, INSIGHT_WIDGET_MAP } from './_widgets'
 import { InsightsWorkspace } from './_workspace'
 
@@ -26,14 +22,19 @@ export default async function InsightsPage({
   if (!canViewInsights(ctx)) redirect('/dashboard')
 
   const sp = await searchParams
+  const canPublish = canPublishInsights(ctx)
   // Materialize the BHQL built-ins as real published Cards (idempotent), then
   // load everything: dashboards remap their built-in widget keys onto these card
   // ids, and the palette/library pick them up as published cards.
   const systemCards = await ensureSystemCards(ctx)
-  const [dashboards, data, paletteCards] = await Promise.all([
+  const [dashboards, paletteCards, aiConfig, entities, roleOptions] = await Promise.all([
     loadDashboards(ctx, systemCards),
-    loadInsightsData(ctx),
     loadCardsForPalette(ctx),
+    getTenantAiConfig(ctx),
+    // Studio entities (base registry + Builder-app-scoped), so the dashboard
+    // filter drawer can map params onto app-backed cards too.
+    loadStudioEntities(ctx),
+    canPublish ? loadInsightRoleOptions(ctx) : Promise.resolve([]),
   ])
 
   // Compile the Cards placed on each dashboard, per dashboard, so a board's own
@@ -43,7 +44,7 @@ export default async function InsightsPage({
   const renderEntries = await Promise.all(
     dashboards.map(async (d) => {
       // Each placed widget that's a saved Card OR a BHQL-backed built-in runs
-      // through the engine; legacy built-ins (AI, computed rollups) fall through.
+      // through the engine; the AI journal widget falls through (bespoke render).
       const items: Array<
         Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>
       > = []
@@ -71,6 +72,7 @@ export default async function InsightsPage({
       const renders = await loadDashboardCardRenders(ctx, items, {
         paramValues,
         paramMap: d.paramMap,
+        params: d.params,
       })
       return renders.map((r) => [`${d.id}:${r.id}`, r] as [string, CardRender])
     }),
@@ -80,11 +82,13 @@ export default async function InsightsPage({
   return (
     <InsightsWorkspace
       initialDashboards={dashboards}
-      data={data}
+      aiEnabled={aiConfig !== null}
       paletteCards={paletteCards}
       cardRenders={cardRenders}
       canCreate={canCreateInsights(ctx)}
-      entities={await ctx.db((tx) => discoverEntitiesWithCustomFields(tx))}
+      canPublish={canPublish}
+      roles={roleOptions}
+      entities={entities}
     />
   )
 }

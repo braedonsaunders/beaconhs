@@ -232,11 +232,10 @@ export const DEFAULT_INSIGHT_LAYOUT: InsightDashboardLayout = {
   ],
 }
 
-/** Built-in widgets that are now real BHQL-backed cards: the dashboard runs these
- *  queries under RLS and renders them through the SAME engine + visualization as
- *  user-built cards (no per-tenant seeding — the keys are stable). Widgets without
- *  an entry here still render via the legacy WidgetView (the few computed rollups
- *  + the on-demand AI journal analysis). */
+/** Built-in widgets that are real BHQL-backed cards: materialized per tenant as
+ *  published system cards (ensureSystemCards) and rendered through the SAME
+ *  engine + visualization as user-built cards. Widgets without an entry here
+ *  (today only the AI journal analysis) render bespoke client code. */
 export const BUILTIN_QUERIES: Record<
   string,
   { query: BhqlQuery; vizType: string; vizSettings?: Record<string, unknown> }
@@ -863,3 +862,9 @@ export const BUILTIN_QUERIES: Record<
     },
   },
 }
+
+/** Widgets that are NOT BHQL system cards and still render bespoke client code —
+ *  today only the on-demand AI journal analysis. Everything in BUILTIN_QUERIES
+ *  is materialized as a published system card and reaches the palette as a Card,
+ *  so only these belong in the add palette's widget section. */
+export const LEGACY_INSIGHT_WIDGETS = INSIGHT_WIDGETS.filter((w) => !(w.id in BUILTIN_QUERIES))

@@ -13,20 +13,13 @@ import {
   type JournalAnalysis,
 } from '@beaconhs/ai'
 import { runBhql } from '@beaconhs/analytics/server'
-import {
-  insightCards,
-  journalEntries,
-  orgUnits,
-  people,
-  type AiCardConfig,
-  type BhqlQuery,
-} from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
+import { journalEntries, orgUnits, people, type AiCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { getAuthorPersonId, journalScopeWhere } from '../journals/_lib'
 import { canViewInsights } from './_access'
+import { loadCard } from './cards/_data'
 
 const analysisAuthor = alias(people, 'analysis_author')
 
@@ -36,7 +29,9 @@ export type JournalAnalysisResult =
 
 export async function runJournalAnalysis(days = 30): Promise<JournalAnalysisResult> {
   const ctx = await requireRequestContext()
-  if (!ctx.isSuperAdmin && !can(ctx, 'reports.read')) {
+  // Gate matches the surface that exposes the widget (canViewInsights); the
+  // journal-level scoping below still bounds WHICH entries the caller can read.
+  if (!canViewInsights(ctx)) {
     return { ok: false, error: 'You do not have access to insights.' }
   }
   const aiConfig = await getTenantAiConfig(ctx)
@@ -109,18 +104,9 @@ export async function runInsightAiCard(cardId: string): Promise<InsightAiResult>
   const aiConfig = await getTenantAiConfig(ctx)
   if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
 
-  const [card] = await ctx.db((tx) =>
-    tx
-      .select({
-        kind: insightCards.kind,
-        name: insightCards.name,
-        query: insightCards.query,
-        config: insightCards.config,
-      })
-      .from(insightCards)
-      .where(and(eq(insightCards.id, cardId), isNull(insightCards.deletedAt)))
-      .limit(1),
-  )
+  // loadCard applies the same visibility every other reader enforces: the
+  // caller's own cards, or published cards their roles are allowed to see.
+  const card = await loadCard(ctx, cardId)
   if (!card) return { ok: false, error: 'Card not found.' }
   if (card.kind !== 'ai') return { ok: false, error: 'This card is not an AI card.' }
   const cfg = card.config as AiCardConfig | null
@@ -130,7 +116,7 @@ export async function runInsightAiCard(cardId: string): Promise<InsightAiResult>
 
   let result
   try {
-    result = await ctx.db((tx) => runBhql(tx, card.query as BhqlQuery, { maxRows: 5_000 }))
+    result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 5_000 }))
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not run the card dataset.' }
   }

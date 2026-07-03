@@ -3,6 +3,7 @@
 import { runBhql } from '@beaconhs/analytics/server'
 import type { BhqlResult } from '@beaconhs/analytics'
 import { requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
 import { canViewInsights } from '../../../_access'
 import { loadCard } from '../../_data'
 
@@ -45,6 +46,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 50_000 }))
   const csv = toCsv(result)
+  const rowCount = result.shape === 'flat' ? result.rows.length : result.rowKeys.length
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: card.id,
+    action: 'export',
+    summary: `Exported Insights card "${card.name}" (${rowCount} rows) to CSV`,
+    metadata: { rowCount },
+  })
   const filename =
     card.name
       .toLowerCase()
