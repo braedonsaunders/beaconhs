@@ -42,7 +42,7 @@ export function extractScores(schema: FormSchemaV1, values: Record<string, unkno
       } else if (field.type === 'traffic_light') {
         const s = String(value)
         const score = s === 'green' ? 1 : s === 'yellow' ? 0.5 : s === 'red' ? 0 : null
-        out.push({ fieldId: field.id, sectionId: section.id, score, label: s, weight: 1 })
+        out.push({ fieldId: field.id, sectionId: section.id, score, label: s, weight })
       } else if (field.type === 'risk_matrix') {
         const v = value as { score?: number; label?: string } | undefined
         out.push({
@@ -56,29 +56,4 @@ export function extractScores(schema: FormSchemaV1, values: Record<string, unkno
     }
   }
   return out
-}
-
-export function rollupScore(rows: ScoreRow[]): {
-  pass: number
-  fail: number
-  na: number
-  pct: number
-} {
-  let pass = 0
-  let fail = 0
-  let na = 0
-  let totalWeight = 0
-  let earnedWeight = 0
-  for (const r of rows) {
-    if (r.score === null) {
-      na += 1
-      continue
-    }
-    if (r.score === 1) pass += 1
-    else if (r.score === 0) fail += 1
-    totalWeight += r.weight
-    earnedWeight += r.score * r.weight
-  }
-  const pct = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0
-  return { pass, fail, na, pct }
 }

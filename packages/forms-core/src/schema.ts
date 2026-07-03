@@ -36,9 +36,8 @@ export type LogicRule =
 // --- Formula expression tree -------------------------------------------------
 //
 // Stored on FormField.formula as a small JSON expression. Evaluated by
-// `evaluateFormulaTree()` in `./evaluator.ts`. Lives alongside the existing
-// string-based `evaluateFormula()` because designer-built calc fields need a
-// typed tree, while legacy `field.config.expr` strings keep working.
+// `evaluateFormulaTree()` in `./evaluator.ts` — the only formula runtime;
+// designer-built calc fields always persist a typed tree.
 export type FormulaExpression =
   | { kind: 'literal'; value: number | string }
   | { kind: 'field_ref'; fieldKey: string }
@@ -519,7 +518,8 @@ export function validateFormSchema(input: unknown): FormSchemaV1 {
   return formSchemaV1.parse(input)
 }
 
-// Lightweight check: every showIf rule references a real field id.
+// Lightweight check: every showIf rule references a real field id, and every
+// designer-authored validation pattern compiles as a regular expression.
 export function lintFormSchema(schema: FormSchemaV1): string[] {
   const errors: string[] = []
   const fieldIds = new Set<string>()
@@ -534,7 +534,16 @@ export function lintFormSchema(schema: FormSchemaV1): string[] {
   }
   for (const sec of schema.sections) {
     if (sec.showIf) walk(sec.showIf, `section:${sec.id}`)
-    for (const f of sec.fields) if (f.showIf) walk(f.showIf, `field:${f.id}`)
+    for (const f of sec.fields) {
+      if (f.showIf) walk(f.showIf, `field:${f.id}`)
+      if (f.validation?.pattern) {
+        try {
+          new RegExp(f.validation.pattern)
+        } catch {
+          errors.push(`field:${f.id}: validation pattern is not a valid regular expression`)
+        }
+      }
+    }
   }
   return errors
 }

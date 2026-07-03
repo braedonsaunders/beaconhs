@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   coerceCustomFieldValue,
-  formatCustomFieldValue,
   normalizeCustomFieldConfig,
   readCustomFieldValues,
   slugifyCustomFieldKey,
@@ -82,21 +81,6 @@ describe('coerceCustomFieldValue', () => {
     expect(coerceCustomFieldValue(def({ fieldType: 'url' }), 'ftp://x').ok).toBe(false)
     expect(coerceCustomFieldValue(def({ fieldType: 'date' }), '2026-06-30').ok).toBe(true)
     expect(coerceCustomFieldValue(def({ fieldType: 'date' }), '06/30/26').ok).toBe(false)
-  })
-})
-
-describe('formatCustomFieldValue', () => {
-  it('renders unit, booleans, and option labels', () => {
-    expect(formatCustomFieldValue(def({ fieldType: 'number', config: { unit: 'ppm' } }), 35)).toBe(
-      '35 ppm',
-    )
-    expect(formatCustomFieldValue(def({ fieldType: 'boolean' }), true)).toBe('Yes')
-    const sel = def({
-      fieldType: 'select',
-      config: { options: [{ value: 'co', label: 'Carbon monoxide' }] },
-    })
-    expect(formatCustomFieldValue(sel, 'co')).toBe('Carbon monoxide')
-    expect(formatCustomFieldValue(def({}), null)).toBe('—')
   })
 })
 

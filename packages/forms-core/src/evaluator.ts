@@ -1,13 +1,11 @@
 // Typed JSON-tree evaluators for form field logic and formulas.
 //
-// Sits alongside the older string-based `evaluateFormula(expr, values)` (which
-// targets `field.config.expr` strings) and the rule-based `evalLogicRule()`
-// (which already exists for flat `values` maps).
+// This module is the SINGLE implementation of the form condition/formula
+// language — the filler, the validator, the PDF renderer, and the Flows
+// engine all evaluate rules through it so visibility decisions never diverge.
 //
-// What this module adds:
-//   - `evaluateLogicRule(rule, ctx)` — same semantics as `evalLogicRule` but
-//     accepts the richer EvalContext so visibility rules can reference fields
-//     inside repeating sections via `<sectionKey>.<fieldKey>`.
+//   - `evaluateLogicRule(rule, ctx)` — evaluates a LogicRule against the
+//     EvalContext (flat values + repeating-section rows).
 //   - `evaluateFormulaTree(expr, ctx)` — walks a typed FormulaExpression tree.
 //     Designer-built calc fields store this on `field.formula`.
 //   - `resolveDefaultValue(expr, ctx)` — produces an initial value for a field
@@ -74,6 +72,31 @@ function coerceNumber(v: unknown): number {
 }
 
 /**
+ * Type-tolerant equality for `eq`/`ne`. The designer's LogicBuilder persists
+ * comparison values as strings, while responses store typed values (a number
+ * field stores `3`, not `"3"`). Strict `===` would make "severity equals 3"
+ * false forever, so when exactly one side is a number or boolean we coerce the
+ * other side before comparing. String-vs-string stays strict.
+ */
+function looseEquals(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a === null || a === undefined || b === null || b === undefined) return false
+  if (typeof a === 'number' || typeof b === 'number') {
+    const na = typeof a === 'number' ? a : typeof a === 'string' && a.trim() !== '' ? Number(a) : NaN
+    const nb = typeof b === 'number' ? b : typeof b === 'string' && b.trim() !== '' ? Number(b) : NaN
+    return Number.isFinite(na) && Number.isFinite(nb) && na === nb
+  }
+  if (typeof a === 'boolean' || typeof b === 'boolean') {
+    const toBool = (v: unknown): boolean | undefined =>
+      v === true || v === 'true' ? true : v === false || v === 'false' ? false : undefined
+    const ba = toBool(a)
+    const bb = toBool(b)
+    return ba !== undefined && bb !== undefined && ba === bb
+  }
+  return false
+}
+
+/**
  * Coerce a raw entity attribute value to match its declared EntityAttrDef
  * valueType. We're intentionally permissive — null falls through unchanged
  * so callers can render their own "—" fallback. Date columns may arrive as
@@ -136,9 +159,9 @@ export function evaluateLogicRule(rule: LogicRule, ctx: EvalContext): boolean {
     case 'not':
       return !evaluateLogicRule(rule.rule, ctx)
     case 'eq':
-      return resolveFieldRef(ctx, rule.field) === rule.value
+      return looseEquals(resolveFieldRef(ctx, rule.field), rule.value)
     case 'ne':
-      return resolveFieldRef(ctx, rule.field) !== rule.value
+      return !looseEquals(resolveFieldRef(ctx, rule.field), rule.value)
     case 'gt':
       return coerceNumber(resolveFieldRef(ctx, rule.field)) > coerceNumber(rule.value)
     case 'lt':
@@ -342,6 +365,12 @@ export function evaluateFormulaTree(
 
 // --- Default-value resolver ------------------------------------------------
 
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+
+function localDateString(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 /**
  * Resolve a DefaultValueExpression to a concrete value for the first render
  * of a field. Returns `undefined` if no default applies (e.g. expression
@@ -353,11 +382,13 @@ export function resolveDefaultValue(expr: DefaultValueExpression, ctx: EvalConte
     case 'literal':
       return expr.value
     case 'today':
-      // ISO yyyy-mm-dd format expected by <input type="date">.
-      return now.toISOString().slice(0, 10)
+      // <input type="date"> expects the LOCAL wall-clock date (yyyy-mm-dd).
+      // Built from local components — toISOString() would yield the UTC date,
+      // which is the wrong calendar day for evening fills west of Greenwich.
+      return localDateString(now)
     case 'now':
-      // ISO yyyy-mm-ddThh:mm format expected by <input type="datetime-local">.
-      return now.toISOString().slice(0, 16)
+      // <input type="datetime-local"> expects LOCAL yyyy-mm-ddThh:mm.
+      return `${localDateString(now)}T${pad2(now.getHours())}:${pad2(now.getMinutes())}`
     case 'current_user_person_id':
       return ctx.requestContext?.currentUserPersonId ?? null
     case 'current_user_name':

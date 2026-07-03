@@ -331,30 +331,6 @@ function requiredErr(label: string): CoerceResult {
   return { ok: false, error: `${label} is required.` }
 }
 
-/** Human-readable rendering of a stored value (read-only views, PDF, exports). */
-export function formatCustomFieldValue(def: CustomFieldDefinition, value: unknown): string {
-  if (value == null || value === '') return '—'
-  switch (def.fieldType) {
-    case 'boolean':
-      return value ? 'Yes' : 'No'
-    case 'number': {
-      const unit = def.config?.unit
-      return unit ? `${value} ${unit}` : String(value)
-    }
-    case 'select': {
-      const opt = def.config?.options?.find((o) => o.value === value)
-      return opt?.label ?? String(value)
-    }
-    case 'multi_select': {
-      if (!Array.isArray(value)) return String(value)
-      const options = def.config?.options ?? []
-      return value.map((v) => options.find((o) => o.value === v)?.label ?? String(v)).join(', ')
-    }
-    default:
-      return String(value)
-  }
-}
-
 /**
  * Normalise / sanitise a raw config object for a given type — drop irrelevant
  * keys and de-dupe option values. Used by the designer save action so a stored

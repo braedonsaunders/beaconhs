@@ -431,32 +431,50 @@ function collect(graph: AutomationGraph, evalCtx: EvalContext, startIds: string[
 }
 
 /**
- * Plan the Actions + Gates reached from the trigger matching `trigger`. Pure:
- * the caller performs the side effects server-side.
+ * Plan the Actions + Gates reached from EVERY trigger node matching `trigger`.
+ * Pure: the caller performs the side effects server-side.
+ *
+ * A graph may legitimately carry several triggers of the same type (multiple
+ * manual buttons, several `on_field_value` branches with different rules, or
+ * distinct `status_change` transitions). Each satisfied trigger contributes its
+ * downstream branch; the branches are collected together so a shared `seen` set
+ * dedupes any actions two triggers converge on. Planning only the first
+ * matching node would silently drop the rest.
+ *
+ * Trigger-specific selection:
+ *   • `manual` — when `opts.buttonId` is supplied, plan just that button;
+ *     otherwise plan every manual button (rare, but well-defined).
+ *   • `on_field_value` — a node fires only when its own rule passes.
+ *   • `status_change` — when `opts.toStatus` is supplied the engine enforces
+ *     the node's `to` (and optional `from`) filter so a `from: X → to: Y`
+ *     transition does not fire on `Z → Y`. When `opts.toStatus` is absent the
+ *     match is by trigger name only (the caller is expected to have already
+ *     narrowed by target status).
  */
 export function planAutomation(
   graph: AutomationGraph,
   trigger: TriggerData['trigger'],
   evalCtx: EvalContext,
-  // For the `manual` trigger: pick a specific button by id. Absent ⇒ the first
-  // manual trigger node. Ignored for every other (parameterless) trigger.
-  opts?: { buttonId?: string },
+  opts?: { buttonId?: string; fromStatus?: string | null; toStatus?: string },
 ): AutomationPlan {
-  const triggerNode = graph.nodes.find((n) => {
-    if (n.data.kind !== 'trigger' || n.data.trigger.trigger !== trigger) return false
-    // A graph may carry several manual buttons; disambiguate by buttonId when
-    // one is supplied, otherwise take the first manual trigger.
-    if (trigger === 'manual' && opts?.buttonId !== undefined) {
-      return n.data.trigger.trigger === 'manual' && n.data.trigger.buttonId === opts.buttonId
+  const startIds: string[] = []
+  for (const node of graph.nodes) {
+    if (node.data.kind !== 'trigger' || node.data.trigger.trigger !== trigger) continue
+    const td = node.data.trigger
+
+    if (td.trigger === 'manual' && opts?.buttonId !== undefined) {
+      if (td.buttonId !== opts.buttonId) continue
     }
-    return true
-  })
-  if (!triggerNode || triggerNode.data.kind !== 'trigger') return { actions: [], gates: [] }
-  const td = triggerNode.data.trigger
-  if (td.trigger === 'on_field_value' && !evaluateLogicRule(td.rule, evalCtx)) {
-    return { actions: [], gates: [] }
+    if (td.trigger === 'on_field_value' && !evaluateLogicRule(td.rule, evalCtx)) continue
+    if (td.trigger === 'status_change' && opts?.toStatus !== undefined) {
+      if (td.to !== opts.toStatus) continue
+      if (td.from && td.from !== (opts.fromStatus ?? undefined)) continue
+    }
+
+    startIds.push(node.id)
   }
-  return collect(graph, evalCtx, [triggerNode.id])
+  if (startIds.length === 0) return { actions: [], gates: [] }
+  return collect(graph, evalCtx, startIds)
 }
 
 /**

@@ -576,17 +576,26 @@ describe('resolveDefaultValue', () => {
     expect(resolveDefaultValue({ kind: 'literal', value: 7 }, makeCtx())).toBe(7)
   })
 
-  it('today returns yyyy-mm-dd', () => {
+  it('today returns the LOCAL yyyy-mm-dd', () => {
+    // Date inputs expect the local wall-clock date, so the expected value is
+    // derived from local components (not the UTC slice) to stay correct in any
+    // runner timezone.
     const fixed = new Date('2025-03-15T12:00:00Z')
+    const p = (n: number) => String(n).padStart(2, '0')
+    const expected = `${fixed.getFullYear()}-${p(fixed.getMonth() + 1)}-${p(fixed.getDate())}`
     expect(
       resolveDefaultValue({ kind: 'today' }, makeCtx({ requestContext: { now: fixed } })),
-    ).toBe('2025-03-15')
+    ).toBe(expected)
   })
 
-  it('now returns yyyy-mm-ddThh:mm', () => {
+  it('now returns the LOCAL yyyy-mm-ddThh:mm', () => {
     const fixed = new Date('2025-03-15T14:25:00Z')
+    const p = (n: number) => String(n).padStart(2, '0')
+    const expected =
+      `${fixed.getFullYear()}-${p(fixed.getMonth() + 1)}-${p(fixed.getDate())}` +
+      `T${p(fixed.getHours())}:${p(fixed.getMinutes())}`
     expect(resolveDefaultValue({ kind: 'now' }, makeCtx({ requestContext: { now: fixed } }))).toBe(
-      '2025-03-15T14:25',
+      expected,
     )
   })
 
