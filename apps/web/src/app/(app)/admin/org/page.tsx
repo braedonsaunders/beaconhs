@@ -1,33 +1,49 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, eq, isNull } from 'drizzle-orm'
-import { ArrowUpRight, Plus, Trash2 } from 'lucide-react'
+import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
+import { ArrowUpRight, Lock, Plus, Trash2 } from 'lucide-react'
 import {
   Badge,
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   DetailHeader,
+  EmptyState,
   Input,
   Label,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@beaconhs/ui'
 import Link from 'next/link'
-import { crews, departments, orgUnits, people, trades } from '@beaconhs/db/schema'
+import { crews, orgUnits, people, trades } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { getOrgUnitSyncOrigins, isOrgUnitSynced } from '@/lib/org-sync'
 import { levelLabel } from '@/lib/org-hierarchy'
-import { PageContainer } from '@/components/page-layout'
+import { parseListParams, pickString } from '@/lib/list-params'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { SortableTh } from '@/components/sortable-th'
+import { Pagination } from '@/components/pagination'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { ListPageLayout } from '@/components/page-layout'
 import { ConfirmButton } from '@/components/confirm-button'
 
 export const metadata = { title: 'Org hierarchy' }
 export const dynamic = 'force-dynamic'
 
 const LEVELS = ['customer', 'project', 'site', 'area'] as const
+const TABS = ['units', 'trades', 'crews'] as const
+const UNIT_SORTS = ['name', 'level', 'code'] as const
 
 // Org hierarchy is admin configuration. Every action here is a POST endpoint,
 // so each must gate itself — the page render gate does not protect them.
@@ -39,7 +55,7 @@ async function requireOrgAdmin() {
 }
 
 function backWithError(message: string): never {
-  redirect(`/admin/org?error=${encodeURIComponent(message)}`)
+  redirect(`/admin/org?tab=units&error=${encodeURIComponent(message)}`)
 }
 
 async function addOrgUnit(formData: FormData) {
@@ -65,17 +81,24 @@ async function addOrgUnit(formData: FormData) {
 
 // Archive (soft delete), matching /locations semantics — org units are shared
 // with the locations module, which restores archived units. Non-cascading:
-// descendants are left untouched and stay visible in the tree.
+// descendants are left untouched and stay visible in the list. Units still
+// owned by an active data-sync connection cannot be archived here — the source
+// system owns them, so the change would just be re-created on the next run.
 async function deleteOrgUnit(formData: FormData) {
   'use server'
   const ctx = await requireOrgAdmin()
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const before = await ctx.db(async (tx) => {
+  const { before, synced } = await ctx.db(async (tx) => {
     const [u] = await tx.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1)
-    return u ?? null
+    return { before: u ?? null, synced: u ? await isOrgUnitSynced(tx, id) : false }
   })
   if (!before || before.deletedAt) return
+  if (synced) {
+    backWithError(
+      `"${before.name}" is synced from an external system and can't be archived here. Disable its data-sync connection first.`,
+    )
+  }
   await ctx.db((tx) =>
     tx.update(orgUnits).set({ deletedAt: new Date() }).where(eq(orgUnits.id, id)),
   )
@@ -196,235 +219,467 @@ export default async function AdminOrgPage({
   const ctx = await requireOrgAdmin()
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
-  const [allUnits, depts, allTrades, allCrews] = await ctx.db(async (tx) => {
-    const u = await tx
-      .select()
-      .from(orgUnits)
-      .where(isNull(orgUnits.deletedAt))
-      .orderBy(asc(orgUnits.name))
-    const d = await tx.select().from(departments).orderBy(asc(departments.name))
-    const t = await tx.select().from(trades).orderBy(asc(trades.name))
-    const c = await tx.select().from(crews).orderBy(asc(crews.name))
-    return [u, d, t, c] as const
-  })
+  const tab = pickActiveTab(sp, TABS, 'units')
 
   return (
-    <PageContainer>
-      <div className="space-y-5">
-        <DetailHeader
-          back={{ href: '/admin', label: 'Back to admin' }}
-          title="Org hierarchy"
-          subtitle="Locations, projects, sites, areas + crews / trades"
+    <ListPageLayout
+      header={
+        <>
+          <DetailHeader
+            back={{ href: '/admin', label: 'Back to admin' }}
+            title="Org hierarchy"
+            subtitle="Locations, projects, sites and areas, plus crews and trades"
+          />
+          <TabNav
+            basePath="/admin/org"
+            currentParams={sp}
+            active={tab}
+            variant="pills"
+            tabs={TABS.map((t) => ({ key: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
+          />
+          {error ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              {error}
+            </div>
+          ) : null}
+        </>
+      }
+    >
+      {tab === 'units' ? (
+        <UnitsTab sp={sp} ctx={ctx} />
+      ) : tab === 'trades' ? (
+        <NameListTab
+          sp={sp}
+          ctx={ctx}
+          title="Trades"
+          table={trades}
+          addAction={addTrade}
+          deleteAction={deleteTrade}
         />
-
-        {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
-          </div>
-        ) : null}
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Org units ({allUnits.length})</CardTitle>
-              <CardDescription>
-                Hierarchical tree by level. Archiving hides a unit here and in pickers — restore it
-                from the Locations module.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <OrgTree units={allUnits} onDelete={deleteOrgUnit} />
-              <form
-                action={addOrgUnit}
-                className="grid grid-cols-1 gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 sm:grid-cols-4 dark:border-slate-700 dark:bg-slate-800/40"
-              >
-                <Field label="Level">
-                  <Select name="level" defaultValue="site">
-                    {LEVELS.map((l) => (
-                      <option key={l} value={l}>
-                        {levelLabel(l)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Parent (optional)">
-                  <Select name="parentId" defaultValue="">
-                    <option value="">— top-level —</option>
-                    {allUnits.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {levelLabel(u.level)}: {u.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Name" className="sm:col-span-1">
-                  <Input name="name" placeholder="e.g. Site C" />
-                </Field>
-                <div className="flex items-end">
-                  <Button type="submit" className="w-full">
-                    <Plus size={14} /> Add
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Departments ({depts.length})</CardTitle>
-                <CardDescription>Managed in People.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {depts.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">None.</p>
-                ) : (
-                  <ul className="space-y-1 text-sm">
-                    {depts.map((d) => (
-                      <li key={d.id} className="rounded px-2 py-1">
-                        {d.name}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <Link
-                  href="/people/departments"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
-                >
-                  Manage departments <ArrowUpRight size={13} />
-                </Link>
-              </CardContent>
-            </Card>
-            <NameListCard
-              title="Trades"
-              items={allTrades}
-              addAction={addTrade}
-              deleteAction={deleteTrade}
-            />
-            <NameListCard
-              title="Crews"
-              items={allCrews}
-              addAction={addCrew}
-              deleteAction={deleteCrew}
-            />
-          </div>
-        </div>
-      </div>
-    </PageContainer>
+      ) : (
+        <NameListTab
+          sp={sp}
+          ctx={ctx}
+          title="Crews"
+          table={crews}
+          addAction={addCrew}
+          deleteAction={deleteCrew}
+        />
+      )}
+    </ListPageLayout>
   )
 }
 
-function OrgTree({
-  units,
-  onDelete,
+async function UnitsTab({
+  sp,
+  ctx,
 }: {
-  units: (typeof orgUnits.$inferSelect)[]
-  onDelete: (fd: FormData) => Promise<void>
+  sp: Record<string, string | string[] | undefined>
+  ctx: Awaited<ReturnType<typeof requireOrgAdmin>>
 }) {
-  const visibleIds = new Set(units.map((u) => u.id))
-  const byParent = new Map<string | null, typeof units>()
-  for (const u of units) {
-    // Units whose parent is archived render as roots so nothing disappears
-    // silently (archiving is non-cascading).
-    const k = u.parentId && visibleIds.has(u.parentId) ? u.parentId : null
-    if (!byParent.has(k)) byParent.set(k, [])
-    byParent.get(k)!.push(u)
-  }
+  const params = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: UNIT_SORTS,
+  })
+  const statusFilter = pickString(sp.status) ?? 'active'
+  const rawLevel = pickString(sp.level)
+  const levelFilter = LEVELS.includes(rawLevel as (typeof LEVELS)[number])
+    ? (rawLevel as (typeof LEVELS)[number])
+    : undefined
 
-  function render(parentId: string | null, depth: number): React.ReactNode {
-    const children = byParent.get(parentId) ?? []
-    if (children.length === 0) return null
-    return (
-      <ul
-        className={depth === 0 ? '' : 'ml-4 border-l border-slate-200 pl-3 dark:border-slate-800'}
-      >
-        {children.map((u) => (
-          <li key={u.id} className="py-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{levelLabel(u.level)}</Badge>
-                <span className="text-sm font-medium">{u.name}</span>
-                {u.code ? (
-                  <span className="text-xs text-slate-400 dark:text-slate-500">{u.code}</span>
-                ) : null}
-              </div>
-              <form action={onDelete} className="inline">
-                <input type="hidden" name="id" value={u.id} />
-                <ConfirmButton
-                  message={`Archive "${u.name}"? It disappears from pickers and this tree; restore it from the Locations module.`}
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
-                >
-                  <Trash2 size={12} />
-                </ConfirmButton>
-              </form>
+  const parent = alias(orgUnits, 'parent')
+
+  const { rows, total, levelCounts, activeCount, archivedCount, syncOrigins, parentOptions } =
+    await ctx.db(async (tx) => {
+      const searchFilters: SQL<unknown>[] = []
+      if (params.q) {
+        const term = `%${params.q}%`
+        const cond = or(ilike(orgUnits.name, term), ilike(orgUnits.code, term))
+        if (cond) searchFilters.push(cond)
+      }
+
+      // Status scoping is shared by every count so the chips reflect the same
+      // search-filtered set the table shows.
+      const statusScope =
+        statusFilter === 'archived'
+          ? [isNotNull(orgUnits.deletedAt)]
+          : [isNull(orgUnits.deletedAt)]
+
+      const filters = [...searchFilters, ...statusScope]
+      if (levelFilter) filters.push(eq(orgUnits.level, levelFilter))
+      const whereClause = and(...filters)
+
+      // Per-level tallies (respect search + status, independent of the level pick).
+      const levelRows = await tx
+        .select({ level: orgUnits.level, c: count() })
+        .from(orgUnits)
+        .where(and(...searchFilters, ...statusScope))
+        .groupBy(orgUnits.level)
+      const levelCounts = new Map<string, number>()
+      for (const r of levelRows) levelCounts.set(r.level, Number(r.c))
+
+      // Active/archived tallies (respect search + level, independent of status).
+      const [tallies] = await tx
+        .select({
+          active: sql<string>`count(*) filter (where ${orgUnits.deletedAt} is null)`,
+          archived: sql<string>`count(*) filter (where ${orgUnits.deletedAt} is not null)`,
+        })
+        .from(orgUnits)
+        .where(and(...searchFilters, ...(levelFilter ? [eq(orgUnits.level, levelFilter)] : [])))
+
+      const orderBy =
+        params.sort === 'code'
+          ? [params.dir === 'asc' ? asc(orgUnits.code) : desc(orgUnits.code)]
+          : params.sort === 'level'
+            ? [
+                params.dir === 'asc' ? asc(orgUnits.level) : desc(orgUnits.level),
+                asc(orgUnits.name),
+              ]
+            : [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
+
+      const [tot] = await tx.select({ c: count() }).from(orgUnits).where(whereClause)
+
+      const pageRows = await tx
+        .select({
+          id: orgUnits.id,
+          name: orgUnits.name,
+          level: orgUnits.level,
+          code: orgUnits.code,
+          deletedAt: orgUnits.deletedAt,
+          parentName: parent.name,
+          parentLevel: parent.level,
+        })
+        .from(orgUnits)
+        .leftJoin(parent, eq(parent.id, orgUnits.parentId))
+        .where(whereClause)
+        .orderBy(...orderBy)
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage)
+
+      const syncOrigins = await getOrgUnitSyncOrigins(
+        tx,
+        pageRows.map((r) => r.id),
+      )
+
+      // Lightweight parent picker for the add form (id/name/level only — no tree
+      // walk, no descendant counts). Capped so a huge synced org can't balloon
+      // the page; a customer typically has far fewer than this.
+      const parentOptions = await tx
+        .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
+        .from(orgUnits)
+        .where(isNull(orgUnits.deletedAt))
+        .orderBy(asc(orgUnits.level), asc(orgUnits.name))
+        .limit(500)
+
+      return {
+        rows: pageRows,
+        total: Number(tot?.c ?? 0),
+        levelCounts,
+        activeCount: Number(tallies?.active ?? 0),
+        archivedCount: Number(tallies?.archived ?? 0),
+        syncOrigins,
+        parentOptions,
+      }
+    })
+
+  const sortProps = { basePath: '/admin/org', currentParams: sp, dir: params.dir }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchInput placeholder="Search by name or code" />
+        <FilterChips
+          basePath="/admin/org"
+          currentParams={sp}
+          paramKey="status"
+          label="Status"
+          defaultValue="active"
+          options={[
+            { value: 'active', label: 'Active', count: activeCount },
+            { value: 'archived', label: 'Archived', count: archivedCount },
+          ]}
+        />
+        <FilterChips
+          basePath="/admin/org"
+          currentParams={sp}
+          paramKey="level"
+          label="Level"
+          allLabel="All levels"
+          options={LEVELS.map((l) => ({
+            value: l,
+            label: levelLabel(l, { plural: true }),
+            count: levelCounts.get(l) ?? 0,
+          }))}
+        />
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState
+          title={params.q ? `No org units match "${params.q}"` : 'No org units'}
+          description="Add a customer, project, site or area below to build your hierarchy."
+        />
+      ) : (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                  Name
+                </SortableTh>
+                <SortableTh {...sortProps} column="level" active={params.sort === 'level'}>
+                  Level
+                </SortableTh>
+                <TableHead>Parent</TableHead>
+                <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
+                  Code
+                </SortableTh>
+                <TableHead>Source</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((u) => {
+                const origin = syncOrigins.get(u.id)
+                return (
+                  <TableRow key={u.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-900 dark:text-slate-100">
+                          {u.name}
+                        </span>
+                        {u.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{levelLabel(u.level)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-400">
+                      {u.parentName ? (
+                        <span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            {levelLabel(u.parentLevel!)}:{' '}
+                          </span>
+                          {u.parentName}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                      {u.code ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {origin ? (
+                        <Badge variant="secondary" title={`Synced from ${origin.connectionName}`}>
+                          <Lock size={11} /> {origin.sourceSystem}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">Manual</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {u.deletedAt ? (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                          Restore in Locations
+                        </span>
+                      ) : origin ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500"
+                          title={`Synced from ${origin.connectionName} — disable the connection to edit`}
+                        >
+                          <Lock size={11} /> Synced
+                        </span>
+                      ) : (
+                        <form action={deleteOrgUnit} className="inline">
+                          <input type="hidden" name="id" value={u.id} />
+                          <ConfirmButton
+                            message={`Archive "${u.name}"? It disappears from pickers and this list; restore it from the Locations module.`}
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                          >
+                            <Trash2 size={12} />
+                          </ConfirmButton>
+                        </form>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          <Pagination
+            basePath="/admin/org"
+            currentParams={sp}
+            total={total}
+            page={params.page}
+            perPage={params.perPage}
+          />
+        </>
+      )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Add org unit</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={addOrgUnit} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+            <Field label="Level">
+              <Select name="level" defaultValue="site">
+                {LEVELS.map((l) => (
+                  <option key={l} value={l}>
+                    {levelLabel(l)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Parent (optional)">
+              <Select name="parentId" defaultValue="">
+                <option value="">— top-level —</option>
+                {parentOptions.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {levelLabel(u.level)}: {u.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Name">
+              <Input name="name" placeholder="e.g. Site C" />
+            </Field>
+            <div className="flex items-end">
+              <Button type="submit" className="w-full">
+                <Plus size={14} /> Add
+              </Button>
             </div>
-            {render(u.id, depth + 1)}
-          </li>
-        ))}
-      </ul>
-    )
-  }
+          </form>
+        </CardContent>
+      </Card>
 
-  if (units.length === 0) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">No org units.</p>
-  }
-  return render(null, 0)
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Departments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/people/departments"
+            className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            Manage departments in People <ArrowUpRight size={13} />
+          </Link>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
 
-function NameListCard({
+async function NameListTab({
+  sp,
+  ctx,
   title,
-  items,
+  table,
   addAction,
   deleteAction,
 }: {
+  sp: Record<string, string | string[] | undefined>
+  ctx: Awaited<ReturnType<typeof requireOrgAdmin>>
   title: string
-  items: { id: string; name: string }[]
+  table: typeof trades | typeof crews
   addAction: (fd: FormData) => Promise<void>
   deleteAction: (fd: FormData) => Promise<void>
 }) {
+  const params = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: ['name'] as const,
+  })
+  const singular = title.toLowerCase().replace(/s$/, '')
+  const { rows, total } = await ctx.db(async (tx) => {
+    const whereClause = params.q ? ilike(table.name, `%${params.q}%`) : undefined
+    const [tot] = await tx.select({ c: count() }).from(table).where(whereClause)
+    const list = await tx
+      .select({ id: table.id, name: table.name })
+      .from(table)
+      .where(whereClause)
+      .orderBy(params.dir === 'asc' ? asc(table.name) : desc(table.name))
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
+    return { rows: list, total: Number(tot?.c ?? 0) }
+  })
+
+  const sortProps = { basePath: '/admin/org', currentParams: sp, dir: params.dir }
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">
-          {title} ({items.length})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {items.length === 0 ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">None.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {items.map((i) => (
-              <li
-                key={i.id}
-                className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800/60"
-              >
-                <span>{i.name}</span>
-                <form action={deleteAction} className="inline">
-                  <input type="hidden" name="id" value={i.id} />
-                  <ConfirmButton
-                    message={`Delete "${i.name}"? This cannot be undone.`}
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
-                  >
-                    <Trash2 size={12} />
-                  </ConfirmButton>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form action={addAction} className="flex gap-1">
-          <Input name="name" placeholder="Add new" className="h-8 text-sm" />
-          <Button type="submit" size="sm" variant="outline">
-            <Plus size={12} />
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchInput placeholder={`Search ${title.toLowerCase()}`} />
+      </div>
+      {rows.length === 0 ? (
+        <EmptyState
+          title={
+            params.q ? `No ${title.toLowerCase()} match "${params.q}"` : `No ${title.toLowerCase()}`
+          }
+          description={`Add a ${singular} below.`}
+        />
+      ) : (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                  Name
+                </SortableTh>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((i) => (
+                <TableRow key={i.id}>
+                  <TableCell className="font-medium text-slate-900 dark:text-slate-100">
+                    {i.name}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <form action={deleteAction} className="inline">
+                      <input type="hidden" name="id" value={i.id} />
+                      <ConfirmButton
+                        message={`Delete "${i.name}"? This cannot be undone.`}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                      >
+                        <Trash2 size={12} />
+                      </ConfirmButton>
+                    </form>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <Pagination
+            basePath="/admin/org"
+            currentParams={sp}
+            total={total}
+            page={params.page}
+            perPage={params.perPage}
+          />
+        </>
+      )}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Add {singular}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={addAction} className="flex gap-2">
+            <Input name="name" placeholder={`New ${singular}`} />
+            <Button type="submit">
+              <Plus size={14} /> Add
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
