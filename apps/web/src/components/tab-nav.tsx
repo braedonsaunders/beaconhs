@@ -54,6 +54,9 @@ export function TabNav({
         className={cn(
           'flex [scrollbar-width:none] flex-nowrap items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden',
           'sm:flex-wrap sm:overflow-x-visible',
+          // Rounded chips read cramped flush against the header divider; the
+          // underline variant is meant to sit on it, so only pills pad below.
+          'pb-1.5 sm:pb-2',
           className,
         )}
         role="tablist"
