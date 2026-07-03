@@ -56,21 +56,79 @@ async function resolveSoffice(): Promise<string> {
   )
 }
 
-/** Pull speaker notes out of the pptx zip: ppt/notesSlides/notesSlideN.xml. */
+/** Extract the visible text runs from a notes-slide XML document. */
+function notesTextFromXml(xml: string): string {
+  // Text runs live in <a:t>…</a:t>. Strip the slide-number placeholder
+  // fields by dropping runs that are purely numeric page artifacts.
+  const runs = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((r) => r[1] ?? '')
+  const text = runs.join(' ').replace(/\s+/g, ' ').trim()
+  return text && !/^\d+$/.test(text) ? text : ''
+}
+
+/**
+ * Pull speaker notes out of the pptx zip, keyed by SLIDE POSITION (1-based, in
+ * presentation order). The slide↔notesSlide association is defined by each
+ * slide's _rels relationships — notes files are numbered in creation order, so
+ * notesSlide1.xml can belong to slide 3 when only slide 3 has notes. Resolution
+ * order: presentation.xml sldIdLst (slide order) → slideN.xml.rels (notesSlide
+ * target) → notesSlideM.xml (text). Falls back to the filename-index heuristic
+ * for decks whose relationship parts are missing or malformed.
+ */
 async function extractNotes(pptx: Buffer): Promise<Map<number, string>> {
   const notes = new Map<number, string>()
   try {
     const zip = await JSZip.loadAsync(pptx)
+    const read = (name: string) => zip.files[name]?.async('string') ?? null
+
+    // 1. Slide order: presentation.xml sldIdLst r:id refs → presentation rels targets.
+    const orderedSlideFiles: string[] = []
+    const presXml = await read('ppt/presentation.xml')
+    const presRelsXml = await read('ppt/_rels/presentation.xml.rels')
+    if (presXml && presRelsXml) {
+      const relTargets = new Map<string, string>()
+      for (const rel of presRelsXml.matchAll(/<Relationship\b[^>]*>/g)) {
+        const tag = rel[0]
+        const relId = tag.match(/\bId="([^"]+)"/)?.[1]
+        const target = tag.match(/\bTarget="([^"]+)"/)?.[1]
+        if (relId && target) relTargets.set(relId, target)
+      }
+      for (const sld of presXml.matchAll(/<p:sldId\b[^>]*\br:id="([^"]+)"[^>]*\/?>/g)) {
+        const target = relTargets.get(sld[1]!)
+        if (!target) continue
+        const normalized = target.replace(/^\/?(ppt\/)?/, 'ppt/').replace(/^ppt\/\.\.\//, '')
+        if (/^ppt\/slides\/slide\d+\.xml$/.test(normalized)) orderedSlideFiles.push(normalized)
+      }
+    }
+
+    if (orderedSlideFiles.length > 0) {
+      // 2. Per-slide rels: find each slide's notesSlide target and read its text.
+      for (let position = 0; position < orderedSlideFiles.length; position++) {
+        const slideFile = orderedSlideFiles[position]!
+        const slideName = slideFile.slice('ppt/slides/'.length)
+        const relsXml = await read(`ppt/slides/_rels/${slideName}.rels`)
+        if (!relsXml) continue
+        const target = [...relsXml.matchAll(/<Relationship\b[^>]*>/g)]
+          .map((r) => r[0])
+          .filter((tag) => /\bType="[^"]*\/notesSlide"/.test(tag))
+          .map((tag) => tag.match(/\bTarget="([^"]+)"/)?.[1])
+          .find((t): t is string => !!t)
+        if (!target) continue
+        const notesFile = `ppt/notesSlides/${target.replace(/^(\.\.\/)*notesSlides\//, '')}`
+        const xml = await read(notesFile)
+        if (!xml) continue
+        const text = notesTextFromXml(xml)
+        if (text) notes.set(position + 1, text)
+      }
+      return notes
+    }
+
+    // 3. Fallback: assume notesSlideN.xml index == slide position (older decks
+    // exported with dense sequential notes parts).
     for (const name of Object.keys(zip.files)) {
       const m = name.match(/^ppt\/notesSlides\/notesSlide(\d+)\.xml$/)
       if (!m) continue
-      const xml = await zip.files[name]!.async('string')
-      // Text runs live in <a:t>…</a:t>. Strip the slide-number placeholder
-      // fields by dropping runs that are purely numeric page artifacts.
-      const runs = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((r) => r[1] ?? '')
-      const text = runs.join(' ').replace(/\s+/g, ' ').trim()
-      const idx = Number(m[1])
-      if (text && !/^\d+$/.test(text)) notes.set(idx, text)
+      const text = notesTextFromXml(await zip.files[name]!.async('string'))
+      if (text) notes.set(Number(m[1]), text)
     }
   } catch {
     // Notes are best-effort — a malformed zip should not fail the import.

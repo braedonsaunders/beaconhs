@@ -1,9 +1,11 @@
 // Scheduled flow execution (Phase 4). Closes the long-standing gap where the
 // `scheduled` flow trigger was authorable in the canvas but never ran. Every
-// minute we walk enabled automations, find the ones whose `scheduled` cron
-// matches this minute, and run their worker-safe actions (notify_role /
+// minute we walk enabled automations and fire the ones whose `scheduled` cron
+// has an occurrence since the flow last ran (anchored on `lastScheduledRunAt`,
+// not on wall-clock minute matching — so a late tick, a queue-retry, or worker
+// downtime never silently skips a flow; missed occurrences fast-forward to a
+// single catch-up run). Actions are the worker-safe subset (notify_role /
 // send_email) — the same execution surface the session-overdue scan uses.
-// Per-flow `lastScheduledRunAt` dedups so a cron fires once per matching minute.
 
 import { and, eq } from 'drizzle-orm'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
@@ -11,25 +13,14 @@ import { formAutomations, tenants } from '@beaconhs/db/schema'
 import { planAutomation } from '@beaconhs/forms-core'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import { interpolate, resolveEmails, roleUserIds } from './session-overdue-flows'
-import { parseCron, type CronFields } from './form-assignment-scanner'
+import { lastCronOccurrenceBetween, parseCron, type CronFields } from './form-assignment-scanner'
+import { escapeHtml } from './escape-html'
 
 export type ScheduledFlowScanResult = { flows: number; ran: number }
-
-function cronMatchesMinute(c: CronFields, d: Date): boolean {
-  return (
-    c.minute.includes(d.getUTCMinutes()) &&
-    c.hour.includes(d.getUTCHours()) &&
-    c.dayOfMonth.includes(d.getUTCDate()) &&
-    c.dayOfWeek.includes(d.getUTCDay()) &&
-    c.month.includes(d.getUTCMonth() + 1)
-  )
-}
 
 export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
   const result: ScheduledFlowScanResult = { flows: 0, ran: 0 }
   const now = new Date()
-  const minuteStart = new Date(now)
-  minuteStart.setUTCSeconds(0, 0)
   const tenantRows = await withSuperAdmin(db, (tx) => tx.select({ id: tenants.id }).from(tenants))
 
   for (const t of tenantRows) {
@@ -39,6 +30,7 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
           id: formAutomations.id,
           graph: formAutomations.graph,
           lastRunAt: formAutomations.lastScheduledRunAt,
+          createdAt: formAutomations.createdAt,
         })
         .from(formAutomations)
         .where(and(eq(formAutomations.tenantId, t.id), eq(formAutomations.enabled, true)))
@@ -53,11 +45,16 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
         let cron: CronFields
         try {
           cron = parseCron(node.data.trigger.cron)
-        } catch {
+        } catch (err) {
+          console.warn(
+            `[scheduled_flow] tenant ${t.id} flow ${flow.id}: bad cron — ${err instanceof Error ? err.message : err}`,
+          )
           continue
         }
-        if (!cronMatchesMinute(cron, now)) continue
-        if (flow.lastRunAt && flow.lastRunAt >= minuteStart) continue // already fired this minute
+        // Due when the cron has an occurrence since the last run (fast-forwarded
+        // to at most one catch-up fire); a never-run flow anchors on creation.
+        const anchor = flow.lastRunAt ?? flow.createdAt
+        if (!lastCronOccurrenceBetween(cron, anchor, now)) continue
         result.flows += 1
 
         try {
@@ -90,7 +87,7 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
                     to,
                     subject: interpolate(action.subject ?? '', {}) || 'Scheduled automation',
                     text: body,
-                    html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${body}</div>`,
+                    html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${escapeHtml(body)}</div>`,
                     meta: { tenantId: t.id, category: 'automation' },
                   })
                   result.ran += 1
@@ -98,12 +95,18 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
               }
               // CAPA / incident / webhook actions need web-side primitives and
               // are intentionally skipped in the worker path.
-            } catch {
-              /* guarded — one bad action never blocks the rest */
+            } catch (err) {
+              // Guarded — one bad action never blocks the rest, but a flow that
+              // consistently fails must be visible in the worker logs.
+              console.warn(
+                `[scheduled_flow] tenant ${t.id} flow ${flow.id}: ${action.action} action failed — ${err instanceof Error ? err.message : err}`,
+              )
             }
           }
-        } catch {
-          /* bad graph / plan — skip */
+        } catch (err) {
+          console.warn(
+            `[scheduled_flow] tenant ${t.id} flow ${flow.id}: bad graph / plan — ${err instanceof Error ? err.message : err}`,
+          )
         }
 
         await tx

@@ -8,6 +8,8 @@ import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { notifications, tenantNotificationPolicy, tenants, users } from '@beaconhs/db/schema'
 import { enqueueEmail } from '@beaconhs/jobs'
+import { appBaseUrl } from './app-base-url'
+import { escapeHtml } from './escape-html'
 
 export type DigestScanResult = { tenants: number; emails: number }
 
@@ -16,7 +18,7 @@ export async function scanDigests(): Promise<DigestScanResult> {
   const now = new Date()
   const hour = now.getUTCHours()
   const isMonday = now.getUTCDay() === 1
-  const appUrl = process.env.APP_URL ?? ''
+  const appUrl = appBaseUrl()
   const tenantRows = await withSuperAdmin(db, (tx) => tx.select({ id: tenants.id }).from(tenants))
 
   for (const t of tenantRows) {
@@ -66,7 +68,7 @@ export async function scanDigests(): Promise<DigestScanResult> {
           .slice(0, 50)
           .map(
             (i) =>
-              `<li>${i.title}${i.linkPath ? ` — <a href="${appUrl}${i.linkPath}">open</a>` : ''}</li>`,
+              `<li>${escapeHtml(i.title)}${i.linkPath ? ` — <a href="${escapeHtml(`${appUrl}${i.linkPath}`)}">open</a>` : ''}</li>`,
           )
           .join('')
         const subject = `Your ${pol.digestMode} summary — ${items.length} update${items.length === 1 ? '' : 's'}`

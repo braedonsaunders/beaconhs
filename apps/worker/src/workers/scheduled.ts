@@ -18,7 +18,11 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
     case 'form_session_overdue_scan':
       return scanFormSessionOverdue()
     case 'compliance_scan': {
-      const r = await scanCompliance()
+      // Evaluate tenant crons against the tick's SCHEDULED minute (timestamp +
+      // delay = the BullMQ repeat slot), so late processing or a retry never
+      // silently skips a tenant whose scan matched the intended minute.
+      const slotMs = job.timestamp + (job.opts.delay ?? 0)
+      const r = await scanCompliance(Number.isFinite(slotMs) ? new Date(slotMs) : new Date())
       // Runs every minute now (per-tenant self-gating); only log when work happened.
       if (r.due > 0 || r.errors > 0) {
         console.log(

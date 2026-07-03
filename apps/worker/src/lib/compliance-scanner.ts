@@ -75,7 +75,14 @@ function cronDueNow(cron: string, tz: string, now: Date): boolean {
   )
 }
 
-export async function scanCompliance(): Promise<ComplianceScanResult> {
+// `scheduledFor` is the minute the tick was SCHEDULED to run (the caller passes
+// the BullMQ slot time). Matching against it — instead of the wall clock at
+// processing time — means a tick delayed by queue congestion or a retry still
+// evaluates the minute it was meant for, so a tenant's daily scan is not
+// silently skipped when the tick lands a few minutes late.
+export async function scanCompliance(
+  scheduledFor: Date = new Date(),
+): Promise<ComplianceScanResult> {
   const result: ComplianceScanResult = {
     tenants: 0,
     due: 0,
@@ -83,7 +90,7 @@ export async function scanCompliance(): Promise<ComplianceScanResult> {
     reminders: 0,
     errors: 0,
   }
-  const now = new Date()
+  const now = scheduledFor
 
   // One cross-tenant read of each tenant's detection schedule (left join: tenants
   // with no policy row fall back to the legacy default). Guarded so a pre-DDL

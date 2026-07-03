@@ -12,6 +12,7 @@ import { and, eq } from 'drizzle-orm'
 import { planAutomation, type EmailTarget } from '@beaconhs/forms-core'
 import { formAutomations, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
+import { escapeHtml } from './escape-html'
 
 export function interpolate(tpl: string, values: Record<string, unknown>): string {
   return tpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k: string) => {
@@ -83,14 +84,20 @@ export async function runSessionOverdueFlows(args: {
       .select({ graph: formAutomations.graph })
       .from(formAutomations)
       .where(and(eq(formAutomations.templateId, templateId), eq(formAutomations.enabled, true)))
-  } catch {
+  } catch (err) {
+    console.warn(
+      `[session_overdue] tenant ${tenantId} template ${templateId}: could not load flows — ${err instanceof Error ? err.message : err}`,
+    )
     return false
   }
   for (const flow of flows) {
     let plan
     try {
       plan = planAutomation(flow.graph, 'session_overdue', { values: data, rows: {}, entities: {} })
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[session_overdue] tenant ${tenantId} template ${templateId}: bad flow graph — ${err instanceof Error ? err.message : err}`,
+      )
       continue
     }
     for (const action of plan.actions) {
@@ -122,7 +129,7 @@ export async function runSessionOverdueFlows(args: {
               subject:
                 interpolate(action.subject ?? '', data) || 'Monitored session check-in overdue',
               text: body,
-              html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${body}</div>`,
+              html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${escapeHtml(body)}</div>`,
               meta: { tenantId, category: 'lone_worker' },
             })
             ran = true
@@ -130,8 +137,12 @@ export async function runSessionOverdueFlows(args: {
         }
         // Other action kinds (CAPA, incident, webhook, …) need web-side
         // primitives and are intentionally skipped in the worker overdue path.
-      } catch {
-        /* guarded — one bad action never blocks escalation */
+      } catch (err) {
+        // Guarded — one bad action never blocks escalation, but the failure
+        // must be visible: this IS the escalation path.
+        console.warn(
+          `[session_overdue] tenant ${tenantId} response ${responseId}: ${action.action} action failed — ${err instanceof Error ? err.message : err}`,
+        )
       }
     }
   }

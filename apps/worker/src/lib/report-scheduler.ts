@@ -11,9 +11,6 @@ import { reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import { computeNextRunAt } from '@beaconhs/reports'
 
-// Re-export so existing consumers (e.g. _cadence-test.ts) keep working.
-export { computeNextRunAt, type Cadence, type CadenceInput } from '@beaconhs/reports'
-
 export async function scanReportSchedules(now: Date = new Date()): Promise<void> {
   const due = await withSuperAdmin(db, async (tx) => {
     return tx

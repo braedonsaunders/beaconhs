@@ -12,10 +12,12 @@ import {
   users,
   webpushSubscriptions,
 } from '@beaconhs/db/schema'
-import { enqueueEmail, type NotifyJobData } from '@beaconhs/jobs'
+import { emailQueue, type NotifyJobData } from '@beaconhs/jobs'
 import webpush from 'web-push'
 import { sendSms, sendSmsVia } from '@beaconhs/sms'
 import { resolveSmsDelivery } from '../lib/resolve-sms-transport'
+import { appBaseUrl } from '../lib/app-base-url'
+import { escapeHtml } from '../lib/escape-html'
 
 /** True when `hourUtc` falls inside the quiet window (handles overnight wrap). */
 function inQuietHours(qh: { start: number; end: number } | null, hourUtc: number): boolean {
@@ -23,6 +25,15 @@ function inQuietHours(qh: { start: number; end: number } | null, hourUtc: number
   return qh.start < qh.end
     ? hourUtc >= qh.start && hourUtc < qh.end
     : hourUtc >= qh.start || hourUtc < qh.end
+}
+
+/** Milliseconds from `now` until the quiet window's end hour (UTC) next occurs. */
+function msUntilQuietHoursEnd(qh: { start: number; end: number }, now: Date): number {
+  const end = new Date(now)
+  end.setUTCMinutes(0, 0, 0)
+  end.setUTCHours(qh.end)
+  if (end.getTime() <= now.getTime()) end.setUTCDate(end.getUTCDate() + 1)
+  return end.getTime() - now.getTime()
 }
 
 const vapidPub = process.env.VAPID_PUBLIC_KEY
@@ -62,32 +73,34 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       .where(eq(tenantNotificationPolicy.tenantId, d.tenantId))
       .limit(1)
 
+    const now = new Date()
     const allowed = catCfg?.channels.length ? catCfg.channels : (d.channels ?? ['in_app', 'email'])
-    const quietNow = inQuietHours(policy?.quietHours ?? null, new Date().getUTCHours())
+    const quietHours = policy?.quietHours ?? null
+    const quietNow = inQuietHours(quietHours, now.getUTCHours())
     const digestOn = (policy?.digestMode ?? 'off') !== 'off'
-    // Non-critical email holds for the digest or quiet hours; in-app always lands
-    // (it's the digest's source) and critical always sends immediately.
-    const emailAllowed = allowed.includes('email') && (critical || (!digestOn && !quietNow))
+    // Non-critical email holds for the digest (the digest scan re-sends it from
+    // the in-app rows). When digest is off and quiet hours are active, the email
+    // is DEFERRED to the end of the quiet window (queue delay), never dropped.
+    // In-app always lands (it's the digest's source) and critical always sends
+    // immediately.
+    const emailAllowed = allowed.includes('email') && (critical || !digestOn)
+    const emailDelayMs =
+      !critical && quietNow && quietHours ? msUntilQuietHoursEnd(quietHours, now) : 0
+    // Push is an immediacy channel: during quiet hours non-critical pushes are
+    // intentionally suppressed (not deferred) — the in-app notification remains
+    // as the record, so nothing is lost and phones stay silent overnight.
     const pushAllowed = allowed.includes('push') && (critical || !quietNow)
     const smsAllowed = allowed.includes('sms')
 
-    // Determine effective channels per active tenant member. The queue is a
-    // trust boundary: every producer supplies userIds, so the worker enforces
-    // tenant membership before writing in-app rows or sending external channels.
+    // Resolve targets. The queue is a trust boundary: every producer supplies
+    // userIds, so the worker enforces active tenant membership before writing
+    // in-app rows or sending external channels.
     const targets =
       requestedUserIds.length > 0
         ? await tx
-            .select({ user: users, pref: notificationPreferences })
+            .select({ user: users })
             .from(tenantUsers)
             .innerJoin(users, eq(users.id, tenantUsers.userId))
-            .leftJoin(
-              notificationPreferences,
-              and(
-                eq(notificationPreferences.userId, users.id),
-                eq(notificationPreferences.tenantId, d.tenantId),
-                eq(notificationPreferences.category, d.category),
-              ),
-            )
             .where(
               and(
                 eq(tenantUsers.tenantId, d.tenantId),
@@ -97,6 +110,35 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             )
         : []
     const targetUserIds = targets.map((target) => target.user.id)
+
+    // Per-user channel preferences for this category — one row per (user,
+    // channel). A missing row means "enabled"; an explicit enabled=false row
+    // opts that user out of that channel for this category.
+    const prefRows =
+      targetUserIds.length > 0
+        ? await tx
+            .select({
+              userId: notificationPreferences.userId,
+              channel: notificationPreferences.channel,
+              enabled: notificationPreferences.enabled,
+            })
+            .from(notificationPreferences)
+            .where(
+              and(
+                eq(notificationPreferences.tenantId, d.tenantId),
+                eq(notificationPreferences.category, d.category),
+                inArray(notificationPreferences.userId, targetUserIds),
+              ),
+            )
+        : []
+    const prefsByUser = new Map<string, Map<string, boolean>>()
+    for (const row of prefRows) {
+      const byChannel = prefsByUser.get(row.userId) ?? new Map<string, boolean>()
+      byChannel.set(row.channel, row.enabled)
+      prefsByUser.set(row.userId, byChannel)
+    }
+    const channelEnabled = (userId: string, channel: 'email' | 'push' | 'sms'): boolean =>
+      prefsByUser.get(userId)?.get(channel) !== false
 
     // 1. Always insert in_app
     for (const u of targetUserIds) {
@@ -135,18 +177,23 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     }
 
     // 2. Email + push fan-out
+    const baseUrl = appBaseUrl()
     for (const t of targets) {
-      const emailPref = t.pref?.channel === 'email' ? t.pref.enabled !== false : true
-      if (emailAllowed && emailPref) {
-        await enqueueEmail({
-          to: t.user.email,
-          subject: d.title,
-          html: `<p>${escapeHtml(d.body ?? d.title)}</p>${d.linkPath ? `<p><a href="${process.env.APP_URL ?? ''}${d.linkPath}">Open in app</a></p>` : ''}`,
-          text: `${d.body ?? d.title}${d.linkPath ? `\n${process.env.APP_URL ?? ''}${d.linkPath}` : ''}`,
-        })
+      if (emailAllowed && channelEnabled(t.user.id, 'email')) {
+        await emailQueue.add(
+          'send',
+          {
+            to: t.user.email,
+            subject: d.title,
+            html: `<p>${escapeHtml(d.body ?? d.title)}</p>${d.linkPath ? `<p><a href="${escapeHtml(`${baseUrl}${d.linkPath}`)}">Open in app</a></p>` : ''}`,
+            text: `${d.body ?? d.title}${d.linkPath ? `\n${baseUrl}${d.linkPath}` : ''}`,
+            meta: { tenantId: d.tenantId, userId: t.user.id, category: d.category },
+          },
+          emailDelayMs > 0 ? { delay: emailDelayMs } : undefined,
+        )
       }
 
-      if (pushAllowed && vapidPub && vapidPriv) {
+      if (pushAllowed && channelEnabled(t.user.id, 'push') && vapidPub && vapidPriv) {
         const subs = await tx
           .select()
           .from(webpushSubscriptions)
@@ -174,7 +221,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       // SMS via the resolved provider (tenant → platform → env Twilio fallback).
       // Every attempt is written to sms_log so the support team can answer "did
       // X get the text?" — mirrors the email_log audit trail.
-      if (smsDelivery && smsDelivery.kind !== 'suppressed') {
+      if (smsDelivery && smsDelivery.kind !== 'suppressed' && channelEnabled(t.user.id, 'sms')) {
         const via = smsDelivery.kind === 'transport' ? smsDelivery.transport.provider : 'env'
         const text = (d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1500)
         const [person] = await tx
@@ -236,11 +283,4 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       }
     }
   })
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
-  )
 }

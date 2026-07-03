@@ -69,15 +69,22 @@ async function analyzeTable(table: string): Promise<void> {
 }
 
 async function writeLastRun(lastRun: DbMaintenanceLastRun): Promise<void> {
-  const current = await readSettings()
-  const next: DbMaintenanceSettings = { ...current, lastRun }
+  // Atomically set ONLY the lastRun key (jsonb_set) — a read-modify-write of
+  // the whole `database` object would silently clobber retention settings a
+  // platform admin saved while the maintenance run was executing.
+  const lastRunJson = JSON.stringify(lastRun)
   await withSuperAdmin(db, async (tx) => {
     await tx
       .insert(platformSettings)
-      .values({ id: PLATFORM_SETTINGS_ID, database: next as Record<string, unknown> })
+      .values({
+        id: PLATFORM_SETTINGS_ID,
+        database: { lastRun } as Record<string, unknown>,
+      })
       .onConflictDoUpdate({
         target: platformSettings.id,
-        set: { database: next as Record<string, unknown> },
+        set: {
+          database: sql`jsonb_set(coalesce(${platformSettings.database}, '{}'::jsonb), '{lastRun}', ${lastRunJson}::jsonb)`,
+        },
       })
   })
 }

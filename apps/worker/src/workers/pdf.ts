@@ -84,6 +84,8 @@ import {
 import { deleteObject, getObject, presignGet, publicUrl, putObject } from '@beaconhs/storage'
 import { importSlidesFromPptx } from './slides-import'
 import { audit } from '@beaconhs/audit'
+import { appBaseUrl } from '../lib/app-base-url'
+import { escapeHtml } from '../lib/escape-html'
 
 export async function processPdf(job: Job<PdfJobData, unknown>): Promise<unknown> {
   const data = job.data
@@ -146,13 +148,10 @@ async function emailRenderedPdf(
   email: PdfEmailPayload,
   artifact: RenderedPdfArtifact,
 ): Promise<void> {
-  let bytes: Buffer
-  try {
-    bytes = await getObject({ key: artifact.r2Key })
-  } catch (err) {
-    console.error('[pdf] could not read rendered PDF for email:', err)
-    return
-  }
+  // A storage read failure must FAIL the job (BullMQ retries; renders are
+  // idempotent transient artifacts) — swallowing it would silently drop the
+  // flow's configured email while the job reports success.
+  const bytes = await getObject({ key: artifact.r2Key })
   await enqueueEmail({
     to: email.to,
     subject: email.subject,
@@ -293,7 +292,11 @@ async function renderFormResponse(tenantId: string, responseId: string): Promise
     metadata: {
       title,
       reference: result.response.id.slice(0, 8),
-      submittedAt: result.response.submittedAt?.toISOString().slice(0, 19).replace('T', ' '),
+      // Timestamps store UTC; label the zone so the document of record is
+      // unambiguous for field users in other timezones.
+      submittedAt: result.response.submittedAt
+        ? `${result.response.submittedAt.toISOString().slice(0, 19).replace('T', ' ')} UTC`
+        : undefined,
       siteName: result.site?.name,
       tenantName: result.tenant.name,
       tenantLogoUrl: result.tenant.branding.logoUrl,
@@ -525,8 +528,7 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
   const { cert, record, person, course, tenant: t, photoUrl } = result
 
   // Public verify URL — encoded into the QR + printed in the footer text.
-  const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000'
-  const verifyUrl = `${baseUrl}/verify/${cert.verifyToken}`
+  const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
 
   const { certificate, wallet } = await renderCertificatePdf({
@@ -684,8 +686,7 @@ async function renderSkillCertificate(tenantId: string, skillCertificateId: stri
   }
   const { cert, assignment, skillType, authority, person, tenant: t, photoUrl } = result
 
-  const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000'
-  const verifyUrl = `${baseUrl}/verify/${cert.verifyToken}`
+  const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
 
@@ -1358,16 +1359,6 @@ async function sendSignedReportEmail(args: {
   })
 }
 
-function escapeHtml(s: string | null | undefined): string {
-  if (s == null) return ''
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
 // --- ca --------------------------------------------------------------------
 
 async function renderCa(tenantId: string, caId: string): Promise<StoredPdfResult> {
@@ -1715,7 +1706,6 @@ async function renderEquipmentWorkOrder(
         type: equipmentTypes,
         site: orgUnits,
         holder: people,
-        reportedBy: people,
         tenant: tenants,
       })
       .from(equipmentWorkOrders)

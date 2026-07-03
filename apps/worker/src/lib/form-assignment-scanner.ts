@@ -8,9 +8,9 @@
 //   2. resolves an audience from targetPersonIds / targetOrgUnitIds /
 //      targetRoleKeys and enqueues an in-app notification per assignee
 //
-// To be wired up from apps/worker/src/workers/scheduled.ts case
-// 'form_assignment_scan' (touching that file is out of scope for this agent —
-// see scope notes in summary).
+// Missed occurrences (worker downtime, assignment re-enabled after a gap) are
+// FAST-FORWARDED: one dispatch fires at the most recent occurrence <= now
+// instead of replaying every missed slot one per tick.
 //
 // Idempotency: the scanner re-checks max(occurredAt) per assignment before
 // inserting, so a tick that fires twice in the same minute will only insert
@@ -115,6 +115,23 @@ export function nextCronAfter(c: CronFields, from: Date): Date | null {
   return null
 }
 
+/**
+ * Most recent cron occurrence in `(after, now]`, or null when the cron has no
+ * occurrence in that window. Used to fast-forward past missed occurrences
+ * (worker downtime) so a scanner dispatches ONCE instead of replaying every
+ * missed slot. Walks occurrence-by-occurrence — bounded by the elapsed window.
+ */
+export function lastCronOccurrenceBetween(c: CronFields, after: Date, now: Date): Date | null {
+  let latest: Date | null = null
+  let cursor = after
+  for (;;) {
+    const next = nextCronAfter(c, cursor)
+    if (!next || next.getTime() > now.getTime()) return latest
+    latest = next
+    cursor = next
+  }
+}
+
 export type FormAssignmentScanResult = {
   candidates: number
   dispatched: number
@@ -174,9 +191,11 @@ export async function scanFormAssignments(
       continue
     }
 
+    // Fast-forward to the most recent occurrence <= now: after downtime a daily
+    // assignment fires once, not once per missed day.
     const after = lastFiredAt ?? assignment.createdAt
-    const due = nextCronAfter(fields, after)
-    if (!due || due.getTime() > now.getTime()) {
+    const due = lastCronOccurrenceBetween(fields, after, now)
+    if (!due) {
       result.skipped += 1
       continue
     }
@@ -248,6 +267,3 @@ async function resolveAssigneeUserIds(
   )
   return members.map((m) => m.userId).filter((u): u is string => Boolean(u))
 }
-
-// Re-export for potential tests / direct invocation.
-export { formAssignmentDispatches }
