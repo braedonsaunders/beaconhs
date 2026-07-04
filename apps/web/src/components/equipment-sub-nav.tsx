@@ -10,6 +10,7 @@ import { ModuleNav } from '@/components/module-admin/module-nav'
 
 export type EquipmentSubNavKey =
   | 'equipment'
+  | 'maintenance'
   | 'work-orders'
   | 'vehicle-log'
   | 'inspections'

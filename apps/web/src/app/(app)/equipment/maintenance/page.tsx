@@ -1,0 +1,617 @@
+// Equipment maintenance cockpit — the fleet-wide "what should a technician be
+// doing, to which unit, when" view. One merged agenda from three sources:
+// per-unit inspection schedules, ad-hoc reminders, and oil-change tracking.
+// Overdue/today/this-week tiles up top, a month calendar in the middle
+// (desktop), and a day-grouped work list that is the primary mobile surface.
+
+import Link from 'next/link'
+import { and, asc, eq, isNull, lte, notInArray, sql, type SQL } from 'drizzle-orm'
+import {
+  AlarmClock,
+  BellRing,
+  CalendarClock,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  Droplets,
+  Plus,
+} from 'lucide-react'
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
+import {
+  equipmentCategories,
+  equipmentInspectionSchedules,
+  equipmentInspectionTypes,
+  equipmentItems,
+  equipmentReminders,
+  orgUnits,
+  people,
+} from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
+import { requireRequestContext } from '@/lib/auth'
+import { moduleScopeWhere } from '@/lib/visibility'
+import { mergeHref, pickString } from '@/lib/list-params'
+import { formatInterval } from '@/lib/equipment/intervals'
+import { ListPageLayout } from '@/components/page-layout'
+import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { TableToolbar } from '@/components/table-toolbar'
+import { FilterChips } from '@/components/filter-bar'
+import { StatTile } from '@/components/stat-tile'
+import { completeEquipmentReminder } from '../_maintenance-actions'
+import { ReminderDrawer, type ReminderEditing } from '../_maintenance-drawers'
+
+export const metadata = { title: 'Equipment maintenance' }
+export const dynamic = 'force-dynamic'
+
+const BASE = '/equipment/maintenance'
+
+type EntryKind = 'inspection' | 'reminder' | 'oil_change'
+
+type Entry = {
+  key: string
+  kind: EntryKind
+  itemId: string
+  itemName: string
+  assetTag: string
+  title: string
+  detail: string | null
+  dueOn: string
+  /** Link to start the work (fill the inspection) when one exists. */
+  startHref: string | null
+  reminderId: string | null
+}
+
+const KIND_META: Record<EntryKind, { label: string; dot: string }> = {
+  inspection: { label: 'Inspection', dot: 'bg-teal-500' },
+  reminder: { label: 'Reminder', dot: 'bg-amber-500' },
+  oil_change: { label: 'Oil change', dot: 'bg-violet-500' },
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return isoDate(d)
+}
+
+export default async function EquipmentMaintenancePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const ctx = await requireRequestContext()
+  const manage = can(ctx, 'equipment.manage')
+
+  const today = isoDate(new Date())
+  const currentMonth = today.slice(0, 7)
+  const rawMonth = pickString(sp.month)
+  const month = rawMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth) ? rawMonth : currentMonth
+  const monthStart = `${month}-01`
+  const monthStartDate = new Date(`${monthStart}T00:00:00Z`)
+  const monthEndDate = new Date(monthStartDate)
+  monthEndDate.setUTCMonth(monthEndDate.getUTCMonth() + 1)
+  monthEndDate.setUTCDate(0) // last day of the viewed month
+  const monthEnd = isoDate(monthEndDate)
+  const prevMonth = isoDate(
+    new Date(Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() - 1, 1)),
+  ).slice(0, 7)
+  const nextMonth = isoDate(
+    new Date(Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + 1, 1)),
+  ).slice(0, 7)
+  // Fetch far enough out that the summary tiles stay correct even when the
+  // viewer is looking at a past month.
+  const horizon = monthEnd > addDays(today, 60) ? monthEnd : addDays(today, 60)
+
+  const kindFilter = pickString(sp.kind)
+  const catFilter = pickString(sp.cat)
+  const drawerKey = pickString(sp.drawer)
+
+  const data = await ctx.db(async (tx) => {
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
+    const itemFilters: (SQL | undefined)[] = [
+      isNull(equipmentItems.deletedAt),
+      notInArray(equipmentItems.status, ['retired', 'lost']),
+      vis,
+      catFilter ? eq(equipmentItems.categoryId, catFilter) : undefined,
+    ]
+
+    const [scheduleRows, reminderRows, oilRows, categories, itemOptions] = await Promise.all([
+      tx
+        .select({
+          schedule: equipmentInspectionSchedules,
+          typeName: equipmentInspectionTypes.name,
+          itemId: equipmentItems.id,
+          itemName: equipmentItems.name,
+          assetTag: equipmentItems.assetTag,
+        })
+        .from(equipmentInspectionSchedules)
+        .innerJoin(
+          equipmentItems,
+          eq(equipmentItems.id, equipmentInspectionSchedules.equipmentItemId),
+        )
+        .leftJoin(
+          equipmentInspectionTypes,
+          eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
+        )
+        .where(
+          and(
+            eq(equipmentInspectionSchedules.isActive, true),
+            lte(equipmentInspectionSchedules.nextDueOn, horizon),
+            ...itemFilters,
+          ),
+        )
+        .orderBy(asc(equipmentInspectionSchedules.nextDueOn)),
+      tx
+        .select({
+          reminder: equipmentReminders,
+          assignee: people,
+          itemId: equipmentItems.id,
+          itemName: equipmentItems.name,
+          assetTag: equipmentItems.assetTag,
+        })
+        .from(equipmentReminders)
+        .innerJoin(equipmentItems, eq(equipmentItems.id, equipmentReminders.equipmentItemId))
+        .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
+        .where(
+          and(
+            isNull(equipmentReminders.completedAt),
+            lte(equipmentReminders.dueOn, horizon),
+            ...itemFilters,
+          ),
+        )
+        .orderBy(asc(equipmentReminders.dueOn)),
+      tx
+        .select({
+          itemId: equipmentItems.id,
+          itemName: equipmentItems.name,
+          assetTag: equipmentItems.assetTag,
+          dueOn: equipmentItems.nextOilChangeDue,
+          intervalMonths: equipmentItems.oilChangeIntervalMonths,
+        })
+        .from(equipmentItems)
+        .where(
+          and(
+            eq(equipmentItems.requiresOilChange, true),
+            sql`${equipmentItems.nextOilChangeDue} IS NOT NULL`,
+            lte(equipmentItems.nextOilChangeDue, horizon),
+            ...itemFilters,
+          ),
+        )
+        .orderBy(asc(equipmentItems.nextOilChangeDue)),
+      tx
+        .select({ id: equipmentCategories.id, name: equipmentCategories.name })
+        .from(equipmentCategories)
+        .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name)),
+      // Unit picker for the add-reminder drawer.
+      tx
+        .select({
+          id: equipmentItems.id,
+          name: equipmentItems.name,
+          assetTag: equipmentItems.assetTag,
+        })
+        .from(equipmentItems)
+        .where(and(...itemFilters.filter((f) => f != null)))
+        .orderBy(asc(equipmentItems.name))
+        .limit(1000),
+    ])
+    // Active people for the reminder assignee picker.
+    const assigneeOptions = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
+      .from(people)
+      .where(eq(people.status, 'active'))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+      .limit(500)
+    return { scheduleRows, reminderRows, oilRows, categories, itemOptions, assigneeOptions }
+  })
+
+  // ---- Merge the three sources into one agenda -------------------------------
+  const entries: Entry[] = [
+    ...data.scheduleRows.map((r) => ({
+      key: `s-${r.schedule.id}`,
+      kind: 'inspection' as const,
+      itemId: r.itemId,
+      itemName: r.itemName,
+      assetTag: r.assetTag,
+      title: r.typeName ?? r.schedule.label ?? 'Inspection',
+      detail: formatInterval(r.schedule.intervalValue, r.schedule.intervalUnit),
+      dueOn: r.schedule.nextDueOn,
+      startHref: r.schedule.inspectionTypeId
+        ? `/equipment/inspections/new?itemId=${r.itemId}&typeId=${r.schedule.inspectionTypeId}`
+        : null,
+      reminderId: null,
+    })),
+    ...data.reminderRows.map((r) => ({
+      key: `r-${r.reminder.id}`,
+      kind: 'reminder' as const,
+      itemId: r.itemId,
+      itemName: r.itemName,
+      assetTag: r.assetTag,
+      title: r.reminder.title,
+      detail: [
+        r.assignee ? `${r.assignee.firstName} ${r.assignee.lastName}` : null,
+        r.reminder.repeatIntervalValue && r.reminder.repeatIntervalUnit
+          ? formatInterval(r.reminder.repeatIntervalValue, r.reminder.repeatIntervalUnit)
+          : null,
+        r.reminder.details,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      dueOn: r.reminder.dueOn,
+      startHref: null,
+      reminderId: r.reminder.id,
+    })),
+    ...data.oilRows.map((r) => ({
+      key: `o-${r.itemId}`,
+      kind: 'oil_change' as const,
+      itemId: r.itemId,
+      itemName: r.itemName,
+      assetTag: r.assetTag,
+      title: 'Oil change',
+      detail: r.intervalMonths ? formatInterval(r.intervalMonths, 'month') : null,
+      dueOn: r.dueOn!,
+      startHref: null,
+      reminderId: null,
+    })),
+  ]
+    .filter((e) => !kindFilter || e.kind === kindFilter)
+    .sort((a, b) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0))
+
+  const overdue = entries.filter((e) => e.dueOn < today)
+  const dueToday = entries.filter((e) => e.dueOn === today)
+  const week = entries.filter((e) => e.dueOn > today && e.dueOn <= addDays(today, 7))
+  const next30 = entries.filter((e) => e.dueOn >= today && e.dueOn <= addDays(today, 30))
+
+  // Calendar cells for the viewed month (Sunday-first grid).
+  const byDay = new Map<string, Entry[]>()
+  for (const e of entries) {
+    if (e.dueOn >= monthStart && e.dueOn <= monthEnd) {
+      const list = byDay.get(e.dueOn) ?? []
+      list.push(e)
+      byDay.set(e.dueOn, list)
+    }
+  }
+  const daysInMonth = monthEndDate.getUTCDate()
+  const leadingBlanks = monthStartDate.getUTCDay()
+  const monthLabel = monthStartDate.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+
+  // Work list: overdue first, then the viewed month's upcoming days.
+  const upcomingDays = [...byDay.keys()].filter((d) => d >= today).sort()
+
+  const editingReminderRow =
+    drawerKey?.startsWith('reminder-') && drawerKey !== 'reminder-new'
+      ? (data.reminderRows.find((r) => `reminder-${r.reminder.id}` === drawerKey) ?? null)
+      : null
+  const reminderEditing: ReminderEditing | null = editingReminderRow
+    ? {
+        id: editingReminderRow.reminder.id,
+        equipmentItemId: editingReminderRow.itemId,
+        title: editingReminderRow.reminder.title,
+        details: editingReminderRow.reminder.details,
+        dueOn: editingReminderRow.reminder.dueOn,
+        repeatIntervalValue: editingReminderRow.reminder.repeatIntervalValue,
+        repeatIntervalUnit: editingReminderRow.reminder.repeatIntervalUnit,
+        assignedToPersonId: editingReminderRow.reminder.assignedToPersonId,
+      }
+    : null
+
+  const closeHref = mergeHref(BASE, sp, { drawer: undefined })
+
+  return (
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title="Maintenance"
+            description="Everything due across the fleet — inspection schedules, reminders, and oil changes."
+            actions={
+              manage ? (
+                <Link
+                  href={mergeHref(BASE, sp, { drawer: 'reminder-new' }) as never}
+                  scroll={false}
+                >
+                  <Button>
+                    <Plus size={14} /> Add reminder
+                  </Button>
+                </Link>
+              ) : undefined
+            }
+          />
+          <EquipmentSubNav active="maintenance" />
+          <TableToolbar>
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="kind"
+              label="Kind"
+              options={[
+                { value: 'inspection', label: 'Inspections' },
+                { value: 'reminder', label: 'Reminders' },
+                { value: 'oil_change', label: 'Oil changes' },
+              ]}
+            />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="cat"
+              label="Category"
+              options={data.categories.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          </TableToolbar>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile icon={AlarmClock} tone="rose" label="Overdue" value={overdue.length} />
+          <StatTile icon={ClipboardCheck} tone="amber" label="Due today" value={dueToday.length} />
+          <StatTile icon={CalendarClock} tone="sky" label="Next 7 days" value={week.length} />
+          <StatTile icon={CalendarDays} tone="teal" label="Next 30 days" value={next30.length} />
+        </div>
+
+        {/* Month calendar — desktop only; the work list below is the mobile surface. */}
+        <Card className="hidden md:block">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+            <CardTitle>{monthLabel}</CardTitle>
+            <div className="flex items-center gap-1">
+              <Link
+                href={mergeHref(BASE, sp, { month: prevMonth }) as never}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                aria-label="Previous month"
+              >
+                <ChevronLeft size={14} />
+              </Link>
+              {month !== currentMonth ? (
+                <Link
+                  href={mergeHref(BASE, sp, { month: undefined }) as never}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                >
+                  Today
+                </Link>
+              ) : null}
+              <Link
+                href={mergeHref(BASE, sp, { month: nextMonth }) as never}
+                className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                aria-label="Next month"
+              >
+                <ChevronRight size={14} />
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-xs dark:border-slate-800 dark:bg-slate-800">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                <div
+                  key={d}
+                  className="bg-slate-50 px-2 py-1.5 text-center font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400"
+                >
+                  {d}
+                </div>
+              ))}
+              {Array.from({ length: leadingBlanks }, (_, i) => (
+                <div key={`blank-${i}`} className="min-h-24 bg-white dark:bg-slate-900" />
+              ))}
+              {Array.from({ length: daysInMonth }, (_, i) => {
+                const day = `${month}-${String(i + 1).padStart(2, '0')}`
+                const dayEntries = byDay.get(day) ?? []
+                const isToday = day === today
+                return (
+                  <div
+                    key={day}
+                    className={`min-h-24 space-y-1 bg-white p-1.5 dark:bg-slate-900 ${
+                      isToday ? 'ring-2 ring-teal-500 ring-inset' : ''
+                    }`}
+                  >
+                    <div
+                      className={`text-right text-[11px] ${
+                        isToday
+                          ? 'font-semibold text-teal-600 dark:text-teal-400'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {i + 1}
+                    </div>
+                    {dayEntries.slice(0, 3).map((e) => (
+                      <Link
+                        key={e.key}
+                        href={`/equipment/${e.itemId}?tab=inspections`}
+                        title={`${e.itemName} — ${e.title}`}
+                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                          e.dueOn < today
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${KIND_META[e.kind].dot}`}
+                        />
+                        <span className="truncate">
+                          {e.assetTag} · {e.title}
+                        </span>
+                      </Link>
+                    ))}
+                    {dayEntries.length > 3 ? (
+                      <div className="px-1 text-[10px] text-slate-400 dark:text-slate-500">
+                        +{dayEntries.length - 3} more
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              {(Object.keys(KIND_META) as EntryKind[]).map((k) => (
+                <span key={k} className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />
+                  {KIND_META[k].label}s
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Work list — overdue first, then day by day for the viewed month. */}
+        {overdue.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-rose-600 dark:text-rose-400">
+                Overdue ({overdue.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WorkList entries={overdue} today={today} manage={manage} sp={sp} />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Coming up{month !== currentMonth ? ` — ${monthLabel}` : ''} (
+              {upcomingDays.reduce((n, d) => n + (byDay.get(d)?.length ?? 0), 0)})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {upcomingDays.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Nothing due{month === currentMonth ? ' for the rest of this month' : ' this month'}.
+                Schedules, reminders, and oil changes appear here as their due dates approach.
+              </p>
+            ) : (
+              upcomingDays.map((day) => (
+                <div key={day} className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+                      weekday: 'long',
+                      month: 'short',
+                      day: 'numeric',
+                      timeZone: 'UTC',
+                    })}
+                    {day === today ? <Badge variant="warning">today</Badge> : null}
+                  </div>
+                  <WorkList entries={byDay.get(day) ?? []} today={today} manage={manage} sp={sp} />
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <ReminderDrawer
+        open={manage && (drawerKey === 'reminder-new' || reminderEditing != null)}
+        closeHref={closeHref}
+        itemOptions={data.itemOptions.map((i) => ({
+          value: i.id,
+          label: `${i.name} (${i.assetTag})`,
+        }))}
+        editing={reminderEditing}
+        people={data.assigneeOptions.map((p) => ({
+          value: p.id,
+          label: `${p.lastName}, ${p.firstName}`,
+          hint: p.employeeNo ?? undefined,
+        }))}
+      />
+    </ListPageLayout>
+  )
+}
+
+function WorkList({
+  entries,
+  today,
+  manage,
+  sp,
+}: {
+  entries: Entry[]
+  today: string
+  manage: boolean
+  sp: Record<string, string | string[] | undefined>
+}) {
+  return (
+    <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+      {entries.map((e) => (
+        <li key={e.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_META[e.kind].dot}`} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Link
+                href={`/equipment/${e.itemId}?tab=inspections`}
+                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+              >
+                {e.itemName}
+              </Link>
+              <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
+                {e.assetTag}
+              </span>
+              <span className="text-slate-600 dark:text-slate-300">{e.title}</span>
+              <Badge variant="secondary">{KIND_META[e.kind].label}</Badge>
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Due{' '}
+              <span
+                className={
+                  e.dueOn < today ? 'font-medium text-rose-600 dark:text-rose-400' : undefined
+                }
+              >
+                {e.dueOn}
+              </span>
+              {e.detail ? ` · ${e.detail}` : ''}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {e.startHref ? (
+              <Link href={e.startHref as never}>
+                <Button size="sm" variant="outline">
+                  <ClipboardCheck size={14} /> Start
+                </Button>
+              </Link>
+            ) : null}
+            {e.kind === 'oil_change' ? (
+              <Link href={`/equipment/${e.itemId}?tab=log&drawer=add-log`}>
+                <Button size="sm" variant="outline">
+                  <Droplets size={14} /> Log
+                </Button>
+              </Link>
+            ) : null}
+            {manage && e.reminderId ? (
+              <>
+                <Link
+                  href={mergeHref(BASE, sp, { drawer: `reminder-${e.reminderId}` }) as never}
+                  scroll={false}
+                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  Edit
+                </Link>
+                <form action={completeEquipmentReminder}>
+                  <input type="hidden" name="id" value={e.reminderId} />
+                  <Button size="sm" variant="outline" type="submit">
+                    <Check size={14} /> Done
+                  </Button>
+                </form>
+              </>
+            ) : null}
+            {e.kind === 'reminder' && !manage ? (
+              <BellRing size={14} className="text-slate-300 dark:text-slate-600" />
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
