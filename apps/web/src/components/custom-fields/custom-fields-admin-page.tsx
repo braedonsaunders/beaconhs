@@ -24,6 +24,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { ModuleNav } from '@/components/module-admin/module-nav'
 import { mergeHref, pickString } from '@/lib/list-params'
 import { entityConfig } from '@/lib/custom-fields/config'
+import { EQUIPMENT_FIELD_GROUPS } from '@/lib/equipment/field-groups'
 import { loadAllCustomFieldDefs, loadSubtypeOptions } from '@/lib/custom-fields/queries'
 import { deleteCustomFieldDefAction, saveCustomFieldDefAction } from '@/lib/custom-fields/actions'
 import { ConfirmButton } from '@/components/confirm-button'
@@ -60,6 +61,7 @@ export async function CustomFieldsAdminPage({
         fieldType: editingRow.fieldType,
         required: editingRow.required,
         groupLabel: editingRow.groupLabel,
+        groupKey: editingRow.groupKey,
         subtypeId: editingRow.subtypeId,
         sortOrder: editingRow.sortOrder,
         isActive: editingRow.isActive,
@@ -67,6 +69,10 @@ export async function CustomFieldsAdminPage({
       }
     : null
   const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
+  // Native-group placement targets (equipment only).
+  const nativeGroups =
+    kind === 'equipment' ? EQUIPMENT_FIELD_GROUPS.map((g) => ({ key: g.key, label: g.label })) : []
+  const nativeGroupLabel = new Map(nativeGroups.map((g) => [g.key, g.label]))
   const closeHref = mergeHref(base, sp, { drawer: undefined })
   const newHref = mergeHref(base, sp, { drawer: 'new' })
 
@@ -145,7 +151,13 @@ export async function CustomFieldsAdminPage({
                       </TableCell>
                     ) : null}
                     <TableCell className="text-slate-600 dark:text-slate-400">
-                      {d.groupLabel ?? <span className="text-slate-400">—</span>}
+                      {d.groupKey ? (
+                        <Badge variant="secondary">
+                          {nativeGroupLabel.get(d.groupKey) ?? d.groupKey}
+                        </Badge>
+                      ) : (
+                        (d.groupLabel ?? <span className="text-slate-400">—</span>)
+                      )}
                     </TableCell>
                     <TableCell>
                       {d.required ? (
@@ -200,6 +212,7 @@ export async function CustomFieldsAdminPage({
         hasSubtype={cfg.hasSubtype}
         subtypeLabel={cfg.subtypeLabel}
         subtypeOptions={subtypeOptions}
+        nativeGroups={nativeGroups}
         closeHref={closeHref}
         saveAction={saveCustomFieldDefAction}
       />

@@ -25,6 +25,7 @@ export type DesignerEditing = {
   fieldType: CustomFieldType
   required: boolean
   groupLabel: string | null
+  groupKey: string | null
   subtypeId: string | null
   sortOrder: number
   isActive: boolean
@@ -47,6 +48,7 @@ export function CustomFieldsDesignerDrawer({
   hasSubtype,
   subtypeLabel,
   subtypeOptions,
+  nativeGroups = [],
   closeHref,
   saveAction,
 }: {
@@ -56,6 +58,8 @@ export function CustomFieldsDesignerDrawer({
   hasSubtype: boolean
   subtypeLabel: string | null
   subtypeOptions: { id: string; name: string }[]
+  /** Native field groups the field can render inside (equipment only). */
+  nativeGroups?: { key: string; label: string }[]
   closeHref: string
   saveAction: SaveAction
 }) {
@@ -79,6 +83,7 @@ export function CustomFieldsDesignerDrawer({
         hasSubtype={hasSubtype}
         subtypeLabel={subtypeLabel}
         subtypeOptions={subtypeOptions}
+        nativeGroups={nativeGroups}
         saveAction={saveAction}
         onDone={close}
       />
@@ -92,6 +97,7 @@ function DesignerForm({
   hasSubtype,
   subtypeLabel,
   subtypeOptions,
+  nativeGroups,
   saveAction,
   onDone,
 }: {
@@ -100,6 +106,7 @@ function DesignerForm({
   hasSubtype: boolean
   subtypeLabel: string | null
   subtypeOptions: { id: string; name: string }[]
+  nativeGroups: { key: string; label: string }[]
   saveAction: SaveAction
   onDone: () => void
 }) {
@@ -107,6 +114,7 @@ function DesignerForm({
   const [fieldType, setFieldType] = useState<CustomFieldType>(editing?.fieldType ?? 'text')
   const [helpText, setHelpText] = useState(editing?.helpText ?? '')
   const [groupLabel, setGroupLabel] = useState(editing?.groupLabel ?? '')
+  const [groupKey, setGroupKey] = useState(editing?.groupKey ?? '')
   const [required, setRequired] = useState(editing?.required ?? false)
   const [isActive, setIsActive] = useState(editing?.isActive ?? true)
   const [subtypeId, setSubtypeId] = useState(editing?.subtypeId ?? '')
@@ -174,6 +182,7 @@ function DesignerForm({
         config: Object.keys(config).length > 0 ? config : null,
         required,
         groupLabel: groupLabel.trim() || null,
+        groupKey: groupKey || null,
         subtypeId: hasSubtype ? subtypeId || null : null,
         sortOrder: Number(sortOrder) || 0,
         isActive,
@@ -227,15 +236,34 @@ function DesignerForm({
             </p>
           ) : null}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="cf-group">Group (section heading)</Label>
-          <Input
-            id="cf-group"
-            value={groupLabel}
-            onChange={(e) => setGroupLabel(e.currentTarget.value)}
-            placeholder="e.g. Gas detector"
-          />
-        </div>
+        {nativeGroups.length > 0 ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="cf-placement">Appears in</Label>
+            <Select
+              id="cf-placement"
+              value={groupKey}
+              onChange={(e) => setGroupKey(e.currentTarget.value)}
+            >
+              <option value="">Its own section</option>
+              {nativeGroups.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {!groupKey ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="cf-group">Group (section heading)</Label>
+            <Input
+              id="cf-group"
+              value={groupLabel}
+              onChange={(e) => setGroupLabel(e.currentTarget.value)}
+              placeholder="e.g. Gas detector"
+            />
+          </div>
+        ) : null}
       </div>
 
       {hasSubtype ? (

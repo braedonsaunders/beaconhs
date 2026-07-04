@@ -28,6 +28,7 @@ import {
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { EQUIPMENT_FIELD_GROUPS } from '@/lib/equipment/field-groups'
 import { entityConfig } from './config'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
@@ -160,6 +161,8 @@ export type SaveCustomFieldInput = {
   config: CustomFieldConfig | null
   required: boolean
   groupLabel: string | null
+  /** Native field-group placement (equipment only) — see EQUIPMENT_FIELD_GROUPS. */
+  groupKey: string | null
   subtypeId: string | null
   sortOrder: number
   isActive: boolean
@@ -187,6 +190,14 @@ export async function saveCustomFieldDefAction(input: SaveCustomFieldInput): Pro
   // Subtype scope only applies to kinds that have subtypes.
   const subtypeId = cfg.hasSubtype ? input.subtypeId || null : null
   const groupLabel = input.groupLabel?.trim() || null
+  // Native-group placement is an equipment concept; validate against the
+  // registry so a stale key can never orphan the field.
+  const groupKey =
+    input.kind === 'equipment' &&
+    input.groupKey &&
+    EQUIPMENT_FIELD_GROUPS.some((g) => g.key === input.groupKey)
+      ? input.groupKey
+      : null
   const helpText = input.helpText?.trim() || null
 
   try {
@@ -204,6 +215,7 @@ export async function saveCustomFieldDefAction(input: SaveCustomFieldInput): Pro
             config,
             required: input.required,
             groupLabel,
+            groupKey,
             subtypeId,
             sortOrder: input.sortOrder,
             isActive: input.isActive,
@@ -232,6 +244,7 @@ export async function saveCustomFieldDefAction(input: SaveCustomFieldInput): Pro
           config,
           required: input.required,
           groupLabel,
+          groupKey,
           sortOrder: input.sortOrder,
           isActive: input.isActive,
         })

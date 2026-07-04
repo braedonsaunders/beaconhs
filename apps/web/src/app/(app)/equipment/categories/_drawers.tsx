@@ -7,12 +7,14 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { DEFAULT_ENABLED_GROUP_KEYS, EQUIPMENT_FIELD_GROUPS } from '@/lib/equipment/field-groups'
 
 export type CategoryEditing = {
   id: string
   name: string
   description: string | null
   sortOrder: number
+  enabledFieldGroups: string[] | null
 }
 
 type SaveAction = (input: {
@@ -20,6 +22,7 @@ type SaveAction = (input: {
   name: string
   description: string | null
   sortOrder: number
+  enabledFieldGroups: string[] | null
 }) => Promise<{ ok: true } | { ok: false; error: string }>
 
 export function EquipmentCategoryDrawer({
@@ -68,8 +71,17 @@ function CategoryForm({
   const [name, setName] = useState(editing?.name ?? '')
   const [sortOrder, setSortOrder] = useState(String(editing?.sortOrder ?? 0))
   const [description, setDescription] = useState(editing?.description ?? '')
+  // Field-group layout: null = registry defaults; a list = explicit override.
+  const [useDefaultGroups, setUseDefaultGroups] = useState(editing?.enabledFieldGroups == null)
+  const [groupKeys, setGroupKeys] = useState<string[]>(
+    editing?.enabledFieldGroups ?? DEFAULT_ENABLED_GROUP_KEYS,
+  )
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+
+  function toggleGroup(key: string) {
+    setGroupKeys((keys) => (keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]))
+  }
 
   function submit() {
     setError(null)
@@ -84,6 +96,7 @@ function CategoryForm({
         name: trimmed,
         description: description.trim() || null,
         sortOrder: Number(sortOrder) || 0,
+        enabledFieldGroups: useDefaultGroups ? null : groupKeys,
       })
       if (res.ok) onDone()
       else setError(res.error)
@@ -127,6 +140,44 @@ function CategoryForm({
           rows={2}
         />
       </div>
+      <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
+        <legend className="px-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+          Record page sections
+        </legend>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Which detail sections items of this category show — keep a hand tool lean, give a truck
+          registration and meters.
+        </p>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={useDefaultGroups}
+            onChange={(e) => setUseDefaultGroups(e.currentTarget.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+          />
+          <span>Use recommended defaults</span>
+        </label>
+        {!useDefaultGroups ? (
+          <div className="space-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
+            {EQUIPMENT_FIELD_GROUPS.map((g) => (
+              <label key={g.key} className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={groupKeys.includes(g.key)}
+                  onChange={() => toggleGroup(g.key)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+                />
+                <span>
+                  {g.label}
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    {g.description}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : null}
+      </fieldset>
       {error ? (
         <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
           {error}

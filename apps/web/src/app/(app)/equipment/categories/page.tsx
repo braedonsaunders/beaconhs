@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { EQUIPMENT_FIELD_GROUPS } from '@/lib/equipment/field-groups'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
@@ -46,17 +47,30 @@ async function saveCategory(input: {
   name: string
   description: string | null
   sortOrder: number
+  /** Enabled field-group keys; null = registry defaults. */
+  enabledFieldGroups: string[] | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'equipment')
   const name = input.name.trim()
   if (!name) return { ok: false, error: 'Name is required' }
+  // Only registry keys survive — a stale key from an old client is dropped.
+  const validKeys = new Set(EQUIPMENT_FIELD_GROUPS.map((g) => g.key))
+  const enabledFieldGroups =
+    input.enabledFieldGroups === null
+      ? null
+      : input.enabledFieldGroups.filter((k) => validKeys.has(k))
   const id = await ctx.db(async (tx) => {
     if (input.id) {
       await tx
         .update(equipmentCategories)
-        .set({ name, description: input.description, sortOrder: input.sortOrder })
+        .set({
+          name,
+          description: input.description,
+          sortOrder: input.sortOrder,
+          enabledFieldGroups,
+        })
         .where(eq(equipmentCategories.id, input.id))
       return input.id
     }
@@ -68,6 +82,7 @@ async function saveCategory(input: {
         slug: slugify(name),
         description: input.description,
         sortOrder: input.sortOrder,
+        enabledFieldGroups,
       })
       .onConflictDoNothing({ target: [equipmentCategories.tenantId, equipmentCategories.slug] })
       .returning({ id: equipmentCategories.id })
@@ -212,6 +227,7 @@ export default async function EquipmentCategoriesPage({
         name: editingRow.name,
         description: editingRow.description,
         sortOrder: editingRow.sortOrder,
+        enabledFieldGroups: editingRow.enabledFieldGroups ?? null,
       }
     : null
   const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
