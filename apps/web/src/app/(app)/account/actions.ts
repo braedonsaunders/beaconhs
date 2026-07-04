@@ -10,9 +10,13 @@ import { headers } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { auth } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { users } from '@beaconhs/db/schema'
+import { attachments, people, users } from '@beaconhs/db/schema'
 import { assertNotImpersonating } from '@beaconhs/tenant'
+import { newAttachmentKey, putObject } from '@beaconhs/storage'
 import { getSessionUser, requireRequestContext } from '@/lib/auth'
+import { recordAudit } from '@/lib/audit'
+
+const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)?,(.*)$/s
 
 type Result = { ok?: boolean; error?: string }
 
@@ -84,6 +88,78 @@ export async function changePassword(_prev: Result | null, formData: FormData): 
   } catch {
     return { error: 'Your current password is incorrect.' }
   }
+  return { ok: true }
+}
+
+/**
+ * Save the signed-in user's own signature, drawn on the account page's signature
+ * pad. The signature lives on the linked person record (people.signature_attachment_id)
+ * so every existing render site — form sign-offs, inspections, lift plans, PDFs —
+ * keeps working unchanged. Decodes the pad's PNG data-url, stores the bytes in
+ * object storage, and points the person at a fresh attachment row.
+ */
+export async function saveMySignature(dataUrl: string): Promise<Result> {
+  const ctx = await requireRequestContext()
+  assertNotImpersonating(ctx, 'account')
+  if (!ctx.personId) {
+    return { error: 'Your login is not linked to a person record yet.' }
+  }
+  const match = DATA_URL_RE.exec((dataUrl ?? '').trim())
+  if (!match) return { error: 'Could not read the signature. Draw it again.' }
+  const contentType = match[1] || 'image/png'
+  const body = Buffer.from(match[2] ?? '', 'base64')
+  if (body.length === 0) return { error: 'Draw your signature before saving.' }
+
+  const filename = 'signature.png'
+  const key = newAttachmentKey({ tenantId: ctx.tenantId, kind: 'signature', filename })
+  await putObject({ key, body, contentType })
+
+  await ctx.db(async (tx) => {
+    const [att] = await tx
+      .insert(attachments)
+      .values({
+        tenantId: ctx.tenantId,
+        uploadedBy: ctx.userId,
+        kind: 'signature',
+        r2Key: key,
+        contentType,
+        sizeBytes: body.length,
+        filename,
+      })
+      .returning({ id: attachments.id })
+    if (att) {
+      await tx
+        .update(people)
+        .set({ signatureAttachmentId: att.id })
+        .where(eq(people.id, ctx.personId!))
+    }
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'person',
+    entityId: ctx.personId,
+    action: 'update',
+    summary: 'Updated signature (self-service)',
+  })
+  revalidatePath('/account')
+  return { ok: true }
+}
+
+/** Clear the signed-in user's own signature. */
+export async function clearMySignature(): Promise<Result> {
+  const ctx = await requireRequestContext()
+  assertNotImpersonating(ctx, 'account')
+  if (!ctx.personId) return { error: 'Your login is not linked to a person record yet.' }
+  await ctx.db((tx) =>
+    tx.update(people).set({ signatureAttachmentId: null }).where(eq(people.id, ctx.personId!)),
+  )
+  await recordAudit(ctx, {
+    entityType: 'person',
+    entityId: ctx.personId,
+    action: 'update',
+    summary: 'Cleared signature (self-service)',
+  })
+  revalidatePath('/account')
   return { ok: true }
 }
 

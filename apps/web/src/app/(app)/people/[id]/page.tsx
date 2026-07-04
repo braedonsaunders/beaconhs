@@ -1,22 +1,17 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, inArray, isNull, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm'
 import {
   Award,
   BadgeCheck,
-  CheckSquare,
   FileText,
   HardHat,
-  IdCard,
   Mail,
   Paperclip,
-  PenLine,
   Phone,
   ShieldCheck,
-  Square,
   Trash2,
-  Users,
 } from 'lucide-react'
 import {
   Alert,
@@ -30,8 +25,6 @@ import {
   CardTitle,
   DetailHeader,
   EmptyState,
-  Label,
-  Select,
   Table,
   TableBody,
   TableCell,
@@ -45,13 +38,9 @@ import {
   departments,
   documentAcknowledgments,
   documents,
-  formResponses,
-  formTemplates,
   incidentInjuries,
   incidentPeople,
   incidents,
-  jobTitleTaskAcknowledgments,
-  jobTitleTasks,
   people,
   personFiles,
   personGroupMemberships,
@@ -72,41 +61,37 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { publicUrl } from '@beaconhs/storage'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import { LiveField, LivePersonSelect, LiveRichText, LiveSelect } from '@/components/live-field'
+import { LiveMultiSelect } from '@/components/live-multi-select'
+import { SearchInput } from '@/components/search-input'
+import { Pagination } from '@/components/pagination'
+import { pickString } from '@/lib/list-params'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { getPersonSyncOrigin, SYNC_OWNED_PERSON_FIELDS } from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
-import { togglePersonInGroup } from '../_actions/groups'
-import {
-  acknowledgeTitleTask,
-  assignTitleToPerson,
-  revokeTitleTaskAck,
-  setPrimaryTitle,
-  unassignTitleFromPerson,
-} from '../_actions/titles'
-import { clearPersonSignature, deletePersonFile } from '../_actions/files'
+import { setPersonGroups } from '../_actions/groups'
+import { setPersonTitles } from '../_actions/titles'
+import { deletePersonFile } from '../_actions/files'
 import { PersonFilesDrawers } from './_files-drawers'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = [
   'overview',
-  'groups',
-  'title',
   'compliance',
   'training',
   'skills',
   'ppe',
   'documents',
   'incidents',
-  'forms',
   'activity',
 ] as const
 type Tab = (typeof TABS)[number]
@@ -177,6 +162,10 @@ async function updatePersonField(formData: FormData) {
   let value: string | null = rawValue || null
   if (field === 'firstName' || field === 'lastName') {
     value = rawValue
+  } else if (field === 'notes') {
+    // Notes is a rich-text field — persist sanitized HTML (defense-in-depth
+    // alongside the render-side sanitize), or null when effectively blank.
+    value = rawValue ? sanitizeDocumentHtml(rawValue) : null
   } else if (field === 'status') {
     if (!(PERSON_STATUSES as readonly string[]).includes(rawValue)) {
       throw new Error('Invalid status')
@@ -221,11 +210,18 @@ export default async function PersonDetailPage({
   const canEdit = canManageModule(ctx, 'people')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
-      .select({ person: people, department: departments, trade: trades, crew: crews })
+      .select({
+        person: people,
+        department: departments,
+        trade: trades,
+        crew: crews,
+        photoKey: attachments.r2Key,
+      })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .leftJoin(crews, eq(crews.id, people.crewId))
+      .leftJoin(attachments, eq(attachments.id, people.photoAttachmentId))
       .where(and(eq(people.id, id), isNull(people.deletedAt)))
       .limit(1)
     if (!row) return null
@@ -256,13 +252,11 @@ export default async function PersonDetailPage({
       ppeAssigned,
       ppeIssueLog,
       ackedDocs,
-      submittedForms,
       personGroupRows,
       allGroups,
       personTitleRows,
       allTitles,
       fileRows,
-      signatureAtt,
       managerRow,
       deptOptions,
       tradeOptions,
@@ -341,12 +335,6 @@ export default async function PersonDetailPage({
         .innerJoin(documents, eq(documents.id, documentAcknowledgments.documentId))
         .where(eq(documentAcknowledgments.personId, id))
         .orderBy(desc(documentAcknowledgments.acknowledgedAt)),
-      tx
-        .select({ response: formResponses, template: formTemplates })
-        .from(formResponses)
-        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-        .where(eq(formResponses.subjectPersonId, id))
-        .orderBy(desc(formResponses.submittedAt)),
       // Groups this person belongs to
       tx
         .select({ membership: personGroupMemberships, group: personGroups })
@@ -371,17 +359,6 @@ export default async function PersonDetailPage({
         .leftJoin(attachments, eq(attachments.id, personFiles.attachmentId))
         .where(eq(personFiles.personId, id))
         .orderBy(desc(personFiles.uploadedAt)),
-      // Signature image attachment (single row) — used both on this page and
-      // inline by inspections / lift plans / form sign-offs when this person
-      // signs.
-      row.person.signatureAttachmentId
-        ? tx
-            .select()
-            .from(attachments)
-            .where(eq(attachments.id, row.person.signatureAttachmentId))
-            .limit(1)
-            .then((rs) => rs[0] ?? null)
-        : Promise.resolve(null),
       // Manager for the side-panel "reports to" row + a quick org-chart link.
       row.person.managerPersonId
         ? tx
@@ -417,26 +394,6 @@ export default async function PersonDetailPage({
       getPersonSyncOrigin(tx, id),
     ])
 
-    // Second pass for title tasks now that we know the titles
-    const heldTitleIds = personTitleRows.map((r) => r.title.id)
-    const tasksForHeldTitles =
-      heldTitleIds.length > 0
-        ? await tx
-            .select()
-            .from(jobTitleTasks)
-            .where(inArray(jobTitleTasks.titleId, heldTitleIds))
-            .orderBy(asc(jobTitleTasks.entityOrder))
-        : []
-    const taskIds = tasksForHeldTitles.map((t) => t.id)
-    const acksForPerson =
-      taskIds.length > 0
-        ? await tx
-            .select()
-            .from(jobTitleTaskAcknowledgments)
-            .where(inArray(jobTitleTaskAcknowledgments.taskId, taskIds))
-        : []
-    const acksForThisPerson = acksForPerson.filter((a) => a.personId === id)
-
     // Read-only view of the login account this person is linked to (managed from
     // Admin → Users). membershipId lets an admin jump straight to that page.
     const linkedAccount = row.person.userId
@@ -455,6 +412,7 @@ export default async function PersonDetailPage({
 
     return {
       ...row,
+      photoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
       linkedAccount,
       training,
       skills,
@@ -463,15 +421,11 @@ export default async function PersonDetailPage({
       ppeAssigned,
       ppeIssueLog,
       ackedDocs,
-      submittedForms,
       personGroupRows,
       allGroups,
       personTitleRows,
       allTitles,
-      titleTasks: tasksForHeldTitles,
-      titleTaskAcks: acksForThisPerson,
       fileRows,
-      signatureAtt,
       managerRow,
       deptOptions,
       tradeOptions,
@@ -494,15 +448,11 @@ export default async function PersonDetailPage({
     ppeAssigned,
     ppeIssueLog,
     ackedDocs,
-    submittedForms,
     personGroupRows,
     allGroups,
     personTitleRows,
     allTitles,
-    titleTasks,
-    titleTaskAcks,
     fileRows,
-    signatureAtt,
     managerRow,
     deptOptions,
     tradeOptions,
@@ -510,8 +460,8 @@ export default async function PersonDetailPage({
     managerOptions,
     syncOrigin,
     linkedAccount,
+    photoUrl,
   } = data
-  const signatureUrl = signatureAtt ? publicUrl(signatureAtt.r2Key) : null
   const openDrawer = typeof sp.drawer === 'string' ? sp.drawer : null
   const basePathForDrawer = `/people/${id}${active === 'overview' ? '' : `?tab=${active}`}`
   const synced = syncOrigin != null
@@ -523,10 +473,20 @@ export default async function PersonDetailPage({
   // A field's input is read-only when the viewer lacks edit permission, OR the
   // person is synced and this is a sync-owned field.
   const fieldDisabled = (field: string) => !canEdit || (synced && SYNC_OWNED_FIELDS.has(field))
-  const ackByTaskId = new Map(titleTaskAcks.map((a) => [a.taskId, a]))
 
   const today = new Date()
-  const trainingWithStatus = training
+  // Transcript = the person's CURRENT standing per course. `training` is ordered
+  // newest-completed-first, so the first row seen for a course is its most recent
+  // record; older rows for the same course are superseded (e.g. an expired cert
+  // that has since been renewed) and must not show as separate expired lines.
+  const seenCourseIds = new Set<string>()
+  const latestPerCourse = training.filter((t) => {
+    if (seenCourseIds.has(t.course.id)) return false
+    seenCourseIds.add(t.course.id)
+    return true
+  })
+  const supersededCount = training.length - latestPerCourse.length
+  const transcript = latestPerCourse
     .map((t) => {
       const exp = t.record.expiresOn ? new Date(t.record.expiresOn) : null
       const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
@@ -544,6 +504,22 @@ export default async function PersonDetailPage({
       const rank = { expired: 0, expiring: 1, ok: 2, no_expiry: 3 } as const
       return rank[a.status] - rank[b.status]
     })
+
+  // Transcript sub-table: URL-driven search + pagination via prefixed params so
+  // it never fights the other tabs for `q`/`page`.
+  const transcriptQuery = (pickString(sp.tq) ?? '').trim().toLowerCase()
+  const filteredTranscript = transcriptQuery
+    ? transcript.filter((t) => {
+        const hay = `${t.course.name} ${t.course.code ?? ''}`.toLowerCase()
+        return hay.includes(transcriptQuery)
+      })
+    : transcript
+  const TRANSCRIPT_PER_PAGE = 10
+  const transcriptPage = Math.max(1, Number(pickString(sp.tpage) ?? '1') || 1)
+  const transcriptPageRows = filteredTranscript.slice(
+    (transcriptPage - 1) * TRANSCRIPT_PER_PAGE,
+    transcriptPage * TRANSCRIPT_PER_PAGE,
+  )
 
   const skillsWithStatus = skills
     .map((s) => {
@@ -564,8 +540,9 @@ export default async function PersonDetailPage({
       return rank[a.status] - rank[b.status]
     })
 
-  const expiredCount = trainingWithStatus.filter((t) => t.status === 'expired').length
-  const expiringCount = trainingWithStatus.filter((t) => t.status === 'expiring').length
+  const expiredCount = transcript.filter((t) => t.status === 'expired').length
+  const expiringCount = transcript.filter((t) => t.status === 'expiring').length
+  const validCount = transcript.filter((t) => t.status === 'ok').length
 
   const incidentMap = new Map<
     string,
@@ -591,9 +568,6 @@ export default async function PersonDetailPage({
         <DetailHeader
           back={{ href: '/people', label: 'Back to people' }}
           title={`${person.firstName} ${person.lastName}`}
-          subtitle={
-            person.formalName ?? (person.employeeNo ? `Employee ${person.employeeNo}` : undefined)
-          }
           badge={
             <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
               {person.status}
@@ -606,16 +580,26 @@ export default async function PersonDetailPage({
             <Card>
               <CardContent className="space-y-3 p-5 text-sm">
                 <div className="flex flex-col items-center gap-2 pb-3">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-100 text-2xl font-semibold text-teal-800">
-                    {person.firstName[0]}
-                    {person.lastName[0]}
-                  </div>
-                  <div className="text-center">
-                    <div className="text-base font-semibold">
-                      {person.formalName ?? `${person.firstName} ${person.lastName}`}
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photoUrl}
+                      alt={`${person.firstName} ${person.lastName}`}
+                      className="h-20 w-20 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-100 text-2xl font-semibold text-teal-800 dark:bg-teal-500/15 dark:text-teal-300">
+                      {person.firstName[0]}
+                      {person.lastName[0]}
                     </div>
-                    <div className="text-xs text-slate-500">{person.jobTitle ?? '—'}</div>
-                    <div className="text-xs text-slate-500">{trade?.name ?? ''}</div>
+                  )}
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      {person.jobTitle ?? '—'}
+                    </div>
+                    {trade?.name ? (
+                      <div className="text-xs text-slate-500">{trade.name}</div>
+                    ) : null}
                   </div>
                 </div>
                 <SidebarRow label="Employee #">{person.employeeNo ?? '—'}</SidebarRow>
@@ -687,66 +671,6 @@ export default async function PersonDetailPage({
                 </CardContent>
               </Card>
             ) : null}
-            {person.notes ? (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Notes</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 text-sm whitespace-pre-wrap text-slate-700">
-                  {person.notes}
-                </CardContent>
-              </Card>
-            ) : null}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <PenLine size={14} className="text-slate-500" />
-                  Signature
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {signatureUrl ? (
-                  <div className="space-y-2">
-                    <img
-                      src={signatureUrl}
-                      alt={`${person.firstName} ${person.lastName} signature`}
-                      className="max-h-16 w-full rounded border border-slate-200 bg-white object-contain p-1 dark:border-slate-700"
-                    />
-                    {canEditFiles ? (
-                      <div className="flex items-center gap-1">
-                        <Link href={`${basePath}?drawer=signature-upload`} className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full">
-                            Replace
-                          </Button>
-                        </Link>
-                        <form action={clearPersonSignature} className="inline">
-                          <input type="hidden" name="personId" value={person.id} />
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        </form>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
-                    <p>No signature on file.</p>
-                    {canEditFiles ? (
-                      <Link href={`${basePath}?drawer=signature-upload`} className="block">
-                        <Button variant="outline" size="sm" className="w-full">
-                          Upload signature
-                        </Button>
-                      </Link>
-                    ) : null}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </aside>
 
           <div className="space-y-4">
@@ -757,38 +681,23 @@ export default async function PersonDetailPage({
               variant="pills"
               tabs={[
                 { key: 'overview', label: 'Overview' },
-                {
-                  key: 'groups',
-                  label: 'Groups',
-                  count: personGroupRows.length,
-                },
-                {
-                  key: 'title',
-                  label: 'Titles',
-                  count: personTitleRows.length,
-                },
                 { key: 'compliance', label: 'Compliance' },
                 {
                   key: 'training',
-                  label: 'Training',
-                  count: training.length,
+                  label: 'Transcript',
+                  count: transcript.length,
                 },
                 { key: 'skills', label: 'Skills', count: skills.length },
                 { key: 'ppe', label: 'PPE', count: ppeAssigned.length },
                 {
                   key: 'documents',
                   label: 'Documents & files',
-                  count: fileRows.length + ackedDocs.length,
+                  count: fileRows.length,
                 },
                 {
                   key: 'incidents',
                   label: 'Incidents',
                   count: allIncidents.length,
-                },
-                {
-                  key: 'forms',
-                  label: 'Apps',
-                  count: submittedForms.length,
                 },
                 { key: 'activity', label: 'Activity' },
               ]}
@@ -984,14 +893,42 @@ export default async function PersonDetailPage({
                   </div>
                 </Section>
 
+                <Section title="Groups & titles" subtitle="Tags and job titles this person holds">
+                  <div className="space-y-4">
+                    <LiveMultiSelect
+                      id={person.id}
+                      label="Groups"
+                      initialValue={personGroupRows.map((r) => r.group.id)}
+                      options={allGroups.map((g) => ({
+                        value: g.id,
+                        label: g.name,
+                        color: g.color,
+                      }))}
+                      disabled={!canEdit}
+                      updateAction={setPersonGroups}
+                      placeholder="Add to a group…"
+                      sheetTitle="Add to group"
+                    />
+                    <LiveMultiSelect
+                      id={person.id}
+                      label="Titles"
+                      initialValue={personTitleRows.map((r) => r.title.id)}
+                      options={allTitles.map((t) => ({ value: t.id, label: t.name }))}
+                      disabled={!canEdit}
+                      updateAction={setPersonTitles}
+                      placeholder="Assign a title…"
+                      sheetTitle="Assign title"
+                    />
+                  </div>
+                </Section>
+
                 <Section title="Notes" subtitle="Internal notes about this person">
-                  <LiveField
+                  <LiveRichText
                     id={person.id}
                     field="notes"
                     label="Notes"
-                    multiline
-                    rows={4}
                     initialValue={person.notes}
+                    placeholder="Add internal notes about this person…"
                     disabled={fieldDisabled('notes')}
                     updateAction={updatePersonField}
                   />
@@ -1008,49 +945,35 @@ export default async function PersonDetailPage({
               </div>
             ) : null}
 
-            {active === 'groups' ? (
-              <GroupsTab
-                personId={person.id}
-                memberships={personGroupRows}
-                allGroups={allGroups}
-                canEdit={canEdit}
-              />
-            ) : null}
-
-            {active === 'title' ? (
-              <TitleTab
-                personId={person.id}
-                titlesHeld={personTitleRows}
-                allTitles={allTitles}
-                titleTasks={titleTasks}
-                ackByTaskId={ackByTaskId}
-                canEdit={canEdit}
-                canAcknowledge={canEdit || isSelf}
-              />
-            ) : null}
-
             {active === 'compliance' ? (
               <ComplianceTab
-                trainingTotal={trainingWithStatus.length}
-                trainingValid={trainingWithStatus.filter((t) => t.status === 'ok').length}
+                trainingTotal={transcript.length}
+                trainingValid={transcript.filter((t) => t.status === 'ok').length}
                 trainingExpiring={expiringCount}
                 trainingExpired={expiredCount}
                 documentsAcked={ackedDocs.length}
                 ppeCount={ppeAssigned.length}
-                titleTaskTotal={titleTasks.length}
-                titleTaskAckedCount={titleTaskAcks.length}
                 incidentsCount={allIncidents.length}
               />
             ) : null}
 
             {active === 'training' ? (
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+                  <span className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    Compliance
+                  </span>
+                  <CompactStat label="Valid" value={validCount} tone="success" />
+                  <CompactStat label="Expiring ≤30d" value={expiringCount} tone="warning" />
+                  <CompactStat label="Expired" value={expiredCount} tone="destructive" />
+                </div>
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Training matrix</CardTitle>
+                  <CardHeader className="flex flex-row items-center justify-between gap-3">
+                    <CardTitle>Transcript</CardTitle>
+                    <SearchInput placeholder="Search courses…" paramKey="tq" pageParamKey="tpage" />
                   </CardHeader>
                   <CardContent>
-                    {trainingWithStatus.length === 0 ? (
+                    {transcript.length === 0 ? (
                       <EmptyState
                         icon={<FileText size={24} />}
                         title="No training records"
@@ -1063,75 +986,91 @@ export default async function PersonDetailPage({
                           </Link>
                         }
                       />
+                    ) : filteredTranscript.length === 0 ? (
+                      <EmptyState
+                        icon={<FileText size={24} />}
+                        title={`No courses match “${pickString(sp.tq) ?? ''}”`}
+                        description="Try a different search term."
+                      />
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Course</TableHead>
-                            <TableHead>Completed</TableHead>
-                            <TableHead>Expires</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Grade</TableHead>
-                            <TableHead></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {trainingWithStatus.map((row) => (
-                            <TableRow key={row.record.id}>
-                              <TableCell className="font-medium">
-                                <Link
-                                  href={`/training/records/${row.record.id}`}
-                                  className="hover:underline"
-                                >
-                                  {row.course.name}
-                                </Link>
-                                <div className="text-xs text-slate-500">{row.course.code}</div>
-                              </TableCell>
-                              <TableCell>{row.record.completedOn}</TableCell>
-                              <TableCell>{row.record.expiresOn ?? '—'}</TableCell>
-                              <TableCell>
-                                {row.status === 'expired' ? (
-                                  <Badge variant="destructive">
-                                    Expired {Math.abs(row.daysLeft!)}d ago
-                                  </Badge>
-                                ) : row.status === 'expiring' ? (
-                                  <Badge variant="warning">{row.daysLeft}d left</Badge>
-                                ) : row.status === 'ok' ? (
-                                  <Badge variant="success">Valid</Badge>
-                                ) : (
-                                  <Badge variant="secondary">No expiry</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {row.record.grade != null ? `${row.record.grade}%` : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <Link
-                                  href={`/training/records/${row.record.id}`}
-                                  className="text-xs text-teal-700 hover:underline"
-                                >
-                                  View →
-                                </Link>
-                              </TableCell>
+                      <>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Course</TableHead>
+                              <TableHead>Completed</TableHead>
+                              <TableHead>Expires</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Grade</TableHead>
+                              <TableHead></TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {transcriptPageRows.map((row) => (
+                              <TableRow key={row.record.id}>
+                                <TableCell className="font-medium">
+                                  <Link
+                                    href={`/training/records/${row.record.id}`}
+                                    className="hover:underline"
+                                  >
+                                    {row.course.name}
+                                  </Link>
+                                  <div className="text-xs text-slate-500">{row.course.code}</div>
+                                </TableCell>
+                                <TableCell>{row.record.completedOn}</TableCell>
+                                <TableCell>{row.record.expiresOn ?? '—'}</TableCell>
+                                <TableCell>
+                                  {row.status === 'expired' ? (
+                                    <Badge variant="destructive">
+                                      Expired {Math.abs(row.daysLeft!)}d ago
+                                    </Badge>
+                                  ) : row.status === 'expiring' ? (
+                                    <Badge variant="warning">{row.daysLeft}d left</Badge>
+                                  ) : row.status === 'ok' ? (
+                                    <Badge variant="success">Valid</Badge>
+                                  ) : (
+                                    <Badge variant="secondary">No expiry</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {row.record.grade != null ? `${row.record.grade}%` : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <Link
+                                    href={`/training/records/${row.record.id}`}
+                                    className="text-xs text-teal-700 hover:underline"
+                                  >
+                                    View →
+                                  </Link>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <Pagination
+                          basePath={basePath}
+                          currentParams={sp}
+                          total={filteredTranscript.length}
+                          page={transcriptPage}
+                          perPage={TRANSCRIPT_PER_PAGE}
+                          pageParamKey="tpage"
+                        />
+                        {supersededCount > 0 ? (
+                          <p className="px-3 pt-1 text-xs text-slate-400 dark:text-slate-500">
+                            Showing the most recent record per course. {supersededCount} older
+                            superseded {supersededCount === 1 ? 'record is' : 'records are'} hidden
+                            — view the{' '}
+                            <Link
+                              href={`/training/records?personId=${id}` as any}
+                              className="text-teal-700 hover:underline dark:text-teal-400"
+                            >
+                              training module
+                            </Link>{' '}
+                            for full history.
+                          </p>
+                        ) : null}
+                      </>
                     )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Compliance summary</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                    <Stat
-                      label="Valid certifications"
-                      value={trainingWithStatus.filter((t) => t.status === 'ok').length}
-                      tone="success"
-                    />
-                    <Stat label="Expiring within 30 days" value={expiringCount} tone="warning" />
-                    <Stat label="Expired" value={expiredCount} tone="destructive" />
                   </CardContent>
                 </Card>
               </div>
@@ -1372,63 +1311,6 @@ export default async function PersonDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Documents acknowledged ({ackedDocs.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {ackedDocs.length === 0 ? (
-                      <EmptyState
-                        icon={<ShieldCheck size={24} />}
-                        title="No documents acknowledged"
-                        description="Acknowledgements appear here once the person signs off on policies, SDS, or procedures."
-                        action={
-                          <Link href={`/documents`}>
-                            <Button variant="outline" size="sm">
-                              Browse documents →
-                            </Button>
-                          </Link>
-                        }
-                      />
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Document</TableHead>
-                            <TableHead>Category</TableHead>
-                            <TableHead>Acknowledged at</TableHead>
-                            <TableHead></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {ackedDocs.map((row) => (
-                            <TableRow key={row.ack.id}>
-                              <TableCell className="font-medium">
-                                <Link href={`/documents/${row.doc.id}`} className="hover:underline">
-                                  {row.doc.title}
-                                </Link>
-                              </TableCell>
-                              <TableCell className="text-slate-600">
-                                {row.doc.category ?? '—'}
-                              </TableCell>
-                              <TableCell>
-                                {new Date(row.ack.acknowledgedAt).toLocaleString()}
-                              </TableCell>
-                              <TableCell>
-                                <Link
-                                  href={`/documents/${row.doc.id}`}
-                                  className="text-xs text-teal-700 hover:underline"
-                                >
-                                  View →
-                                </Link>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
               </div>
             ) : null}
 
@@ -1483,66 +1365,6 @@ export default async function PersonDetailPage({
               </Card>
             ) : null}
 
-            {active === 'forms' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Apps about this person ({submittedForms.length})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {submittedForms.length === 0 ? (
-                    <EmptyState
-                      icon={<FileText size={24} />}
-                      title="No apps about this person"
-                      description="JSHAs, incident investigations, evaluations, and other app submissions where this person is the subject appear here."
-                    />
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Form</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Submitted</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {submittedForms.map((row) => (
-                          <TableRow key={row.response.id}>
-                            <TableCell className="font-medium">{row.template.name}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  row.response.status === 'closed' ||
-                                  row.response.status === 'submitted'
-                                    ? 'success'
-                                    : 'warning'
-                                }
-                              >
-                                {row.response.status.replace('_', ' ')}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {row.response.submittedAt
-                                ? new Date(row.response.submittedAt).toLocaleDateString()
-                                : '—'}
-                            </TableCell>
-                            <TableCell>
-                              <Link
-                                href={`/apps/responses/${row.response.id}`}
-                                className="text-xs text-teal-700 hover:underline"
-                              >
-                                View →
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            ) : null}
-
             {active === 'activity' ? (
               <Card>
                 <CardHeader>
@@ -1559,11 +1381,7 @@ export default async function PersonDetailPage({
       {canEditFiles ? (
         <PersonFilesDrawers
           personId={person.id}
-          openDrawer={
-            openDrawer === 'upload-person-file' || openDrawer === 'signature-upload'
-              ? openDrawer
-              : null
-          }
+          openDrawer={openDrawer === 'upload-person-file' ? openDrawer : null}
           closeHref={basePathForDrawer}
         />
       ) : null}
@@ -1580,7 +1398,9 @@ function SidebarRow({ label, children }: { label: string; children: React.ReactN
   )
 }
 
-function Stat({
+/** Compact inline stat — a colored number with a small label, for the dense
+ * one-row transcript compliance summary. */
+function CompactStat({
   label,
   value,
   tone,
@@ -1596,315 +1416,10 @@ function Stat({
         ? 'text-amber-700 dark:text-amber-400'
         : 'text-red-700 dark:text-red-400'
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
-      </div>
-      <div className={`mt-1 text-2xl font-semibold tabular-nums ${colour}`}>{value}</div>
-    </div>
-  )
-}
-
-// ---------- Groups tab ---------------------------------------------------
-
-function GroupsTab({
-  personId,
-  memberships,
-  allGroups,
-  canEdit,
-}: {
-  personId: string
-  memberships: {
-    membership: typeof personGroupMemberships.$inferSelect
-    group: typeof personGroups.$inferSelect
-  }[]
-  allGroups: (typeof personGroups.$inferSelect)[]
-  canEdit: boolean
-}) {
-  const memberIds = new Set(memberships.map((m) => m.group.id))
-  const candidates = allGroups.filter((g) => !memberIds.has(g.id))
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users size={16} />
-            Current groups
-            <Badge variant="secondary">{memberships.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {memberships.length === 0 ? (
-            <p className="text-sm text-slate-500">Not in any groups.</p>
-          ) : (
-            <ul className="flex flex-wrap gap-2">
-              {memberships.map(({ group }) => (
-                <li
-                  key={group.id}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  style={group.color ? { borderColor: group.color, color: group.color } : undefined}
-                >
-                  {group.color ? (
-                    <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ background: group.color }}
-                    />
-                  ) : null}
-                  <Link href={`/people/groups/${group.id}`} className="hover:underline">
-                    {group.name}
-                  </Link>
-                  {canEdit ? (
-                    <form action={togglePersonInGroup} className="inline">
-                      <input type="hidden" name="groupId" value={group.id} />
-                      <input type="hidden" name="personId" value={personId} />
-                      <button
-                        type="submit"
-                        title="Remove from group"
-                        className="text-slate-400 hover:text-red-600"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-      {canEdit && candidates.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Available groups</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-              {candidates.map((g) => (
-                <li
-                  key={g.id}
-                  className="flex items-center justify-between rounded border border-slate-200 px-3 py-2 dark:border-slate-700"
-                >
-                  <div className="flex items-center gap-2">
-                    {g.color ? (
-                      <span
-                        className="inline-block h-3 w-3 rounded-full"
-                        style={{ background: g.color }}
-                      />
-                    ) : null}
-                    <span className="font-medium">{g.name}</span>
-                  </div>
-                  <form action={togglePersonInGroup} className="inline">
-                    <input type="hidden" name="groupId" value={g.id} />
-                    <input type="hidden" name="personId" value={personId} />
-                    <Button type="submit" size="sm" variant="outline">
-                      Add
-                    </Button>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
-  )
-}
-
-// ---------- Title tab ----------------------------------------------------
-
-function TitleTab({
-  personId,
-  titlesHeld,
-  allTitles,
-  titleTasks,
-  ackByTaskId,
-  canEdit,
-  canAcknowledge,
-}: {
-  personId: string
-  titlesHeld: {
-    assignment: typeof personTitleAssignments.$inferSelect
-    title: typeof personTitles.$inferSelect
-  }[]
-  allTitles: (typeof personTitles.$inferSelect)[]
-  titleTasks: (typeof jobTitleTasks.$inferSelect)[]
-  ackByTaskId: Map<string, typeof jobTitleTaskAcknowledgments.$inferSelect>
-  canEdit: boolean
-  canAcknowledge: boolean
-}) {
-  const heldIds = new Set(titlesHeld.map((t) => t.title.id))
-  const candidates = allTitles.filter((t) => !heldIds.has(t.id))
-  // Group tasks by title to render the job-description sign-off list
-  const tasksByTitle = new Map<string, (typeof jobTitleTasks.$inferSelect)[]>()
-  for (const t of titleTasks) {
-    if (!tasksByTitle.has(t.titleId)) tasksByTitle.set(t.titleId, [])
-    tasksByTitle.get(t.titleId)!.push(t)
-  }
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <IdCard size={16} />
-            Current titles
-            <Badge variant="secondary">{titlesHeld.length}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {titlesHeld.length === 0 ? (
-            <p className="text-sm text-slate-500">No titles assigned.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {titlesHeld.map(({ assignment, title }) => (
-                <li
-                  key={assignment.id}
-                  className="flex items-center justify-between gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-700"
-                >
-                  <Link
-                    href={`/people/titles/${title.id}`}
-                    className="flex-1 font-medium hover:underline"
-                  >
-                    {title.name}
-                  </Link>
-                  {assignment.isPrimary ? (
-                    <Badge variant="success">Primary</Badge>
-                  ) : canEdit ? (
-                    <form action={setPrimaryTitle} className="inline">
-                      <input type="hidden" name="titleId" value={title.id} />
-                      <input type="hidden" name="personId" value={personId} />
-                      <Button type="submit" size="sm" variant="ghost">
-                        Make primary
-                      </Button>
-                    </form>
-                  ) : null}
-                  {canEdit ? (
-                    <form action={unassignTitleFromPerson} className="inline">
-                      <input type="hidden" name="titleId" value={title.id} />
-                      <input type="hidden" name="personId" value={personId} />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          {canEdit && candidates.length > 0 ? (
-            <form
-              action={assignTitleToPerson}
-              className="mt-3 flex items-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800"
-            >
-              <input type="hidden" name="personId" value={personId} />
-              <div className="min-w-0 flex-1 space-y-1">
-                <Label htmlFor="titleId">Assign new title</Label>
-                <Select id="titleId" name="titleId" defaultValue="">
-                  <option value="">— select —</option>
-                  {candidates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <label className="flex items-center gap-1 text-xs text-slate-500">
-                <input type="checkbox" name="isPrimary" />
-                Primary
-              </label>
-              <Button type="submit">Assign</Button>
-            </form>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {titlesHeld.map(({ title }) => {
-        const tasks = tasksByTitle.get(title.id) ?? []
-        if (tasks.length === 0) return null
-        const ackedCount = tasks.filter((t) => ackByTaskId.has(t.id)).length
-        return (
-          <Card key={title.id}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText size={16} />
-                Job description — {title.name}
-                <Badge variant={ackedCount === tasks.length ? 'success' : 'secondary'}>
-                  {ackedCount}/{tasks.length} acknowledged
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol className="space-y-1 text-sm">
-                {tasks.map((t, i) => {
-                  const ack = ackByTaskId.get(t.id)
-                  return (
-                    <li
-                      key={t.id}
-                      className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-700"
-                    >
-                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-900 dark:text-slate-100">
-                          {t.task}
-                        </div>
-                        {t.description ? (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {t.description}
-                          </div>
-                        ) : null}
-                        {ack ? (
-                          <div className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">
-                            Acknowledged {new Date(ack.acknowledgedAt).toLocaleDateString()}
-                          </div>
-                        ) : null}
-                      </div>
-                      {ack ? (
-                        canAcknowledge ? (
-                          <form action={revokeTitleTaskAck} className="inline">
-                            <input type="hidden" name="taskId" value={t.id} />
-                            <input type="hidden" name="personId" value={personId} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="ghost"
-                              className="text-emerald-700 dark:text-emerald-400"
-                            >
-                              <CheckSquare size={14} />
-                            </Button>
-                          </form>
-                        ) : (
-                          <CheckSquare
-                            size={14}
-                            className="mt-1 text-emerald-700 dark:text-emerald-400"
-                          />
-                        )
-                      ) : canAcknowledge ? (
-                        <form action={acknowledgeTitleTask} className="inline">
-                          <input type="hidden" name="taskId" value={t.id} />
-                          <input type="hidden" name="personId" value={personId} />
-                          <Button type="submit" size="sm" variant="outline">
-                            <Square size={14} />
-                            Acknowledge
-                          </Button>
-                        </form>
-                      ) : (
-                        <Square size={14} className="mt-1 text-slate-300 dark:text-slate-600" />
-                      )}
-                    </li>
-                  )
-                })}
-              </ol>
-            </CardContent>
-          </Card>
-        )
-      })}
-    </div>
+    <span className="flex items-baseline gap-1.5">
+      <span className={`text-lg font-semibold tabular-nums ${colour}`}>{value}</span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
+    </span>
   )
 }
 
@@ -1917,8 +1432,6 @@ function ComplianceTab({
   trainingExpired,
   documentsAcked,
   ppeCount,
-  titleTaskTotal,
-  titleTaskAckedCount,
   incidentsCount,
 }: {
   trainingTotal: number
@@ -1927,13 +1440,9 @@ function ComplianceTab({
   trainingExpired: number
   documentsAcked: number
   ppeCount: number
-  titleTaskTotal: number
-  titleTaskAckedCount: number
   incidentsCount: number
 }) {
   const trainingPct = trainingTotal === 0 ? null : Math.round((trainingValid / trainingTotal) * 100)
-  const titleTaskPct =
-    titleTaskTotal === 0 ? null : Math.round((titleTaskAckedCount / titleTaskTotal) * 100)
   const overdueCount = trainingExpired
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1976,25 +1485,6 @@ function ComplianceTab({
           ppeCount === 0
             ? 'No PPE currently issued'
             : `${ppeCount} piece${ppeCount === 1 ? '' : 's'} of PPE assigned`,
-        ]}
-      />
-      <BigStatCard
-        icon={<FileText size={20} />}
-        title="Job description acknowledgements"
-        primary={titleTaskPct === null ? '—' : `${titleTaskPct}%`}
-        accent={
-          titleTaskPct === null
-            ? 'neutral'
-            : titleTaskPct === 100
-              ? 'success'
-              : titleTaskPct >= 50
-                ? 'warning'
-                : 'destructive'
-        }
-        detail={[
-          titleTaskTotal === 0
-            ? 'No tasks for assigned titles'
-            : `${titleTaskAckedCount} of ${titleTaskTotal} tasks acknowledged`,
         ]}
       />
       <BigStatCard

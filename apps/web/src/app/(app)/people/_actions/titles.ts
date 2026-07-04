@@ -7,7 +7,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import {
   jobTitleTaskAcknowledgments,
   jobTitleTasks,
@@ -122,35 +122,60 @@ export async function deleteTitle(formData: FormData): Promise<void> {
 
 // ---------- title assignment --------------------------------------------
 
-export async function assignTitleToPerson(formData: FormData): Promise<void> {
+/**
+ * Set a person's full set of held titles in one shot — the write half of the
+ * inline "Titles" multi-select on the person overview. Diffs against current
+ * assignments, adds/removes the delta, and guarantees exactly one primary
+ * survives whenever the person still holds at least one title.
+ */
+export async function setPersonTitles(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  const titleId = String(formData.get('titleId') ?? '')
-  const personId = String(formData.get('personId') ?? '')
-  const isPrimary =
-    String(formData.get('isPrimary') ?? '') === 'on' ||
-    String(formData.get('isPrimary') ?? '') === 'true'
-  if (!titleId || !personId) return
+  const personId = String(formData.get('id') ?? '')
+  if (!personId) return
+  const titleIds = Array.from(new Set(formData.getAll('value').map(String).filter(Boolean)))
+
   await ctx.db(async (tx) => {
-    if (isPrimary) {
+    const existing = await tx
+      .select()
+      .from(personTitleAssignments)
+      .where(eq(personTitleAssignments.personId, personId))
+    const existingIds = existing.map((r) => r.titleId)
+    const toRemove = existingIds.filter((t) => !titleIds.includes(t))
+    const toAdd = titleIds.filter((t) => !existingIds.includes(t))
+    if (toRemove.length > 0) {
+      await tx
+        .delete(personTitleAssignments)
+        .where(
+          and(
+            eq(personTitleAssignments.personId, personId),
+            inArray(personTitleAssignments.titleId, toRemove),
+          ),
+        )
+    }
+    if (toAdd.length > 0) {
+      await tx
+        .insert(personTitleAssignments)
+        .values(toAdd.map((titleId) => ({ tenantId: ctx.tenantId, titleId, personId })))
+        .onConflictDoNothing()
+    }
+    // Keep the primary invariant: if nothing is flagged primary but titles remain
+    // (e.g. the primary was just removed), promote the first survivor.
+    const remaining = await tx
+      .select()
+      .from(personTitleAssignments)
+      .where(eq(personTitleAssignments.personId, personId))
+      .orderBy(asc(personTitleAssignments.createdAt))
+    if (remaining.length > 0 && !remaining.some((r) => r.isPrimary)) {
       await tx
         .update(personTitleAssignments)
-        .set({ isPrimary: false })
-        .where(eq(personTitleAssignments.personId, personId))
-      // If the assignment already exists (double-submit, re-assign), promote it
-      // instead of no-op'ing — otherwise the clear above leaves zero primaries.
-      await tx
-        .insert(personTitleAssignments)
-        .values({ tenantId: ctx.tenantId, titleId, personId, isPrimary: true })
-        .onConflictDoUpdate({
-          target: [personTitleAssignments.titleId, personTitleAssignments.personId],
-          set: { isPrimary: true },
-        })
-    } else {
-      await tx
-        .insert(personTitleAssignments)
-        .values({ tenantId: ctx.tenantId, titleId, personId, isPrimary: false })
-        .onConflictDoNothing()
+        .set({ isPrimary: true })
+        .where(
+          and(
+            eq(personTitleAssignments.personId, personId),
+            eq(personTitleAssignments.titleId, remaining[0]!.titleId),
+          ),
+        )
     }
     await refreshTitleCache(tx, ctx.tenantId, [personId])
   })
@@ -158,11 +183,10 @@ export async function assignTitleToPerson(formData: FormData): Promise<void> {
     entityType: 'person',
     entityId: personId,
     action: 'update',
-    summary: `Assigned title${isPrimary ? ' (primary)' : ''}`,
-    metadata: { titleId, isPrimary },
+    summary: 'Updated title assignments',
+    after: { titleIds },
   })
   revalidatePath(`/people/${personId}`)
-  revalidatePath(`/people/titles/${titleId}`)
 }
 
 export async function unassignTitleFromPerson(formData: FormData): Promise<void> {
@@ -187,38 +211,6 @@ export async function unassignTitleFromPerson(formData: FormData): Promise<void>
     entityId: personId,
     action: 'update',
     summary: 'Unassigned title',
-    metadata: { titleId },
-  })
-  revalidatePath(`/people/${personId}`)
-  revalidatePath(`/people/titles/${titleId}`)
-}
-
-export async function setPrimaryTitle(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'people')
-  const titleId = String(formData.get('titleId') ?? '')
-  const personId = String(formData.get('personId') ?? '')
-  if (!titleId || !personId) return
-  await ctx.db(async (tx) => {
-    await tx
-      .update(personTitleAssignments)
-      .set({ isPrimary: false })
-      .where(eq(personTitleAssignments.personId, personId))
-    await tx
-      .update(personTitleAssignments)
-      .set({ isPrimary: true })
-      .where(
-        and(
-          eq(personTitleAssignments.titleId, titleId),
-          eq(personTitleAssignments.personId, personId),
-        ),
-      )
-  })
-  await recordAudit(ctx, {
-    entityType: 'person',
-    entityId: personId,
-    action: 'update',
-    summary: 'Set primary title',
     metadata: { titleId },
   })
   revalidatePath(`/people/${personId}`)

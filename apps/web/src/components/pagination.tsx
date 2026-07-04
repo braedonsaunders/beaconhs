@@ -8,19 +8,26 @@ export function Pagination({
   total,
   page,
   perPage,
+  pageParamKey = 'page',
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   total: number
   page: number
   perPage: number
+  /** URL param that carries the page number. Sub-tables pass a prefixed key. */
+  pageParamKey?: string
 }) {
   const pageCount = Math.max(1, Math.ceil(total / perPage))
   const from = total === 0 ? 0 : (page - 1) * perPage + 1
   const to = Math.min(total, page * perPage)
 
-  const prevHref = mergeHref(basePath, currentParams, { page: page > 1 ? page - 1 : 1 })
-  const nextHref = mergeHref(basePath, currentParams, { page: Math.min(pageCount, page + 1) })
+  const prevHref = mergeHref(basePath, currentParams, {
+    [pageParamKey]: page > 1 ? page - 1 : 1,
+  })
+  const nextHref = mergeHref(basePath, currentParams, {
+    [pageParamKey]: Math.min(pageCount, page + 1),
+  })
 
   return (
     <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">

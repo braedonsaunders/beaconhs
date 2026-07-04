@@ -8,7 +8,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
-import { people, personFiles } from '@beaconhs/db/schema'
+import { personFiles } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { assertCanActOnPerson } from '../_lib/person-access'
@@ -82,65 +82,6 @@ export async function deletePersonFile(formData: FormData): Promise<void> {
     summary: `Deleted file: ${before.label}`,
     before: before as unknown as Record<string, unknown>,
     metadata: { personFileId: id, kind: before.kind },
-  })
-
-  revalidatePath(`/people/${personId}`)
-}
-
-export async function setPersonSignature(args: {
-  personId: string
-  attachmentId: string
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const ctx = await requireRequestContext()
-  if (!args.personId) return { ok: false, error: 'Missing personId' }
-  if (!args.attachmentId) return { ok: false, error: 'Missing attachmentId' }
-  assertCanActOnPerson(ctx, args.personId)
-
-  const before = await ctx.db(async (tx) => {
-    const [r] = await tx
-      .select({ signatureAttachmentId: people.signatureAttachmentId })
-      .from(people)
-      .where(eq(people.id, args.personId))
-      .limit(1)
-    return r
-  })
-
-  await ctx.db((tx) =>
-    tx
-      .update(people)
-      .set({ signatureAttachmentId: args.attachmentId })
-      .where(eq(people.id, args.personId)),
-  )
-
-  await recordAudit(ctx, {
-    entityType: 'person',
-    entityId: args.personId,
-    action: 'update',
-    summary: 'Updated signature image',
-    before: before as unknown as Record<string, unknown>,
-    after: { signatureAttachmentId: args.attachmentId },
-  })
-
-  revalidatePath(`/people/${args.personId}`)
-  return { ok: true }
-}
-
-export async function clearPersonSignature(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  const personId = String(formData.get('personId') ?? '')
-  if (!personId) return
-  assertCanActOnPerson(ctx, personId)
-
-  await ctx.db((tx) =>
-    tx.update(people).set({ signatureAttachmentId: null }).where(eq(people.id, personId)),
-  )
-
-  await recordAudit(ctx, {
-    entityType: 'person',
-    entityId: personId,
-    action: 'update',
-    summary: 'Cleared signature image',
-    after: { signatureAttachmentId: null },
   })
 
   revalidatePath(`/people/${personId}`)

@@ -3,10 +3,9 @@
 // Drawers for the person detail page:
 //   • upload-person-file → FileUploader + kind picker + label, inserts a
 //     person_files row pointing at the uploaded attachment
-//   • signature-upload   → image-only FileUploader; updates
-//     people.signature_attachment_id directly
 //
-// Both open via `?drawer=…` so the URL is shareable and survives refresh.
+// Opens via `?drawer=…` so the URL is shareable and survives refresh. A person's
+// signature is now recorded by the person themselves on the Account page.
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -14,7 +13,7 @@ import { Loader2 } from 'lucide-react'
 import { Button, FileUploader, Input, Label, Select, UrlDrawer } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
-import { addPersonFile, setPersonSignature } from '../_actions/files'
+import { addPersonFile } from '../_actions/files'
 
 const FILE_KINDS = [
   { value: 'resume', label: 'Resume' },
@@ -29,22 +28,15 @@ export function PersonFilesDrawers({
   closeHref,
 }: {
   personId: string
-  openDrawer: 'upload-person-file' | 'signature-upload' | null
+  openDrawer: 'upload-person-file' | null
   closeHref: string
 }) {
   return (
-    <>
-      <UploadFileDrawer
-        open={openDrawer === 'upload-person-file'}
-        closeHref={closeHref}
-        personId={personId}
-      />
-      <SignatureUploadDrawer
-        open={openDrawer === 'signature-upload'}
-        closeHref={closeHref}
-        personId={personId}
-      />
-    </>
+    <UploadFileDrawer
+      open={openDrawer === 'upload-person-file'}
+      closeHref={closeHref}
+      personId={personId}
+    />
   )
 }
 
@@ -175,111 +167,6 @@ function UploadFileDrawer({
             />
           )}
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </UrlDrawer>
-  )
-}
-
-function SignatureUploadDrawer({
-  open,
-  closeHref,
-  personId,
-}: {
-  open: boolean
-  closeHref: string
-  personId: string
-}) {
-  const router = useRouter()
-  const [uploaded, setUploaded] = useState<{
-    attachmentId: string
-    filename: string
-  } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
-
-  function reset() {
-    setUploaded(null)
-    setError(null)
-  }
-
-  function submit() {
-    setError(null)
-    if (!uploaded) {
-      setError('Upload an image first.')
-      return
-    }
-    startTransition(async () => {
-      const res = await setPersonSignature({
-        personId,
-        attachmentId: uploaded.attachmentId,
-      })
-      if (res.ok) {
-        toast.success('Signature saved')
-        reset()
-        router.push(closeHref)
-        router.refresh()
-      } else {
-        setError(res.error)
-        toast.error(res.error)
-      }
-    })
-  }
-
-  return (
-    <UrlDrawer
-      open={open}
-      closeHref={closeHref}
-      title="Upload signature image"
-      description="PNG, JPG, or SVG. Used when this person signs forms, inspections, or lift plans."
-      size="md"
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              reset()
-              router.push(closeHref)
-            }}
-            disabled={pending}
-          >
-            Cancel
-          </Button>
-          <Button type="button" onClick={submit} disabled={pending || !uploaded}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Save signature
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        {uploaded ? (
-          <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
-            <span className="font-medium text-emerald-900">{uploaded.filename}</span>
-            <button
-              type="button"
-              onClick={() => setUploaded(null)}
-              className="text-xs font-medium text-emerald-800 hover:underline"
-            >
-              Replace
-            </button>
-          </div>
-        ) : (
-          <FileUploader
-            requestUploadAction={requestUpload}
-            finalizeUploadAction={finalizeUpload}
-            kind="signature"
-            accept="image/*"
-            onUploaded={(f) => setUploaded({ attachmentId: f.attachmentId, filename: f.filename })}
-            label="Drop signature image or click to choose"
-            hint="Transparent PNG works best."
-          />
-        )}
         {error ? (
           <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}

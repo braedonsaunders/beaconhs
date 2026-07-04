@@ -156,39 +156,40 @@ export async function setGroupMembership(formData: FormData): Promise<void> {
   revalidatePath(`/people/groups/${groupId}`)
 }
 
-export async function togglePersonInGroup(formData: FormData): Promise<void> {
+/**
+ * Set a person's full group membership set in one shot — the write half of the
+ * inline "Groups" multi-select on the person overview. Diffs against the current
+ * memberships, adds/removes the delta, and refreshes the denormalised cache.
+ */
+export async function setPersonGroups(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  const groupId = String(formData.get('groupId') ?? '')
-  const personId = String(formData.get('personId') ?? '')
-  if (!groupId || !personId) return
-  const present = await ctx.db(async (tx) => {
-    const [m] = await tx
-      .select()
-      .from(personGroupMemberships)
-      .where(
-        and(
-          eq(personGroupMemberships.groupId, groupId),
-          eq(personGroupMemberships.personId, personId),
-        ),
-      )
-      .limit(1)
-    return Boolean(m)
-  })
+  const personId = String(formData.get('id') ?? '')
+  if (!personId) return
+  const groupIds = Array.from(new Set(formData.getAll('value').map(String).filter(Boolean)))
+
   await ctx.db(async (tx) => {
-    if (present) {
+    const existing = await tx
+      .select({ groupId: personGroupMemberships.groupId })
+      .from(personGroupMemberships)
+      .where(eq(personGroupMemberships.personId, personId))
+    const existingIds = existing.map((r) => r.groupId)
+    const toRemove = existingIds.filter((g) => !groupIds.includes(g))
+    const toAdd = groupIds.filter((g) => !existingIds.includes(g))
+    if (toRemove.length > 0) {
       await tx
         .delete(personGroupMemberships)
         .where(
           and(
-            eq(personGroupMemberships.groupId, groupId),
             eq(personGroupMemberships.personId, personId),
+            inArray(personGroupMemberships.groupId, toRemove),
           ),
         )
-    } else {
+    }
+    if (toAdd.length > 0) {
       await tx
         .insert(personGroupMemberships)
-        .values({ tenantId: ctx.tenantId, groupId, personId })
+        .values(toAdd.map((groupId) => ({ tenantId: ctx.tenantId, groupId, personId })))
         .onConflictDoNothing()
     }
     await refreshGroupCache(tx, ctx.tenantId, [personId])
@@ -197,11 +198,10 @@ export async function togglePersonInGroup(formData: FormData): Promise<void> {
     entityType: 'person',
     entityId: personId,
     action: 'update',
-    summary: present ? 'Removed from group' : 'Added to group',
-    metadata: { groupId },
+    summary: 'Updated group memberships',
+    after: { groupIds },
   })
   revalidatePath(`/people/${personId}`)
-  revalidatePath(`/people/groups/${groupId}`)
 }
 
 /**
