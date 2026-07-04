@@ -5,13 +5,7 @@
 // name who receives it (matches the hazard-assessment / document senders).
 
 import { eq } from 'drizzle-orm'
-import {
-  departments,
-  incidentInjuries,
-  incidents,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { departments, incidentInjuries, incidents, orgUnits, people } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 

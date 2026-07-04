@@ -573,10 +573,7 @@ export async function querySafetyKpiSummary(
   const trainingComp = await tx
     .select({ status: complianceStatus.status, c: count() })
     .from(complianceStatus)
-    .innerJoin(
-      complianceObligations,
-      eq(complianceObligations.id, complianceStatus.obligationId),
-    )
+    .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
     .where(
       and(
         isNull(complianceObligations.deletedAt),
@@ -587,7 +584,9 @@ export async function querySafetyKpiSummary(
     .groupBy(complianceStatus.status)
   const trainingTotal = trainingComp.reduce((acc, r) => acc + Number(r.c), 0)
   const trainingSatisfied = trainingComp
-    .filter((r) => r.status === 'completed' || r.status === 'waived' || r.status === 'not_applicable')
+    .filter(
+      (r) => r.status === 'completed' || r.status === 'waived' || r.status === 'not_applicable',
+    )
     .reduce((acc, r) => acc + Number(r.c), 0)
   const trainingPct =
     trainingTotal === 0 ? null : Math.round((trainingSatisfied / trainingTotal) * 100)

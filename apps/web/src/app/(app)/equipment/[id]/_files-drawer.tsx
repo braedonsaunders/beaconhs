@@ -151,7 +151,9 @@ export function EquipmentFileDrawer({
               finalizeUploadAction={finalizeUpload}
               kind="document"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.heic,.webp"
-              onUploaded={(f) => setUploaded({ attachmentId: f.attachmentId, filename: f.filename })}
+              onUploaded={(f) =>
+                setUploaded({ attachmentId: f.attachmentId, filename: f.filename })
+              }
               label="Drop file or click to choose"
               hint="Up to 50 MB. PDF, Office, or image."
             />

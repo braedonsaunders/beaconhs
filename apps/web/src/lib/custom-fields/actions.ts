@@ -276,9 +276,7 @@ export async function deleteCustomFieldDefAction(formData: FormData): Promise<vo
   const [deleted] = await ctx.db((tx) =>
     tx
       .delete(customFieldDefinitions)
-      .where(
-        and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.entityKind, kindRaw)),
-      )
+      .where(and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.entityKind, kindRaw)))
       .returning({ id: customFieldDefinitions.id }),
   )
   if (!deleted) return

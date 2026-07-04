@@ -282,7 +282,10 @@ function handleSuggestDelete(editor: Editor, dir: 'backward' | 'forward'): boole
   } else {
     // Stamp the deletion with the same author attribution as insertions.
     const user = (
-      editor.storage as unknown as Record<string, { user?: { id: string; name: string } } | undefined>
+      editor.storage as unknown as Record<
+        string,
+        { user?: { id: string; name: string } } | undefined
+      >
     ).suggestion?.user
     const stamp = {
       userId: user?.id || null,

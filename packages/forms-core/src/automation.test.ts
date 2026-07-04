@@ -109,8 +109,14 @@ function roles(
 describe('planAutomation', () => {
   it('plans EVERY on_field_value trigger whose rule passes, not just the first', () => {
     const graph = graphOf([
-      { trigger: { trigger: 'on_field_value', rule: { op: 'eq', field: 'a', value: 'no' } }, role: 'first' },
-      { trigger: { trigger: 'on_field_value', rule: { op: 'eq', field: 'a', value: 'yes' } }, role: 'second' },
+      {
+        trigger: { trigger: 'on_field_value', rule: { op: 'eq', field: 'a', value: 'no' } },
+        role: 'first',
+      },
+      {
+        trigger: { trigger: 'on_field_value', rule: { op: 'eq', field: 'a', value: 'yes' } },
+        role: 'second',
+      },
     ])
     const ctx: EvalContext = { values: { a: 'yes' }, rows: {}, entities: {} }
     // The FIRST trigger's rule fails; the second must still fire.
@@ -139,7 +145,10 @@ describe('planAutomation', () => {
     ).toEqual(['any_close'])
     // in_review → closed: both fire.
     expect(
-      roles(graph, 'status_change', emptyCtx, { fromStatus: 'in_review', toStatus: 'closed' }).sort(),
+      roles(graph, 'status_change', emptyCtx, {
+        fromStatus: 'in_review',
+        toStatus: 'closed',
+      }).sort(),
     ).toEqual(['any_close', 'reviewed_close'])
     // → open: neither fires.
     expect(roles(graph, 'status_change', emptyCtx, { toStatus: 'open' })).toEqual([])

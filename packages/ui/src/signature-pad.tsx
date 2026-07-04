@@ -395,7 +395,9 @@ export function SignaturePad({
           // (slate-900) and the exported PNG is dark-on-transparent for PDFs,
           // so a dark backing would hide the stroke while signing and viewing.
           'relative w-full overflow-hidden rounded-md border bg-white',
-          disabled ? 'border-slate-200 dark:border-slate-800' : 'border-slate-300 dark:border-slate-700',
+          disabled
+            ? 'border-slate-200 dark:border-slate-800'
+            : 'border-slate-300 dark:border-slate-700',
         )}
         style={{ height }}
       >

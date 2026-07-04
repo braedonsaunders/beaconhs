@@ -303,9 +303,7 @@ async function UnitsTab({
       // Status scoping is shared by every count so the chips reflect the same
       // search-filtered set the table shows.
       const statusScope =
-        statusFilter === 'archived'
-          ? [isNotNull(orgUnits.deletedAt)]
-          : [isNull(orgUnits.deletedAt)]
+        statusFilter === 'archived' ? [isNotNull(orgUnits.deletedAt)] : [isNull(orgUnits.deletedAt)]
 
       const filters = [...searchFilters, ...statusScope]
       if (levelFilter) filters.push(eq(orgUnits.level, levelFilter))

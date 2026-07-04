@@ -82,8 +82,10 @@ function looseEquals(a: unknown, b: unknown): boolean {
   if (a === b) return true
   if (a === null || a === undefined || b === null || b === undefined) return false
   if (typeof a === 'number' || typeof b === 'number') {
-    const na = typeof a === 'number' ? a : typeof a === 'string' && a.trim() !== '' ? Number(a) : NaN
-    const nb = typeof b === 'number' ? b : typeof b === 'string' && b.trim() !== '' ? Number(b) : NaN
+    const na =
+      typeof a === 'number' ? a : typeof a === 'string' && a.trim() !== '' ? Number(a) : NaN
+    const nb =
+      typeof b === 'number' ? b : typeof b === 'string' && b.trim() !== '' ? Number(b) : NaN
     return Number.isFinite(na) && Number.isFinite(nb) && na === nb
   }
   if (typeof a === 'boolean' || typeof b === 'boolean') {
