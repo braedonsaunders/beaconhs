@@ -234,9 +234,12 @@ export const REPORT_VIEWS_SQL: string[] = [
      CASE WHEN holder.id IS NULL THEN NULL
           ELSE holder.first_name || ' ' || holder.last_name END AS holder_name,
      e.is_missing                         AS is_missing,
-     e.requires_annual_inspection         AS requires_annual_inspection,
-     e.last_annual_inspection_on          AS last_annual_inspection_on,
-     e.next_annual_inspection_due         AS next_annual_inspection_due,
+     e.manufacturer                       AS manufacturer,
+     e.model                              AS model,
+     e.purchase_price                     AS purchase_price,
+     e.ownership                          AS ownership,
+     sched.last_inspection_on             AS last_inspection_on,
+     sched.next_inspection_due            AS next_inspection_due,
      e.requires_oil_change                AS requires_oil_change,
      e.last_oil_change_on                 AS last_oil_change_on,
      e.next_oil_change_due                AS next_oil_change_due,
@@ -249,6 +252,13 @@ export const REPORT_VIEWS_SQL: string[] = [
    LEFT JOIN equipment_types t ON t.id = e.type_id AND t.tenant_id = e.tenant_id
    LEFT JOIN org_units site ON site.id = e.current_site_org_unit_id AND site.tenant_id = e.tenant_id
    LEFT JOIN people holder ON holder.id = e.current_holder_person_id AND holder.tenant_id = e.tenant_id
+   LEFT JOIN LATERAL (
+     SELECT
+       MIN(s.next_due_on)      AS next_inspection_due,
+       MAX(s.last_completed_on) AS last_inspection_on
+     FROM equipment_inspection_schedules s
+     WHERE s.equipment_item_id = e.id AND s.tenant_id = e.tenant_id AND s.is_active
+   ) sched ON true
    LEFT JOIN LATERAL (
      SELECT
        COALESCE(SUM(tl.hours_on_site) FILTER (WHERE tl.entry_date >= date_trunc('year', CURRENT_DATE)::date), 0) AS hours_ytd,

@@ -131,6 +131,10 @@ CREATE INDEX IF NOT EXISTS "equipment_inspection_schedules_type_idx" ON "equipme
 --> statement-breakpoint
 
 -- ---- Backfill schedules from the legacy per-item annual columns, then drop --
+-- report_equipment_fleet projects the legacy columns; drop it first so the
+-- column drops succeed. Every migrate re-creates it from REPORT_VIEWS_SQL.
+DROP VIEW IF EXISTS "report_equipment_fleet";
+--> statement-breakpoint
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns

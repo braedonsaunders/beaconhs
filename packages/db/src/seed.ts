@@ -589,7 +589,7 @@ async function main() {
           kind: 'built_in',
           name: 'Equipment — Fleet',
           description:
-            'In-service assets with type, current site/holder, YTD usage, and next annual inspection — the fleet register.',
+            'In-service assets with type, current site/holder, YTD usage, and next inspection due — the fleet register.',
           category: 'equipment',
           queryKind: 'custom_query',
           customQuery: {
@@ -604,8 +604,8 @@ async function main() {
               'holder_name',
               'hours_ytd',
               'km_ytd',
-              'last_annual_inspection_on',
-              'next_annual_inspection_due',
+              'last_inspection_on',
+              'next_inspection_due',
             ],
             filtersV2: {
               combinator: 'and',
@@ -620,7 +620,7 @@ async function main() {
           kind: 'built_in',
           name: 'Equipment — Upcoming & overdue inspections',
           description:
-            'Assets whose annual inspection is overdue or due within 30 days, soonest first.',
+            'Assets whose next scheduled inspection is overdue or due within 30 days, soonest first.',
           category: 'equipment',
           queryKind: 'custom_query',
           customQuery: {
@@ -632,17 +632,14 @@ async function main() {
               'equipment_type',
               'site_name',
               'holder_name',
-              'last_annual_inspection_on',
-              'next_annual_inspection_due',
+              'last_inspection_on',
+              'next_inspection_due',
             ],
             filtersV2: {
               combinator: 'and',
-              rules: [
-                { field: 'requires_annual_inspection', op: 'is_true' },
-                { field: 'next_annual_inspection_due', op: 'due_within_days', value: 30 },
-              ],
+              rules: [{ field: 'next_inspection_due', op: 'due_within_days', value: 30 }],
             },
-            sort: { column: 'next_annual_inspection_due', direction: 'asc' },
+            sort: { column: 'next_inspection_due', direction: 'asc' },
             limit: 5000,
           },
         },
