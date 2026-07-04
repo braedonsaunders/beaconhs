@@ -1,7 +1,7 @@
 // Org hierarchy + people. Hierarchy depth is tenant-configurable
 // (customer / project / site / area) but always lives in one self-referential table.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
   date,
@@ -167,7 +167,16 @@ export const people = pgTable(
     tenantIdx: index('people_tenant_idx').on(t.tenantId),
     tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux').on(t.tenantId, t.employeeNo),
     nameIdx: index('people_name_idx').on(t.tenantId, t.lastName, t.firstName),
-    metadataGin: index('people_metadata_gin').using('gin', t.metadata),
+    // Reverse-lookup index for "user → person" resolution (compliance audience,
+    // notification recipients, flows delivery) which join people by userId.
+    userIdx: index('people_user_idx').on(t.userId),
+    // A login account maps to AT MOST one active person per tenant. Enforces the
+    // 1:1 assumption baked into every `people.userId = <session user>` lookup.
+    // Partial so soft-deleted rows and the many login-less workers (null userId)
+    // don't collide.
+    tenantUserUx: uniqueIndex('people_tenant_user_ux')
+      .on(t.tenantId, t.userId)
+      .where(sql`${t.userId} is not null and ${t.deletedAt} is null`),
   }),
 )
 

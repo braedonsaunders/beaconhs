@@ -34,15 +34,6 @@ function textArray(ids: string[]): SQL {
   )}]::text[]`
 }
 
-async function resolveMyPersonId(ctx: RequestContext, tx: Database): Promise<string | null> {
-  const [p] = await tx
-    .select({ id: people.id })
-    .from(people)
-    .where(eq(people.userId, ctx.userId))
-    .limit(1)
-  return p?.id ?? null
-}
-
 /**
  * Build the visibility predicate for a record list from the caller's scopes.
  * Returns `undefined` (no filter) for super-admins and tenant-scoped users;
@@ -64,9 +55,8 @@ export async function recordVisibilityWhere(
   const conds: SQL[] = []
 
   // Always include the caller's own records (as subject and/or creator).
-  if (cols.personCol) {
-    const mine = await resolveMyPersonId(ctx, tx)
-    if (mine) conds.push(eq(cols.personCol, mine))
+  if (cols.personCol && ctx.personId) {
+    conds.push(eq(cols.personCol, ctx.personId))
   }
   const myUserId = ctx.membership?.id
   if (cols.createdByCol && myUserId) {
@@ -155,10 +145,7 @@ async function ownPredicates(
   const conds: SQL[] = []
   const tuId = myTenantUserId(ctx)
   if (tuId && cols.ownerCols) for (const c of cols.ownerCols) conds.push(eq(c, tuId))
-  if (cols.personCol) {
-    const pid = await resolveMyPersonId(ctx, tx)
-    if (pid) conds.push(eq(cols.personCol, pid))
-  }
+  if (cols.personCol && ctx.personId) conds.push(eq(cols.personCol, ctx.personId))
   return conds
 }
 
@@ -215,9 +202,6 @@ export async function canSeeRecord(
 
   const tuId = myTenantUserId(ctx)
   if (tuId && rec.ownerIds?.some((o) => o === tuId)) return true
-  if (rec.personId) {
-    const pid = await resolveMyPersonId(ctx, tx)
-    if (pid && pid === rec.personId) return true
-  }
+  if (rec.personId && ctx.personId && ctx.personId === rec.personId) return true
   return false
 }

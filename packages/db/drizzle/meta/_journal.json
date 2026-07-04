@@ -85,6 +85,13 @@
       "when": 1782970000000,
       "tag": "0011_drop_equipment_type_legacy_cadence",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782980000000,
+      "tag": "0012_people_user_link_constraints",
+      "breakpoints": true
     }
   ]
 }

@@ -364,7 +364,7 @@ export async function acknowledgeTitleTask(formData: FormData): Promise<void> {
   // Acknowledgements are compliance sign-offs: only a people-module manager may
   // record one on someone else's behalf; everyone else can only sign for their
   // own linked person record.
-  await assertCanActOnPerson(ctx, personId)
+  assertCanActOnPerson(ctx, personId)
   const { task, holdsTitle } = await ctx.db(async (tx) => {
     const [t] = await tx.select().from(jobTitleTasks).where(eq(jobTitleTasks.id, taskId)).limit(1)
     if (!t) return { task: null, holdsTitle: false }
@@ -418,7 +418,7 @@ export async function revokeTitleTaskAck(formData: FormData): Promise<void> {
   const taskId = String(formData.get('taskId') ?? '')
   const personId = String(formData.get('personId') ?? '')
   if (!taskId || !personId) return
-  await assertCanActOnPerson(ctx, personId)
+  assertCanActOnPerson(ctx, personId)
   const task = await ctx.db(async (tx) => {
     const [t] = await tx.select().from(jobTitleTasks).where(eq(jobTitleTasks.id, taskId)).limit(1)
     return t

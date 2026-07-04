@@ -32,6 +32,12 @@ export type RequestContext = {
   timezone: string
   // The active tenant_user membership (id, display name)
   membership: { id: string; displayName: string } | null
+  // The active user's linked person record in this tenant, resolved once at
+  // request time (people.userId = this user, 1:1 per tenant). Null for accounts
+  // with no employee record — super-admins, external auditors, API keys. Prefer
+  // this over re-querying `people` by userId; it's the canonical "who am I as an
+  // employee" for /my, record ownership, and self-scoped visibility.
+  personId: string | null
   permissions: Set<string>
   scopes: RoleScope[]
   // The single role a multi-role user has "switched into" via the role

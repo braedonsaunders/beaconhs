@@ -66,6 +66,8 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     // affects server-rendered local-time display, which JSON API responses don't use.
     timezone: 'America/Toronto',
     membership: null,
+    // No human employee behind an API key — record visibility is full-tenant.
+    personId: null,
     apiKey: { id: row.id, name: row.name },
     // API keys use the same permission vocabulary as tenant roles. They are
     // tenant-level credentials, so record visibility is full-tenant.

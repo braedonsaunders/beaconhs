@@ -2,8 +2,16 @@ import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { auth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
-import { roleAssignments, roles, sessions, tenants, tenantUsers, users } from '@beaconhs/db/schema'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import {
+  people,
+  roleAssignments,
+  roles,
+  sessions,
+  tenants,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import {
   assertCan,
   assertNotImpersonating,
@@ -17,6 +25,31 @@ export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
 // The single role a multi-role user has switched into. Cleared whenever the
 // active tenant changes (a role id only means something inside one tenant).
 export const ACTIVE_ROLE_COOKIE = 'bhs-active-role'
+
+/**
+ * Resolve the person (employee) record linked to a login account in one tenant.
+ * The `people_tenant_user_ux` partial unique index guarantees at most one active
+ * match, so `.limit(1)` is exact. Runs on the passed (bypass-RLS) transaction —
+ * getRequestContext resolves this before any tenant scope is applied.
+ */
+async function resolvePersonId(
+  tx: Database,
+  userId: string,
+  tenantId: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(
+        eq(people.userId, userId),
+        eq(people.tenantId, tenantId),
+        isNull(people.deletedAt),
+      ),
+    )
+    .limit(1)
+  return row?.id ?? null
+}
 
 export async function getCurrentUserId(): Promise<string | null> {
   try {
@@ -141,6 +174,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         isSuperAdmin: true,
         timezone: u.timezone,
         membership: m ? { id: m.id, displayName: m.displayName ?? u.name } : null,
+        personId: await resolvePersonId(tx as unknown as Database, userId, t.id),
         permissions,
         scopes: [{ type: 'tenant' }],
       })
@@ -187,6 +221,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         id: active.membership.id,
         displayName: active.membership.displayName ?? u.name,
       },
+      personId: await resolvePersonId(tx as unknown as Database, userId, active.tenant.id),
       permissions,
       scopes,
       activeRoleId: appliedRoleId,
@@ -249,6 +284,7 @@ async function resolveImpersonation(
     isSuperAdmin: false,
     timezone: target.timezone,
     membership: { id: m.id, displayName: m.displayName ?? target.name },
+    personId: await resolvePersonId(tx, target.id, s.tenantId),
     permissions,
     scopes,
     impersonation: {
