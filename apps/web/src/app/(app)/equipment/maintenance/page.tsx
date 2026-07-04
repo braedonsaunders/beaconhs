@@ -31,12 +31,14 @@ import {
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { mergeHref, pickString } from '@/lib/list-params'
+import { clamp, mergeHref, pickString } from '@/lib/list-params'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
+import { SearchInput } from '@/components/search-input'
+import { Pagination } from '@/components/pagination'
 import { StatTile } from '@/components/stat-tile'
 import { completeEquipmentReminder } from '../_maintenance-actions'
 import { ReminderDrawer, type ReminderEditing } from '../_maintenance-drawers'
@@ -45,6 +47,7 @@ export const metadata = { title: 'Equipment maintenance' }
 export const dynamic = 'force-dynamic'
 
 const BASE = '/equipment/maintenance'
+const PER_PAGE = 15
 
 type EntryKind = 'inspection' | 'reminder' | 'oil_change'
 
@@ -109,6 +112,8 @@ export default async function EquipmentMaintenancePage({
 
   const kindFilter = pickString(sp.kind)
   const catFilter = pickString(sp.cat)
+  const q = pickString(sp.q)?.trim().toLowerCase() || undefined
+  const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
   const drawerKey = pickString(sp.drawer)
 
   const data = await ctx.db(async (tx) => {
@@ -268,6 +273,13 @@ export default async function EquipmentMaintenancePage({
     })),
   ]
     .filter((e) => !kindFilter || e.kind === kindFilter)
+    .filter(
+      (e) =>
+        !q ||
+        e.itemName.toLowerCase().includes(q) ||
+        e.assetTag.toLowerCase().includes(q) ||
+        e.title.toLowerCase().includes(q),
+    )
     .sort((a, b) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0))
 
   const overdue = entries.filter((e) => e.dueOn < today)
@@ -292,8 +304,9 @@ export default async function EquipmentMaintenancePage({
     timeZone: 'UTC',
   })
 
-  // Work list: overdue first, then the viewed month's upcoming days.
-  const upcomingDays = [...byDay.keys()].filter((d) => d >= today).sort()
+  // Work list: one flat, paginated agenda (overdue first via the asc sort).
+  const workTotal = entries.length
+  const pageEntries = entries.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   const editingReminderRow =
     drawerKey?.startsWith('reminder-') && drawerKey !== 'reminder-new'
@@ -336,6 +349,7 @@ export default async function EquipmentMaintenancePage({
           />
           <EquipmentSubNav active="maintenance" />
           <TableToolbar>
+            <SearchInput placeholder="Search unit, tag, task…" />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
@@ -366,152 +380,134 @@ export default async function EquipmentMaintenancePage({
           <StatTile icon={CalendarDays} tone="teal" label="Next 30 days" value={next30.length} />
         </div>
 
-        {/* Month calendar — desktop only; the work list below is the mobile surface. */}
-        <Card className="hidden md:block">
-          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-            <CardTitle>{monthLabel}</CardTitle>
-            <div className="flex items-center gap-1">
-              <Link
-                href={mergeHref(BASE, sp, { month: prevMonth }) as never}
-                className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                aria-label="Previous month"
-              >
-                <ChevronLeft size={14} />
-              </Link>
-              {month !== currentMonth ? (
-                <Link
-                  href={mergeHref(BASE, sp, { month: undefined }) as never}
-                  className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                >
-                  Today
-                </Link>
-              ) : null}
-              <Link
-                href={mergeHref(BASE, sp, { month: nextMonth }) as never}
-                className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                aria-label="Next month"
-              >
-                <ChevronRight size={14} />
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-xs dark:border-slate-800 dark:bg-slate-800">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div
-                  key={d}
-                  className="bg-slate-50 px-2 py-1.5 text-center font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400"
-                >
-                  {d}
-                </div>
-              ))}
-              {Array.from({ length: leadingBlanks }, (_, i) => (
-                <div key={`blank-${i}`} className="min-h-24 bg-white dark:bg-slate-900" />
-              ))}
-              {Array.from({ length: daysInMonth }, (_, i) => {
-                const day = `${month}-${String(i + 1).padStart(2, '0')}`
-                const dayEntries = byDay.get(day) ?? []
-                const isToday = day === today
-                return (
-                  <div
-                    key={day}
-                    className={`min-h-24 space-y-1 bg-white p-1.5 dark:bg-slate-900 ${
-                      isToday ? 'ring-2 ring-teal-500 ring-inset' : ''
-                    }`}
-                  >
-                    <div
-                      className={`text-right text-[11px] ${
-                        isToday
-                          ? 'font-semibold text-teal-600 dark:text-teal-400'
-                          : 'text-slate-400 dark:text-slate-500'
-                      }`}
-                    >
-                      {i + 1}
-                    </div>
-                    {dayEntries.slice(0, 3).map((e) => (
-                      <Link
-                        key={e.key}
-                        href={`/equipment/${e.itemId}?tab=inspections`}
-                        title={`${e.itemName} — ${e.title}`}
-                        className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                          e.dueOn < today
-                            ? 'text-rose-600 dark:text-rose-400'
-                            : 'text-slate-700 dark:text-slate-200'
-                        }`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${KIND_META[e.kind].dot}`}
-                        />
-                        <span className="truncate">
-                          {e.assetTag} · {e.title}
-                        </span>
-                      </Link>
-                    ))}
-                    {dayEntries.length > 3 ? (
-                      <div className="px-1 text-[10px] text-slate-400 dark:text-slate-500">
-                        +{dayEntries.length - 3} more
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-              {(Object.keys(KIND_META) as EntryKind[]).map((k) => (
-                <span key={k} className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />
-                  {KIND_META[k].label}s
-                </span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Work list — overdue first, then day by day for the viewed month. */}
-        {overdue.length > 0 ? (
-          <Card>
+        {/* 1/3 work list + 2/3 calendar. Below lg they stack (list first); the
+            calendar is desktop-only — the paginated list is the mobile surface. */}
+        <div className="grid items-start gap-5 lg:grid-cols-3">
+          <Card className="lg:col-span-1">
             <CardHeader>
-              <CardTitle className="text-rose-600 dark:text-rose-400">
-                Overdue ({overdue.length})
-              </CardTitle>
+              <CardTitle>Work list ({workTotal})</CardTitle>
             </CardHeader>
-            <CardContent>
-              <WorkList entries={overdue} today={today} manage={manage} sp={sp} />
+            <CardContent className="space-y-3">
+              {pageEntries.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {q || kindFilter || catFilter
+                    ? 'Nothing due matches the current search or filters.'
+                    : 'Nothing due in this window. Schedules, reminders, and oil changes appear here as their due dates approach.'}
+                </p>
+              ) : (
+                <WorkList entries={pageEntries} today={today} manage={manage} sp={sp} />
+              )}
+              <Pagination
+                basePath={BASE}
+                currentParams={sp}
+                total={workTotal}
+                page={page}
+                perPage={PER_PAGE}
+              />
             </CardContent>
           </Card>
-        ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Coming up{month !== currentMonth ? ` — ${monthLabel}` : ''} (
-              {upcomingDays.reduce((n, d) => n + (byDay.get(d)?.length ?? 0), 0)})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {upcomingDays.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Nothing due{month === currentMonth ? ' for the rest of this month' : ' this month'}.
-                Schedules, reminders, and oil changes appear here as their due dates approach.
-              </p>
-            ) : (
-              upcomingDays.map((day) => (
-                <div key={day} className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
-                      weekday: 'long',
-                      month: 'short',
-                      day: 'numeric',
-                      timeZone: 'UTC',
-                    })}
-                    {day === today ? <Badge variant="warning">today</Badge> : null}
+          {/* Month calendar — navigate months to plan ahead. */}
+          <Card className="hidden md:block lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+              <CardTitle>{monthLabel}</CardTitle>
+              <div className="flex items-center gap-1">
+                <Link
+                  href={mergeHref(BASE, sp, { month: prevMonth }) as never}
+                  className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft size={14} />
+                </Link>
+                {month !== currentMonth ? (
+                  <Link
+                    href={mergeHref(BASE, sp, { month: undefined }) as never}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  >
+                    Today
+                  </Link>
+                ) : null}
+                <Link
+                  href={mergeHref(BASE, sp, { month: nextMonth }) as never}
+                  className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  aria-label="Next month"
+                >
+                  <ChevronRight size={14} />
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-xs dark:border-slate-800 dark:bg-slate-800">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                  <div
+                    key={d}
+                    className="bg-slate-50 px-2 py-1.5 text-center font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400"
+                  >
+                    {d}
                   </div>
-                  <WorkList entries={byDay.get(day) ?? []} today={today} manage={manage} sp={sp} />
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+                ))}
+                {Array.from({ length: leadingBlanks }, (_, i) => (
+                  <div key={`blank-${i}`} className="min-h-24 bg-white dark:bg-slate-900" />
+                ))}
+                {Array.from({ length: daysInMonth }, (_, i) => {
+                  const day = `${month}-${String(i + 1).padStart(2, '0')}`
+                  const dayEntries = byDay.get(day) ?? []
+                  const isToday = day === today
+                  return (
+                    <div
+                      key={day}
+                      className={`min-h-24 space-y-1 bg-white p-1.5 dark:bg-slate-900 ${
+                        isToday ? 'ring-2 ring-teal-500 ring-inset' : ''
+                      }`}
+                    >
+                      <div
+                        className={`text-right text-[11px] ${
+                          isToday
+                            ? 'font-semibold text-teal-600 dark:text-teal-400'
+                            : 'text-slate-400 dark:text-slate-500'
+                        }`}
+                      >
+                        {i + 1}
+                      </div>
+                      {dayEntries.slice(0, 3).map((e) => (
+                        <Link
+                          key={e.key}
+                          href={`/equipment/${e.itemId}?tab=inspections`}
+                          title={`${e.itemName} — ${e.title}`}
+                          className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                            e.dueOn < today
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : 'text-slate-700 dark:text-slate-200'
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${KIND_META[e.kind].dot}`}
+                          />
+                          <span className="truncate">
+                            {e.assetTag} · {e.title}
+                          </span>
+                        </Link>
+                      ))}
+                      {dayEntries.length > 3 ? (
+                        <div className="px-1 text-[10px] text-slate-400 dark:text-slate-500">
+                          +{dayEntries.length - 3} more
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                {(Object.keys(KIND_META) as EntryKind[]).map((k) => (
+                  <span key={k} className="flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />
+                    {KIND_META[k].label}s
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <ReminderDrawer

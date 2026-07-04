@@ -111,8 +111,12 @@ shared packages, database schema, auth, tenant scoping, workers, or UI primitive
 - Use `lucide-react` icons; keep operational UI dense, calm, and scannable.
 - Styling is Tailwind with class-based dark mode via `.dark`. Preserve light and
   dark states when changing UI.
-- Keep list pages URL-driven for search, sort, pagination, and filters where
-  existing modules do so.
+- NON-NEGOTIABLE: every table or list of records — module list pages,
+  detail-page sub-tables, dashboards, cockpit work lists, admin tables —
+  ships with search, relevant filters, and pagination. URL-driven via the
+  shared primitives (`parseListParams`, `SearchInput`, `FilterChips`,
+  `SortableTh`, `Pagination`, or the prefixed sub-table param pattern on
+  multi-table pages). Never render an unbounded or unsearchable table.
 - CSV/PDF/export routes should audit exports and respect tenant context.
 
 ## Data, Auth, and Permissions
