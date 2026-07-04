@@ -5,7 +5,7 @@
 // (desktop), and a day-grouped work list that is the primary mobile surface.
 
 import Link from 'next/link'
-import { and, asc, eq, isNull, lte, notInArray, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, lte, notInArray, sql, type SQL } from 'drizzle-orm'
 import {
   AlarmClock,
   BellRing,
@@ -18,20 +18,31 @@ import {
   Droplets,
   Plus,
 } from 'lucide-react'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  PageHeader,
+  UrlDrawer,
+} from '@beaconhs/ui'
 import {
   equipmentCategories,
+  equipmentInspectionRecords,
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
   equipmentReminders,
+  equipmentTypes,
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { clamp, mergeHref, pickString } from '@/lib/list-params'
+import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
@@ -69,6 +80,39 @@ const KIND_META: Record<EntryKind, { label: string; dot: string }> = {
   inspection: { label: 'Inspection', dot: 'bg-teal-500' },
   reminder: { label: 'Reminder', dot: 'bg-amber-500' },
   oil_change: { label: 'Oil change', dot: 'bg-violet-500' },
+}
+
+type UnitDrawerData = {
+  item: typeof equipmentItems.$inferSelect
+  typeName: string | null
+  categoryName: string | null
+  siteName: string | null
+  holderName: string | null
+  schedules: {
+    id: string
+    typeName: string | null
+    label: string | null
+    inspectionTypeId: string | null
+    intervalValue: number
+    intervalUnit: 'day' | 'week' | 'month' | 'year'
+    lastCompletedOn: string | null
+    nextDueOn: string
+    isActive: boolean
+  }[]
+  reminders: {
+    id: string
+    title: string
+    dueOn: string
+    assignee: string | null
+    repeat: string | null
+  }[]
+  inspections: {
+    id: string
+    reference: string
+    occurredAt: Date
+    result: string | null
+    status: string
+  }[]
 }
 
 function isoDate(d: Date): string {
@@ -115,6 +159,8 @@ export default async function EquipmentMaintenancePage({
   const q = pickString(sp.q)?.trim().toLowerCase() || undefined
   const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
   const drawerKey = pickString(sp.drawer)
+  const drawerUnitRaw = drawerKey?.startsWith('unit-') ? drawerKey.slice('unit-'.length) : null
+  const drawerUnitId = drawerUnitRaw && isUuid(drawerUnitRaw) ? drawerUnitRaw : null
 
   const data = await ctx.db(async (tx) => {
     const vis = await moduleScopeWhere(ctx, tx, {
@@ -220,7 +266,100 @@ export default async function EquipmentMaintenancePage({
       .where(eq(people.status, 'active'))
       .orderBy(asc(people.lastName), asc(people.firstName))
       .limit(500)
-    return { scheduleRows, reminderRows, oilRows, categories, itemOptions, assigneeOptions }
+
+    // Quick-detail flyout: the clicked unit's whole maintenance picture. Same
+    // visibility scope as the list; an out-of-scope id simply renders nothing.
+    let unit: UnitDrawerData | null = null
+    if (drawerUnitId) {
+      const [row] = await tx
+        .select({
+          item: equipmentItems,
+          typeName: equipmentTypes.name,
+          categoryName: equipmentCategories.name,
+          siteName: orgUnits.name,
+          holderFirst: people.firstName,
+          holderLast: people.lastName,
+        })
+        .from(equipmentItems)
+        .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+        .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
+        .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+        .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+        .where(and(eq(equipmentItems.id, drawerUnitId), isNull(equipmentItems.deletedAt), vis))
+        .limit(1)
+      if (row) {
+        const [unitSchedules, unitReminders, unitInspections] = await Promise.all([
+          tx
+            .select({
+              id: equipmentInspectionSchedules.id,
+              typeName: equipmentInspectionTypes.name,
+              label: equipmentInspectionSchedules.label,
+              inspectionTypeId: equipmentInspectionSchedules.inspectionTypeId,
+              intervalValue: equipmentInspectionSchedules.intervalValue,
+              intervalUnit: equipmentInspectionSchedules.intervalUnit,
+              lastCompletedOn: equipmentInspectionSchedules.lastCompletedOn,
+              nextDueOn: equipmentInspectionSchedules.nextDueOn,
+              isActive: equipmentInspectionSchedules.isActive,
+            })
+            .from(equipmentInspectionSchedules)
+            .leftJoin(
+              equipmentInspectionTypes,
+              eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
+            )
+            .where(eq(equipmentInspectionSchedules.equipmentItemId, drawerUnitId))
+            .orderBy(asc(equipmentInspectionSchedules.nextDueOn)),
+          tx
+            .select({ reminder: equipmentReminders, assignee: people })
+            .from(equipmentReminders)
+            .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
+            .where(
+              and(
+                eq(equipmentReminders.equipmentItemId, drawerUnitId),
+                isNull(equipmentReminders.completedAt),
+              ),
+            )
+            .orderBy(asc(equipmentReminders.dueOn))
+            .limit(25),
+          tx
+            .select({
+              id: equipmentInspectionRecords.id,
+              reference: equipmentInspectionRecords.reference,
+              occurredAt: equipmentInspectionRecords.occurredAt,
+              result: equipmentInspectionRecords.result,
+              status: equipmentInspectionRecords.status,
+            })
+            .from(equipmentInspectionRecords)
+            .where(
+              and(
+                eq(equipmentInspectionRecords.equipmentItemId, drawerUnitId),
+                isNull(equipmentInspectionRecords.deletedAt),
+              ),
+            )
+            .orderBy(desc(equipmentInspectionRecords.occurredAt))
+            .limit(5),
+        ])
+        unit = {
+          item: row.item,
+          typeName: row.typeName,
+          categoryName: row.categoryName,
+          siteName: row.siteName,
+          holderName: row.holderLast ? `${row.holderFirst} ${row.holderLast}` : null,
+          schedules: unitSchedules,
+          reminders: unitReminders.map((r) => ({
+            id: r.reminder.id,
+            title: r.reminder.title,
+            dueOn: r.reminder.dueOn,
+            assignee: r.assignee ? `${r.assignee.firstName} ${r.assignee.lastName}` : null,
+            repeat:
+              r.reminder.repeatIntervalValue && r.reminder.repeatIntervalUnit
+                ? formatInterval(r.reminder.repeatIntervalValue, r.reminder.repeatIntervalUnit)
+                : null,
+          })),
+          inspections: unitInspections,
+        }
+      }
+    }
+    return { scheduleRows, reminderRows, oilRows, categories, itemOptions, assigneeOptions, unit }
   })
 
   // ---- Merge the three sources into one agenda -------------------------------
@@ -495,7 +634,8 @@ export default async function EquipmentMaintenancePage({
                       {dayEntries.slice(0, 3).map((e) => (
                         <Link
                           key={e.key}
-                          href={`/equipment/${e.itemId}?tab=inspections`}
+                          href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
+                          scroll={false}
                           title={`${e.itemName} — ${e.title}`}
                           className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
                             e.dueOn < today
@@ -536,6 +676,14 @@ export default async function EquipmentMaintenancePage({
         </div>
       </div>
 
+      <UnitMaintenanceDrawer
+        open={drawerKey?.startsWith('unit-') ?? false}
+        closeHref={closeHref}
+        unit={data.unit}
+        today={today}
+        manage={manage}
+      />
+
       <ReminderDrawer
         open={manage && (drawerKey === 'reminder-new' || reminderEditing != null)}
         closeHref={closeHref}
@@ -573,7 +721,8 @@ function WorkList({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Link
-                href={`/equipment/${e.itemId}?tab=inspections`}
+                href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
+                scroll={false}
                 className="font-medium text-slate-900 hover:underline dark:text-slate-100"
               >
                 {e.itemName}
@@ -635,5 +784,218 @@ function WorkList({
         </li>
       ))}
     </ul>
+  )
+}
+
+// Quick-detail flyout for a unit clicked in the work list or calendar — the
+// whole maintenance picture without leaving the cockpit.
+function UnitMaintenanceDrawer({
+  open,
+  closeHref,
+  unit,
+  today,
+  manage,
+}: {
+  open: boolean
+  closeHref: string
+  unit: UnitDrawerData | null
+  today: string
+  manage: boolean
+}) {
+  return (
+    <UrlDrawer
+      open={open}
+      closeHref={closeHref}
+      title={unit?.item.name ?? 'Equipment'}
+      description={
+        unit
+          ? [unit.item.assetTag, unit.typeName, unit.categoryName].filter(Boolean).join(' · ')
+          : undefined
+      }
+      size="lg"
+      footer={
+        unit ? (
+          <Link href={`/equipment/${unit.item.id}?tab=inspections`}>
+            <Button>Open full record</Button>
+          </Link>
+        ) : null
+      }
+    >
+      {!unit ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">Unit not found.</p>
+      ) : (
+        <div className="space-y-5 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={unit.item.status === 'in_service' ? 'success' : 'warning'}>
+              {String(unit.item.status).replace(/_/g, ' ')}
+            </Badge>
+            {unit.item.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
+            <span className="text-slate-600 dark:text-slate-300">
+              {unit.siteName ?? 'Unassigned'}
+              {unit.holderName ? ` · held by ${unit.holderName}` : ''}
+            </span>
+          </div>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+              Inspection schedules ({unit.schedules.length})
+            </h3>
+            {unit.schedules.length === 0 ? (
+              <p className="text-slate-500 dark:text-slate-400">No recurring inspections.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {unit.schedules.map((s) => (
+                  <li key={s.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {s.typeName ?? s.label ?? 'Inspection'}
+                        {!s.isActive ? (
+                          <Badge variant="secondary" className="ml-2">
+                            inactive
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {formatInterval(s.intervalValue, s.intervalUnit)}
+                        {s.lastCompletedOn ? ` · last ${s.lastCompletedOn}` : ''} · next{' '}
+                        <span
+                          className={
+                            s.isActive && s.nextDueOn < today
+                              ? 'font-medium text-rose-600 dark:text-rose-400'
+                              : undefined
+                          }
+                        >
+                          {s.nextDueOn}
+                        </span>
+                      </div>
+                    </div>
+                    {s.inspectionTypeId ? (
+                      <Link
+                        href={`/equipment/inspections/new?itemId=${unit.item.id}&typeId=${s.inspectionTypeId}`}
+                      >
+                        <Button size="sm" variant="outline">
+                          <ClipboardCheck size={14} /> Start
+                        </Button>
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+              Open reminders ({unit.reminders.length})
+            </h3>
+            {unit.reminders.length === 0 ? (
+              <p className="text-slate-500 dark:text-slate-400">No open reminders.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {unit.reminders.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        {r.title}
+                        {r.repeat ? (
+                          <Badge variant="secondary" className="ml-2">
+                            {r.repeat}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Due{' '}
+                        <span
+                          className={
+                            r.dueOn < today
+                              ? 'font-medium text-rose-600 dark:text-rose-400'
+                              : undefined
+                          }
+                        >
+                          {r.dueOn}
+                        </span>
+                        {r.assignee ? ` · ${r.assignee}` : ''}
+                      </div>
+                    </div>
+                    {manage ? (
+                      <form action={completeEquipmentReminder}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <Button size="sm" variant="outline" type="submit">
+                          <Check size={14} /> Done
+                        </Button>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {unit.item.requiresOilChange ? (
+            <section className="space-y-1">
+              <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                Oil change
+              </h3>
+              <p className="text-slate-600 dark:text-slate-300">
+                {unit.item.oilChangeIntervalMonths
+                  ? `${formatInterval(unit.item.oilChangeIntervalMonths, 'month')} · `
+                  : ''}
+                {unit.item.lastOilChangeOn ? `last ${unit.item.lastOilChangeOn} · ` : ''}
+                next{' '}
+                <span
+                  className={
+                    unit.item.nextOilChangeDue && unit.item.nextOilChangeDue < today
+                      ? 'font-medium text-rose-600 dark:text-rose-400'
+                      : undefined
+                  }
+                >
+                  {unit.item.nextOilChangeDue ?? '—'}
+                </span>
+              </p>
+            </section>
+          ) : null}
+
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+              Recent inspections
+            </h3>
+            {unit.inspections.length === 0 ? (
+              <p className="text-slate-500 dark:text-slate-400">No inspections recorded.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {unit.inspections.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                    <Link
+                      href={`/equipment/inspections/${r.id}`}
+                      className="font-mono text-xs text-teal-700 hover:underline dark:text-teal-400"
+                    >
+                      {r.reference}
+                    </Link>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {new Date(r.occurredAt).toLocaleDateString()}
+                    </span>
+                    {r.result ? (
+                      <Badge
+                        variant={
+                          r.result === 'pass'
+                            ? 'success'
+                            : r.result === 'fail'
+                              ? 'destructive'
+                              : 'secondary'
+                        }
+                      >
+                        {r.result}
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning">{String(r.status).replace(/_/g, ' ')}</Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+      )}
+    </UrlDrawer>
   )
 }
