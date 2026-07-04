@@ -71,8 +71,8 @@ function CategoryForm({
   const [name, setName] = useState(editing?.name ?? '')
   const [sortOrder, setSortOrder] = useState(String(editing?.sortOrder ?? 0))
   const [description, setDescription] = useState(editing?.description ?? '')
-  // Field-group layout: null = registry defaults; a list = explicit override.
-  const [useDefaultGroups, setUseDefaultGroups] = useState(editing?.enabledFieldGroups == null)
+  // Field-group layout — the checkbox list is always shown; a category that
+  // was never configured starts from the registry defaults.
   const [groupKeys, setGroupKeys] = useState<string[]>(
     editing?.enabledFieldGroups ?? DEFAULT_ENABLED_GROUP_KEYS,
   )
@@ -96,7 +96,7 @@ function CategoryForm({
         name: trimmed,
         description: description.trim() || null,
         sortOrder: Number(sortOrder) || 0,
-        enabledFieldGroups: useDefaultGroups ? null : groupKeys,
+        enabledFieldGroups: groupKeys,
       })
       if (res.ok) onDone()
       else setError(res.error)
@@ -148,35 +148,24 @@ function CategoryForm({
           Which detail sections items of this category show — keep a hand tool lean, give a truck
           registration and meters.
         </p>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={useDefaultGroups}
-            onChange={(e) => setUseDefaultGroups(e.currentTarget.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-          />
-          <span>Use recommended defaults</span>
-        </label>
-        {!useDefaultGroups ? (
-          <div className="space-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
-            {EQUIPMENT_FIELD_GROUPS.map((g) => (
-              <label key={g.key} className="flex cursor-pointer items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={groupKeys.includes(g.key)}
-                  onChange={() => toggleGroup(g.key)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-                />
-                <span>
-                  {g.label}
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">
-                    {g.description}
-                  </span>
+        <div className="space-y-1.5">
+          {EQUIPMENT_FIELD_GROUPS.map((g) => (
+            <label key={g.key} className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={groupKeys.includes(g.key)}
+                onChange={() => toggleGroup(g.key)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+              />
+              <span>
+                {g.label}
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  {g.description}
                 </span>
-              </label>
-            ))}
-          </div>
-        ) : null}
+              </span>
+            </label>
+          ))}
+        </div>
       </fieldset>
       {error ? (
         <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
