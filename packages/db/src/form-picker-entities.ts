@@ -16,7 +16,7 @@
 // attribute requires editing both ENTITY_ATTRS (forms-core) and the matching
 // projection here. SELECT * is never used.
 
-import { inArray } from 'drizzle-orm'
+import { inArray, sql } from 'drizzle-orm'
 import type { Database } from './client'
 import {
   crews,
@@ -186,14 +186,22 @@ export async function loadEntitiesForFormPickers(
         name: equipmentItems.name,
         assetTag: equipmentItems.assetTag,
         serialNumber: equipmentItems.serialNumber,
+        manufacturer: equipmentItems.manufacturer,
+        model: equipmentItems.model,
         status: equipmentItems.status,
         typeId: equipmentItems.typeId,
         currentSiteOrgUnitId: equipmentItems.currentSiteOrgUnitId,
         currentHolderPersonId: equipmentItems.currentHolderPersonId,
         lastSeenAt: equipmentItems.lastSeenAt,
         lastPreUseInspectionAt: equipmentItems.lastPreUseInspectionAt,
-        lastAnnualInspectionOn: equipmentItems.lastAnnualInspectionOn,
-        nextAnnualInspectionDue: equipmentItems.nextAnnualInspectionDue,
+        // Soonest next_due_on across the item's ACTIVE recurring inspection
+        // schedules; null when nothing is scheduled.
+        nextInspectionDue: sql<string | null>`(
+          select min(s.next_due_on)
+          from equipment_inspection_schedules s
+          where s.equipment_item_id = ${equipmentItems.id}
+            and s.is_active = true
+        )`,
         isMissing: equipmentItems.isMissing,
         isAvailableForCheckout: equipmentItems.isAvailableForCheckout,
         requiresOilChange: equipmentItems.requiresOilChange,
@@ -241,6 +249,8 @@ export async function loadEntitiesForFormPickers(
         name: r.name,
         assetTag: r.assetTag,
         serialNumber: r.serialNumber ?? null,
+        manufacturer: r.manufacturer ?? null,
+        model: r.model ?? null,
         status: r.status,
         typeName: r.typeId ? (typeNameById.get(r.typeId) ?? null) : null,
         currentSiteName: r.currentSiteOrgUnitId
@@ -251,8 +261,7 @@ export async function loadEntitiesForFormPickers(
           : null,
         lastSeenAt: r.lastSeenAt ?? null,
         lastPreUseInspectionAt: r.lastPreUseInspectionAt ?? null,
-        lastAnnualInspectionOn: r.lastAnnualInspectionOn ?? null,
-        nextAnnualInspectionDue: r.nextAnnualInspectionDue ?? null,
+        nextInspectionDue: r.nextInspectionDue ?? null,
         isMissing: r.isMissing,
         isAvailableForCheckout: r.isAvailableForCheckout,
         requiresOilChange: r.requiresOilChange,

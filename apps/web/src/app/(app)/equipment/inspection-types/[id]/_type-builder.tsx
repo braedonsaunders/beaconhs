@@ -22,6 +22,8 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { IntervalPicker, type IntervalValue } from '@/components/equipment/interval-picker'
+import type { EquipmentIntervalUnit } from '@/lib/equipment/intervals'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -60,22 +62,13 @@ function severityVariant(s: Severity): 'destructive' | 'warning' | 'secondary' {
   return s === 'critical' || s === 'high' ? 'destructive' : s === 'medium' ? 'warning' : 'secondary'
 }
 
-const INTERVALS: { value: string; label: string }[] = [
-  { value: 'pre_use', label: 'Pre-use' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'quarterly', label: 'Quarterly' },
-  { value: 'annually', label: 'Annually' },
-  { value: 'five_year', label: 'Every 5 years' },
-  { value: 'on_demand', label: 'On demand' },
-]
-
 export type BuilderType = {
   id: string
   name: string
   description: string | null
-  interval: string
+  intervalValue: number | null
+  intervalUnit: EquipmentIntervalUnit | null
+  isPreUse: boolean
   appliesToTypeId: string | null
   allowPassAll: boolean
   failsSpawnWorkOrders: boolean
@@ -715,7 +708,11 @@ function SettingsPanel({
   const [, start] = React.useTransition()
   const [name, setName] = React.useState(type.name)
   const [description, setDescription] = React.useState(type.description ?? '')
-  const [interval, setInterval] = React.useState(type.interval)
+  const [interval, setInterval] = React.useState<IntervalValue>({
+    isPreUse: type.isPreUse,
+    intervalValue: type.intervalValue,
+    intervalUnit: type.intervalUnit,
+  })
   const [appliesToTypeId, setAppliesToTypeId] = React.useState(type.appliesToTypeId ?? '')
   const [allowPassAll, setAllowPassAll] = React.useState(type.allowPassAll)
   const [failsSpawnWorkOrders, setFailsSpawnWorkOrders] = React.useState(type.failsSpawnWorkOrders)
@@ -728,7 +725,9 @@ function SettingsPanel({
           id: type.id,
           name,
           description,
-          interval,
+          intervalValue: interval.intervalValue,
+          intervalUnit: interval.intervalUnit,
+          isPreUse: interval.isPreUse,
           appliesToTypeId: appliesToTypeId || null,
           allowPassAll,
           failsSpawnWorkOrders,
@@ -769,16 +768,13 @@ function SettingsPanel({
           ))}
         </Select>
       </div>
-      <div className="space-y-1.5">
-        <Label>Interval</Label>
-        <Select value={interval} onChange={(e) => setInterval(e.target.value)}>
-          {INTERVALS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <IntervalPicker
+        value={interval}
+        onChange={setInterval}
+        label="Default interval"
+        allowPreUse
+        idPrefix="eit-settings-interval"
+      />
       <div className="space-y-1.5">
         <Label>Description</Label>
         <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />

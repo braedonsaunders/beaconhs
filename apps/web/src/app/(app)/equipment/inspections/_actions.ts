@@ -19,6 +19,7 @@ import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { formatInterval } from '@/lib/equipment/intervals'
 import { parseDatetimeLocal } from './_datetime'
 import {
   finaliseEquipmentInspection,
@@ -110,7 +111,9 @@ export async function startEquipmentInspection(formData: FormData) {
         equipmentItemId,
         status: 'draft',
         occurredAt,
-        intervalSnapshot: type.interval,
+        intervalLabel: formatInterval(type.intervalValue, type.intervalUnit, {
+          preUse: type.isPreUse,
+        }),
         siteOrgUnitId: item.currentSiteOrgUnitId ?? null,
         inspectorTenantUserId: ctx.membership?.id ?? null,
         serial: item.serialNumber ?? null,

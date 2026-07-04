@@ -64,6 +64,13 @@
       "when": 1782510800000,
       "tag": "0008_admin_export_nav_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782950000000,
+      "tag": "0009_equipment_maintenance_overhaul",
+      "breakpoints": true
     }
   ]
 }

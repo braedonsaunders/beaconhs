@@ -12,7 +12,7 @@
 // M3 per-record/expiry completion adapters — when those land, this becomes a
 // single query over `compliance_status`.
 
-import { and, desc, eq, inArray, isNotNull, isNull, lte, notInArray, or } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import {
   correctiveActions,
   documents,
@@ -197,8 +197,17 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
       }
     }
 
-    // ---- Equipment: annual inspection / oil change / warranty ----
+    // ---- Equipment: scheduled inspection / oil change / warranty ----
     {
+      // Soonest next_due_on across the item's ACTIVE recurring inspection
+      // schedules; items with no active schedule have nothing due.
+      const nextInspectionDue = sql<string | null>`(
+        select min(s.next_due_on)
+        from equipment_inspection_schedules s
+        where s.equipment_item_id = ${equipmentItems.id}
+          and s.tenant_id = ${equipmentItems.tenantId}
+          and s.is_active = true
+      )`
       const rows = await tx
         .select({
           id: equipmentItems.id,
@@ -207,7 +216,7 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
           holder: equipmentItems.currentHolderPersonId,
           first: people.firstName,
           last: people.lastName,
-          annual: equipmentItems.nextAnnualInspectionDue,
+          inspection: nextInspectionDue,
           oil: equipmentItems.nextOilChangeDue,
           warranty: equipmentItems.warrantyExpiresOn,
         })
@@ -219,7 +228,7 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
             isNull(equipmentItems.deletedAt),
             notInArray(equipmentItems.status, ['retired', 'lost']),
             or(
-              lte(equipmentItems.nextAnnualInspectionDue, horizonIso),
+              sql`${nextInspectionDue} <= ${horizonIso}`,
               lte(equipmentItems.nextOilChangeDue, horizonIso),
               lte(equipmentItems.warrantyExpiresOn, horizonIso),
             ),
@@ -242,7 +251,7 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
             href: `/equipment/${r.id}`,
           })
         }
-        push('Annual inspection', isoDate(r.annual), false)
+        push('Inspection', isoDate(r.inspection), false)
         push('Oil change', isoDate(r.oil), false)
         push('Warranty', isoDate(r.warranty), true)
       }

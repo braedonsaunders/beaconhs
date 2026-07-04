@@ -156,8 +156,8 @@ export type DashboardMetrics = {
     assetTag: string
     typeName: string | null
     status: string
-    requiresAnnualInspection: boolean
-    nextAnnualInspectionDue: string | null
+    /** Soonest next_due_on across the item's active inspection schedules. */
+    nextInspectionDue: string | null
     expectedReturnOn: string | null
   }>
   myCompliance: {
@@ -927,8 +927,12 @@ export async function loadDashboardMetrics(
               name: equipmentItems.name,
               assetTag: equipmentItems.assetTag,
               status: equipmentItems.status,
-              requiresAnnualInspection: equipmentItems.requiresAnnualInspection,
-              nextAnnualInspectionDue: equipmentItems.nextAnnualInspectionDue,
+              nextInspectionDue: sql<string | null>`(
+                select min(s.next_due_on)
+                from equipment_inspection_schedules s
+                where s.equipment_item_id = ${equipmentItems.id}
+                  and s.is_active = true
+              )`,
               typeName: equipmentTypes.name,
               expectedReturnOn: equipmentCheckouts.expectedReturnOn,
             })
@@ -951,10 +955,7 @@ export async function loadDashboardMetrics(
           assetTag: r.assetTag,
           typeName: r.typeName,
           status: r.status,
-          requiresAnnualInspection: r.requiresAnnualInspection,
-          nextAnnualInspectionDue: r.nextAnnualInspectionDue
-            ? String(r.nextAnnualInspectionDue)
-            : null,
+          nextInspectionDue: r.nextInspectionDue ? String(r.nextInspectionDue) : null,
           expectedReturnOn: r.expectedReturnOn ? String(r.expectedReturnOn) : null,
         }))
       : []

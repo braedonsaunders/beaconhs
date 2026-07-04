@@ -1353,16 +1353,19 @@ const equipmentCreate = z.object({
   typeId: uuid.nullish(),
   categoryId: uuid.nullish(),
   serialNumber: z.string().max(200).nullish(),
+  manufacturer: z.string().max(200).nullish(),
+  model: z.string().max(200).nullish(),
+  modelYear: z.number().int().min(1900).max(2100).nullish(),
   description: z.string().max(5000).nullish(),
   notes: z.string().max(5000).nullish(),
   status: z.enum(equipmentStatus.enumValues).default('in_service'),
   purchaseDate: isoDate.nullish(),
+  purchasePrice: z.number().nonnegative().nullish(),
+  purchaseVendor: z.string().max(240).nullish(),
   warrantyExpiresOn: isoDate.nullish(),
   currentSiteOrgUnitId: uuid.nullish(),
   currentHolderPersonId: uuid.nullish(),
   requiresPreUseInspection: z.boolean().default(false),
-  requiresAnnualInspection: z.boolean().default(false),
-  nextAnnualInspectionDue: isoDate.nullish(),
   requiresOilChange: z.boolean().default(false),
   oilChangeIntervalMonths: z.number().int().positive().nullish(),
   lastOilChangeOn: isoDate.nullish(),
@@ -1413,17 +1416,21 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
         typeId: b.typeId ?? null,
         categoryId: b.categoryId ?? null,
         serialNumber: stripEmpty(b.serialNumber),
+        manufacturer: stripEmpty(b.manufacturer),
+        model: stripEmpty(b.model),
+        modelYear: b.modelYear ?? null,
         description: stripEmpty(b.description),
         notes: stripEmpty(b.notes),
         qrToken: randomBytes(12).toString('base64url'),
         status: b.status,
         purchaseDate: optionalDate(b.purchaseDate),
+        // numeric(12,2) column — drizzle expects a string; null passes through.
+        purchasePrice: b.purchasePrice != null ? String(b.purchasePrice) : null,
+        purchaseVendor: stripEmpty(b.purchaseVendor),
         warrantyExpiresOn: optionalDate(b.warrantyExpiresOn),
         currentSiteOrgUnitId: b.currentSiteOrgUnitId ?? null,
         currentHolderPersonId: b.currentHolderPersonId ?? null,
         requiresPreUseInspection: b.requiresPreUseInspection,
-        requiresAnnualInspection: b.requiresAnnualInspection,
-        nextAnnualInspectionDue: optionalDate(b.nextAnnualInspectionDue),
         requiresOilChange: b.requiresOilChange,
         oilChangeIntervalMonths: b.oilChangeIntervalMonths ?? null,
         lastOilChangeOn: optionalDate(b.lastOilChangeOn),
@@ -1461,7 +1468,6 @@ function equipmentResult(row: typeof equipmentItems.$inferSelect): WriteResult {
     serial_number: row.serialNumber,
     status: row.status,
     current_site_org_unit_id: row.currentSiteOrgUnitId,
-    next_annual_inspection_due: row.nextAnnualInspectionDue,
     next_oil_change_due: row.nextOilChangeDue,
   }
 }
@@ -1524,10 +1530,18 @@ async function updateEquipment(
     if (hasOwn(b, 'typeId')) patch.typeId = b.typeId ?? null
     if (hasOwn(b, 'categoryId')) patch.categoryId = b.categoryId ?? null
     if (hasOwn(b, 'serialNumber')) patch.serialNumber = stripEmpty(b.serialNumber)
+    if (hasOwn(b, 'manufacturer')) patch.manufacturer = stripEmpty(b.manufacturer)
+    if (hasOwn(b, 'model')) patch.model = stripEmpty(b.model)
+    if (hasOwn(b, 'modelYear')) patch.modelYear = b.modelYear ?? null
     if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
     if (hasOwn(b, 'notes')) patch.notes = stripEmpty(b.notes)
     if (hasOwn(b, 'status')) patch.status = b.status
     if (hasOwn(b, 'purchaseDate')) patch.purchaseDate = optionalDate(b.purchaseDate)
+    if (hasOwn(b, 'purchasePrice')) {
+      // numeric(12,2) column — drizzle expects a string; null passes through.
+      patch.purchasePrice = b.purchasePrice != null ? String(b.purchasePrice) : null
+    }
+    if (hasOwn(b, 'purchaseVendor')) patch.purchaseVendor = stripEmpty(b.purchaseVendor)
     if (hasOwn(b, 'warrantyExpiresOn')) {
       patch.warrantyExpiresOn = optionalDate(b.warrantyExpiresOn)
     }
@@ -1539,12 +1553,6 @@ async function updateEquipment(
     }
     if (hasOwn(b, 'requiresPreUseInspection')) {
       patch.requiresPreUseInspection = b.requiresPreUseInspection
-    }
-    if (hasOwn(b, 'requiresAnnualInspection')) {
-      patch.requiresAnnualInspection = b.requiresAnnualInspection
-    }
-    if (hasOwn(b, 'nextAnnualInspectionDue')) {
-      patch.nextAnnualInspectionDue = optionalDate(b.nextAnnualInspectionDue)
     }
     if (hasOwn(b, 'requiresOilChange')) patch.requiresOilChange = b.requiresOilChange
     if (hasOwn(b, 'oilChangeIntervalMonths')) {
@@ -1650,16 +1658,19 @@ const EQUIPMENT_BODY: Json = {
     typeId: { type: 'string', format: 'uuid' },
     categoryId: { type: 'string', format: 'uuid' },
     serialNumber: { type: 'string' },
+    manufacturer: { type: 'string' },
+    model: { type: 'string' },
+    modelYear: { type: 'integer', minimum: 1900, maximum: 2100 },
     description: { type: 'string' },
     notes: { type: 'string' },
     status: { type: 'string', enum: equipmentStatus.enumValues, default: 'in_service' },
     purchaseDate: { type: 'string', format: 'date' },
+    purchasePrice: { type: 'number', minimum: 0 },
+    purchaseVendor: { type: 'string' },
     warrantyExpiresOn: { type: 'string', format: 'date' },
     currentSiteOrgUnitId: { type: 'string', format: 'uuid' },
     currentHolderPersonId: { type: 'string', format: 'uuid' },
     requiresPreUseInspection: { type: 'boolean', default: false },
-    requiresAnnualInspection: { type: 'boolean', default: false },
-    nextAnnualInspectionDue: { type: 'string', format: 'date' },
     requiresOilChange: { type: 'boolean', default: false },
     oilChangeIntervalMonths: { type: 'integer', minimum: 1 },
     lastOilChangeOn: { type: 'string', format: 'date' },

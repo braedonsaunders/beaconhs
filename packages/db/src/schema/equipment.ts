@@ -36,6 +36,11 @@ export const equipmentCategories = pgTable(
     slug: text('slug').notNull(),
     description: text('description'),
     sortOrder: integer('sort_order').default(0).notNull(),
+    // Which optional field groups (see the web app's EQUIPMENT_FIELD_GROUPS
+    // registry) render on items of this category. NULL = registry defaults, so
+    // categories opt in/out of e.g. vehicle/meters/specs sections without
+    // cluttering every asset with irrelevant inputs.
+    enabledFieldGroups: jsonb('enabled_field_groups').$type<string[] | null>(),
     ...timestamps,
   },
   (t) => ({
@@ -82,6 +87,8 @@ export const equipmentStatus = pgEnum('equipment_status', [
   'retired',
 ])
 
+export const equipmentOwnership = pgEnum('equipment_ownership', ['owned', 'rented', 'leased'])
+
 export const equipmentItems = pgTable(
   'equipment_items',
   {
@@ -107,17 +114,45 @@ export const equipmentItems = pgTable(
     // Draft-first (badged): instant-created items show in the register with a
     // "Draft" badge until completed — never hidden. Existing rows default false.
     isDraft: boolean('is_draft').default(false).notNull(),
+    // ----- Manufacture (field group: manufacture) -----
+    manufacturer: text('manufacturer'),
+    model: text('model'),
+    modelYear: integer('model_year'),
+    // ----- Acquisition (field group: acquisition) -----
+    // Purchase price is an informational asset attribute only — billing rates,
+    // expenses, and every other financial concern live in the external
+    // financial system, never here.
     purchaseDate: date('purchase_date'),
+    purchasePrice: numeric('purchase_price', { precision: 12, scale: 2 }),
+    purchaseVendor: text('purchase_vendor'),
     warrantyExpiresOn: date('warranty_expires_on'),
+    // ----- Ownership (field group: ownership) -----
+    ownership: equipmentOwnership('ownership').default('owned').notNull(),
+    rentalProvider: text('rental_provider'),
+    rentalEndsOn: date('rental_ends_on'),
+    // ----- Road / registration (field group: vehicle) -----
+    vin: text('vin'),
+    licensePlate: text('license_plate'),
+    registrationExpiresOn: date('registration_expires_on'),
+    insuranceExpiresOn: date('insurance_expires_on'),
+    // ----- Meters (field group: meters) -----
+    currentHours: numeric('current_hours', { precision: 10, scale: 1 }),
+    currentOdometer: integer('current_odometer'),
+    metersUpdatedAt: timestamp('meters_updated_at', { withTimezone: true }),
+    // ----- Specifications (field group: specifications) -----
+    fuelType: text('fuel_type'),
+    powerRating: text('power_rating'),
+    capacity: text('capacity'),
+    weight: text('weight'),
+    dimensions: text('dimensions'),
     currentSiteOrgUnitId: uuid('current_site_org_unit_id').references(() => orgUnits.id),
     currentHolderPersonId: uuid('current_holder_person_id').references(() => people.id),
     photoAttachmentId: uuid('photo_attachment_id'),
     manualAttachmentId: uuid('manual_attachment_id'),
+    // Pre-use inspections gate on each use rather than a calendar; recurring
+    // calendar cadences live in equipment_inspection_schedules.
     requiresPreUseInspection: boolean('requires_pre_use_inspection').default(false).notNull(),
     lastPreUseInspectionAt: timestamp('last_pre_use_inspection_at', { withTimezone: true }),
-    requiresAnnualInspection: boolean('requires_annual_inspection').default(false).notNull(),
-    lastAnnualInspectionOn: date('last_annual_inspection_on'),
-    nextAnnualInspectionDue: date('next_annual_inspection_due'),
     isMissing: boolean('is_missing').default(false).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     lastSeenSiteOrgUnitId: uuid('last_seen_site_org_unit_id').references(() => orgUnits.id),

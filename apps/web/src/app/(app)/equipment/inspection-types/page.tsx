@@ -20,6 +20,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { formatInterval } from '@/lib/equipment/intervals'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -62,7 +63,13 @@ export default async function InspectionTypesPage({
       params.sort === 'applies'
         ? [dirFn(equipmentTypes.name), asc(equipmentInspectionTypes.name)]
         : params.sort === 'interval'
-          ? [dirFn(equipmentInspectionTypes.interval), asc(equipmentInspectionTypes.name)]
+          ? [
+              // Sort cadences coarsest-first by unit then value; pre-use and
+              // on-demand (null unit) sort together at the end.
+              dirFn(equipmentInspectionTypes.intervalUnit),
+              dirFn(equipmentInspectionTypes.intervalValue),
+              asc(equipmentInspectionTypes.name),
+            ]
           : [dirFn(equipmentInspectionTypes.name)]
 
     const [tot] = await tx
@@ -169,7 +176,9 @@ export default async function InspectionTypesPage({
                       {applies?.name ?? <span className="text-slate-400 italic">any</span>}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{t.interval.replace('_', ' ')}</Badge>
+                      <Badge variant="secondary">
+                        {formatInterval(t.intervalValue, t.intervalUnit, { preUse: t.isPreUse })}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge variant={n > 0 ? 'success' : 'warning'}>{n}</Badge>

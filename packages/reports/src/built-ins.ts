@@ -15,6 +15,8 @@ import {
   documentAcknowledgments,
   documentAssignments,
   documents,
+  equipmentInspectionSchedules,
+  equipmentInspectionTypes,
   equipmentItems,
   formResponses,
   formTemplates,
@@ -794,22 +796,30 @@ export async function queryOverdueRollup(
     )
     .orderBy(asc(documents.nextReviewOn))
 
+  // Overdue equipment inspections = active per-unit schedules past their
+  // next_due_on. Schedule name = the linked inspection type, falling back to
+  // the schedule's own label for type-less (due-date-only) cadences.
   const eqRows = await tx
     .select({
       asset: equipmentItems.assetTag,
       name: equipmentItems.name,
-      nextDue: equipmentItems.nextAnnualInspectionDue,
+      schedule: sql<string>`coalesce(${equipmentInspectionTypes.name}, ${equipmentInspectionSchedules.label}, 'Inspection')`,
+      nextDue: equipmentInspectionSchedules.nextDueOn,
     })
-    .from(equipmentItems)
+    .from(equipmentInspectionSchedules)
+    .innerJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionSchedules.equipmentItemId))
+    .leftJoin(
+      equipmentInspectionTypes,
+      eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
+    )
     .where(
       and(
+        eq(equipmentInspectionSchedules.isActive, true),
+        lte(equipmentInspectionSchedules.nextDueOn, today),
         isNull(equipmentItems.deletedAt),
-        eq(equipmentItems.requiresAnnualInspection, true),
-        isNotNull(equipmentItems.nextAnnualInspectionDue),
-        lte(equipmentItems.nextAnnualInspectionDue, today),
       ),
     )
-    .orderBy(asc(equipmentItems.nextAnnualInspectionDue))
+    .orderBy(asc(equipmentInspectionSchedules.nextDueOn))
 
   const ppeRows = await tx
     .select({
@@ -850,10 +860,10 @@ export async function queryOverdueRollup(
       isEmpty: docRows.length === 0,
     },
     {
-      title: 'Equipment annual inspections overdue',
+      title: 'Equipment inspections overdue',
       subtitle: `${eqRows.length} item(s)`,
-      columns: ['Asset tag', 'Name', 'Due'],
-      rows: eqRows.map((r) => [r.asset, r.name, r.nextDue]),
+      columns: ['Asset tag', 'Name', 'Schedule', 'Due'],
+      rows: eqRows.map((r) => [r.asset, r.name, r.schedule, r.nextDue]),
       isEmpty: eqRows.length === 0,
     },
     {

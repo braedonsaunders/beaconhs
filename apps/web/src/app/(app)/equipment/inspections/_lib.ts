@@ -2,18 +2,20 @@
 // criteria materialisation, result computation, and work-order spawning on a
 // failed inspection (the legacy "fail = WO" rule).
 
-import { count, eq, sql } from 'drizzle-orm'
+import { and, count, eq, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   equipmentInspectionCriteria,
   equipmentInspectionGroups,
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
+  equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
   equipmentWorkOrders,
 } from '@beaconhs/db/schema'
 import { nextReference } from '@/lib/reference'
+import { addInterval } from '@/lib/equipment/intervals'
 
 export type EqAnswer = 'pass' | 'fail' | 'n_a'
 export type EqSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -100,36 +102,14 @@ export type SubmitOutcome =
     }
   | { ok: false; error: string }
 
-/** Interval → months until the next inspection is due (null = no schedule). */
-const INTERVAL_MONTHS: Record<string, number | null> = {
-  pre_use: null,
-  daily: 0, // handled as +1 day below
-  weekly: 0, // handled as +7 days below
-  monthly: 1,
-  quarterly: 3,
-  annually: 12,
-  five_year: 60,
-  on_demand: null,
-}
-
-function dateOnly(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
-
-/** Next-due date (YYYY-MM-DD) for an interval, from the inspection instant. */
-export function nextDueFromInterval(interval: string | null, occurredAt: Date): string | null {
-  if (!interval) return null
-  if (interval === 'daily') {
-    return dateOnly(new Date(occurredAt.getTime() + 86_400_000))
-  }
-  if (interval === 'weekly') {
-    return dateOnly(new Date(occurredAt.getTime() + 7 * 86_400_000))
-  }
-  const months = INTERVAL_MONTHS[interval]
-  if (!months) return null
-  const next = new Date(occurredAt)
-  next.setUTCMonth(next.getUTCMonth() + months)
-  return dateOnly(next)
+/** Next-due date (YYYY-MM-DD) for a value+unit cadence (null = no cadence). */
+export function nextDueFromInterval(
+  intervalValue: number | null,
+  intervalUnit: 'day' | 'week' | 'month' | 'year' | null,
+  occurredAt: Date,
+): string | null {
+  if (!intervalValue || !intervalUnit) return null
+  return addInterval(occurredAt, intervalValue, intervalUnit)
 }
 
 /**
@@ -244,7 +224,11 @@ export async function finaliseEquipmentInspection(
     }
 
     const occurredOn = record.occurredAt.toISOString().slice(0, 10)
-    const nextDueOn = nextDueFromInterval(record.intervalSnapshot, record.occurredAt)
+    const nextDueOn = nextDueFromInterval(
+      typeRow?.intervalValue ?? null,
+      typeRow?.intervalUnit ?? null,
+      record.occurredAt,
+    )
 
     await tx
       .update(equipmentInspectionRecords)
@@ -260,19 +244,38 @@ export async function finaliseEquipmentInspection(
       })
       .where(eq(equipmentInspectionRecords.id, recordId))
 
-    // Stamp the equipment item's last/next inspection dates from the interval
-    // snapshot so the detail-page stats, dashboard "annual due" widget, and
-    // compliance signals update from actually-performed inspections.
-    if (record.intervalSnapshot === 'pre_use') {
+    // A pre-use template stamps the item's pre-use timestamp; every submitted
+    // inspection also advances the item's matching active schedules (per-unit
+    // cadences drive overdue tracking, the maintenance cockpit, and compliance
+    // signals). Each schedule advances by its OWN interval, from this
+    // inspection's date.
+    if (typeRow?.isPreUse) {
       await tx
         .update(equipmentItems)
         .set({ lastPreUseInspectionAt: record.occurredAt })
         .where(eq(equipmentItems.id, record.equipmentItemId))
-    } else if (record.intervalSnapshot === 'annually') {
-      await tx
-        .update(equipmentItems)
-        .set({ lastAnnualInspectionOn: occurredOn, nextAnnualInspectionDue: nextDueOn })
-        .where(eq(equipmentItems.id, record.equipmentItemId))
+    }
+    if (record.inspectionTypeId) {
+      const schedules = await tx
+        .select()
+        .from(equipmentInspectionSchedules)
+        .where(
+          and(
+            eq(equipmentInspectionSchedules.equipmentItemId, record.equipmentItemId),
+            eq(equipmentInspectionSchedules.inspectionTypeId, record.inspectionTypeId),
+            eq(equipmentInspectionSchedules.isActive, true),
+          ),
+        )
+      for (const s of schedules) {
+        await tx
+          .update(equipmentInspectionSchedules)
+          .set({
+            lastCompletedOn: occurredOn,
+            nextDueOn: addInterval(record.occurredAt, s.intervalValue, s.intervalUnit),
+            updatedAt: new Date(),
+          })
+          .where(eq(equipmentInspectionSchedules.id, s.id))
+      }
     }
 
     return { ok: true, result, failed: fails.length, workOrdersSpawned: spawned }

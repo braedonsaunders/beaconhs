@@ -565,12 +565,21 @@ function recordRow(
 async function evalEquipment(tx: Tx, tid: string, ob: Ob, today: string): Promise<EvalResult> {
   const remind = ob.recurrence?.remindBeforeDays ?? 30
   const typeId = ob.targetRef?.equipmentTypeId
+  // An item's due date = the soonest next_due_on across its ACTIVE recurring
+  // inspection schedules. No active schedule ⇒ null ⇒ 'completed' (nothing
+  // outstanding), matching the pre-schedules behaviour for untracked items.
   const rows = await tx
     .select({
       id: equipmentItems.id,
       name: equipmentItems.name,
       tag: equipmentItems.assetTag,
-      due: equipmentItems.nextAnnualInspectionDue,
+      due: sql<string | null>`(
+        select min(s.next_due_on)
+        from equipment_inspection_schedules s
+        where s.equipment_item_id = ${equipmentItems.id}
+          and s.tenant_id = ${equipmentItems.tenantId}
+          and s.is_active = true
+      )`,
     })
     .from(equipmentItems)
     .where(

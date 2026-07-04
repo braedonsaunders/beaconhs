@@ -18,6 +18,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { parseIntervalUnit, type EquipmentIntervalUnit } from '@/lib/equipment/intervals'
 
 const KINDS = ['pass_fail', 'pass_fail_na', 'text', 'numeric', 'photo'] as const
 type Kind = (typeof KINDS)[number]
@@ -35,21 +36,26 @@ function parseSeverity(v: unknown): Severity {
     : 'medium'
 }
 
-const INTERVALS = [
-  'pre_use',
-  'daily',
-  'weekly',
-  'monthly',
-  'quarterly',
-  'annually',
-  'five_year',
-  'on_demand',
-] as const
-type Interval = (typeof INTERVALS)[number]
-function parseInterval(v: unknown): Interval {
-  return typeof v === 'string' && (INTERVALS as readonly string[]).includes(v)
-    ? (v as Interval)
-    : 'on_demand'
+// Cadence input: "every N day|week|month|year", or none (on demand /
+// pre-use). Normalised so value+unit are either both set or both null.
+type IntervalInput = {
+  intervalValue: number | null
+  intervalUnit: string | null
+  isPreUse: boolean
+}
+function parseIntervalInput(input: IntervalInput): {
+  intervalValue: number | null
+  intervalUnit: EquipmentIntervalUnit | null
+  isPreUse: boolean
+} {
+  if (input.isPreUse) return { intervalValue: null, intervalUnit: null, isPreUse: true }
+  const unit = parseIntervalUnit(input.intervalUnit)
+  const value =
+    typeof input.intervalValue === 'number' && Number.isFinite(input.intervalValue)
+      ? Math.max(1, Math.trunc(input.intervalValue))
+      : null
+  if (!unit || !value) return { intervalValue: null, intervalUnit: null, isPreUse: false }
+  return { intervalValue: value, intervalUnit: unit, isPreUse: false }
 }
 
 async function manageCtx() {
@@ -69,7 +75,9 @@ export async function updateEquipmentInspectionType(input: {
   id: string
   name: string
   description: string | null
-  interval: string
+  intervalValue: number | null
+  intervalUnit: string | null
+  isPreUse: boolean
   appliesToTypeId: string | null
   allowPassAll: boolean
   failsSpawnWorkOrders: boolean
@@ -84,7 +92,7 @@ export async function updateEquipmentInspectionType(input: {
       .set({
         name,
         description: input.description?.trim() || null,
-        interval: parseInterval(input.interval),
+        ...parseIntervalInput(input),
         appliesToTypeId: input.appliesToTypeId || null,
         allowPassAll: input.allowPassAll,
         failsSpawnWorkOrders: input.failsSpawnWorkOrders,
@@ -104,7 +112,9 @@ export async function updateEquipmentInspectionType(input: {
 export async function createEquipmentInspectionType(input: {
   name: string
   description: string | null
-  interval: string
+  intervalValue: number | null
+  intervalUnit: string | null
+  isPreUse: boolean
   appliesToTypeId: string | null
   allowPassAll: boolean
   failsSpawnWorkOrders: boolean
@@ -119,7 +129,7 @@ export async function createEquipmentInspectionType(input: {
         tenantId: ctx.tenantId,
         name,
         description: input.description?.trim() || null,
-        interval: parseInterval(input.interval),
+        ...parseIntervalInput(input),
         appliesToTypeId: input.appliesToTypeId || null,
         allowPassAll: input.allowPassAll,
         failsSpawnWorkOrders: input.failsSpawnWorkOrders,

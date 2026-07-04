@@ -66,6 +66,11 @@ export const customFieldDefinitions = pgTable(
     required: boolean('required').default(false).notNull(),
     // Section heading used to group fields on the record page / designer.
     groupLabel: text('group_label'),
+    // Optional native field-group placement. When set (e.g. 'vehicle',
+    // 'specifications' for equipment — see the web app's field-group
+    // registry), the field renders inside that native section on the record
+    // page instead of a standalone custom section.
+    groupKey: text('group_key'),
     sortOrder: integer('sort_order').default(0).notNull(),
     isActive: boolean('is_active').default(true).notNull(),
     ...timestamps,

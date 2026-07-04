@@ -11,22 +11,12 @@ import {
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
+import { formatInterval } from '@/lib/equipment/intervals'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
 import { EquipmentInspectionTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
-
-const INTERVAL_LABELS: Record<string, string> = {
-  pre_use: 'Pre-use',
-  daily: 'Daily',
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annually: 'Annually',
-  five_year: 'Every 5 years',
-  on_demand: 'On demand',
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -94,7 +84,7 @@ export default async function EquipmentInspectionTypeDetailPage({
           badge={
             <div className="flex items-center gap-2">
               <Badge variant="secondary">
-                {INTERVAL_LABELS[type.interval] ?? type.interval.replace(/_/g, ' ')}
+                {formatInterval(type.intervalValue, type.intervalUnit, { preUse: type.isPreUse })}
               </Badge>
               {!type.isActive ? <Badge variant="secondary">Inactive</Badge> : null}
             </div>
@@ -115,7 +105,9 @@ export default async function EquipmentInspectionTypeDetailPage({
           id: type.id,
           name: type.name,
           description: type.description,
-          interval: type.interval,
+          intervalValue: type.intervalValue,
+          intervalUnit: type.intervalUnit,
+          isPreUse: type.isPreUse,
           appliesToTypeId: type.appliesToTypeId,
           allowPassAll: type.allowPassAll,
           failsSpawnWorkOrders: type.failsSpawnWorkOrders,

@@ -32,7 +32,6 @@ import { equipmentItems, equipmentWorkOrders } from './equipment'
 import {
   equipmentInspectionCriterionKind,
   equipmentInspectionCriterionSeverity,
-  equipmentInspectionInterval,
   equipmentInspectionTypes,
 } from './equipment-inspection-types'
 
@@ -77,9 +76,10 @@ export const equipmentInspectionRecords = pgTable(
 
     // When the inspection actually happened (legacy InspectionDate).
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-    // Snapshot of the interval + computed next-due so the upcoming report and
-    // compliance engine can read this row without joining the live type.
-    intervalSnapshot: equipmentInspectionInterval('interval_snapshot'),
+    // Display snapshot of the cadence this record was performed under (e.g.
+    // "Every 3 months", "Pre-use", "On demand") + computed next-due so the
+    // upcoming report can read this row without joining the live type.
+    intervalLabel: text('interval_label'),
     lastInspectionOn: date('last_inspection_on'), // legacy LastInspection
     nextDueOn: date('next_due_on'), // legacy NextInspection
 

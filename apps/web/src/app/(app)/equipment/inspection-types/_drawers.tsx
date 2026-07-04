@@ -11,18 +11,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 import { Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { IntervalPicker, type IntervalValue } from '@/components/equipment/interval-picker'
 import { createEquipmentInspectionType, deleteEquipmentInspectionType } from './_actions'
-
-const INTERVAL_OPTIONS = [
-  { value: 'pre_use', label: 'Pre-use' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'quarterly', label: 'Quarterly' },
-  { value: 'annually', label: 'Annually' },
-  { value: 'five_year', label: 'Every 5 years' },
-  { value: 'on_demand', label: 'On demand' },
-]
 
 export function NewTypeDrawer({
   open,
@@ -36,7 +26,11 @@ export function NewTypeDrawer({
   const router = useRouter()
   const [name, setName] = useState('')
   const [appliesToTypeId, setAppliesToTypeId] = useState('')
-  const [intervalValue, setIntervalValue] = useState('on_demand')
+  const [interval, setInterval] = useState<IntervalValue>({
+    isPreUse: false,
+    intervalValue: null,
+    intervalUnit: null,
+  })
   const [description, setDescription] = useState('')
   const [allowPassAll, setAllowPassAll] = useState(true)
   const [failsSpawnWorkOrders, setFailsSpawnWorkOrders] = useState(true)
@@ -54,7 +48,9 @@ export function NewTypeDrawer({
       const res = await createEquipmentInspectionType({
         name: trimmed,
         description: description.trim() || null,
-        interval: intervalValue,
+        intervalValue: interval.intervalValue,
+        intervalUnit: interval.intervalUnit,
+        isPreUse: interval.isPreUse,
         appliesToTypeId: appliesToTypeId || null,
         allowPassAll,
         failsSpawnWorkOrders,
@@ -119,20 +115,13 @@ export function NewTypeDrawer({
             ))}
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="eit-interval">Interval</Label>
-          <Select
-            id="eit-interval"
-            value={intervalValue}
-            onChange={(e) => setIntervalValue(e.currentTarget.value)}
-          >
-            {INTERVAL_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <IntervalPicker
+          value={interval}
+          onChange={setInterval}
+          label="Default interval"
+          allowPreUse
+          idPrefix="eit-interval"
+        />
         <div className="space-y-1.5">
           <Label htmlFor="eit-description">Description</Label>
           <Textarea

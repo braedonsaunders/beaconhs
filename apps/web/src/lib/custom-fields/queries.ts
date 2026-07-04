@@ -24,6 +24,7 @@ export type CustomFieldDefRow = {
   config: CustomFieldConfig | null
   required: boolean
   groupLabel: string | null
+  groupKey: string | null
   sortOrder: number
   isActive: boolean
 }
@@ -40,6 +41,7 @@ function mapRow(r: typeof customFieldDefinitions.$inferSelect): CustomFieldDefRo
     config: (r.config ?? null) as CustomFieldConfig | null,
     required: r.required,
     groupLabel: r.groupLabel,
+    groupKey: r.groupKey,
     sortOrder: r.sortOrder,
     isActive: r.isActive,
   }

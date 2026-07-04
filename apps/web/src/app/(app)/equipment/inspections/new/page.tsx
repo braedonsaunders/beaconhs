@@ -2,21 +2,11 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { equipmentInspectionTypes, equipmentItems } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatInterval } from '@/lib/equipment/intervals'
 import { PageContainer } from '@/components/page-layout'
 import { NewInspectionForm } from './_new-form'
 
 export const dynamic = 'force-dynamic'
-
-const INTERVAL_LABELS: Record<string, string> = {
-  pre_use: 'Pre-use',
-  daily: 'Daily',
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annually: 'Annually',
-  five_year: 'Every 5 years',
-  on_demand: 'On demand',
-}
 
 export const metadata = { title: 'Start equipment inspection · BeaconHS' }
 
@@ -43,7 +33,9 @@ export default async function NewEquipmentInspectionPage({
       .select({
         id: equipmentInspectionTypes.id,
         name: equipmentInspectionTypes.name,
-        interval: equipmentInspectionTypes.interval,
+        intervalValue: equipmentInspectionTypes.intervalValue,
+        intervalUnit: equipmentInspectionTypes.intervalUnit,
+        isPreUse: equipmentInspectionTypes.isPreUse,
         appliesToTypeId: equipmentInspectionTypes.appliesToTypeId,
       })
       .from(equipmentInspectionTypes)
@@ -61,7 +53,7 @@ export default async function NewEquipmentInspectionPage({
   const typeOptions = types.map((t) => ({
     value: t.id,
     label: t.name,
-    hint: INTERVAL_LABELS[t.interval] ?? t.interval,
+    hint: formatInterval(t.intervalValue, t.intervalUnit, { preUse: t.isPreUse }),
     appliesToTypeId: t.appliesToTypeId,
   }))
 

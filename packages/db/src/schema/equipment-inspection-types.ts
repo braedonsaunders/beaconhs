@@ -1,8 +1,9 @@
 // Equipment inspection types — per-equipment-type inspection templates with
 // pass/fail criteria. Distinct from the generic inspection_banks (which back
 // arbitrary form templates): these are pinned to an equipment_type and carry
-// an interval (daily / monthly / annual / 5-year) so the upcoming-inspections
-// report can compute next-due dates without a separate calendar.
+// a default cadence (any value + unit, e.g. every 3 months or every 5 years).
+// Per-unit cadences live in equipment_inspection_schedules, which override the
+// type default for a specific asset.
 //
 // On a failed criterion the calling code spawns an equipment_work_order
 // automatically — same behaviour as the legacy app's "fail = WO" rule.
@@ -16,15 +17,14 @@ import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 import { equipmentTypes } from './equipment'
 
-export const equipmentInspectionInterval = pgEnum('equipment_inspection_interval', [
-  'pre_use',
-  'daily',
-  'weekly',
-  'monthly',
-  'quarterly',
-  'annually',
-  'five_year',
-  'on_demand',
+// Unit for equipment maintenance cadences ("every N days/weeks/months/years").
+// Shared by inspection-type defaults, per-unit inspection schedules, and
+// repeating ad-hoc reminders.
+export const equipmentIntervalUnit = pgEnum('equipment_interval_unit', [
+  'day',
+  'week',
+  'month',
+  'year',
 ])
 
 export const equipmentInspectionTypes = pgTable(
@@ -42,7 +42,14 @@ export const equipmentInspectionTypes = pgTable(
     }),
     name: text('name').notNull(),
     description: text('description'),
-    interval: equipmentInspectionInterval('interval').default('on_demand').notNull(),
+    // Default cadence for this template: "every {intervalValue} {intervalUnit}s".
+    // Both null = on demand (no recurring schedule). A per-unit
+    // equipment_inspection_schedules row can override this for one asset.
+    intervalValue: integer('interval_value'),
+    intervalUnit: equipmentIntervalUnit('interval_unit'),
+    // Pre-use templates are gated by the item's requiresPreUseInspection flag
+    // rather than a calendar; submitting one stamps lastPreUseInspectionAt.
+    isPreUse: boolean('is_pre_use').default(false).notNull(),
     // When true, the "pass all" shortcut button is available in the runtime
     // form. Defaults true to match legacy behaviour.
     allowPassAll: boolean('allow_pass_all').default(true).notNull(),

@@ -1289,7 +1289,7 @@ function MyEquipmentCard({
       ) : (
         <ul className="space-y-0.5 px-2 pb-2">
           {items.map((e, idx) => {
-            const due = e.requiresAnnualInspection ? e.nextAnnualInspectionDue : null
+            const due = e.nextInspectionDue
             const sub =
               [
                 e.assetTag,

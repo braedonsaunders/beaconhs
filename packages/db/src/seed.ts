@@ -19,9 +19,11 @@ import {
   equipmentCategories,
   equipmentInspectionCriteria,
   equipmentInspectionGroups,
+  equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
   equipmentLogEntries,
+  equipmentReminders,
   equipmentTypes,
   equipmentWorkOrders,
   equipmentLocationHistory,
@@ -1085,22 +1087,38 @@ async function main() {
           assetTag: `AT-${String(i).padStart(4, '0')}`,
           name: isTool ? `Cordless Drill #${i}` : `Pickup Truck #${i - 5}`,
           serialNumber: isTool ? `DRL-${1000 + i}` : `VIN-1HGBH${10000 + i}`,
+          manufacturer: isTool ? 'DeWalt' : 'Ford',
+          model: isTool ? null : 'F-150',
+          modelYear: isTool ? null : 2023,
           qrToken: `bhs-eq-${randomUUID()}`,
           status: 'in_service',
           currentSiteOrgUnitId: i % 2 === 0 ? siteA.id : siteB.id,
           currentHolderPersonId: isTool ? insertedPeople[i % insertedPeople.length]!.id : null,
           purchaseDate: '2024-03-15',
+          purchasePrice: isTool ? null : '58500.00',
+          ownership: 'owned',
+          licensePlate: isTool ? null : `ABC-100${i - 5}`,
           warrantyExpiresOn: '2027-03-15',
           requiresPreUseInspection: isTool ? true : true,
-          requiresAnnualInspection: !isTool,
-          lastAnnualInspectionOn: !isTool ? isoDate(new Date(today.getTime() - 120 * dayMs)) : null,
-          nextAnnualInspectionDue: !isTool
-            ? isoDate(new Date(today.getTime() + 240 * dayMs))
-            : null,
           lastPreUseInspectionAt: new Date(today.getTime() - 2 * dayMs),
         })
         .returning()
       equipmentIds.push(eq!.id)
+
+      // Vehicles carry a recurring annual-inspection schedule (the calendar
+      // side now lives in equipment_inspection_schedules, not on the item).
+      if (!isTool) {
+        await tx.insert(equipmentInspectionSchedules).values({
+          tenantId: tenant.id,
+          equipmentItemId: eq!.id,
+          label: 'Annual inspection',
+          intervalValue: 1,
+          intervalUnit: 'year',
+          lastCompletedOn: isoDate(new Date(today.getTime() - 120 * dayMs)),
+          nextDueOn: isoDate(new Date(today.getTime() + 240 * dayMs)),
+          isActive: true,
+        })
+      }
 
       // Add a little location history
       await tx.insert(equipmentLocationHistory).values({
@@ -1139,6 +1157,26 @@ async function main() {
       openedAt: new Date(today.getTime() - 120 * dayMs),
       closedAt: new Date(today.getTime() - 118 * dayMs),
     })
+    // Ad-hoc maintenance reminders on the first pickup truck: one overdue,
+    // one upcoming with a repeat cadence.
+    await tx.insert(equipmentReminders).values([
+      {
+        tenantId: tenant.id,
+        equipmentItemId: equipmentIds[5]!,
+        title: 'Check roof membrane',
+        dueOn: isoDate(new Date(today.getTime() - 10 * dayMs)),
+        createdByTenantUserId: membership.id,
+      },
+      {
+        tenantId: tenant.id,
+        equipmentItemId: equipmentIds[5]!,
+        title: 'Rotate tires',
+        dueOn: isoDate(new Date(today.getTime() + 20 * dayMs)),
+        repeatIntervalValue: 6,
+        repeatIntervalUnit: 'month',
+        createdByTenantUserId: membership.id,
+      },
+    ])
 
     // Canonical PPE types + criteria — uses the dedicated seed helper so
     // both the schema relationships and the audit story stay consistent.
@@ -2528,7 +2566,8 @@ export async function seedAtmosphericGasDetectorPilot(tx: any, tenantId: string)
       name: 'Calibration',
       description:
         'Quarterly calibration against certified test gas. A failed channel forces a work order.',
-      interval: 'quarterly',
+      intervalValue: 3,
+      intervalUnit: 'month',
       allowPassAll: false,
       failsSpawnWorkOrders: true,
       isActive: true,
@@ -2589,7 +2628,7 @@ export async function seedAtmosphericGasDetectorPilot(tx: any, tenantId: string)
   }
 
   // 4. One sample detector item with custom values populated.
-  await tx
+  const [gdItem] = await tx
     .insert(equipmentItems)
     .values({
       tenantId,
@@ -2599,7 +2638,6 @@ export async function seedAtmosphericGasDetectorPilot(tx: any, tenantId: string)
       name: 'Gas Detector GD-001',
       qrToken: `bhs-eq-${randomUUID()}`,
       status: 'in_service',
-      requiresAnnualInspection: true,
       metadata: {
         custom: {
           detector_model: 'BW MicroClip XL',
@@ -2611,6 +2649,22 @@ export async function seedAtmosphericGasDetectorPilot(tx: any, tenantId: string)
       },
     })
     .onConflictDoNothing()
+    .returning({ id: equipmentItems.id })
+
+  // Recurring quarterly calibration cadence for the sample unit (only when the
+  // item insert actually landed — onConflictDoNothing returns no row on skip).
+  if (gdItem) {
+    await tx.insert(equipmentInspectionSchedules).values({
+      tenantId,
+      equipmentItemId: gdItem.id,
+      inspectionTypeId: calType?.id ?? null,
+      label: null,
+      intervalValue: 3,
+      intervalUnit: 'month',
+      nextDueOn: isoDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
+      isActive: true,
+    })
+  }
 
   console.log(
     '  · atmospheric gas-detector pilot (type + custom fields + Calibration inspection + sample item)',
