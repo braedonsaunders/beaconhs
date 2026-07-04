@@ -43,6 +43,10 @@ export const equipmentInspectionSchedules = pgTable(
     intervalUnit: equipmentIntervalUnit('interval_unit').notNull(),
     lastCompletedOn: date('last_completed_on'),
     nextDueOn: date('next_due_on').notNull(),
+    // The nextDueOn value the maintenance scan last notified about — a
+    // schedule alerts once per due cycle (stamp ≠ nextDueOn), not on every
+    // scan while it sits overdue. Advancing the schedule re-arms it.
+    dueNotifiedFor: date('due_notified_for'),
     isActive: boolean('is_active').default(true).notNull(),
     notes: text('notes'),
     createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
@@ -75,6 +79,10 @@ export const equipmentReminders = pgTable(
     // interval (the completed row is kept as history).
     repeatIntervalValue: integer('repeat_interval_value'),
     repeatIntervalUnit: equipmentIntervalUnit('repeat_interval_unit'),
+    // The dueOn value the maintenance scan last notified about (see the same
+    // stamp on schedules). Editing the due date re-arms the alert; a repeat
+    // spawns a fresh row, so each occurrence alerts once.
+    dueNotifiedFor: date('due_notified_for'),
     assignedToPersonId: uuid('assigned_to_person_id').references(() => people.id, {
       onDelete: 'set null',
     }),

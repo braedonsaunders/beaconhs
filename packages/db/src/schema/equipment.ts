@@ -152,6 +152,10 @@ export const equipmentItems = pgTable(
     // Pre-use inspections gate on each use rather than a calendar; recurring
     // calendar cadences live in equipment_inspection_schedules.
     requiresPreUseInspection: boolean('requires_pre_use_inspection').default(false).notNull(),
+    // The pre-use checklist this unit uses. Plain uuid (no drizzle .references)
+    // to avoid a schema-file import cycle — the FK to
+    // equipment_inspection_types (ON DELETE SET NULL) is installed by migration.
+    preUseInspectionTypeId: uuid('pre_use_inspection_type_id'),
     lastPreUseInspectionAt: timestamp('last_pre_use_inspection_at', { withTimezone: true }),
     isMissing: boolean('is_missing').default(false).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),

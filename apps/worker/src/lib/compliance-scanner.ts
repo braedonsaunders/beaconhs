@@ -15,6 +15,7 @@ import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { tenantNotificationPolicy, tenants } from '@beaconhs/db/schema'
 import { materializeTenant } from '@beaconhs/compliance'
 import { emitComplianceTransitions } from '@beaconhs/events'
+import { scanTenantEquipmentMaintenance } from './equipment-maintenance-scanner'
 import { parseCron, type CronFields } from './form-assignment-scanner'
 
 const DEFAULT_CRON = '0 6 * * *'
@@ -25,6 +26,8 @@ export type ComplianceScanResult = {
   due: number
   obligations: number
   reminders: number
+  /** Equipment maintenance entries alerted (schedules + reminders due). */
+  maintenance: number
   errors: number
 }
 
@@ -88,6 +91,7 @@ export async function scanCompliance(
     due: 0,
     obligations: 0,
     reminders: 0,
+    maintenance: 0,
     errors: 0,
   }
   const now = scheduledFor
@@ -140,6 +144,18 @@ export async function scanCompliance(
         await emitComplianceTransitions(s.id, obligation.id, actionable)
         result.reminders += 1
       }
+    }
+
+    // Equipment maintenance rides the same per-tenant heartbeat — inspection
+    // schedules + ad-hoc reminders whose due date arrived alert once per due
+    // cycle (see the scanner's due_notified_for stamps).
+    try {
+      result.maintenance += await scanTenantEquipmentMaintenance(s.id)
+    } catch (err) {
+      result.errors += 1
+      console.warn(
+        `[compliance_scan] equipment maintenance for tenant ${s.id} failed: ${err instanceof Error ? err.message : err}`,
+      )
     }
   }
   return result

@@ -40,4 +40,11 @@ export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
       'Obligations becoming due, overdue, or expiring — the single source of due/overdue alerts.',
     defaultRoles: defaults(),
   },
+  {
+    key: 'equipment',
+    label: 'Equipment maintenance',
+    description:
+      'Inspection schedules and maintenance reminders becoming due or overdue. Assigned reminders also alert the assignee directly.',
+    defaultRoles: defaults(),
+  },
 ]

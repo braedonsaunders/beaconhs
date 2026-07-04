@@ -26,7 +26,7 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       // Runs every minute now (per-tenant self-gating); only log when work happened.
       if (r.due > 0 || r.errors > 0) {
         console.log(
-          `[scheduled] compliance_scan: ${r.due}/${r.tenants} tenants due / ${r.obligations} obligations / ${r.reminders} reminders / ${r.errors} errors`,
+          `[scheduled] compliance_scan: ${r.due}/${r.tenants} tenants due / ${r.obligations} obligations / ${r.reminders} reminders / ${r.maintenance} maintenance / ${r.errors} errors`,
         )
       }
       return

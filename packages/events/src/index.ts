@@ -82,6 +82,7 @@ export const DEFAULT_ROLES_BY_CATEGORY: Record<string, string[]> = {
   incident: ['safety_manager', 'tenant_admin'],
   ca: ['safety_manager', 'tenant_admin'],
   compliance: ['safety_manager', 'tenant_admin'],
+  equipment: ['safety_manager', 'tenant_admin'],
 }
 
 /**
@@ -661,6 +662,108 @@ export async function emitComplianceTransitions(
     }
   } catch (err) {
     logFailure('emitComplianceTransitions', err)
+  }
+}
+
+// --- Equipment maintenance -------------------------------------------------
+
+export type EquipmentMaintenanceDueEntry = {
+  kind: 'inspection' | 'reminder'
+  equipmentItemId: string
+  itemName: string
+  assetTag: string
+  /** Schedule name (inspection type / label) or the reminder title. */
+  title: string
+  dueOn: string
+  /** Reminder assignee — self-targeted like compliance per-person alerts. */
+  assigneePersonId?: string | null
+}
+
+/**
+ * Equipment maintenance becoming due/overdue: per-unit inspection schedules
+ * and ad-hoc reminders surfaced by the maintenance scan. Mirrors
+ * emitComplianceTransitions — reminder assignees get a self-targeted alert,
+ * the tenant's `equipment` audience gets a single rollup + email pointing at
+ * the maintenance cockpit. The scan only passes entries it hasn't alerted for
+ * this due cycle, so a still-overdue item never re-spams.
+ */
+export async function emitEquipmentMaintenanceDue(
+  tenantId: string,
+  entries: EquipmentMaintenanceDueEntry[],
+): Promise<void> {
+  if (entries.length === 0) return
+  const ctx = workerEventCtx(tenantId)
+  try {
+    // Map reminder assignees → their login user, for self-targeting.
+    const personIds = [
+      ...new Set(entries.map((e) => e.assigneePersonId).filter(Boolean)),
+    ] as string[]
+    const personUser = new Map<string, string>()
+    if (personIds.length > 0) {
+      const rows = await ctx.db((tx) =>
+        tx
+          .select({ id: people.id, userId: people.userId })
+          .from(people)
+          .where(and(eq(people.tenantId, tenantId), inArray(people.id, personIds))),
+      )
+      for (const r of rows) if (r.userId) personUser.set(r.id, r.userId)
+    }
+
+    // 1. Self-targeted alert per assigned reminder.
+    for (const e of entries) {
+      const userId = e.assigneePersonId ? personUser.get(e.assigneePersonId) : null
+      if (!userId || e.kind !== 'reminder') continue
+      await enqueueNotification({
+        tenantId,
+        userIds: [userId],
+        category: 'equipment',
+        type: 'equipment.reminder_due',
+        title: `${e.title} is due`,
+        body: `${e.itemName} (${e.assetTag}) — due ${e.dueOn}.`,
+        linkPath: `/equipment/${e.equipmentItemId}?tab=inspections`,
+        data: { equipmentItemId: e.equipmentItemId, dueOn: e.dueOn, self: true },
+      })
+    }
+
+    // 2. Single rollup to the tenant's equipment audience.
+    const audience = await resolveAudience(ctx, tenantId, 'equipment', [])
+    if (audience.length > 0) {
+      const inspections = entries.filter((e) => e.kind === 'inspection').length
+      const reminders = entries.filter((e) => e.kind === 'reminder').length
+      const parts: string[] = []
+      if (inspections) parts.push(`${inspections} inspection${inspections === 1 ? '' : 's'}`)
+      if (reminders) parts.push(`${reminders} reminder${reminders === 1 ? '' : 's'}`)
+      const title = `Equipment maintenance due: ${parts.join(' · ')}`
+      const linkPath = '/equipment/maintenance'
+      const url = appUrl(linkPath)
+      await enqueueNotification({
+        tenantId,
+        userIds: audience,
+        category: 'equipment',
+        type: 'equipment.maintenance_due',
+        title,
+        body: 'Open the maintenance cockpit for the full work list.',
+        linkPath,
+        data: { inspections, reminders },
+      })
+      const recipients = await emailsForUserIds(ctx, tenantId, audience)
+      if (recipients.length > 0) {
+        const list = entries
+          .slice(0, 25)
+          .map((e) => `<li>${e.itemName} (${e.assetTag}) — ${e.title}, due ${e.dueOn}</li>`)
+          .join('')
+        const more = entries.length > 25 ? `<p>…and ${entries.length - 25} more.</p>` : ''
+        await enqueueEmail({
+          to: recipients,
+          subject: title,
+          html: `<p>${title}.</p><ul>${list}</ul>${more}<p><a href="${url}">Open the maintenance cockpit</a></p>`,
+          text: `${title}.\n${url}`,
+          meta: { tenantId, category: 'equipment' },
+        })
+      }
+    }
+  } catch (err) {
+    logFailure('emitEquipmentMaintenanceDue', err)
   }
 }
 

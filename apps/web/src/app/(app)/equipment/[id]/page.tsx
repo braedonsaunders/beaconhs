@@ -195,6 +195,7 @@ async function updateEquipmentField(formData: FormData) {
     'categoryId',
     'currentSiteOrgUnitId',
     'currentHolderPersonId',
+    'preUseInspectionTypeId',
   ])
   const BOOLS = new Set(['requiresPreUseInspection'])
   const ENUMS: Record<string, readonly string[]> = { status: EQUIPMENT_STATUSES }
@@ -1125,6 +1126,10 @@ export default async function EquipmentDetailPage({
       value: t.id,
       label: `${t.name} — ${formatInterval(t.intervalValue, t.intervalUnit, { preUse: t.isPreUse })}`,
     }))
+  // Pre-use checklist picker: pre-use templates that apply to this item.
+  const preUseTypeOptions = itemInspectionTypes
+    .filter((t) => t.isPreUse && (!t.appliesToTypeId || t.appliesToTypeId === item.typeId))
+    .map((t) => ({ value: t.id, label: t.name }))
 
   // Live* option lists.
   const siteOptions = sites
@@ -2070,12 +2075,22 @@ export default async function EquipmentDetailPage({
                           </TableBody>
                         </Table>
                       )}
-                      <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-slate-800">
+                      <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
                         <LiveToggle
                           id={id}
                           field="requiresPreUseInspection"
                           label="Requires pre-use inspection"
                           initialValue={item.requiresPreUseInspection}
+                          disabled={locked}
+                          updateAction={updateEquipmentField}
+                        />
+                        <LiveSelect
+                          id={id}
+                          field="preUseInspectionTypeId"
+                          label="Pre-use checklist"
+                          initialValue={item.preUseInspectionTypeId}
+                          options={preUseTypeOptions}
+                          emptyLabel="— No checklist —"
                           disabled={locked}
                           updateAction={updateEquipmentField}
                         />
@@ -2087,6 +2102,16 @@ export default async function EquipmentDetailPage({
                               : '—'
                           }
                         />
+                        {item.requiresPreUseInspection && item.preUseInspectionTypeId ? (
+                          <div className="sm:col-span-3">
+                            <Link
+                              href={`/equipment/inspections/new?itemId=${id}&typeId=${item.preUseInspectionTypeId}`}
+                              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                            >
+                              Start pre-use inspection →
+                            </Link>
+                          </div>
+                        ) : null}
                       </div>
                     </CardContent>
                   </Card>
