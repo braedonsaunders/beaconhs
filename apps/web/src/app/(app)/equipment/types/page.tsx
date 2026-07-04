@@ -43,21 +43,16 @@ async function saveType(input: {
   name: string
   description: string | null
   categoryId: string | null
-  everyDays: number | null
-  oilMonths: number | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'equipment')
   const name = input.name.trim()
   if (!name) return { ok: false, error: 'Name is required' }
-  const inspectionSchedule = input.everyDays != null ? { everyDays: input.everyDays } : null
   const values = {
     name,
     description: input.description,
     categoryId: input.categoryId,
-    defaultOilChangeIntervalMonths: input.oilMonths,
-    inspectionSchedule,
   }
   const id = await ctx.db(async (tx) => {
     if (input.id) {
@@ -196,8 +191,6 @@ export default async function EquipmentTypesPage({
         name: editingRow.name,
         description: editingRow.description,
         categoryId: editingRow.categoryId,
-        everyDays: editingRow.inspectionSchedule?.everyDays ?? null,
-        oilMonths: editingRow.defaultOilChangeIntervalMonths ?? null,
       }
     : null
   const mode: 'new' | 'edit' | null = drawerParam === 'new' ? 'new' : editing ? 'edit' : null
@@ -210,7 +203,7 @@ export default async function EquipmentTypesPage({
         <>
           <PageHeader
             title="Equipment types"
-            description="Equipment groupings with default schedules and templates."
+            description="The make/model catalogue every asset is classified against."
             actions={
               <Link href={newHref as never} scroll={false}>
                 <Button>
@@ -260,8 +253,6 @@ export default async function EquipmentTypesPage({
                 >
                   Category
                 </SortableTh>
-                <TableHead className="text-right">Inspection (days)</TableHead>
-                <TableHead className="text-right">Oil change (mo.)</TableHead>
                 <TableHead className="text-right">Items</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -288,12 +279,6 @@ export default async function EquipmentTypesPage({
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-400">
                       {cat?.name ?? type.category ?? <span className="text-slate-400">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
-                      {type.inspectionSchedule?.everyDays ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
-                      {type.defaultOilChangeIntervalMonths ?? '—'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge variant="secondary">{n}</Badge>

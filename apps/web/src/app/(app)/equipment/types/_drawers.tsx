@@ -13,8 +13,6 @@ export type TypeEditing = {
   name: string
   description: string | null
   categoryId: string | null
-  everyDays: number | null
-  oilMonths: number | null
 }
 
 type SaveAction = (input: {
@@ -22,8 +20,6 @@ type SaveAction = (input: {
   name: string
   description: string | null
   categoryId: string | null
-  everyDays: number | null
-  oilMonths: number | null
 }) => Promise<{ ok: true } | { ok: false; error: string }>
 
 export function EquipmentTypeDrawer({
@@ -49,7 +45,7 @@ export function EquipmentTypeDrawer({
       open={mode !== null}
       closeHref={closeHref}
       title={mode === 'edit' ? 'Edit equipment type' : 'New equipment type'}
-      description="Group the asset register and set a default inspection cadence."
+      description="The make/model catalogue every asset is classified against. Inspection cadences live on each unit's schedules; templates default their own interval."
       size="md"
     >
       <TypeForm
@@ -76,12 +72,6 @@ function TypeForm({
 }) {
   const [name, setName] = useState(editing?.name ?? '')
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? '')
-  const [everyDays, setEveryDays] = useState(
-    editing?.everyDays != null ? String(editing.everyDays) : '',
-  )
-  const [oilMonths, setOilMonths] = useState(
-    editing?.oilMonths != null ? String(editing.oilMonths) : '',
-  )
   const [description, setDescription] = useState(editing?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -99,8 +89,6 @@ function TypeForm({
         name: trimmed,
         description: description.trim() || null,
         categoryId: categoryId || null,
-        everyDays: everyDays.trim() ? Number(everyDays) : null,
-        oilMonths: oilMonths.trim() ? Number(oilMonths) : null,
       })
       if (res.ok) onDone()
       else setError(res.error)
@@ -140,30 +128,6 @@ function TypeForm({
             </option>
           ))}
         </Select>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="et-days">Inspection every (days)</Label>
-          <Input
-            id="et-days"
-            type="number"
-            min={1}
-            value={everyDays}
-            onChange={(e) => setEveryDays(e.currentTarget.value)}
-            placeholder="e.g. 365"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="et-oil">Oil change every (months)</Label>
-          <Input
-            id="et-oil"
-            type="number"
-            min={1}
-            value={oilMonths}
-            onChange={(e) => setOilMonths(e.currentTarget.value)}
-            placeholder="e.g. 6"
-          />
-        </div>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="et-description">Description</Label>

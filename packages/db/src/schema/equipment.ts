@@ -64,13 +64,6 @@ export const equipmentTypes = pgTable(
       onDelete: 'set null',
     }),
     description: text('description'),
-    inspectionSchedule: jsonb('inspection_schedule').$type<{
-      cron?: string
-      everyDays?: number
-      templateKey?: string
-    } | null>(),
-    // Default oil-change interval (in months) for items of this type.
-    defaultOilChangeIntervalMonths: integer('default_oil_change_interval_months'),
     ...timestamps,
   },
   (t) => ({
