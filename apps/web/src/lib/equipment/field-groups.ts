@@ -46,7 +46,12 @@ export const EQUIPMENT_FIELD_GROUPS: EquipmentFieldGroup[] = [
     description: 'Manufacturer, model, and model year.',
     defaultEnabled: true,
     fields: [
-      { field: 'manufacturer', label: 'Manufacturer', type: 'text', placeholder: 'e.g. Caterpillar' },
+      {
+        field: 'manufacturer',
+        label: 'Manufacturer',
+        type: 'text',
+        placeholder: 'e.g. Caterpillar',
+      },
       { field: 'model', label: 'Model', type: 'text', placeholder: 'e.g. 320 GC' },
       { field: 'modelYear', label: 'Model year', type: 'number', numeric: 'int' },
     ],
@@ -59,7 +64,12 @@ export const EQUIPMENT_FIELD_GROUPS: EquipmentFieldGroup[] = [
     fields: [
       { field: 'purchaseDate', label: 'Purchase date', type: 'date' },
       { field: 'purchasePrice', label: 'Purchase price', type: 'number', numeric: 'decimal' },
-      { field: 'purchaseVendor', label: 'Vendor', type: 'text', placeholder: 'Where it was purchased' },
+      {
+        field: 'purchaseVendor',
+        label: 'Vendor',
+        type: 'text',
+        placeholder: 'Where it was purchased',
+      },
       { field: 'warrantyExpiresOn', label: 'Warranty expires', type: 'date' },
     ],
   },
@@ -69,7 +79,12 @@ export const EQUIPMENT_FIELD_GROUPS: EquipmentFieldGroup[] = [
     description: 'Owned, rented, or leased — and from whom.',
     defaultEnabled: false,
     fields: [
-      { field: 'ownership', label: 'Ownership', type: 'select', options: EQUIPMENT_OWNERSHIP_OPTIONS },
+      {
+        field: 'ownership',
+        label: 'Ownership',
+        type: 'select',
+        options: EQUIPMENT_OWNERSHIP_OPTIONS,
+      },
       { field: 'rentalProvider', label: 'Rental / lease provider', type: 'text' },
       { field: 'rentalEndsOn', label: 'Rental / lease ends', type: 'date' },
     ],

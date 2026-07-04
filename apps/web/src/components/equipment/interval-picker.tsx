@@ -6,10 +6,7 @@
 // in the module is entered the same way.
 
 import { Input, Label, Select } from '@beaconhs/ui'
-import {
-  EQUIPMENT_INTERVAL_UNITS,
-  type EquipmentIntervalUnit,
-} from '@/lib/equipment/intervals'
+import { EQUIPMENT_INTERVAL_UNITS, type EquipmentIntervalUnit } from '@/lib/equipment/intervals'
 
 export type IntervalValue = {
   isPreUse: boolean
