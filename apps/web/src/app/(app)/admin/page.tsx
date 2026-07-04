@@ -3,7 +3,6 @@ import Link from 'next/link'
 import {
   ArrowUpRight,
   Bell,
-  Building2,
   Database,
   Download,
   FileText,
@@ -87,13 +86,6 @@ const STATIC_GROUPS: Group[] = [
         title: 'Roles & permissions',
         desc: 'Define roles and what they grant',
         permission: 'admin.roles.manage',
-      },
-      {
-        href: '/admin/org',
-        icon: <Building2 size={18} />,
-        title: 'Org hierarchy',
-        desc: 'Locations, projects, sites, areas, crews',
-        permission: 'admin.org.manage',
       },
     ],
   },
