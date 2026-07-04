@@ -633,7 +633,7 @@ export default async function EquipmentMaintenancePage({
                       >
                         {i + 1}
                       </div>
-                      {(dayEntries.length > 3 ? dayEntries.slice(0, 2) : dayEntries).map((e) => (
+                      {(dayEntries.length > 2 ? [] : dayEntries).map((e) => (
                         <Link
                           key={e.key}
                           href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
@@ -653,13 +653,19 @@ export default async function EquipmentMaintenancePage({
                           </span>
                         </Link>
                       ))}
-                      {dayEntries.length > 3 ? (
+                      {dayEntries.length > 2 ? (
+                        // Busy day → one grouped alert instead of clipped chips;
+                        // opens the day flyout with the full list.
                         <Link
                           href={mergeHref(BASE, sp, { drawer: `day-${day}` }) as never}
                           scroll={false}
-                          className="flex items-center gap-1 rounded bg-slate-100 px-1 py-0.5 font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                          className={`flex items-center justify-center gap-1 rounded px-1 py-1 font-semibold ${
+                            dayEntries.some((e) => e.dueOn < today)
+                              ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60'
+                              : 'bg-teal-100 text-teal-800 hover:bg-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:hover:bg-teal-900/60'
+                          }`}
                         >
-                          +{dayEntries.length - 2} more
+                          {dayEntries.length} due
                         </Link>
                       ) : null}
                     </div>
