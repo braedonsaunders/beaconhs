@@ -42,7 +42,14 @@ export type ReminderEditing = {
 }
 
 export type PersonOption = { value: string; label: string; hint?: string }
-export type TypeOption = { value: string; label: string; hint?: string }
+export type TypeOption = {
+  value: string
+  label: string
+  hint?: string
+  /** The type's default cadence — inherited when the type is picked. */
+  intervalValue?: number | null
+  intervalUnit?: EquipmentIntervalUnit | null
+}
 export type ItemOption = { value: string; label: string; hint?: string }
 
 function todayIso(): string {
@@ -151,7 +158,20 @@ function ScheduleForm({
         <Select
           id="sched-type"
           value={inspectionTypeId}
-          onChange={(e) => setInspectionTypeId(e.currentTarget.value)}
+          onChange={(e) => {
+            const next = e.currentTarget.value
+            setInspectionTypeId(next)
+            // Inherit the type's default cadence; on-demand/pre-use types
+            // (no default) keep whatever interval is already entered.
+            const picked = typeOptions.find((t) => t.value === next)
+            if (picked?.intervalValue && picked.intervalUnit) {
+              setInterval({
+                isPreUse: false,
+                intervalValue: picked.intervalValue,
+                intervalUnit: picked.intervalUnit,
+              })
+            }
+          }}
         >
           <option value="">— Due-date tracking only —</option>
           {typeOptions.map((t) => (

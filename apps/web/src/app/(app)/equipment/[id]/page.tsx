@@ -1125,6 +1125,9 @@ export default async function EquipmentDetailPage({
     .map((t) => ({
       value: t.id,
       label: `${t.name} — ${formatInterval(t.intervalValue, t.intervalUnit, { preUse: t.isPreUse })}`,
+      // Picking a type seeds the schedule's repeat interval from its default.
+      intervalValue: t.intervalValue,
+      intervalUnit: t.intervalUnit,
     }))
   // Pre-use checklist picker: pre-use templates that apply to this item.
   const preUseTypeOptions = itemInspectionTypes
