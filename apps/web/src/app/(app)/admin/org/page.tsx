@@ -2,19 +2,12 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { ArrowUpRight, Lock, Plus, Trash2 } from 'lucide-react'
+import { Lock, Plus, Trash2 } from 'lucide-react'
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   DetailHeader,
   EmptyState,
-  Input,
-  Label,
-  Select,
   Table,
   TableBody,
   TableCell,
@@ -29,7 +22,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { getOrgUnitSyncOrigins, isOrgUnitSynced } from '@/lib/org-sync'
 import { levelLabel } from '@/lib/org-hierarchy'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
 import { SortableTh } from '@/components/sortable-th'
@@ -37,6 +30,7 @@ import { Pagination } from '@/components/pagination'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ListPageLayout } from '@/components/page-layout'
 import { ConfirmButton } from '@/components/confirm-button'
+import { NameDrawer, OrgUnitDrawer, type SaveResult } from './_drawers'
 
 export const metadata = { title: 'Org hierarchy' }
 export const dynamic = 'force-dynamic'
@@ -58,13 +52,18 @@ function backWithError(message: string): never {
   redirect(`/admin/org?tab=units&error=${encodeURIComponent(message)}`)
 }
 
-async function addOrgUnit(formData: FormData) {
+async function addOrgUnit(input: {
+  name: string
+  level: string
+  parentId: string | null
+}): Promise<SaveResult> {
   'use server'
   const ctx = await requireOrgAdmin()
-  const name = String(formData.get('name') ?? '').trim()
-  const level = String(formData.get('level') ?? '') as (typeof LEVELS)[number]
-  const parentId = String(formData.get('parentId') ?? '').trim() || null
-  if (!name || !LEVELS.includes(level)) return
+  const name = input.name.trim()
+  const level = input.level as (typeof LEVELS)[number]
+  if (!name) return { ok: false, error: 'Name is required.' }
+  if (!LEVELS.includes(level)) return { ok: false, error: 'Choose a level.' }
+  const parentId = input.parentId?.trim() || null
   const [row] = await ctx.db((tx) =>
     tx.insert(orgUnits).values({ tenantId: ctx.tenantId, name, level, parentId }).returning(),
   )
@@ -77,6 +76,7 @@ async function addOrgUnit(formData: FormData) {
     })
   }
   revalidatePath('/admin/org')
+  return { ok: true }
 }
 
 // Archive (soft delete), matching /locations semantics — org units are shared
@@ -113,11 +113,11 @@ async function deleteOrgUnit(formData: FormData) {
   revalidatePath('/locations')
 }
 
-async function addTrade(formData: FormData) {
+async function addTrade(input: { name: string }): Promise<SaveResult> {
   'use server'
   const ctx = await requireOrgAdmin()
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required.' }
   const [row] = await ctx.db((tx) =>
     tx.insert(trades).values({ tenantId: ctx.tenantId, name }).returning(),
   )
@@ -130,6 +130,7 @@ async function addTrade(formData: FormData) {
     })
   }
   revalidatePath('/admin/org')
+  return { ok: true }
 }
 
 async function deleteTrade(formData: FormData) {
@@ -162,11 +163,11 @@ async function deleteTrade(formData: FormData) {
   revalidatePath('/admin/org')
 }
 
-async function addCrew(formData: FormData) {
+async function addCrew(input: { name: string }): Promise<SaveResult> {
   'use server'
   const ctx = await requireOrgAdmin()
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: 'Name is required.' }
   const [row] = await ctx.db((tx) =>
     tx.insert(crews).values({ tenantId: ctx.tenantId, name }).returning(),
   )
@@ -179,6 +180,7 @@ async function addCrew(formData: FormData) {
     })
   }
   revalidatePath('/admin/org')
+  return { ok: true }
 }
 
 async function deleteCrew(formData: FormData) {
@@ -221,6 +223,9 @@ export default async function AdminOrgPage({
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const tab = pickActiveTab(sp, TABS, 'units')
 
+  const addLabel = tab === 'units' ? 'Add org unit' : tab === 'trades' ? 'Add trade' : 'Add crew'
+  const newHref = mergeHref('/admin/org', sp, { drawer: 'new', error: undefined })
+
   return (
     <ListPageLayout
       header={
@@ -229,6 +234,13 @@ export default async function AdminOrgPage({
             back={{ href: '/admin', label: 'Back to admin' }}
             title="Org hierarchy"
             subtitle="Locations, projects, sites and areas, plus crews and trades"
+            actions={
+              <Link href={newHref as any} scroll={false}>
+                <Button>
+                  <Plus size={14} /> {addLabel}
+                </Button>
+              </Link>
+            }
           />
           <TabNav
             basePath="/admin/org"
@@ -518,56 +530,16 @@ async function UnitsTab({
         </>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Add org unit</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={addOrgUnit} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-            <Field label="Level">
-              <Select name="level" defaultValue="site">
-                {LEVELS.map((l) => (
-                  <option key={l} value={l}>
-                    {levelLabel(l)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Parent (optional)">
-              <Select name="parentId" defaultValue="">
-                <option value="">— top-level —</option>
-                {parentOptions.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {levelLabel(u.level)}: {u.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Name">
-              <Input name="name" placeholder="e.g. Site C" />
-            </Field>
-            <div className="flex items-end">
-              <Button type="submit" className="w-full">
-                <Plus size={14} /> Add
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Departments</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Link
-            href="/people/departments"
-            className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
-          >
-            Manage departments in People <ArrowUpRight size={13} />
-          </Link>
-        </CardContent>
-      </Card>
+      <OrgUnitDrawer
+        open={pickString(sp.drawer) === 'new'}
+        closeHref={mergeHref('/admin/org', sp, { drawer: undefined, error: undefined })}
+        levels={LEVELS.map((l) => ({ value: l, label: levelLabel(l) }))}
+        parentOptions={parentOptions.map((u) => ({
+          value: u.id,
+          label: `${levelLabel(u.level)}: ${u.name}`,
+        }))}
+        saveAction={addOrgUnit}
+      />
     </div>
   )
 }
@@ -584,7 +556,7 @@ async function NameListTab({
   ctx: Awaited<ReturnType<typeof requireOrgAdmin>>
   title: string
   table: typeof trades | typeof crews
-  addAction: (fd: FormData) => Promise<void>
+  addAction: (input: { name: string }) => Promise<SaveResult>
   deleteAction: (fd: FormData) => Promise<void>
 }) {
   const params = parseListParams(sp, {
@@ -664,36 +636,12 @@ async function NameListTab({
           />
         </>
       )}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Add {singular}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={addAction} className="flex gap-2">
-            <Input name="name" placeholder={`New ${singular}`} />
-            <Button type="submit">
-              <Plus size={14} /> Add
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function Field({
-  label,
-  className,
-  children,
-}: {
-  label: string
-  className?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ''}`}>
-      <Label className="text-xs">{label}</Label>
-      {children}
+      <NameDrawer
+        open={pickString(sp.drawer) === 'new'}
+        closeHref={mergeHref('/admin/org', sp, { drawer: undefined, error: undefined })}
+        noun={singular}
+        saveAction={addAction}
+      />
     </div>
   )
 }
