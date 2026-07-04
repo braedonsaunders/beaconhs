@@ -36,6 +36,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
+import { LocationsSubNav } from '@/components/locations-sub-nav'
 
 export const metadata = { title: 'Locations' }
 
@@ -167,16 +168,12 @@ export default async function LocationsPage({
     <ListPageLayout
       header={
         <>
+          <LocationsSubNav active="locations" />
           <PageHeader
             title="Locations"
             description="Your locations, plus the projects and sites beneath them. Add on-site contacts (non-employee site managers, client reps) here."
             actions={
               <div className="flex items-center gap-2">
-                {canManage ? (
-                  <Link href="/locations/custom-fields">
-                    <Button variant="outline">Custom fields</Button>
-                  </Link>
-                ) : null}
                 {canExport ? (
                   <a href={buildExportHref('/locations/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>

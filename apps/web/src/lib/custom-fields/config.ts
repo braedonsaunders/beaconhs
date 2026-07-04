@@ -73,7 +73,7 @@ export const CUSTOM_FIELD_ENTITY_CONFIG: Record<CustomFieldEntityKind, EntityKin
     label: 'Locations',
     singular: 'location',
     permission: 'admin.org.manage',
-    moduleKey: null,
+    moduleKey: 'locations',
     hasSubtype: false,
     subtypeLabel: null,
     detail: (id) => `/locations/${id}`,
