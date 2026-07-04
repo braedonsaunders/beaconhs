@@ -1,10 +1,15 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Activity,
   ArrowLeftRight,
+  BellRing,
+  CalendarClock,
+  Check,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   FileText,
   LogIn,
@@ -45,17 +50,25 @@ import {
   Textarea,
   UrlDrawer,
 } from '@beaconhs/ui'
-import { pickString } from '@/lib/list-params'
-import { LiveField, LivePersonSelect, LiveSelect, LiveToggle } from '@/components/live-field'
+import { clamp, mergeHref, pickString } from '@/lib/list-params'
+import {
+  LiveField,
+  LivePersonSelect,
+  LiveRichText,
+  LiveSelect,
+  LiveToggle,
+} from '@/components/live-field'
 import {
   attachments,
   equipmentCategories,
   equipmentCheckouts,
   equipmentInspectionRecords,
+  equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
   equipmentLocationHistory,
   equipmentLogEntries,
+  equipmentReminders,
   equipmentTypes,
   equipmentWorkOrders,
   orgUnits,
@@ -74,9 +87,27 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { PersonSelectField } from '@/components/person-select-field'
+import { SearchInput } from '@/components/search-input'
+import { readCustomFieldValues } from '@beaconhs/forms-core'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
+import { CustomFieldInput } from '@/components/custom-fields/custom-field-input'
+import { loadVisibleCustomFieldDefs, type CustomFieldDefRow } from '@/lib/custom-fields/queries'
+import { updateCustomFieldValueAction } from '@/lib/custom-fields/actions'
+import {
+  EQUIPMENT_FIELD_GROUPS,
+  resolveEnabledFieldGroups,
+  type EquipmentNativeField,
+} from '@/lib/equipment/field-groups'
+import { formatInterval } from '@/lib/equipment/intervals'
 import { upsertVehicleLogEntry } from '../vehicle-log/_service'
 import { checkInEquipment } from '../_actions'
+import { completeEquipmentReminder } from '../_maintenance-actions'
+import {
+  ReminderDrawer,
+  ScheduleDrawer,
+  type ReminderEditing,
+  type ScheduleEditing,
+} from '../_maintenance-drawers'
 import { createEquipmentWorkOrder } from '../work-orders/_lib'
 
 export const dynamic = 'force-dynamic'
@@ -93,6 +124,23 @@ const TABS = [
 type Tab = (typeof TABS)[number]
 
 const EQUIPMENT_STATUSES = ['in_service', 'out_of_service', 'in_repair', 'lost', 'retired'] as const
+
+// Field-group registry fields, keyed by column name — the autosave action
+// validates registry-driven inputs against this map so the Overview's
+// per-category sections and the server allowlist can never drift.
+const REGISTRY_FIELDS = new Map<string, EquipmentNativeField>(
+  EQUIPMENT_FIELD_GROUPS.flatMap((g) => g.fields.map((f) => [f.field, f] as const)),
+)
+
+// Sub-tables share one page; each gets prefixed search/pagination params
+// (e.g. ?wo_q=&wo_p=2) so filtering work orders never resets the log table.
+const SUB_PER_PAGE = 15
+type SubParams = { q: string | undefined; page: number; offset: number }
+function subParams(sp: Record<string, string | string[] | undefined>, prefix: string): SubParams {
+  const q = pickString(sp[`${prefix}_q`])?.trim() || undefined
+  const page = clamp(Number(pickString(sp[`${prefix}_p`]) ?? '1'), 1, 10_000)
+  return { q, page, offset: (page - 1) * SUB_PER_PAGE }
+}
 
 // Recompute the cached availability flag from its inputs (see the schema note
 // on equipment_items.is_available_for_checkout): available ⇔ no holder AND
@@ -142,43 +190,74 @@ async function updateEquipmentField(formData: FormData) {
 
   const TEXT = new Set(['name', 'assetTag', 'serialNumber', 'description', 'notes'])
   const TEXT_NOTNULL = new Set(['name', 'assetTag'])
-  const DATE_ONLY = new Set(['purchaseDate', 'warrantyExpiresOn'])
   const NULLABLE_IDS = new Set([
     'typeId',
     'categoryId',
     'currentSiteOrgUnitId',
     'currentHolderPersonId',
   ])
-  const BOOLS = new Set(['requiresPreUseInspection', 'requiresAnnualInspection'])
+  const BOOLS = new Set(['requiresPreUseInspection'])
   const ENUMS: Record<string, readonly string[]> = { status: EQUIPMENT_STATUSES }
+  const registryField = REGISTRY_FIELDS.get(field)
 
   const allowed =
     field in ENUMS ||
     TEXT.has(field) ||
-    DATE_ONLY.has(field) ||
     NULLABLE_IDS.has(field) ||
-    BOOLS.has(field)
+    BOOLS.has(field) ||
+    registryField != null
   if (!allowed) throw new Error('Field not allowed')
 
   let val: unknown
   if (field in ENUMS) {
     if (!ENUMS[field]!.includes(value)) throw new Error('Invalid value')
     val = value
-  } else if (DATE_ONLY.has(field) || NULLABLE_IDS.has(field)) {
+  } else if (NULLABLE_IDS.has(field)) {
     val = value || null
   } else if (BOOLS.has(field)) {
     val = value === 'true' || value === 'on' || value === '1'
-  } else {
+  } else if (TEXT.has(field)) {
     const trimmed = value.trim()
     if (TEXT_NOTNULL.has(field) && trimmed === '') throw new Error('This field is required')
     val = trimmed === '' ? null : trimmed
+  } else {
+    // Field-group registry field — coerce per its declared type.
+    const trimmed = value.trim()
+    if (registryField!.type === 'date') {
+      val = trimmed || null
+    } else if (registryField!.type === 'select') {
+      const options = registryField!.options ?? []
+      if (trimmed && !options.some((o) => o.value === trimmed)) throw new Error('Invalid value')
+      val = trimmed || null
+    } else if (registryField!.type === 'number') {
+      if (trimmed === '') {
+        val = null
+      } else if (registryField!.numeric === 'int') {
+        const n = Number(trimmed)
+        if (!Number.isFinite(n) || !Number.isInteger(n)) throw new Error('Enter a whole number')
+        val = Math.trunc(n)
+      } else {
+        // numeric column — persisted as a decimal string.
+        if (!/^-?\d{1,10}(\.\d{1,4})?$/.test(trimmed)) throw new Error('Enter a valid number')
+        val = trimmed
+      }
+    } else {
+      val = trimmed || null
+    }
   }
 
   await ctx.db(async (tx) => {
     await tx
       .update(equipmentItems)
-      // Editing the asset commits a draft (clears the Draft badge).
-      .set({ [field]: val, isDraft: false } as any)
+      .set({
+        [field]: val,
+        // Editing the asset commits a draft (clears the Draft badge).
+        isDraft: false,
+        // Meter readings carry a read-at timestamp so staleness is visible.
+        ...(field === 'currentHours' || field === 'currentOdometer'
+          ? { metersUpdatedAt: new Date() }
+          : {}),
+      } as any)
       .where(eq(equipmentItems.id, id))
     // Holder/status feed the cached availability flag.
     if (field === 'currentHolderPersonId' || field === 'status') {
@@ -637,6 +716,14 @@ export default async function EquipmentDetailPage({
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
+  // Per-table search + pagination state (URL-driven, prefixed per table).
+  const woP = subParams(sp, 'wo')
+  const coP = subParams(sp, 'co')
+  const lhP = subParams(sp, 'lh')
+  const insP = subParams(sp, 'ins')
+  const logP = subParams(sp, 'log')
+  const fP = subParams(sp, 'f')
+
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -670,16 +757,94 @@ export default async function EquipmentDetailPage({
     })
     if (!visible) return null
 
+    // Per-table filters: item scope + optional ilike search.
+    const woWhere = and(
+      eq(equipmentWorkOrders.itemId, id),
+      woP.q
+        ? or(
+            ilike(equipmentWorkOrders.reference, `%${woP.q}%`),
+            ilike(equipmentWorkOrders.summary, `%${woP.q}%`),
+            ilike(equipmentWorkOrders.description, `%${woP.q}%`),
+          )
+        : undefined,
+    )
+    const coWhere = and(
+      eq(equipmentCheckouts.equipmentItemId, id),
+      coP.q
+        ? or(
+            ilike(people.firstName, `%${coP.q}%`),
+            ilike(people.lastName, `%${coP.q}%`),
+            ilike(orgUnits.name, `%${coP.q}%`),
+            ilike(equipmentCheckouts.notes, `%${coP.q}%`),
+            ilike(equipmentCheckouts.returnedNotes, `%${coP.q}%`),
+          )
+        : undefined,
+    )
+    const lhWhere = and(
+      eq(equipmentLocationHistory.itemId, id),
+      lhP.q
+        ? or(
+            ilike(orgUnits.name, `%${lhP.q}%`),
+            ilike(people.firstName, `%${lhP.q}%`),
+            ilike(people.lastName, `%${lhP.q}%`),
+            ilike(equipmentLocationHistory.note, `%${lhP.q}%`),
+          )
+        : undefined,
+    )
+    const insWhere = and(
+      eq(equipmentInspectionRecords.equipmentItemId, id),
+      isNull(equipmentInspectionRecords.deletedAt),
+      insP.q
+        ? or(
+            ilike(equipmentInspectionRecords.reference, `%${insP.q}%`),
+            ilike(equipmentInspectionTypes.name, `%${insP.q}%`),
+            ilike(equipmentInspectionRecords.intervalLabel, `%${insP.q}%`),
+          )
+        : undefined,
+    )
+    const logWhere = and(
+      eq(equipmentLogEntries.equipmentItemId, id),
+      logP.q
+        ? or(
+            ilike(equipmentLogEntries.title, `%${logP.q}%`),
+            ilike(equipmentLogEntries.details, `%${logP.q}%`),
+            ilike(equipmentLogEntries.kind, `%${logP.q}%`),
+          )
+        : undefined,
+    )
+    const fWhere = and(
+      eq(attachments.kind, 'document'),
+      sql`${attachments.exif}->>'equipmentId' = ${id}`,
+      fP.q
+        ? or(
+            ilike(attachments.filename, `%${fP.q}%`),
+            sql`${attachments.exif}->>'label' ILIKE ${`%${fP.q}%`}`,
+            sql`${attachments.exif}->>'kind' ILIKE ${`%${fP.q}%`}`,
+          )
+        : undefined,
+    )
+
     const [
       history,
+      historyTotal,
       workOrders,
+      workOrdersTotal,
+      openWoCountRow,
       sites,
       holders,
       assignees,
       certAttachments,
+      certTotal,
       inspectionRecords,
+      inspectionsTotal,
       logRows,
+      logTotal,
       checkoutRows,
+      checkoutsTotal,
+      openCheckoutRow,
+      schedules,
+      openReminders,
+      itemInspectionTypes,
       allTypes,
       allCategories,
     ] = await Promise.all([
@@ -688,15 +853,39 @@ export default async function EquipmentDetailPage({
         .from(equipmentLocationHistory)
         .leftJoin(orgUnits, eq(orgUnits.id, equipmentLocationHistory.siteOrgUnitId))
         .leftJoin(people, eq(people.id, equipmentLocationHistory.holderPersonId))
-        .where(eq(equipmentLocationHistory.itemId, id))
+        .where(lhWhere)
         .orderBy(desc(equipmentLocationHistory.recordedAt))
-        .limit(50),
+        .limit(SUB_PER_PAGE)
+        .offset(lhP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentLocationHistory)
+        .leftJoin(orgUnits, eq(orgUnits.id, equipmentLocationHistory.siteOrgUnitId))
+        .leftJoin(people, eq(people.id, equipmentLocationHistory.holderPersonId))
+        .where(lhWhere)
+        .then((r) => Number(r[0]?.c ?? 0)),
       tx
         .select()
         .from(equipmentWorkOrders)
-        .where(eq(equipmentWorkOrders.itemId, id))
+        .where(woWhere)
         .orderBy(desc(equipmentWorkOrders.openedAt))
-        .limit(50),
+        .limit(SUB_PER_PAGE)
+        .offset(woP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentWorkOrders)
+        .where(woWhere)
+        .then((r) => Number(r[0]?.c ?? 0)),
+      tx
+        .select({ c: count() })
+        .from(equipmentWorkOrders)
+        .where(
+          and(
+            eq(equipmentWorkOrders.itemId, id),
+            sql`${equipmentWorkOrders.status} NOT IN ('closed', 'cancelled')`,
+          ),
+        )
+        .then((r) => Number(r[0]?.c ?? 0)),
       tx
         .select()
         .from(orgUnits)
@@ -726,11 +915,15 @@ export default async function EquipmentDetailPage({
       tx
         .select()
         .from(attachments)
-        .where(
-          and(eq(attachments.kind, 'document'), sql`${attachments.exif}->>'equipmentId' = ${id}`),
-        )
+        .where(fWhere)
         .orderBy(desc(attachments.createdAt))
-        .limit(50),
+        .limit(SUB_PER_PAGE)
+        .offset(fP.offset),
+      tx
+        .select({ c: count() })
+        .from(attachments)
+        .where(fWhere)
+        .then((r) => Number(r[0]?.c ?? 0)),
       tx
         .select({ record: equipmentInspectionRecords, type: equipmentInspectionTypes })
         .from(equipmentInspectionRecords)
@@ -738,31 +931,93 @@ export default async function EquipmentDetailPage({
           equipmentInspectionTypes,
           eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
         )
-        .where(
-          and(
-            eq(equipmentInspectionRecords.equipmentItemId, id),
-            isNull(equipmentInspectionRecords.deletedAt),
-          ),
-        )
+        .where(insWhere)
         .orderBy(desc(equipmentInspectionRecords.occurredAt))
-        .limit(50),
+        .limit(SUB_PER_PAGE)
+        .offset(insP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentInspectionRecords)
+        .leftJoin(
+          equipmentInspectionTypes,
+          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        )
+        .where(insWhere)
+        .then((r) => Number(r[0]?.c ?? 0)),
       // Per-item freeform log.
       tx
         .select({ log: equipmentLogEntries, person: people })
         .from(equipmentLogEntries)
         .leftJoin(people, eq(people.id, equipmentLogEntries.personPersonId))
-        .where(eq(equipmentLogEntries.equipmentItemId, id))
+        .where(logWhere)
         .orderBy(desc(equipmentLogEntries.entryDate))
-        .limit(100),
+        .limit(SUB_PER_PAGE)
+        .offset(logP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentLogEntries)
+        .where(logWhere)
+        .then((r) => Number(r[0]?.c ?? 0)),
       // Per-item check-out history.
       tx
         .select({ co: equipmentCheckouts, holder: people, dest: orgUnits })
         .from(equipmentCheckouts)
         .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
         .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
-        .where(eq(equipmentCheckouts.equipmentItemId, id))
+        .where(coWhere)
         .orderBy(desc(equipmentCheckouts.checkedOutAt))
-        .limit(100),
+        .limit(SUB_PER_PAGE)
+        .offset(coP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentCheckouts)
+        .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
+        .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
+        .where(coWhere)
+        .then((r) => Number(r[0]?.c ?? 0)),
+      // The open checkout (if any) — independent of the paginated history.
+      tx
+        .select({ co: equipmentCheckouts, holder: people })
+        .from(equipmentCheckouts)
+        .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
+        .where(
+          and(eq(equipmentCheckouts.equipmentItemId, id), isNull(equipmentCheckouts.returnedAt)),
+        )
+        .limit(1)
+        .then((r) => r[0] ?? null),
+      // Recurring inspection schedules for this unit.
+      tx
+        .select({ schedule: equipmentInspectionSchedules, type: equipmentInspectionTypes })
+        .from(equipmentInspectionSchedules)
+        .leftJoin(
+          equipmentInspectionTypes,
+          eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
+        )
+        .where(eq(equipmentInspectionSchedules.equipmentItemId, id))
+        .orderBy(asc(equipmentInspectionSchedules.nextDueOn)),
+      // Open ad-hoc reminders for this unit.
+      tx
+        .select({ reminder: equipmentReminders, assignee: people })
+        .from(equipmentReminders)
+        .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
+        .where(
+          and(eq(equipmentReminders.equipmentItemId, id), isNull(equipmentReminders.completedAt)),
+        )
+        .orderBy(asc(equipmentReminders.dueOn))
+        .limit(50),
+      // Active inspection types applicable to this item (schedule drawer picker).
+      tx
+        .select({
+          id: equipmentInspectionTypes.id,
+          name: equipmentInspectionTypes.name,
+          intervalValue: equipmentInspectionTypes.intervalValue,
+          intervalUnit: equipmentInspectionTypes.intervalUnit,
+          isPreUse: equipmentInspectionTypes.isPreUse,
+          appliesToTypeId: equipmentInspectionTypes.appliesToTypeId,
+        })
+        .from(equipmentInspectionTypes)
+        .where(eq(equipmentInspectionTypes.isActive, true))
+        .orderBy(asc(equipmentInspectionTypes.name)),
       // Full type list for the Overview type picker.
       tx
         .select({ id: equipmentTypes.id, name: equipmentTypes.name })
@@ -779,14 +1034,25 @@ export default async function EquipmentDetailPage({
       ...row,
       photoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
       history,
+      historyTotal,
       workOrders,
+      workOrdersTotal,
+      openWoCount: openWoCountRow,
       sites,
       holders,
       assignees,
       certAttachments,
+      certTotal,
       inspectionRecords,
+      inspectionsTotal,
       logEntries: logRows,
+      logTotal,
       checkouts: checkoutRows,
+      checkoutsTotal,
+      openCheckout: openCheckoutRow,
+      schedules,
+      openReminders,
+      itemInspectionTypes,
       allTypes,
       allCategories,
     }
@@ -802,22 +1068,63 @@ export default async function EquipmentDetailPage({
     missingReporter,
     photoUrl,
     history,
+    historyTotal,
     workOrders,
+    workOrdersTotal,
+    openWoCount,
     sites,
     holders,
     assignees,
     certAttachments,
+    certTotal,
     inspectionRecords,
+    inspectionsTotal,
     logEntries,
+    logTotal,
     checkouts,
+    checkoutsTotal,
+    openCheckout,
+    schedules,
+    openReminders,
+    itemInspectionTypes,
     allTypes,
     allCategories,
   } = data
-  const openCheckout = checkouts.find((c) => c.co.returnedAt === null) ?? null
 
   // Read-only unless the viewer can manage equipment. The autosave action
   // re-asserts the permission server-side; this only gates the inputs.
   const locked = !can(ctx, 'equipment.manage')
+
+  // Category-driven field groups + tenant custom fields. Custom fields that
+  // target an enabled native group render inside it; the rest render in their
+  // own sections below (so a field aimed at a disabled group never vanishes).
+  const fieldGroups = resolveEnabledFieldGroups(category?.enabledFieldGroups ?? null)
+  const enabledGroupKeys = new Set(fieldGroups.map((g) => g.key))
+  const customFieldDefs = await loadVisibleCustomFieldDefs(ctx, 'equipment', item.typeId)
+  const customByGroup = new Map<string, CustomFieldDefRow[]>()
+  const standaloneCustomDefs: CustomFieldDefRow[] = []
+  for (const def of customFieldDefs) {
+    if (def.groupKey && enabledGroupKeys.has(def.groupKey)) {
+      const list = customByGroup.get(def.groupKey) ?? []
+      list.push(def)
+      customByGroup.set(def.groupKey, list)
+    } else {
+      standaloneCustomDefs.push(def)
+    }
+  }
+  const customValues = readCustomFieldValues(item.metadata)
+
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const activeSchedules = schedules.filter((s) => s.schedule.isActive)
+  const nextInspectionDue = activeSchedules[0]?.schedule.nextDueOn ?? null
+
+  // Schedule-drawer type options, scoped to templates that apply to this item.
+  const scheduleTypeOptions = itemInspectionTypes
+    .filter((t) => !t.appliesToTypeId || t.appliesToTypeId === item.typeId)
+    .map((t) => ({
+      value: t.id,
+      label: `${t.name} — ${formatInterval(t.intervalValue, t.intervalUnit, { preUse: t.isPreUse })}`,
+    }))
 
   // Live* option lists.
   const siteOptions = sites
@@ -831,12 +1138,45 @@ export default async function EquipmentDetailPage({
     hint: p.employeeNo ?? undefined,
   }))
 
-  const openWOs = workOrders.filter((w) => !['closed', 'cancelled'].includes(w.status))
   const basePath = `/equipment/${id}`
   // Drawer state is URL-driven; the active tab is preserved in the close URL
   // so that closing the drawer doesn't kick you back to the Overview tab.
   const drawerKey = pickString(sp.drawer)
   const closeHref = `${basePath}?tab=${active}`
+
+  // Schedule / reminder edit drawers address their row by id in the drawer key.
+  const editingScheduleRow =
+    drawerKey?.startsWith('schedule-') && drawerKey !== 'schedule-new'
+      ? (schedules.find((s) => `schedule-${s.schedule.id}` === drawerKey) ?? null)
+      : null
+  const scheduleEditing: ScheduleEditing | null = editingScheduleRow
+    ? {
+        id: editingScheduleRow.schedule.id,
+        inspectionTypeId: editingScheduleRow.schedule.inspectionTypeId,
+        label: editingScheduleRow.schedule.label,
+        intervalValue: editingScheduleRow.schedule.intervalValue,
+        intervalUnit: editingScheduleRow.schedule.intervalUnit,
+        nextDueOn: editingScheduleRow.schedule.nextDueOn,
+        notes: editingScheduleRow.schedule.notes,
+        isActive: editingScheduleRow.schedule.isActive,
+      }
+    : null
+  const editingReminderRow =
+    drawerKey?.startsWith('reminder-') && drawerKey !== 'reminder-new'
+      ? (openReminders.find((r) => `reminder-${r.reminder.id}` === drawerKey) ?? null)
+      : null
+  const reminderEditing: ReminderEditing | null = editingReminderRow
+    ? {
+        id: editingReminderRow.reminder.id,
+        equipmentItemId: id,
+        title: editingReminderRow.reminder.title,
+        details: editingReminderRow.reminder.details,
+        dueOn: editingReminderRow.reminder.dueOn,
+        repeatIntervalValue: editingReminderRow.reminder.repeatIntervalValue,
+        repeatIntervalUnit: editingReminderRow.reminder.repeatIntervalUnit,
+        assignedToPersonId: editingReminderRow.reminder.assignedToPersonId,
+      }
+    : null
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'equipment', id, 50) : []
@@ -974,6 +1314,21 @@ export default async function EquipmentDetailPage({
                   </SidebarRow>
                   <SidebarRow label="Purchased">{item.purchaseDate ?? '—'}</SidebarRow>
                   <SidebarRow label="Warranty">{item.warrantyExpiresOn ?? '—'}</SidebarRow>
+                  <SidebarRow label="Next inspection">
+                    {nextInspectionDue ? (
+                      <span
+                        className={
+                          nextInspectionDue < todayIso
+                            ? 'font-medium text-rose-600 dark:text-rose-400'
+                            : undefined
+                        }
+                      >
+                        {nextInspectionDue}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </SidebarRow>
                 </div>
               </CardContent>
             </Card>
@@ -987,15 +1342,15 @@ export default async function EquipmentDetailPage({
               variant="pills"
               tabs={[
                 { key: 'overview', label: 'Overview' },
-                { key: 'location', label: 'Location & custody', count: checkouts.length },
+                { key: 'location', label: 'Location & custody', count: checkoutsTotal },
                 {
                   key: 'inspections',
                   label: 'Inspections',
-                  count: inspectionRecords.length,
+                  count: activeSchedules.length + openReminders.length,
                 },
-                { key: 'work_orders', label: 'Work orders', count: openWOs.length },
-                { key: 'log', label: 'Log', count: logEntries.length },
-                { key: 'files', label: 'Files', count: certAttachments.length },
+                { key: 'work_orders', label: 'Work orders', count: openWoCount },
+                { key: 'log', label: 'Log', count: logTotal },
+                { key: 'files', label: 'Files', count: certTotal },
                 { key: 'activity', label: 'Activity' },
               ]}
             />
@@ -1078,12 +1433,11 @@ export default async function EquipmentDetailPage({
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <LiveField
+                        <LiveRichText
                           id={id}
                           field="notes"
                           label="Notes"
                           initialValue={item.notes}
-                          multiline
                           placeholder="Maintenance / status notes"
                           disabled={locked}
                           updateAction={updateEquipmentField}
@@ -1092,92 +1446,76 @@ export default async function EquipmentDetailPage({
                     </div>
                   </Section>
 
-                  <Section title="Assignment">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <LiveSelect
-                        id={id}
-                        field="currentSiteOrgUnitId"
-                        label="Current site"
-                        initialValue={item.currentSiteOrgUnitId}
-                        options={siteOptions}
-                        emptyLabel="— Unassigned —"
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LivePersonSelect
-                        id={id}
-                        field="currentHolderPersonId"
-                        label="Current holder"
-                        initialValue={item.currentHolderPersonId}
-                        options={personOptions}
-                        placeholder="Select a holder…"
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                    </div>
-                  </Section>
-
-                  <Section title="Purchase & warranty">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <LiveField
-                        id={id}
-                        field="purchaseDate"
-                        label="Purchase date"
-                        type="date"
-                        initialValue={item.purchaseDate}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="warrantyExpiresOn"
-                        label="Warranty expires"
-                        type="date"
-                        initialValue={item.warrantyExpiresOn}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                    </div>
-                  </Section>
-
-                  <Section title="Inspection requirements">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <LiveToggle
-                        id={id}
-                        field="requiresPreUseInspection"
-                        label="Requires pre-use inspection"
-                        initialValue={item.requiresPreUseInspection}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveToggle
-                        id={id}
-                        field="requiresAnnualInspection"
-                        label="Requires annual inspection"
-                        initialValue={item.requiresAnnualInspection}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3">
-                        <ReadOnlyStat
-                          label="Last pre-use inspection"
-                          value={
-                            item.lastPreUseInspectionAt
-                              ? new Date(item.lastPreUseInspectionAt).toLocaleString()
-                              : '—'
-                          }
-                        />
-                        <ReadOnlyStat
-                          label="Last annual inspection"
-                          value={item.lastAnnualInspectionOn ?? '—'}
-                        />
-                        <ReadOnlyStat
-                          label="Next annual due"
-                          value={item.nextAnnualInspectionDue ?? '—'}
-                        />
+                  {/*
+                   * Category-driven field groups. Which sections appear is
+                   * configured per equipment category (Manage → Categories),
+                   * so a hand tool shows only what applies while a truck gets
+                   * registration, meters, and specs. Tenant custom fields
+                   * targeting a group render inside it.
+                   */}
+                  {fieldGroups.map((group) => (
+                    <Section key={group.key} title={group.label}>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {group.fields.map((f) =>
+                          f.type === 'select' ? (
+                            <LiveSelect
+                              key={f.field}
+                              id={id}
+                              field={f.field}
+                              label={f.label}
+                              initialValue={
+                                (item as unknown as Record<string, unknown>)[f.field] == null
+                                  ? null
+                                  : String((item as unknown as Record<string, unknown>)[f.field])
+                              }
+                              options={f.options ?? []}
+                              allowEmpty={false}
+                              disabled={locked}
+                              updateAction={updateEquipmentField}
+                            />
+                          ) : (
+                            <LiveField
+                              key={f.field}
+                              id={id}
+                              field={f.field}
+                              label={
+                                f.field === 'currentHours' || f.field === 'currentOdometer'
+                                  ? `${f.label}${item.metersUpdatedAt ? ` · read ${new Date(item.metersUpdatedAt).toLocaleDateString()}` : ''}`
+                                  : f.label
+                              }
+                              type={f.type}
+                              placeholder={f.placeholder}
+                              initialValue={
+                                (item as unknown as Record<string, unknown>)[f.field] == null
+                                  ? null
+                                  : String((item as unknown as Record<string, unknown>)[f.field])
+                              }
+                              disabled={locked}
+                              updateAction={updateEquipmentField}
+                            />
+                          ),
+                        )}
+                        {(customByGroup.get(group.key) ?? []).map((def) => (
+                          <CustomFieldInput
+                            key={def.id}
+                            entityKind="equipment"
+                            recordId={id}
+                            def={{
+                              key: def.key,
+                              label: def.label,
+                              helpText: def.helpText,
+                              fieldType: def.fieldType,
+                              required: def.required,
+                              config: def.config,
+                            }}
+                            initialValue={customValues[def.key] ?? null}
+                            disabled={locked}
+                            updateAction={updateCustomFieldValueAction}
+                          />
+                        ))}
                       </div>
-                    </div>
-                  </Section>
+                    </Section>
+                  ))}
 
                   <CustomFieldsSection
                     ctx={ctx}
@@ -1186,6 +1524,7 @@ export default async function EquipmentDetailPage({
                     subtypeId={item.typeId}
                     metadata={item.metadata}
                     locked={locked}
+                    defs={standaloneCustomDefs}
                   />
                 </div>
               ) : null}
@@ -1194,18 +1533,23 @@ export default async function EquipmentDetailPage({
                 <div className="space-y-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Work orders ({workOrders.length})</CardTitle>
+                      <CardTitle>Work orders ({workOrdersTotal})</CardTitle>
                       <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
                         <Button size="sm">
                           <Wrench size={14} /> New work order
                         </Button>
                       </Link>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
+                      <SearchInput
+                        paramKey="wo_q"
+                        pageParamKey="wo_p"
+                        placeholder="Search reference, summary…"
+                      />
                       {workOrders.length === 0 ? (
                         <EmptyState
                           icon={<Wrench size={24} />}
-                          title="No work orders"
+                          title={woP.q ? 'No work orders match your search' : 'No work orders'}
                           description="Open a work order to track repairs or scheduled service."
                           action={
                             <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
@@ -1253,6 +1597,13 @@ export default async function EquipmentDetailPage({
                           </TableBody>
                         </Table>
                       )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="wo"
+                        total={workOrdersTotal}
+                        page={woP.page}
+                      />
                     </CardContent>
                   </Card>
                 </div>
@@ -1284,39 +1635,70 @@ export default async function EquipmentDetailPage({
                         )}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-1 text-sm">
-                      <div className="flex items-center gap-2">
-                        <MapPin size={16} className="text-slate-400" />
-                        {site?.name ?? 'Unassigned'}
+                    <CardContent className="space-y-4 text-sm">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <MapPin size={16} className="text-slate-400" />
+                          {site?.name ?? 'Unassigned'}
+                        </div>
+                        {holder ? (
+                          <div className="text-slate-600 dark:text-slate-400">
+                            Held by{' '}
+                            <Link
+                              href={`/people/${holder.id}`}
+                              className="text-teal-700 hover:underline dark:text-teal-400"
+                            >
+                              {holder.firstName} {holder.lastName}
+                            </Link>
+                          </div>
+                        ) : null}
+                        {openCheckout ? (
+                          <div className="text-slate-600 dark:text-slate-400">
+                            Currently checked out
+                            {openCheckout.co.expectedReturnOn
+                              ? ` · expected back ${openCheckout.co.expectedReturnOn}`
+                              : ''}
+                            .
+                          </div>
+                        ) : null}
                       </div>
-                      {holder ? (
-                        <div className="text-slate-600 dark:text-slate-400">
-                          Held by{' '}
-                          <Link
-                            href={`/people/${holder.id}`}
-                            className="text-teal-700 hover:underline dark:text-teal-400"
-                          >
-                            {holder.firstName} {holder.lastName}
-                          </Link>
-                        </div>
-                      ) : null}
-                      {openCheckout ? (
-                        <div className="text-slate-600 dark:text-slate-400">
-                          Currently checked out
-                          {openCheckout.co.expectedReturnOn
-                            ? ` · expected back ${openCheckout.co.expectedReturnOn}`
-                            : ''}
-                          .
-                        </div>
-                      ) : null}
+                      {/* Assignment editors — site + holder live here with the
+                          rest of the custody picture (moved off the Overview). */}
+                      <div className="grid grid-cols-1 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-slate-800">
+                        <LiveSelect
+                          id={id}
+                          field="currentSiteOrgUnitId"
+                          label="Current site"
+                          initialValue={item.currentSiteOrgUnitId}
+                          options={siteOptions}
+                          emptyLabel="— Unassigned —"
+                          disabled={locked}
+                          updateAction={updateEquipmentField}
+                        />
+                        <LivePersonSelect
+                          id={id}
+                          field="currentHolderPersonId"
+                          label="Current holder"
+                          initialValue={item.currentHolderPersonId}
+                          options={personOptions}
+                          placeholder="Select a holder…"
+                          disabled={locked}
+                          updateAction={updateEquipmentField}
+                        />
+                      </div>
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader>
-                      <CardTitle>Check-out history ({checkouts.length})</CardTitle>
+                      <CardTitle>Check-out history ({checkoutsTotal})</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
+                      <SearchInput
+                        paramKey="co_q"
+                        pageParamKey="co_p"
+                        placeholder="Search holder, destination, notes…"
+                      />
                       {checkouts.length === 0 ? (
                         <EmptyState
                           icon={<LogOut size={24} />}
@@ -1391,17 +1773,29 @@ export default async function EquipmentDetailPage({
                           </TableBody>
                         </Table>
                       )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="co"
+                        total={checkoutsTotal}
+                        page={coP.page}
+                      />
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader>
-                      <CardTitle>Location history ({history.length})</CardTitle>
+                      <CardTitle>Location history ({historyTotal})</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
+                      <SearchInput
+                        paramKey="lh_q"
+                        pageParamKey="lh_p"
+                        placeholder="Search site, holder, note…"
+                      />
                       {history.length === 0 ? (
                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                          No movement recorded.
+                          {lhP.q ? 'No movements match your search.' : 'No movement recorded.'}
                         </p>
                       ) : (
                         <Table>
@@ -1433,6 +1827,13 @@ export default async function EquipmentDetailPage({
                           </TableBody>
                         </Table>
                       )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="lh"
+                        total={historyTotal}
+                        page={lhP.page}
+                      />
                     </CardContent>
                   </Card>
                 </div>
@@ -1441,7 +1842,7 @@ export default async function EquipmentDetailPage({
               {active === 'files' ? (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                    <CardTitle>Files ({certAttachments.length})</CardTitle>
+                    <CardTitle>Files ({certTotal})</CardTitle>
                     {locked ? null : (
                       <Link href={`${basePath}?tab=files&drawer=upload-file` as any}>
                         <Button size="sm">
@@ -1450,11 +1851,16 @@ export default async function EquipmentDetailPage({
                       </Link>
                     )}
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-3">
+                    <SearchInput
+                      paramKey="f_q"
+                      pageParamKey="f_p"
+                      placeholder="Search filename, label, category…"
+                    />
                     {certAttachments.length === 0 ? (
                       <EmptyState
                         icon={<FileText size={24} />}
-                        title="No files attached"
+                        title={fP.q ? 'No files match your search' : 'No files attached'}
                         description="Upload certificates, manuals, photos, receipts, and other documents tagged to this asset."
                         action={
                           locked ? undefined : (
@@ -1536,125 +1942,371 @@ export default async function EquipmentDetailPage({
                         </TableBody>
                       </Table>
                     )}
+                    <SubPagination
+                      basePath={basePath}
+                      sp={sp}
+                      prefix="f"
+                      total={certTotal}
+                      page={fP.page}
+                    />
                   </CardContent>
                 </Card>
               ) : null}
 
               {active === 'inspections' ? (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                    <CardTitle>Inspection history ({inspectionRecords.length})</CardTitle>
-                    <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                      <Button size="sm">
-                        <ClipboardCheck size={14} /> New inspection
-                      </Button>
-                    </Link>
-                  </CardHeader>
-                  <CardContent>
-                    {inspectionRecords.length === 0 ? (
-                      <EmptyState
-                        icon={<ClipboardCheck size={24} />}
-                        title="No inspections recorded"
-                        description="Pre-use, scheduled, and ad-hoc inspections for this asset appear here."
-                        action={
-                          <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                            <Button variant="outline" size="sm">
-                              Start an inspection →
-                            </Button>
-                          </Link>
-                        }
+                <div className="space-y-4">
+                  {/*
+                   * Recurring schedules — the per-unit cadences (any interval:
+                   * daily, monthly, every 3 months, annual, 5-year, …) that
+                   * drive the maintenance cockpit and overdue tracking.
+                   */}
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>Inspection schedules ({activeSchedules.length})</CardTitle>
+                      {locked ? null : (
+                        <Link href={`${basePath}?tab=inspections&drawer=schedule-new` as any}>
+                          <Button size="sm">
+                            <CalendarClock size={14} /> Add schedule
+                          </Button>
+                        </Link>
+                      )}
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {schedules.length === 0 ? (
+                        <EmptyState
+                          icon={<CalendarClock size={24} />}
+                          title="No recurring inspections"
+                          description="Add a schedule to track when this unit's next inspection is due — daily, monthly, every 3 months, annual, 5-year, or any other cadence."
+                          action={
+                            locked ? undefined : (
+                              <Link href={`${basePath}?tab=inspections&drawer=schedule-new` as any}>
+                                <Button size="sm" variant="outline">
+                                  <CalendarClock size={14} /> Add schedule
+                                </Button>
+                              </Link>
+                            )
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Inspection</TableHead>
+                              <TableHead>Interval</TableHead>
+                              <TableHead>Last completed</TableHead>
+                              <TableHead>Next due</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {schedules.map(({ schedule, type: schedType }) => {
+                              const overdue = schedule.isActive && schedule.nextDueOn < todayIso
+                              const dueSoon =
+                                schedule.isActive &&
+                                !overdue &&
+                                schedule.nextDueOn <=
+                                  new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+                              return (
+                                <TableRow key={schedule.id}>
+                                  <TableCell className="font-medium">
+                                    {schedType?.name ?? schedule.label ?? 'Inspection'}
+                                    {!schedule.isActive ? (
+                                      <Badge variant="secondary" className="ml-2">
+                                        inactive
+                                      </Badge>
+                                    ) : null}
+                                    {schedule.notes ? (
+                                      <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                        {schedule.notes}
+                                      </div>
+                                    ) : null}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {formatInterval(
+                                        schedule.intervalValue,
+                                        schedule.intervalUnit,
+                                      )}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-slate-600 dark:text-slate-300">
+                                    {schedule.lastCompletedOn ?? '—'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="flex items-center gap-2">
+                                      {schedule.nextDueOn}
+                                      {overdue ? (
+                                        <Badge variant="destructive">overdue</Badge>
+                                      ) : dueSoon ? (
+                                        <Badge variant="warning">due soon</Badge>
+                                      ) : null}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex items-center justify-end gap-3">
+                                      {schedule.inspectionTypeId ? (
+                                        <Link
+                                          href={`/equipment/inspections/new?itemId=${id}&typeId=${schedule.inspectionTypeId}`}
+                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                        >
+                                          Start →
+                                        </Link>
+                                      ) : null}
+                                      {locked ? null : (
+                                        <Link
+                                          href={
+                                            `${basePath}?tab=inspections&drawer=schedule-${schedule.id}` as any
+                                          }
+                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                        >
+                                          Edit
+                                        </Link>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                      <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-slate-800">
+                        <LiveToggle
+                          id={id}
+                          field="requiresPreUseInspection"
+                          label="Requires pre-use inspection"
+                          initialValue={item.requiresPreUseInspection}
+                          disabled={locked}
+                          updateAction={updateEquipmentField}
+                        />
+                        <ReadOnlyStat
+                          label="Last pre-use inspection"
+                          value={
+                            item.lastPreUseInspectionAt
+                              ? new Date(item.lastPreUseInspectionAt).toLocaleString()
+                              : '—'
+                          }
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>Reminders ({openReminders.length})</CardTitle>
+                      {locked ? null : (
+                        <Link href={`${basePath}?tab=inspections&drawer=reminder-new` as any}>
+                          <Button size="sm" variant="outline">
+                            <BellRing size={14} /> Add reminder
+                          </Button>
+                        </Link>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      {openReminders.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          No open reminders. Add one for ad-hoc maintenance — e.g. check the roof
+                          membrane in March.
+                        </p>
+                      ) : (
+                        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {openReminders.map(({ reminder, assignee }) => {
+                            const overdue = reminder.dueOn < todayIso
+                            return (
+                              <li
+                                key={reminder.id}
+                                className="flex items-center justify-between gap-3 py-2.5"
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {reminder.title}
+                                    {reminder.repeatIntervalValue && reminder.repeatIntervalUnit ? (
+                                      <Badge variant="secondary">
+                                        {formatInterval(
+                                          reminder.repeatIntervalValue,
+                                          reminder.repeatIntervalUnit,
+                                        )}
+                                      </Badge>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                    Due{' '}
+                                    <span
+                                      className={
+                                        overdue
+                                          ? 'font-medium text-rose-600 dark:text-rose-400'
+                                          : undefined
+                                      }
+                                    >
+                                      {reminder.dueOn}
+                                    </span>
+                                    {assignee
+                                      ? ` · ${assignee.firstName} ${assignee.lastName}`
+                                      : ''}
+                                    {reminder.details ? ` · ${reminder.details}` : ''}
+                                  </div>
+                                </div>
+                                {locked ? null : (
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <Link
+                                      href={
+                                        `${basePath}?tab=inspections&drawer=reminder-${reminder.id}` as any
+                                      }
+                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                    >
+                                      Edit
+                                    </Link>
+                                    <form action={completeEquipmentReminder}>
+                                      <input type="hidden" name="id" value={reminder.id} />
+                                      <Button size="sm" variant="outline" type="submit">
+                                        <Check size={14} /> Done
+                                      </Button>
+                                    </form>
+                                  </div>
+                                )}
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle>Inspection history ({inspectionsTotal})</CardTitle>
+                      <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                        <Button size="sm">
+                          <ClipboardCheck size={14} /> New inspection
+                        </Button>
+                      </Link>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <SearchInput
+                        paramKey="ins_q"
+                        pageParamKey="ins_p"
+                        placeholder="Search reference, type…"
                       />
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Reference</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Performed</TableHead>
-                            <TableHead>Result</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {inspectionRecords.map(({ record, type }) => (
-                            <TableRow key={record.id}>
-                              <TableCell className="font-medium">
-                                <Link
-                                  href={`/equipment/inspections/${record.id}`}
-                                  className="text-teal-700 hover:underline dark:text-teal-400"
-                                >
-                                  {record.reference}
-                                </Link>
-                              </TableCell>
-                              <TableCell className="text-slate-600 dark:text-slate-300">
-                                {type?.name ?? '—'}
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                                {record.occurredAt
-                                  ? new Date(record.occurredAt).toLocaleDateString()
-                                  : '—'}
-                              </TableCell>
-                              <TableCell>
-                                {record.result ? (
+                      {inspectionRecords.length === 0 ? (
+                        <EmptyState
+                          icon={<ClipboardCheck size={24} />}
+                          title={
+                            insP.q ? 'No inspections match your search' : 'No inspections recorded'
+                          }
+                          description="Pre-use, scheduled, and ad-hoc inspections for this asset appear here."
+                          action={
+                            <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                              <Button variant="outline" size="sm">
+                                Start an inspection →
+                              </Button>
+                            </Link>
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Reference</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Performed</TableHead>
+                              <TableHead>Result</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {inspectionRecords.map(({ record, type }) => (
+                              <TableRow key={record.id}>
+                                <TableCell className="font-medium">
+                                  <Link
+                                    href={`/equipment/inspections/${record.id}`}
+                                    className="text-teal-700 hover:underline dark:text-teal-400"
+                                  >
+                                    {record.reference}
+                                  </Link>
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  {type?.name ?? '—'}
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                  {record.occurredAt
+                                    ? new Date(record.occurredAt).toLocaleDateString()
+                                    : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  {record.result ? (
+                                    <Badge
+                                      variant={
+                                        record.result === 'pass'
+                                          ? 'success'
+                                          : record.result === 'fail'
+                                            ? 'destructive'
+                                            : 'secondary'
+                                      }
+                                    >
+                                      {record.result}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
                                   <Badge
                                     variant={
-                                      record.result === 'pass'
+                                      record.status === 'closed' || record.status === 'submitted'
                                         ? 'success'
-                                        : record.result === 'fail'
-                                          ? 'destructive'
-                                          : 'secondary'
+                                        : 'warning'
                                     }
                                   >
-                                    {record.result}
+                                    {record.status.replace('_', ' ')}
                                   </Badge>
-                                ) : (
-                                  <span className="text-slate-400">—</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    record.status === 'closed' || record.status === 'submitted'
-                                      ? 'success'
-                                      : 'warning'
-                                  }
-                                >
-                                  {record.status.replace('_', ' ')}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Link
-                                  href={`/equipment/inspections/${record.id}`}
-                                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                >
-                                  View →
-                                </Link>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </CardContent>
-                </Card>
+                                </TableCell>
+                                <TableCell>
+                                  <Link
+                                    href={`/equipment/inspections/${record.id}`}
+                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                  >
+                                    View →
+                                  </Link>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="ins"
+                        total={inspectionsTotal}
+                        page={insP.page}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
               ) : null}
 
               {active === 'log' ? (
                 <div className="space-y-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Log entries ({logEntries.length})</CardTitle>
+                      <CardTitle>Log entries ({logTotal})</CardTitle>
                       <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
                         <Button size="sm">
                           <Plus size={14} /> Add log entry
                         </Button>
                       </Link>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
+                      <SearchInput
+                        paramKey="log_q"
+                        pageParamKey="log_p"
+                        placeholder="Search title, details, kind…"
+                      />
                       {logEntries.length === 0 ? (
                         <EmptyState
-                          title="No log entries"
+                          title={logP.q ? 'No entries match your search' : 'No log entries'}
                           description="Capture observations, fuel-ups, modifications, and other notes against this asset."
                           action={
                             <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
@@ -1697,6 +2349,13 @@ export default async function EquipmentDetailPage({
                           </TableBody>
                         </Table>
                       )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="log"
+                        total={logTotal}
+                        page={logP.page}
+                      />
                     </CardContent>
                   </Card>
                 </div>
@@ -1968,6 +2627,22 @@ export default async function EquipmentDetailPage({
         attachAction={attachEquipmentFile}
       />
 
+      <ScheduleDrawer
+        open={!locked && (drawerKey === 'schedule-new' || scheduleEditing != null)}
+        closeHref={`${basePath}?tab=inspections`}
+        itemId={id}
+        editing={scheduleEditing}
+        typeOptions={scheduleTypeOptions}
+      />
+
+      <ReminderDrawer
+        open={!locked && (drawerKey === 'reminder-new' || reminderEditing != null)}
+        closeHref={`${basePath}?tab=inspections`}
+        itemId={id}
+        editing={reminderEditing}
+        people={personOptions}
+      />
+
       <UrlDrawer
         open={drawerKey === 'check-in' && !!openCheckout}
         closeHref={closeHref}
@@ -2021,6 +2696,64 @@ export default async function EquipmentDetailPage({
         )}
       </UrlDrawer>
     </PageContainer>
+  )
+}
+
+// Prev/next pager for the detail page's sub-tables. Mirrors the shared
+// <Pagination> but with a per-table page param (wo_p, co_p, …) merged into the
+// current URL so the active tab and sibling tables' state are preserved.
+function SubPagination({
+  basePath,
+  sp,
+  prefix,
+  total,
+  page,
+}: {
+  basePath: string
+  sp: Record<string, string | string[] | undefined>
+  prefix: string
+  total: number
+  page: number
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / SUB_PER_PAGE))
+  if (pageCount <= 1) return null
+  const pageParam = `${prefix}_p`
+  const prevHref = mergeHref(basePath, sp, { [pageParam]: page > 1 ? page - 1 : 1 })
+  const nextHref = mergeHref(basePath, sp, { [pageParam]: Math.min(pageCount, page + 1) })
+  const linkCls =
+    'inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60'
+  const disabledCls =
+    'inline-flex cursor-not-allowed items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500'
+  return (
+    <div className="flex items-center justify-between gap-2 pt-1 text-sm text-slate-600 dark:text-slate-300">
+      <span className="text-xs">
+        Showing {(page - 1) * SUB_PER_PAGE + 1}–{Math.min(total, page * SUB_PER_PAGE)} of{' '}
+        {total.toLocaleString()}
+      </span>
+      <div className="flex items-center gap-1">
+        {page <= 1 ? (
+          <span className={disabledCls}>
+            <ChevronLeft size={14} /> Prev
+          </span>
+        ) : (
+          <Link href={prevHref as any} className={linkCls}>
+            <ChevronLeft size={14} /> Prev
+          </Link>
+        )}
+        <span className="px-2 text-xs text-slate-500 dark:text-slate-400">
+          {page} / {pageCount}
+        </span>
+        {page >= pageCount ? (
+          <span className={disabledCls}>
+            Next <ChevronRight size={14} />
+          </span>
+        ) : (
+          <Link href={nextHref as any} className={linkCls}>
+            Next <ChevronRight size={14} />
+          </Link>
+        )}
+      </div>
+    </div>
   )
 }
 

@@ -19,6 +19,7 @@ export async function CustomFieldsSection({
   subtypeId,
   metadata,
   locked,
+  defs: defsProp,
 }: {
   ctx: Ctx
   entityKind: CustomFieldEntityKind
@@ -26,8 +27,13 @@ export async function CustomFieldsSection({
   subtypeId: string | null
   metadata: Record<string, unknown> | null | undefined
   locked: boolean
+  /**
+   * Pre-loaded definitions (callers that split fields between native field
+   * groups and standalone sections load once and pass the remainder here).
+   */
+  defs?: CustomFieldDefRow[]
 }) {
-  const defs = await loadVisibleCustomFieldDefs(ctx, entityKind, subtypeId)
+  const defs = defsProp ?? (await loadVisibleCustomFieldDefs(ctx, entityKind, subtypeId))
   if (defs.length === 0) return null
 
   const values = readCustomFieldValues(metadata)

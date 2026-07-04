@@ -26,6 +26,7 @@ export function PersonSelectField({
   emptyLabel = 'None',
   disabled = false,
   className,
+  onValueChange,
 }: {
   name: string
   options: SelectOption[]
@@ -39,6 +40,8 @@ export function PersonSelectField({
   emptyLabel?: string
   disabled?: boolean
   className?: string
+  /** Observe selection changes (client forms that submit typed actions). */
+  onValueChange?: (value: string) => void
 }) {
   const [value, setValue] = useState(defaultValue)
   return (
@@ -46,7 +49,10 @@ export function PersonSelectField({
       <input type="hidden" name={name} value={value} />
       <SearchSelect
         value={value}
-        onChange={setValue}
+        onChange={(v) => {
+          setValue(v)
+          onValueChange?.(v)
+        }}
         options={options}
         placeholder={placeholder}
         searchPlaceholder={searchPlaceholder}

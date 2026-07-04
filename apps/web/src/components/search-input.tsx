@@ -8,9 +8,12 @@ import { Input } from '@beaconhs/ui'
 export function SearchInput({
   placeholder = 'Search…',
   paramKey = 'q',
+  pageParamKey = 'page',
 }: {
   placeholder?: string
   paramKey?: string
+  /** Pagination param to reset when the search changes (sub-tables use prefixed params). */
+  pageParamKey?: string
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -32,7 +35,7 @@ export function SearchInput({
       if (value) next.set(paramKey, value)
       else next.delete(paramKey)
       // Reset to page 1 when search changes
-      next.delete('page')
+      next.delete(pageParamKey)
       const qs = next.toString()
       // Wrap the navigation in a transition so the App Router keeps the current
       // page (and this input's focus) mounted while the new RSC streams in,
