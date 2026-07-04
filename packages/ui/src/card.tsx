@@ -16,19 +16,29 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     // A card wired with its own onClick must behave like a button for keyboard
     // and assistive-tech users, not a mouse-only div.
     const clickable = isInteractive && typeof onClick === 'function'
+    // Card deliberately has no 'use client' — most cards are static containers
+    // rendered by Server Components, often inside client wrappers (tab
+    // crossfades, drawers). Function props may therefore only be attached when
+    // the caller actually supplied a handler; an unconditional onKeyDown makes
+    // every server-rendered Card unserializable ("Event handlers cannot be
+    // passed to Client Component props").
+    const handleKeyDown =
+      clickable || onKeyDown
+        ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+            if (clickable && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault()
+              onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>)
+            }
+            onKeyDown?.(e)
+          }
+        : undefined
     return (
       <div
         ref={ref}
         onClick={onClick}
         role={clickable ? 'button' : undefined}
         tabIndex={clickable ? 0 : undefined}
-        onKeyDown={(e) => {
-          if (clickable && (e.key === 'Enter' || e.key === ' ')) {
-            e.preventDefault()
-            onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>)
-          }
-          onKeyDown?.(e)
-        }}
+        onKeyDown={handleKeyDown}
         className={cn(
           'rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900',
           isInteractive &&
