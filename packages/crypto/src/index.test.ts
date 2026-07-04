@@ -26,7 +26,7 @@ describe('secret sealing', () => {
   it('returns null on a tampered ciphertext (GCM auth tag rejects it)', () => {
     const sealed = sealSecret('tamper-me')
     const raw = Buffer.from(sealed.ciphertext, 'base64')
-    raw[0] ^= 0xff
+    raw[0] = (raw[0] ?? 0) ^ 0xff
     expect(unsealSecret({ ciphertext: raw.toString('base64'), nonce: sealed.nonce })).toBeNull()
   })
 
