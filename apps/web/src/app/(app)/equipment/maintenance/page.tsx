@@ -161,6 +161,8 @@ export default async function EquipmentMaintenancePage({
   const drawerKey = pickString(sp.drawer)
   const drawerUnitRaw = drawerKey?.startsWith('unit-') ? drawerKey.slice('unit-'.length) : null
   const drawerUnitId = drawerUnitRaw && isUuid(drawerUnitRaw) ? drawerUnitRaw : null
+  const drawerDayRaw = drawerKey?.startsWith('day-') ? drawerKey.slice('day-'.length) : null
+  const drawerDay = drawerDayRaw && /^\d{4}-\d{2}-\d{2}$/.test(drawerDayRaw) ? drawerDayRaw : null
 
   const data = await ctx.db(async (tx) => {
     const vis = await moduleScopeWhere(ctx, tx, {
@@ -631,7 +633,7 @@ export default async function EquipmentMaintenancePage({
                       >
                         {i + 1}
                       </div>
-                      {dayEntries.slice(0, 3).map((e) => (
+                      {(dayEntries.length > 3 ? dayEntries.slice(0, 2) : dayEntries).map((e) => (
                         <Link
                           key={e.key}
                           href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
@@ -652,9 +654,13 @@ export default async function EquipmentMaintenancePage({
                         </Link>
                       ))}
                       {dayEntries.length > 3 ? (
-                        <div className="px-1 text-[10px] text-slate-400 dark:text-slate-500">
-                          +{dayEntries.length - 3} more
-                        </div>
+                        <Link
+                          href={mergeHref(BASE, sp, { drawer: `day-${day}` }) as never}
+                          scroll={false}
+                          className="flex items-center gap-1 rounded bg-slate-100 px-1 py-0.5 font-medium text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                        >
+                          +{dayEntries.length - 2} more
+                        </Link>
                       ) : null}
                     </div>
                   )
@@ -675,6 +681,31 @@ export default async function EquipmentMaintenancePage({
           </Card>
         </div>
       </div>
+
+      {/* Everything due on one day — rows click through to the unit flyout. */}
+      <UrlDrawer
+        open={drawerDay != null}
+        closeHref={closeHref}
+        title={
+          drawerDay
+            ? new Date(`${drawerDay}T00:00:00Z`).toLocaleDateString(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })
+            : ''
+        }
+        description={`${drawerDay ? (byDay.get(drawerDay)?.length ?? 0) : 0} due`}
+        size="md"
+      >
+        {drawerDay && (byDay.get(drawerDay)?.length ?? 0) > 0 ? (
+          <WorkList entries={byDay.get(drawerDay)!} today={today} manage={manage} sp={sp} />
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Nothing due on this day.</p>
+        )}
+      </UrlDrawer>
 
       <UnitMaintenanceDrawer
         open={drawerKey?.startsWith('unit-') ?? false}
