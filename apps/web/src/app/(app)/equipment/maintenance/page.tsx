@@ -298,6 +298,8 @@ export default async function EquipmentMaintenancePage({
   }
   const daysInMonth = monthEndDate.getUTCDate()
   const leadingBlanks = monthStartDate.getUTCDay()
+  const weeks = Math.ceil((leadingBlanks + daysInMonth) / 7)
+  const trailingBlanks = weeks * 7 - leadingBlanks - daysInMonth
   const monthLabel = monthStartDate.toLocaleDateString(undefined, {
     month: 'long',
     year: 'numeric',
@@ -371,45 +373,63 @@ export default async function EquipmentMaintenancePage({
           </TableToolbar>
         </>
       }
+      className="flex h-full min-h-0 flex-col gap-4"
     >
-      <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile icon={AlarmClock} tone="rose" label="Overdue" value={overdue.length} />
-          <StatTile icon={ClipboardCheck} tone="amber" label="Due today" value={dueToday.length} />
-          <StatTile icon={CalendarClock} tone="sky" label="Next 7 days" value={week.length} />
-          <StatTile icon={CalendarDays} tone="teal" label="Next 30 days" value={next30.length} />
+      <div className="flex h-full min-h-0 flex-col gap-4">
+        <div className="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile icon={AlarmClock} tone="rose" label="Overdue" value={overdue.length} dense />
+          <StatTile
+            icon={ClipboardCheck}
+            tone="amber"
+            label="Due today"
+            value={dueToday.length}
+            dense
+          />
+          <StatTile icon={CalendarClock} tone="sky" label="Next 7 days" value={week.length} dense />
+          <StatTile
+            icon={CalendarDays}
+            tone="teal"
+            label="Next 30 days"
+            value={next30.length}
+            dense
+          />
         </div>
 
-        {/* 1/3 work list + 2/3 calendar. Below lg they stack (list first); the
-            calendar is desktop-only — the paginated list is the mobile surface. */}
-        <div className="grid items-start gap-5 lg:grid-cols-3">
-          <Card className="lg:col-span-1">
-            <CardHeader>
+        {/* 1/3 work list + 2/3 calendar, filling the viewport — the page never
+            scrolls; only the work list's rows scroll. The calendar is
+            desktop-only — the paginated list is the mobile surface. */}
+        <div className="flex min-h-0 flex-1 gap-4">
+          <Card className="flex h-full min-h-0 w-full flex-col lg:w-1/3">
+            <CardHeader className="shrink-0 pb-3">
               <CardTitle>Work list ({workTotal})</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {pageEntries.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {q || kindFilter || catFilter
-                    ? 'Nothing due matches the current search or filters.'
-                    : 'Nothing due in this window. Schedules, reminders, and oil changes appear here as their due dates approach.'}
-                </p>
-              ) : (
-                <WorkList entries={pageEntries} today={today} manage={manage} sp={sp} />
-              )}
-              <Pagination
-                basePath={BASE}
-                currentParams={sp}
-                total={workTotal}
-                page={page}
-                perPage={PER_PAGE}
-              />
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-2 pt-0">
+              <div className="app-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+                {pageEntries.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {q || kindFilter || catFilter
+                      ? 'Nothing due matches the current search or filters.'
+                      : 'Nothing due in this window. Schedules, reminders, and oil changes appear here as their due dates approach.'}
+                  </p>
+                ) : (
+                  <WorkList entries={pageEntries} today={today} manage={manage} sp={sp} />
+                )}
+              </div>
+              <div className="shrink-0 border-t border-slate-100 dark:border-slate-800">
+                <Pagination
+                  basePath={BASE}
+                  currentParams={sp}
+                  total={workTotal}
+                  page={page}
+                  perPage={PER_PAGE}
+                />
+              </div>
             </CardContent>
           </Card>
 
           {/* Month calendar — navigate months to plan ahead. */}
-          <Card className="hidden md:block lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+          <Card className="hidden h-full min-h-0 flex-1 lg:flex lg:flex-col">
+            <CardHeader className="flex shrink-0 flex-row items-center justify-between gap-3 space-y-0 pb-3">
               <CardTitle>{monthLabel}</CardTitle>
               <div className="flex items-center gap-1">
                 <Link
@@ -436,8 +456,11 @@ export default async function EquipmentMaintenancePage({
                 </Link>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-xs dark:border-slate-800 dark:bg-slate-800">
+            <CardContent className="flex min-h-0 flex-1 flex-col pt-0">
+              <div
+                className="grid min-h-0 flex-1 grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-xs dark:border-slate-800 dark:bg-slate-800"
+                style={{ gridTemplateRows: `auto repeat(${weeks}, minmax(0, 1fr))` }}
+              >
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                   <div
                     key={d}
@@ -447,7 +470,7 @@ export default async function EquipmentMaintenancePage({
                   </div>
                 ))}
                 {Array.from({ length: leadingBlanks }, (_, i) => (
-                  <div key={`blank-${i}`} className="min-h-24 bg-white dark:bg-slate-900" />
+                  <div key={`lead-${i}`} className="bg-white dark:bg-slate-900" />
                 ))}
                 {Array.from({ length: daysInMonth }, (_, i) => {
                   const day = `${month}-${String(i + 1).padStart(2, '0')}`
@@ -456,7 +479,7 @@ export default async function EquipmentMaintenancePage({
                   return (
                     <div
                       key={day}
-                      className={`min-h-24 space-y-1 bg-white p-1.5 dark:bg-slate-900 ${
+                      className={`min-h-0 space-y-1 overflow-hidden bg-white p-1.5 dark:bg-slate-900 ${
                         isToday ? 'ring-2 ring-teal-500 ring-inset' : ''
                       }`}
                     >
@@ -496,8 +519,11 @@ export default async function EquipmentMaintenancePage({
                     </div>
                   )
                 })}
+                {Array.from({ length: trailingBlanks }, (_, i) => (
+                  <div key={`trail-${i}`} className="bg-white dark:bg-slate-900" />
+                ))}
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <div className="mt-2 flex shrink-0 flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
                 {(Object.keys(KIND_META) as EntryKind[]).map((k) => (
                   <span key={k} className="flex items-center gap-1.5">
                     <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />

@@ -36,9 +36,15 @@ export function PageContainer({
 export function ListPageLayout({
   header,
   children,
+  className,
 }: {
   header: React.ReactNode
   children: React.ReactNode
+  /**
+   * Overrides for the body wrapper — pass e.g. `flex h-full min-h-0 flex-col`
+   * for app-feel pages that fit the viewport and scroll only inside panels.
+   */
+  className?: string
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -48,7 +54,9 @@ export function ListPageLayout({
         </FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className="mx-auto max-w-screen-2xl p-3 sm:p-6">{children}</FadeInBody>
+        <FadeInBody className={cn('mx-auto max-w-screen-2xl p-3 sm:p-6', className)}>
+          {children}
+        </FadeInBody>
       </div>
     </div>
   )
