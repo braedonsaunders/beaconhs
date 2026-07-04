@@ -15,9 +15,17 @@ const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
 
 // BETTER_AUTH_SECRET signs sessions AND seals stored provider API keys. Running
 // production on the publicly-known dev fallback would be a silent security
-// hole, so refuse to boot rather than degrade.
+// hole, so refuse to boot rather than degrade. `next build` also imports this
+// module while collecting page data — inside a Docker image build there are no
+// runtime secrets (NODE_ENV=production, NEXT_PHASE=phase-production-build), and
+// nothing is signed or unsealed during a build, so the guard skips that phase;
+// the server that actually boots still refuses to start without the secret.
 const envSecret = process.env.BETTER_AUTH_SECRET
-if (!envSecret && process.env.NODE_ENV === 'production') {
+if (
+  !envSecret &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.NEXT_PHASE !== 'phase-production-build'
+) {
   throw new Error(
     '[auth] BETTER_AUTH_SECRET must be set in production — refusing to start with the dev fallback secret',
   )
