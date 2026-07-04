@@ -132,11 +132,6 @@ export default async function PeoplePage({
             description="Your organization's directory of workers, contractors, and supervisors."
             actions={
               <div className="flex items-center gap-2">
-                {canManage ? (
-                  <Link href="/people/import">
-                    <Button variant="outline">Import people</Button>
-                  </Link>
-                ) : null}
                 {canExport ? (
                   <a href={buildExportHref('/people/export.csv', sp)}>
                     <Button variant="outline">Export CSV</Button>
@@ -188,7 +183,7 @@ export default async function PeoplePage({
         <EmptyState
           icon={<Users size={32} />}
           title={params.q ? `No people match "${params.q}"` : 'No people'}
-          description="Add people individually, or import them in bulk from a CSV file."
+          description="Add people individually, or bring them in through a data import."
           action={
             canManage ? (
               <Link href="/people/new">
