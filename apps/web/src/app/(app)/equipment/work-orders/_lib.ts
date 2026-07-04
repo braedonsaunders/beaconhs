@@ -4,11 +4,11 @@
 // place. Caller asserts the permission before delegating here.
 
 import { revalidatePath } from 'next/cache'
-import { sql } from 'drizzle-orm'
 import { equipmentWorkOrders } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { nextReference } from '@/lib/reference'
 
 export type CreateWorkOrderInput = {
   itemId: string
@@ -24,15 +24,7 @@ export async function createEquipmentWorkOrder(
   input: CreateWorkOrderInput,
 ): Promise<{ id: string; reference: string } | null> {
   const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    // Count-based reference generation — a shared atomic generator replaces
-    // this platform-wide; keeping the existing scheme in one place until then.
-    const counts = await tx
-      .select({ c: sql<number>`count(*)::int` })
-      .from(equipmentWorkOrders)
-      .where(sql`extract(year from ${equipmentWorkOrders.openedAt}) = ${year}`)
-    const c = counts[0]?.c ?? 0
-    const reference = `WO-${year}-${String(Number(c) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'work_order')
     const [inserted] = await tx
       .insert(equipmentWorkOrders)
       .values({

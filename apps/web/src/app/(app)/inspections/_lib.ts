@@ -5,7 +5,7 @@
 // the pages that use it. Anything cross-module-worthy can be promoted to
 // /lib/ later.
 
-import { count, eq, sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
@@ -16,6 +16,7 @@ import {
   inspectionTypes,
 } from '@beaconhs/db/schema'
 import { recordAudit } from '@/lib/audit'
+import { nextReference } from '@/lib/reference'
 
 export type CriterionAnswer = 'pass' | 'fail' | 'n_a'
 export type CriterionSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -44,15 +45,7 @@ export async function nextInspectionReference(
   ctx: RequestContext,
   occurredAt: Date,
 ): Promise<string> {
-  const year = occurredAt.getFullYear()
-  const c = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ n: count() })
-      .from(inspectionRecords)
-      .where(sql`extract(year from ${inspectionRecords.occurredAt}) = ${year}`)
-    return Number(rows[0]?.n ?? 0)
-  })
-  return `INS-${year}-${String(c + 1).padStart(4, '0')}`
+  return ctx.db((tx) => nextReference(tx, ctx.tenantId, 'inspection', occurredAt.getFullYear()))
 }
 
 /**
@@ -213,14 +206,7 @@ export async function syncCorrectiveActionForCriterion(
       }
 
       // Spawn a new CA
-      const year = new Date().getFullYear()
-      const refRows = await tx
-        .select({ n: count() })
-        .from(correctiveActions)
-        .where(
-          sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-        )
-      const reference = `CA-${year}-${String(Number(refRows[0]?.n ?? 0) + 1).padStart(4, '0')}`
+      const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
 
       const [ca] = await tx
         .insert(correctiveActions)

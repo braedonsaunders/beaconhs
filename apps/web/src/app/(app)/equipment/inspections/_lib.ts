@@ -13,6 +13,7 @@ import {
   equipmentItems,
   equipmentWorkOrders,
 } from '@beaconhs/db/schema'
+import { nextReference } from '@/lib/reference'
 
 export type EqAnswer = 'pass' | 'fail' | 'n_a'
 export type EqSeverity = 'low' | 'medium' | 'high' | 'critical'
@@ -31,20 +32,14 @@ export function parseEqSeverity(raw: unknown): EqSeverity | null {
     : null
 }
 
-/** Next sequential reference EQI-YYYY-NNNN, counted by occurred-at year. */
+/** Next sequential reference EQI-YYYY-NNNN, keyed to the occurred-at year. */
 export async function nextEquipmentInspectionReference(
   ctx: RequestContext,
   occurredAt: Date,
 ): Promise<string> {
-  const year = occurredAt.getFullYear()
-  const c = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ n: count() })
-      .from(equipmentInspectionRecords)
-      .where(sql`extract(year from ${equipmentInspectionRecords.occurredAt}) = ${year}`)
-    return Number(rows[0]?.n ?? 0)
-  })
-  return `EQI-${year}-${String(c + 1).padStart(4, '0')}`
+  return ctx.db((tx) =>
+    nextReference(tx, ctx.tenantId, 'equipment_inspection', occurredAt.getFullYear()),
+  )
 }
 
 /**

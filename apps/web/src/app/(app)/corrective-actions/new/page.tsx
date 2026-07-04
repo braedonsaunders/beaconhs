@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, count, eq, sql } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -23,6 +23,7 @@ import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
+import { nextReference } from '@/lib/reference'
 
 export const metadata = { title: 'New corrective action' }
 
@@ -53,14 +54,7 @@ async function createCA(formData: FormData) {
   const assignedOn = new Date().toISOString().slice(0, 10)
 
   const [row] = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     return tx
       .insert(correctiveActions)
       .values({

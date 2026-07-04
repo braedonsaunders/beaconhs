@@ -14,12 +14,13 @@ import 'server-only'
 // records, event emission, and path revalidation.
 
 import { revalidatePath } from 'next/cache'
-import { and, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
 import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { nextReference } from '@/lib/reference'
 
 type Initiator = 'user' | 'flow'
 
@@ -65,14 +66,7 @@ export async function spawnCorrectiveActionCore(
   const assignedOn = new Date().toISOString().slice(0, 10)
 
   const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     const [inserted] = await tx
       .insert(correctiveActions)
       .values({
@@ -171,12 +165,7 @@ export async function spawnIncidentCore(
   }
 
   const row = await ctx.db(async (tx) => {
-    const year = occurredAt.getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(incidents)
-      .where(sql`extract(year from ${incidents.occurredAt}) = ${year}`)
-    const reference = `INC-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'incident', occurredAt.getFullYear())
     const [inserted] = await tx
       .insert(incidents)
       .values({

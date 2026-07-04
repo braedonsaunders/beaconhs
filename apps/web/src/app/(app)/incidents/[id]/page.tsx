@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import {
   Activity,
   AlertTriangle,
@@ -75,6 +75,7 @@ import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { nextReference } from '@/lib/reference'
 import { assertCan, can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
@@ -488,17 +489,9 @@ async function copyIncident(formData: FormData) {
   })
   if (!src) return
 
-  const year = new Date().getFullYear()
-  const [{ c } = { c: 0 }] = await ctx.db((tx) =>
-    tx
-      .select({ c: count() })
-      .from(incidents)
-      .where(sql`extract(year from ${incidents.occurredAt}) = ${year}`),
-  )
-  const reference = `INC-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
-
-  const [row] = await ctx.db((tx) =>
-    tx
+  const [row] = await ctx.db(async (tx) => {
+    const reference = await nextReference(tx, ctx.tenantId, 'incident')
+    return tx
       .insert(incidents)
       .values({
         tenantId: ctx.tenantId,
@@ -520,8 +513,8 @@ async function copyIncident(formData: FormData) {
         classificationId: src.classificationId,
         reportedByTenantUserId: ctx.membership?.id ?? null,
       })
-      .returning(),
-  )
+      .returning()
+  })
   if (row) {
     await recordAudit(ctx, {
       entityType: 'incident',

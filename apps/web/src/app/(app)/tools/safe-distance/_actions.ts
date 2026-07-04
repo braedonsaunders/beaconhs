@@ -13,10 +13,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { safeDistanceRecords, safeDistanceSegments } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { nextReference } from '@/lib/reference'
 import {
   computeSafeDistance,
   segmentVolumeM3,
@@ -79,27 +80,6 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/**
- * Generate the next SD-YYYY-NNNN reference within the tenant for the current
- * calendar year. The unique index on (tenantId, reference) protects against the
- * unlikely race where two creators land on the same number.
- */
-async function nextReference(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-): Promise<string> {
-  const year = new Date().getFullYear()
-  return ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({ c: count() })
-      .from(safeDistanceRecords)
-      .where(
-        sql`extract(year from ${safeDistanceRecords.occurredAt}) = ${year} AND ${safeDistanceRecords.tenantId} = ${ctx.tenantId} AND ${safeDistanceRecords.reference} LIKE 'SD-%'`,
-      )
-    const n = Number(row?.c ?? 0) + 1
-    return `SD-${year}-${String(n).padStart(4, '0')}`
-  })
-}
-
 // ---------- Create ------------------------------------------------------
 
 /**
@@ -120,10 +100,9 @@ export async function createSafeDistanceRecord(formData: FormData): Promise<void
   const supervisorTenantUserId = String(formData.get('supervisorTenantUserId') ?? '').trim() || null
   const operatorPersonId = String(formData.get('operatorPersonId') ?? '').trim() || null
 
-  const reference = await nextReference(ctx)
-
-  const inserted = await ctx.db((tx) =>
-    tx
+  const inserted = await ctx.db(async (tx) => {
+    const reference = await nextReference(tx, ctx.tenantId!, 'safe_distance')
+    return tx
       .insert(safeDistanceRecords)
       .values({
         tenantId: ctx.tenantId!,
@@ -138,8 +117,8 @@ export async function createSafeDistanceRecord(formData: FormData): Promise<void
         operatorPersonId,
         occurredAt: new Date(),
       })
-      .returning(),
-  )
+      .returning()
+  })
   const row = inserted[0]
   if (!row) throw new Error('Insert failed')
 

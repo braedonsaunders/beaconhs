@@ -8,12 +8,13 @@
 //  6. audits (flagged via:assistant) + emits + runs flows + revalidates.
 
 import { revalidatePath } from 'next/cache'
-import { and, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { assertNotImpersonating, can } from '@beaconhs/tenant'
 import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { nextReference } from '@/lib/reference'
 import { recordVisibilityWhere } from '@/lib/visibility'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { verifyProposal, type CaPreview, type IncidentPreview } from '@/lib/assistant/proposals'
@@ -57,14 +58,7 @@ export async function commitCorrectiveAction(input: {
   }
 
   const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     const [r] = await tx
       .insert(correctiveActions)
       .values({
@@ -128,12 +122,7 @@ export async function commitIncident(input: {
     return { ok: false, error: 'The drafted date is invalid.' }
 
   const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(incidents)
-      .where(sql`extract(year from ${incidents.occurredAt}) = ${year}`)
-    const reference = `INC-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'incident')
     const [r] = await tx
       .insert(incidents)
       .values({

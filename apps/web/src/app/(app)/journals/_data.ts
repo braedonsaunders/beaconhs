@@ -750,7 +750,7 @@ export async function getOrCreateEntryForDate(
       .limit(1)
     if (existing) return existing.id
 
-    const reference = await nextJournalReference(tx, Number(today.slice(0, 4)))
+    const reference = await nextJournalReference(tx, ctx.tenantId, Number(today.slice(0, 4)))
     const [created] = await tx
       .insert(journalEntries)
       .values({

@@ -10,7 +10,7 @@
 // We keep these in a server-only module so that every place in the UI that
 // touches a PPE item lifecycle goes through the same hardened path.
 
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   correctiveActions,
@@ -23,6 +23,7 @@ import {
   ppeTypeInspectionCriteria,
 } from '@beaconhs/db/schema'
 import { recordAudit } from '@/lib/audit'
+import { nextReference } from '@/lib/reference'
 
 export type PpeInspectionKind = 'pre_use' | 'annual'
 export type PpeCriterionAnswer = 'pass' | 'fail' | 'n_a'
@@ -66,14 +67,7 @@ export async function spawnCorrectiveActionForFailedPpeInspection(
   dueDate.setDate(dueDate.getDate() + dayOffset)
   const dueOn = dueDate.toISOString().slice(0, 10)
   const caId = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [tally] = await tx
-      .select({ n: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(tally?.n ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
 
     const [ca] = await tx
       .insert(correctiveActions)

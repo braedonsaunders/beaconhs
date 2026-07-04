@@ -4,10 +4,10 @@ import 'server-only'
 // (reference numbering + polymorphic sourceEntityType/Id) so a journal / hazard
 // assessment / incident flow can create a corrective action.
 
-import { count, sql } from 'drizzle-orm'
 import { correctiveActions } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
+import { nextReference } from '@/lib/reference'
 
 type CaSource = 'inspection' | 'incident' | 'near_miss' | 'observation' | 'audit' | 'jsha' | 'other'
 
@@ -30,14 +30,7 @@ export async function spawnCorrectiveActionForSubject(
   const assignedOn = new Date().toISOString().slice(0, 10)
 
   const row = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     const [inserted] = await tx
       .insert(correctiveActions)
       .values({

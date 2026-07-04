@@ -6,7 +6,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, count, desc, eq, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, max, sql } from 'drizzle-orm'
 import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
@@ -40,6 +40,7 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitHazardAssessmentCreated } from '@beaconhs/integrations'
+import { nextReference } from '@/lib/reference'
 import { parseDatetimeLocal } from './_datetime'
 import { riskRating } from './_risk-scale'
 
@@ -225,13 +226,7 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
   if (copyFromId) await assertCanSeeAssessment(ctx, copyFromId)
 
   const created = await ctx.db(async (tx) => {
-    const year = new Date().getFullYear()
-    const counted = await tx
-      .select({ c: count() })
-      .from(hazidAssessments)
-      .where(sql`extract(year from ${hazidAssessments.createdAt}) = ${year}`)
-    const c = counted[0]?.c ?? 0
-    const reference = `HAZ-${year}-${String(Number(c) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'hazid')
 
     const [row] = await tx
       .insert(hazidAssessments)
@@ -788,13 +783,7 @@ export async function copyAssessment(formData: FormData) {
 
     // Reuse the same numbering scheme as createAssessment so references stay
     // consistent: HAZ-<year>-<counter>.
-    const year = new Date().getFullYear()
-    const counted = await tx
-      .select({ c: count() })
-      .from(hazidAssessments)
-      .where(sql`extract(year from ${hazidAssessments.createdAt}) = ${year}`)
-    const c = counted[0]?.c ?? 0
-    const reference = `HAZ-${year}-${String(Number(c) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'hazid')
 
     const jobScope = src.jobScope ? `${src.jobScope} (copy)` : '(copy)'
 

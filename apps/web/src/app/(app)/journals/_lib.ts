@@ -2,10 +2,11 @@
 // are plain functions consumed by the page (server component), the query layer
 // and the action layer.
 
-import { and, count, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { journalEntries, people } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
+import { nextReference } from '@/lib/reference'
 
 /** Can this context read every journal in the tenant (vs site/self scope)? */
 export function journalCanReadAll(ctx: RequestContext): boolean {
@@ -113,13 +114,13 @@ export async function getAuthorPersonId(ctx: RequestContext): Promise<string | n
   })
 }
 
-/** Next per-tenant reference like JRN-2026-0001 (RLS scopes the count). */
-export async function nextJournalReference(tx: Database, year: number): Promise<string> {
-  const [row] = await tx
-    .select({ c: count() })
-    .from(journalEntries)
-    .where(sql`extract(year from ${journalEntries.entryDate}) = ${year}`)
-  return `JRN-${year}-${String(Number(row?.c ?? 0) + 1).padStart(4, '0')}`
+/** Next per-tenant reference like JRN-2026-0001 (RLS scopes the counter). */
+export async function nextJournalReference(
+  tx: Database,
+  tenantId: string,
+  year: number,
+): Promise<string> {
+  return nextReference(tx, tenantId, 'journal', year)
 }
 
 /**

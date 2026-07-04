@@ -8,7 +8,7 @@
 import { randomBytes } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { and, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import {
   correctiveActionSeverity,
   correctiveActionStatus,
@@ -48,6 +48,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { findIncompleteCriteria, materialiseCriteriaForRecord } from '@/app/(app)/inspections/_lib'
+import { nextReference } from '@/lib/reference'
 import { ApiError } from './errors'
 
 type Json = Record<string, unknown>
@@ -224,12 +225,7 @@ async function createIncident(ctx: RequestContext, raw: unknown): Promise<WriteR
       }
     }
 
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(incidents)
-      .where(sql`extract(year from ${incidents.occurredAt}) = ${year}`)
-    const reference = `INC-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'incident')
 
     const [created] = await tx
       .insert(incidents)
@@ -514,14 +510,7 @@ async function createCorrectiveAction(ctx: RequestContext, raw: unknown): Promis
       }
     }
 
-    const year = new Date().getFullYear()
-    const [{ c } = { c: 0 }] = await tx
-      .select({ c: count() })
-      .from(correctiveActions)
-      .where(
-        sql`extract(year from coalesce(${correctiveActions.assignedOn}, current_date)) = ${year}`,
-      )
-    const reference = `CA-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
 
     const [created] = await tx
       .insert(correctiveActions)
@@ -814,13 +803,12 @@ async function ensureInspectionType(tx: TenantTx, typeId: string): Promise<void>
   if (!type) throw ApiError.invalid(`No published inspection type with id ${typeId}`)
 }
 
-async function nextInspectionReferenceInTx(tx: TenantTx, occurredAt: Date): Promise<string> {
-  const year = occurredAt.getFullYear()
-  const [{ c } = { c: 0 }] = await tx
-    .select({ c: count() })
-    .from(inspectionRecords)
-    .where(sql`extract(year from ${inspectionRecords.occurredAt}) = ${year}`)
-  return `INS-${year}-${String(Number(c ?? 0) + 1).padStart(4, '0')}`
+async function nextInspectionReferenceInTx(
+  tx: TenantTx,
+  tenantId: string,
+  occurredAt: Date,
+): Promise<string> {
+  return nextReference(tx, tenantId, 'inspection', occurredAt.getFullYear())
 }
 
 async function createInspection(ctx: RequestContext, raw: unknown): Promise<WriteResult> {
@@ -838,7 +826,7 @@ async function createInspection(ctx: RequestContext, raw: unknown): Promise<Writ
     await ensureOrgUnit(tx, b.customerOrgUnitId, 'customer org unit')
     await ensurePerson(tx, b.customerContactPersonId, 'customer contact')
 
-    const reference = await nextInspectionReferenceInTx(tx, occurredAt)
+    const reference = await nextInspectionReferenceInTx(tx, ctx.tenantId, occurredAt)
     const [created] = await tx
       .insert(inspectionRecords)
       .values({
