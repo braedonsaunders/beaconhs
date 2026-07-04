@@ -13,10 +13,11 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { auth } from '@beaconhs/auth'
 import {
   account,
+  people,
   PERMISSION_CATALOGUE,
   roleAssignments,
   roles,
@@ -25,7 +26,7 @@ import {
   userPermissionOverrides,
   users,
 } from '@beaconhs/db/schema'
-import { assertCan, ForbiddenError } from '@beaconhs/tenant'
+import { assertCan, assertNotImpersonating, ForbiddenError } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { IMPERSONATION_TTL_MS } from '@/lib/impersonation'
@@ -424,6 +425,182 @@ export async function setSuperAdmin(formData: FormData): Promise<void> {
   })
   revalidatePath(detailPath(membershipId))
   revalidatePath('/admin/users')
+}
+
+// --- linked person (employee) record ------------------------------------
+
+export type LinkablePerson = {
+  id: string
+  name: string
+  hint: string | null
+}
+
+/**
+ * Data for the "Linked person record" control: the person currently linked to
+ * this account in the active tenant (if any) plus the active, unlinked people
+ * that can be chosen. People already linked to a DIFFERENT account are excluded
+ * so the picker can never silently steal another user's link.
+ */
+export async function loadPersonLinkData(
+  ctx: Ctx,
+  userId: string,
+): Promise<{ linked: LinkablePerson | null; options: LinkablePerson[] }> {
+  return ctx.db(async (tx) => {
+    const rows = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+        jobTitle: people.jobTitle,
+        userId: people.userId,
+      })
+      .from(people)
+      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+    const toItem = (r: (typeof rows)[number]): LinkablePerson => ({
+      id: r.id,
+      name: `${r.firstName} ${r.lastName}`.trim(),
+      hint: r.employeeNo ?? r.jobTitle ?? null,
+    })
+    const linked = rows.find((r) => r.userId === userId)
+    return {
+      linked: linked ? toItem(linked) : null,
+      // Unlinked people + (defensively) the one already ours.
+      options: rows.filter((r) => !r.userId || r.userId === userId).map(toItem),
+    }
+  })
+}
+
+/**
+ * Link this account to an employee (`people`) record in the active tenant, or
+ * clear the link (empty personId). Enforces the 1:1 rule the
+ * `people_tenant_user_ux` index guarantees: the account's previous person is
+ * unlinked in the same transaction before the new one is set, and a person
+ * already tied to another account is rejected.
+ */
+export async function setUserPersonLink(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  // Binding an employee record to a login is an identity change — never do it
+  // under an impersonation overlay.
+  assertNotImpersonating(ctx, 'link person record')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  const personId = String(formData.get('personId') ?? '').trim() || null
+  if (!membershipId) return
+
+  const member = await loadMember(ctx, membershipId)
+  if (!member) return
+  if (!canActOn(ctx, member.account)) {
+    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
+  }
+  const userId = member.account.id
+
+  const result = await ctx.db(
+    async (
+      tx,
+    ): Promise<{
+      error?: string
+      changed: boolean
+      linkedId: string | null
+      linkedName: string | null
+      unlinkedId: string | null
+    }> => {
+      const [current] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.userId, userId), isNull(people.deletedAt)))
+        .limit(1)
+
+      if (!personId) {
+        if (!current) return { changed: false, linkedId: null, linkedName: null, unlinkedId: null }
+        await tx.update(people).set({ userId: null }).where(eq(people.id, current.id))
+        return { changed: true, linkedId: null, linkedName: null, unlinkedId: current.id }
+      }
+
+      if (current?.id === personId) {
+        return { changed: false, linkedId: personId, linkedName: null, unlinkedId: null }
+      }
+
+      const [target] = await tx
+        .select({
+          id: people.id,
+          userId: people.userId,
+          status: people.status,
+          deletedAt: people.deletedAt,
+          firstName: people.firstName,
+          lastName: people.lastName,
+        })
+        .from(people)
+        .where(eq(people.id, personId))
+        .limit(1)
+      if (!target || target.deletedAt) {
+        return {
+          error: 'That person record no longer exists.',
+          changed: false,
+          linkedId: null,
+          linkedName: null,
+          unlinkedId: null,
+        }
+      }
+      if (target.status !== 'active') {
+        return {
+          error: 'Only active people can be linked to an account.',
+          changed: false,
+          linkedId: null,
+          linkedName: null,
+          unlinkedId: null,
+        }
+      }
+      if (target.userId && target.userId !== userId) {
+        return {
+          error: 'That person is already linked to another account.',
+          changed: false,
+          linkedId: null,
+          linkedName: null,
+          unlinkedId: null,
+        }
+      }
+
+      // Clear the account's previous person first so the partial unique index on
+      // (tenant_id, user_id) is never momentarily violated, then link the chosen one.
+      if (current && current.id !== personId) {
+        await tx.update(people).set({ userId: null }).where(eq(people.id, current.id))
+      }
+      await tx.update(people).set({ userId }).where(eq(people.id, personId))
+      return {
+        changed: true,
+        linkedId: personId,
+        linkedName: `${target.firstName} ${target.lastName}`.trim(),
+        unlinkedId: current?.id ?? null,
+      }
+    },
+  )
+
+  if (result.error) backToDetail(membershipId, result.error)
+
+  if (result.changed) {
+    await recordAudit(ctx, {
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: 'update',
+      summary: result.linkedId
+        ? `Linked person record${result.linkedName ? ` ${result.linkedName}` : ''}`
+        : 'Unlinked person record',
+      metadata: { userId, personId: result.linkedId, unlinkedPersonId: result.unlinkedId },
+    })
+    revalidatePath('/admin/users')
+    revalidatePath('/people')
+    if (result.linkedId) revalidatePath(`/people/${result.linkedId}`)
+    if (result.unlinkedId) revalidatePath(`/people/${result.unlinkedId}`)
+  }
+  backToTab(membershipId, 'overview', {
+    notice: result.changed
+      ? result.linkedId
+        ? 'Linked the person record.'
+        : 'Unlinked the person record.'
+      : undefined,
+  })
 }
 
 // --- account: name + email ----------------------------------------------

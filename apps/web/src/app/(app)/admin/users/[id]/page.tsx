@@ -30,6 +30,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PERMISSION_GROUPS, permissionLabel } from '@/lib/permissions-meta'
+import { PersonSelectField } from '@/components/person-select-field'
 import { ScopePicker } from '../_components/scope-picker'
 import { ConfirmButton } from '../_components/confirm-button'
 import { SetPasswordForm } from '../_components/set-password-form'
@@ -37,6 +38,7 @@ import { loadScopeOptions, describeScope } from '../_scope-data'
 import {
   assignRole,
   clearPermissionOverride,
+  loadPersonLinkData,
   removeAssignment,
   removeMember,
   resendInvite,
@@ -46,6 +48,7 @@ import {
   setMemberStatus,
   setPermissionOverride,
   setSuperAdmin,
+  setUserPersonLink,
   startImpersonation,
   updateAccountName,
   updateMemberDisplayName,
@@ -112,10 +115,14 @@ export default async function AdminUserDetailPage({
   const { member, assignments, allRoles, overrides, hasPassword, activeSessions } = data
   const sessionCount = activeSessions.length
   const scopeOptions = await loadScopeOptions(ctx)
+  const personLink = await loadPersonLinkData(ctx, member.account.id)
   const activity = await recentActivityForEntity(ctx, 'tenant_user', id)
 
   const displayName = member.membership.displayName ?? member.account.name
   const canToggleSuperAdmin = ctx.isSuperAdmin
+  // Editing a super-admin account is reserved for super-admins (mirrors the
+  // canActOn guard the write actions enforce).
+  const canEditAccount = ctx.isSuperAdmin || !member.account.isSuperAdmin
   // "View as": needs the impersonate permission, an active non-super-admin
   // target that isn't yourself, and that you're not already impersonating.
   const canImpersonate =
@@ -182,6 +189,7 @@ export default async function AdminUserDetailPage({
         />
 
         {active === 'overview' ? (
+          <div className="space-y-5">
           <div className="grid gap-5 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -341,6 +349,70 @@ export default async function AdminUserDetailPage({
                 ) : null}
               </CardContent>
             </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Person record</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Link this account to an employee record so their training, compliance, and
+                self-service pages resolve to the right person. Each account maps to at most one
+                person in this tenant.
+              </p>
+              {canEditAccount ? (
+                <form action={setUserPersonLink} className="space-y-3">
+                  <input type="hidden" name="membershipId" value={id} />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="personId">Linked person</Label>
+                    <PersonSelectField
+                      name="personId"
+                      defaultValue={personLink.linked?.id ?? ''}
+                      options={personLink.options.map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                        hint: p.hint ?? undefined,
+                      }))}
+                      placeholder="No linked person"
+                      emptyLabel="No linked person"
+                    />
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Only active people not already tied to another account are listed.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    {personLink.linked ? (
+                      <a
+                        href={`/people/${personLink.linked.id}`}
+                        className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                      >
+                        Open {personLink.linked.name} →
+                      </a>
+                    ) : (
+                      <span />
+                    )}
+                    <Button type="submit" variant="outline">
+                      Save
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <p className="text-sm text-slate-700 dark:text-slate-200">
+                  {personLink.linked ? (
+                    <a
+                      href={`/people/${personLink.linked.id}`}
+                      className="font-medium text-teal-700 hover:underline dark:text-teal-400"
+                    >
+                      {personLink.linked.name}
+                    </a>
+                  ) : (
+                    'No linked person record.'
+                  )}
+                </p>
+              )}
+            </CardContent>
+          </Card>
           </div>
         ) : null}
 

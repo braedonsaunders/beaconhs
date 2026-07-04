@@ -61,13 +61,16 @@ import {
   ppeIssues,
   ppeItems,
   ppeTypes,
+  tenantUsers,
   trades,
   trainingCourses,
   trainingRecords,
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
+  users,
 } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -434,8 +437,25 @@ export default async function PersonDetailPage({
         : []
     const acksForThisPerson = acksForPerson.filter((a) => a.personId === id)
 
+    // Read-only view of the login account this person is linked to (managed from
+    // Admin → Users). membershipId lets an admin jump straight to that page.
+    const linkedAccount = row.person.userId
+      ? ((
+          await tx
+            .select({
+              membershipId: tenantUsers.id,
+              email: users.email,
+            })
+            .from(tenantUsers)
+            .innerJoin(users, eq(users.id, tenantUsers.userId))
+            .where(eq(tenantUsers.userId, row.person.userId))
+            .limit(1)
+        )[0] ?? null)
+      : null
+
     return {
       ...row,
+      linkedAccount,
       training,
       skills,
       incidentInvolvement,
@@ -489,6 +509,7 @@ export default async function PersonDetailPage({
     crewOptions,
     managerOptions,
     syncOrigin,
+    linkedAccount,
   } = data
   const signatureUrl = signatureAtt ? publicUrl(signatureAtt.r2Key) : null
   const openDrawer = typeof sp.drawer === 'string' ? sp.drawer : null
@@ -611,6 +632,23 @@ export default async function PersonDetailPage({
                     </Link>
                   ) : (
                     '—'
+                  )}
+                </SidebarRow>
+                <SidebarRow label="App account">
+                  {linkedAccount ? (
+                    can(ctx, 'admin.users.manage') ? (
+                      <Link
+                        href={`/admin/users/${linkedAccount.membershipId}`}
+                        className="text-teal-700 hover:underline"
+                        title={linkedAccount.email}
+                      >
+                        {linkedAccount.email}
+                      </Link>
+                    ) : (
+                      <span title={linkedAccount.email}>{linkedAccount.email}</span>
+                    )
+                  ) : (
+                    'Not linked'
                   )}
                 </SidebarRow>
                 {person.email ? (
@@ -758,16 +796,6 @@ export default async function PersonDetailPage({
 
             {active === 'overview' ? (
               <div className="space-y-4">
-                {synced ? (
-                  <Alert variant="info">
-                    <AlertTitle>Synced from {syncOrigin!.connectionName}</AlertTitle>
-                    <AlertDescription>
-                      Identity fields (name, job title, employee #, contact, department, trade,
-                      status, hire date) are kept in sync from {syncOrigin!.sourceSystem} and are
-                      read-only here — edit them at the source. App-only fields stay editable.
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
                 {!canEdit ? (
                   <Alert variant="info">
                     <AlertTitle>Read-only</AlertTitle>
