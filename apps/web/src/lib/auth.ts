@@ -40,13 +40,7 @@ async function resolvePersonId(
   const [row] = await tx
     .select({ id: people.id })
     .from(people)
-    .where(
-      and(
-        eq(people.userId, userId),
-        eq(people.tenantId, tenantId),
-        isNull(people.deletedAt),
-      ),
-    )
+    .where(and(eq(people.userId, userId), eq(people.tenantId, tenantId), isNull(people.deletedAt)))
     .limit(1)
   return row?.id ?? null
 }

@@ -99,7 +99,10 @@ export default async function OrgUnitsPage({
         params.sort === 'code'
           ? [params.dir === 'asc' ? asc(orgUnits.code) : desc(orgUnits.code)]
           : params.sort === 'level'
-            ? [params.dir === 'asc' ? asc(orgUnits.level) : desc(orgUnits.level), asc(orgUnits.name)]
+            ? [
+                params.dir === 'asc' ? asc(orgUnits.level) : desc(orgUnits.level),
+                asc(orgUnits.name),
+              ]
             : [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
 
       const [tot] = await tx.select({ c: count() }).from(orgUnits).where(whereClause)

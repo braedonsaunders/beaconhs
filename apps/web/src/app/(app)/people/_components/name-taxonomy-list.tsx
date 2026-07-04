@@ -124,7 +124,9 @@ export async function NameTaxonomyList({
     >
       {rows.length === 0 ? (
         <EmptyState
-          title={params.q ? `No ${title.toLowerCase()} match "${params.q}"` : `No ${title.toLowerCase()}`}
+          title={
+            params.q ? `No ${title.toLowerCase()} match "${params.q}"` : `No ${title.toLowerCase()}`
+          }
           description={
             params.q ? 'Try a different search.' : `Add a ${noun} people can be assigned to.`
           }

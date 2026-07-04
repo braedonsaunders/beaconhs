@@ -190,229 +190,229 @@ export default async function AdminUserDetailPage({
 
         {active === 'overview' ? (
           <div className="space-y-5">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
-                  <dt className="text-slate-500 dark:text-slate-400">Email</dt>
-                  <dd className="col-span-2 text-slate-900 dark:text-slate-100">
-                    {member.account.email}
-                  </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Joined</dt>
-                  <dd className="col-span-2 text-slate-900 dark:text-slate-100">
-                    {member.membership.joinedAt
-                      ? new Date(member.membership.joinedAt).toLocaleDateString()
-                      : '—'}
-                  </dd>
-                </dl>
-                <form action={updateAccountName} className="space-y-1.5">
-                  <input type="hidden" name="membershipId" value={id} />
-                  <Label htmlFor="name">Account name</Label>
-                  <div className="flex gap-2">
-                    <Input id="name" name="name" defaultValue={member.account.name} required />
-                    <Button type="submit" variant="outline">
-                      Save
-                    </Button>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    The member&apos;s name across the platform. Change their email in the Security
-                    tab.
-                  </p>
-                </form>
-                <form action={updateMemberDisplayName} className="space-y-1.5">
-                  <input type="hidden" name="membershipId" value={id} />
-                  <Label htmlFor="displayName">Display name in this tenant</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="displayName"
-                      name="displayName"
-                      defaultValue={member.membership.displayName ?? ''}
-                      placeholder={member.account.name}
-                    />
-                    <Button type="submit" variant="outline">
-                      Save
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Status & access</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  {member.membership.status === 'active' ? (
-                    <form action={setMemberStatus}>
-                      <input type="hidden" name="membershipId" value={id} />
-                      <input type="hidden" name="status" value="suspended" />
-                      <Button type="submit" variant="outline">
-                        Suspend member
-                      </Button>
-                    </form>
-                  ) : (
-                    <form action={setMemberStatus}>
-                      <input type="hidden" name="membershipId" value={id} />
-                      <input type="hidden" name="status" value="active" />
-                      <Button type="submit" variant="outline">
-                        {member.membership.status === 'invited' ? 'Mark active' : 'Reactivate'}
-                      </Button>
-                    </form>
-                  )}
-                  {member.membership.status === 'invited' ? (
-                    <form action={resendInvite}>
-                      <input type="hidden" name="membershipId" value={id} />
-                      <Button type="submit" variant="ghost">
-                        Resend invite
-                      </Button>
-                    </form>
-                  ) : null}
-                  <form action={removeMember}>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Profile</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
+                    <dt className="text-slate-500 dark:text-slate-400">Email</dt>
+                    <dd className="col-span-2 text-slate-900 dark:text-slate-100">
+                      {member.account.email}
+                    </dd>
+                    <dt className="text-slate-500 dark:text-slate-400">Joined</dt>
+                    <dd className="col-span-2 text-slate-900 dark:text-slate-100">
+                      {member.membership.joinedAt
+                        ? new Date(member.membership.joinedAt).toLocaleDateString()
+                        : '—'}
+                    </dd>
+                  </dl>
+                  <form action={updateAccountName} className="space-y-1.5">
                     <input type="hidden" name="membershipId" value={id} />
-                    <ConfirmButton
-                      type="submit"
-                      variant="destructive"
-                      confirmMessage={`Remove ${displayName} from this tenant? Their roles and permission overrides here will be deleted.`}
-                    >
-                      Remove from tenant
-                    </ConfirmButton>
-                  </form>
-                </div>
-
-                <div className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        Super-admin
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Full platform access across every tenant. Grant sparingly.
-                      </p>
+                    <Label htmlFor="name">Account name</Label>
+                    <div className="flex gap-2">
+                      <Input id="name" name="name" defaultValue={member.account.name} required />
+                      <Button type="submit" variant="outline">
+                        Save
+                      </Button>
                     </div>
-                    {canToggleSuperAdmin ? (
-                      <form action={setSuperAdmin}>
-                        <input type="hidden" name="userId" value={member.account.id} />
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      The member&apos;s name across the platform. Change their email in the Security
+                      tab.
+                    </p>
+                  </form>
+                  <form action={updateMemberDisplayName} className="space-y-1.5">
+                    <input type="hidden" name="membershipId" value={id} />
+                    <Label htmlFor="displayName">Display name in this tenant</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="displayName"
+                        name="displayName"
+                        defaultValue={member.membership.displayName ?? ''}
+                        placeholder={member.account.name}
+                      />
+                      <Button type="submit" variant="outline">
+                        Save
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Status & access</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {member.membership.status === 'active' ? (
+                      <form action={setMemberStatus}>
                         <input type="hidden" name="membershipId" value={id} />
-                        <input
-                          type="hidden"
-                          name="value"
-                          value={member.account.isSuperAdmin ? 'off' : 'on'}
-                        />
-                        <ConfirmButton
-                          type="submit"
-                          variant={member.account.isSuperAdmin ? 'outline' : 'default'}
-                          confirmMessage={
-                            member.account.isSuperAdmin
-                              ? `Revoke super-admin from ${displayName}?`
-                              : `Grant ${displayName} super-admin across the whole platform?`
-                          }
-                        >
-                          {member.account.isSuperAdmin ? 'Revoke' : 'Grant'}
-                        </ConfirmButton>
+                        <input type="hidden" name="status" value="suspended" />
+                        <Button type="submit" variant="outline">
+                          Suspend member
+                        </Button>
                       </form>
                     ) : (
-                      <Badge variant={member.account.isSuperAdmin ? 'warning' : 'secondary'}>
-                        {member.account.isSuperAdmin ? 'Yes' : 'No'}
-                      </Badge>
+                      <form action={setMemberStatus}>
+                        <input type="hidden" name="membershipId" value={id} />
+                        <input type="hidden" name="status" value="active" />
+                        <Button type="submit" variant="outline">
+                          {member.membership.status === 'invited' ? 'Mark active' : 'Reactivate'}
+                        </Button>
+                      </form>
                     )}
+                    {member.membership.status === 'invited' ? (
+                      <form action={resendInvite}>
+                        <input type="hidden" name="membershipId" value={id} />
+                        <Button type="submit" variant="ghost">
+                          Resend invite
+                        </Button>
+                      </form>
+                    ) : null}
+                    <form action={removeMember}>
+                      <input type="hidden" name="membershipId" value={id} />
+                      <ConfirmButton
+                        type="submit"
+                        variant="destructive"
+                        confirmMessage={`Remove ${displayName} from this tenant? Their roles and permission overrides here will be deleted.`}
+                      >
+                        Remove from tenant
+                      </ConfirmButton>
+                    </form>
                   </div>
-                </div>
 
-                {canImpersonate ? (
-                  <div className="rounded-md border border-rose-200 p-3 dark:border-rose-900/60">
+                  <div className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
+                      <div>
                         <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          Impersonate
+                          Super-admin
                         </p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          See the app exactly as {displayName}. Anything you do is recorded against
-                          you and ends after 30 minutes or when you exit.
+                          Full platform access across every tenant. Grant sparingly.
                         </p>
                       </div>
-                      <form action={startImpersonation}>
-                        <input type="hidden" name="membershipId" value={id} />
-                        <ConfirmButton
-                          type="submit"
-                          variant="outline"
-                          confirmMessage={`View the app as ${displayName}? You'll act on their behalf until you exit, and everything you do is audited.`}
-                        >
-                          View as user
-                        </ConfirmButton>
-                      </form>
+                      {canToggleSuperAdmin ? (
+                        <form action={setSuperAdmin}>
+                          <input type="hidden" name="userId" value={member.account.id} />
+                          <input type="hidden" name="membershipId" value={id} />
+                          <input
+                            type="hidden"
+                            name="value"
+                            value={member.account.isSuperAdmin ? 'off' : 'on'}
+                          />
+                          <ConfirmButton
+                            type="submit"
+                            variant={member.account.isSuperAdmin ? 'outline' : 'default'}
+                            confirmMessage={
+                              member.account.isSuperAdmin
+                                ? `Revoke super-admin from ${displayName}?`
+                                : `Grant ${displayName} super-admin across the whole platform?`
+                            }
+                          >
+                            {member.account.isSuperAdmin ? 'Revoke' : 'Grant'}
+                          </ConfirmButton>
+                        </form>
+                      ) : (
+                        <Badge variant={member.account.isSuperAdmin ? 'warning' : 'secondary'}>
+                          {member.account.isSuperAdmin ? 'Yes' : 'No'}
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Person record</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Link this account to an employee record so their training, compliance, and
-                self-service pages resolve to the right person. Each account maps to at most one
-                person in this tenant.
-              </p>
-              {canEditAccount ? (
-                <form action={setUserPersonLink} className="space-y-3">
-                  <input type="hidden" name="membershipId" value={id} />
-                  <div className="space-y-1.5">
-                    <Label htmlFor="personId">Linked person</Label>
-                    <PersonSelectField
-                      name="personId"
-                      defaultValue={personLink.linked?.id ?? ''}
-                      options={personLink.options.map((p) => ({
-                        value: p.id,
-                        label: p.name,
-                        hint: p.hint ?? undefined,
-                      }))}
-                      placeholder="No linked person"
-                      emptyLabel="No linked person"
-                    />
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Only active people not already tied to another account are listed.
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
+                  {canImpersonate ? (
+                    <div className="rounded-md border border-rose-200 p-3 dark:border-rose-900/60">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            Impersonate
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            See the app exactly as {displayName}. Anything you do is recorded
+                            against you and ends after 30 minutes or when you exit.
+                          </p>
+                        </div>
+                        <form action={startImpersonation}>
+                          <input type="hidden" name="membershipId" value={id} />
+                          <ConfirmButton
+                            type="submit"
+                            variant="outline"
+                            confirmMessage={`View the app as ${displayName}? You'll act on their behalf until you exit, and everything you do is audited.`}
+                          >
+                            View as user
+                          </ConfirmButton>
+                        </form>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Person record</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Link this account to an employee record so their training, compliance, and
+                  self-service pages resolve to the right person. Each account maps to at most one
+                  person in this tenant.
+                </p>
+                {canEditAccount ? (
+                  <form action={setUserPersonLink} className="space-y-3">
+                    <input type="hidden" name="membershipId" value={id} />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="personId">Linked person</Label>
+                      <PersonSelectField
+                        name="personId"
+                        defaultValue={personLink.linked?.id ?? ''}
+                        options={personLink.options.map((p) => ({
+                          value: p.id,
+                          label: p.name,
+                          hint: p.hint ?? undefined,
+                        }))}
+                        placeholder="No linked person"
+                        emptyLabel="No linked person"
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Only active people not already tied to another account are listed.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      {personLink.linked ? (
+                        <a
+                          href={`/people/${personLink.linked.id}`}
+                          className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                        >
+                          Open {personLink.linked.name} →
+                        </a>
+                      ) : (
+                        <span />
+                      )}
+                      <Button type="submit" variant="outline">
+                        Save
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <p className="text-sm text-slate-700 dark:text-slate-200">
                     {personLink.linked ? (
                       <a
                         href={`/people/${personLink.linked.id}`}
-                        className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                        className="font-medium text-teal-700 hover:underline dark:text-teal-400"
                       >
-                        Open {personLink.linked.name} →
+                        {personLink.linked.name}
                       </a>
                     ) : (
-                      <span />
+                      'No linked person record.'
                     )}
-                    <Button type="submit" variant="outline">
-                      Save
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <p className="text-sm text-slate-700 dark:text-slate-200">
-                  {personLink.linked ? (
-                    <a
-                      href={`/people/${personLink.linked.id}`}
-                      className="font-medium text-teal-700 hover:underline dark:text-teal-400"
-                    >
-                      {personLink.linked.name}
-                    </a>
-                  ) : (
-                    'No linked person record.'
-                  )}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         ) : null}
 

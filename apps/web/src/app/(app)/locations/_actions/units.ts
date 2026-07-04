@@ -75,7 +75,9 @@ export async function deleteOrgUnit(formData: FormData): Promise<void> {
       )}`,
     )
   }
-  await ctx.db((tx) => tx.update(orgUnits).set({ deletedAt: new Date() }).where(eq(orgUnits.id, id)))
+  await ctx.db((tx) =>
+    tx.update(orgUnits).set({ deletedAt: new Date() }).where(eq(orgUnits.id, id)),
+  )
   await recordAudit(ctx, {
     entityType: 'org_unit',
     entityId: id,

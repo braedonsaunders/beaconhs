@@ -40,9 +40,7 @@ export function NameDrawer({
       open={open}
       closeHref={closeHref}
       title={editing ? `Rename ${noun}` : `Add ${noun}`}
-      description={
-        editing ? `Rename this ${noun}.` : `Add a ${noun} people can be assigned to.`
-      }
+      description={editing ? `Rename this ${noun}.` : `Add a ${noun} people can be assigned to.`}
       size="sm"
     >
       <NameForm
