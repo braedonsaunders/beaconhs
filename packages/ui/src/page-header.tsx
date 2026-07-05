@@ -2,7 +2,7 @@
 // anchor forces a full document reload — which replays the boot splash and
 // refetches the whole shell on every record → list hop. The app injects its
 // client-side Link via UiLinkProvider (see link-context.tsx).
-import { UiLink } from './link-context'
+import { UiBackLink } from './link-context'
 import { cn } from './utils'
 
 export function PageHeader({
@@ -21,12 +21,11 @@ export function PageHeader({
   return (
     <div className={cn('space-y-2', className)}>
       {back ? (
-        <UiLink
+        <UiBackLink
           href={back.href}
+          label={back.label}
           className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
-        >
-          ← {back.label}
-        </UiLink>
+        />
       ) : null}
       {/* One row at every breakpoint: title on the left (truncates to make
           room), actions pinned right. Phones drop the description to keep the
@@ -67,12 +66,11 @@ export function DetailHeader({
   return (
     <header className="space-y-2">
       {back ? (
-        <UiLink
+        <UiBackLink
           href={back.href}
+          label={back.label}
           className="text-sm text-teal-700 hover:underline dark:text-teal-300"
-        >
-          ← {back.label}
-        </UiLink>
+        />
       ) : null}
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">

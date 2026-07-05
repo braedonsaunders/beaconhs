@@ -192,6 +192,22 @@ async function updatePersonField(formData: FormData) {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  // Use the person's name as the document title so back links that land here
+  // from elsewhere read "Back to Jamie Arsenault", not "Back to Person".
+  try {
+    const ctx = await requireRequestContext()
+    const name = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select({ firstName: people.firstName, lastName: people.lastName })
+        .from(people)
+        .where(and(eq(people.id, id), isNull(people.deletedAt)))
+        .limit(1)
+      return row ? `${row.firstName} ${row.lastName}`.trim() : null
+    })
+    if (name) return { title: name }
+  } catch {
+    // Fall through to the id-based title if context/lookup isn't available.
+  }
   return { title: `Person · ${id.slice(0, 8)}` }
 }
 

@@ -31,3 +31,45 @@ export function UiLink({
   const Link = useContext(UiLinkContext) ?? 'a'
   return <Link href={href} {...rest} />
 }
+
+// ---------------------------------------------------------------------------
+// Back-link injection
+//
+// A record page has one hardcoded "home" (its `back` prop), but is reachable
+// from many places. The app injects a smart back-link implementation — it
+// resolves the real return target from an in-app history stack (and an optional
+// ?from param), falling back to the page's hardcoded href/label when there's no
+// better signal. UI components render UiBackLink instead of a bare link so every
+// DetailHeader/PageHeader gains this behaviour with no per-page change.
+
+/** The `back` fallback plus styling; the impl upgrades `href`/`label` at render. */
+export type BackLinkProps = { href: string; label: string; className?: string }
+export type BackLinkLike = ComponentType<BackLinkProps>
+
+const UiBackLinkContext = createContext<BackLinkLike | null>(null)
+
+/** Mount once in the app shell to upgrade every DetailHeader/PageHeader back link. */
+export function UiBackLinkProvider({
+  backLink,
+  children,
+}: {
+  backLink: BackLinkLike
+  children: ReactNode
+}) {
+  return <UiBackLinkContext.Provider value={backLink}>{children}</UiBackLinkContext.Provider>
+}
+
+/**
+ * Renders the injected smart back link when one is provided, otherwise a plain
+ * `← label` anchor to `href`. Safe to use in server components (it's a client
+ * component that reads context at render time).
+ */
+export function UiBackLink({ href, label, className }: BackLinkProps) {
+  const Impl = useContext(UiBackLinkContext)
+  if (Impl) return <Impl href={href} label={label} className={className} />
+  return (
+    <UiLink href={href} className={className}>
+      ← {label}
+    </UiLink>
+  )
+}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SmartBackLink } from '@/components/smart-back-link'
 import { ClipboardList } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import {
@@ -168,12 +169,11 @@ export default async function AssessmentTypesPage({
             description="Quiz templates with question banks and passing scores."
             actions={
               <div className="flex items-center gap-2">
-                <Link
+                <SmartBackLink
                   href="/training/assessments"
+                  label="Back to attempts"
                   className="text-sm text-teal-700 hover:underline dark:text-teal-400"
-                >
-                  ← Back to attempts
-                </Link>
+                />
                 <form action={createAssessmentType}>
                   <Button type="submit">New assessment type</Button>
                 </form>

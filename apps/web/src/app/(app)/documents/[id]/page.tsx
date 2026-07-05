@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
@@ -372,12 +373,11 @@ export default async function DocumentDetailPage({
     <div className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
       <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
-        <Link
+        <SmartBackLink
           href="/documents"
+          label="Documents"
           className="shrink-0 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-        >
-          ← Documents
-        </Link>
+        />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">

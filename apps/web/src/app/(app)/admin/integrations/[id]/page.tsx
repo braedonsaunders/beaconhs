@@ -3,6 +3,7 @@
 // history.
 
 import Link from 'next/link'
+import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound, redirect } from 'next/navigation'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { Clock, Eye, Play, Settings2 } from 'lucide-react'
@@ -107,12 +108,11 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Link
+            <SmartBackLink
               href="/admin/integrations"
+              label="Integrations"
               className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-            >
-              ← Integrations
-            </Link>
+            />
             <form action={renameConnection} className="mt-1 flex items-center gap-2">
               <input type="hidden" name="id" value={conn.id} />
               <input

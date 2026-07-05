@@ -15,6 +15,7 @@ import {
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
 import { RiskMatrixProvider } from '@/components/risk-matrix'
+import { BackNavProviders } from '@/components/smart-back-link'
 import { ThemeProvider } from '@/components/theme-provider'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 
@@ -108,9 +109,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               that whole class of state in one place; the shell/sidebar stay
               mounted and update via fresh props as before. */}
           <RiskMatrixProvider matrix={tenant.riskMatrix}>
-            <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
-              {children}
-            </Fragment>
+            <BackNavProviders>
+              <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
+                {children}
+              </Fragment>
+            </BackNavProviders>
           </RiskMatrixProvider>
           <Toaster richColors position="top-right" />
         </AppShell>

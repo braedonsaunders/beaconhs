@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound, redirect } from 'next/navigation'
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import {
@@ -102,12 +102,11 @@ export default async function SyncRunPage({
     <PageContainer>
       <div className="space-y-6">
         <div className="space-y-1">
-          <Link
+          <SmartBackLink
             href={`/admin/integrations/${data.conn.id}`}
+            label={data.conn.name}
             className="text-xs text-slate-400 hover:text-slate-600"
-          >
-            ← {data.conn.name}
-          </Link>
+          />
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
               Sync run review

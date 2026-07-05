@@ -12,6 +12,7 @@
 // version via the `publishNewVersion` server action.
 
 import { useCallback, useEffect, useRef, useState, useTransition, useMemo } from 'react'
+import { SmartBackLink } from '@/components/smart-back-link'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -678,9 +679,11 @@ export function FormDesigner({
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/apps" className="shrink-0 text-sm text-teal-700 hover:underline">
-            ← Builder
-          </Link>
+          <SmartBackLink
+            href="/apps"
+            label="Builder"
+            className="shrink-0 text-sm text-teal-700 hover:underline"
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="truncate text-sm font-semibold">{appName}</span>

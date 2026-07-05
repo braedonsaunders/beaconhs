@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SmartBackLink } from '@/components/smart-back-link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
@@ -84,12 +85,11 @@ export default function NewTenantPage() {
     <PageContainer>
       <div className="mx-auto max-w-2xl">
         <div>
-          <Link
+          <SmartBackLink
             href="/platform/tenants"
+            label="Back to tenants"
             className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-400"
-          >
-            ← Back to tenants
-          </Link>
+          />
           <PageHeader
             title="New tenant"
             description="Super-admin only. Creates an empty tenant. Add an admin user from the Users page afterwards."
