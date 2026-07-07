@@ -14,7 +14,7 @@
 // On finish/skip the outcome is persisted via a server action so auto-start
 // tours never replay.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { recordWalkthroughProgress } from '@/lib/walkthroughs/actions'
 import { walkthroughById, type Walkthrough } from '@/lib/walkthroughs/registry'
@@ -44,12 +44,24 @@ export function WalkthroughProvider({
   const requestedId = searchParams.get('walkthrough')
   const requestedPreview = searchParams.get('wt_preview') === '1'
 
+  // The finish handler strips ?walkthrough= via router.replace, but this effect
+  // can re-run (active just cleared) BEFORE the new searchParams land — which
+  // would relaunch the tour it just closed. Remember the request we already
+  // consumed; the ref resets once the param is actually gone, so clicking a
+  // launch link again later still works.
+  const consumedRequestRef = useRef<string | null>(null)
+
   // URL-requested tour (help links + admin preview).
   useEffect(() => {
-    if (!requestedId || active) return
+    if (!requestedId) {
+      consumedRequestRef.current = null
+      return
+    }
+    if (active || consumedRequestRef.current === requestedId) return
     const walkthrough = walkthroughById(requestedId)
     if (!walkthrough) return
     if (!requestedPreview && !available.has(walkthrough.id)) return
+    consumedRequestRef.current = requestedId
     setActive({ walkthrough, preview: requestedPreview })
   }, [requestedId, requestedPreview, available, active])
 

@@ -121,9 +121,9 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         path: '/hazard-assessments',
-        target: 'a[href="/hazard-assessments/new"]',
+        target: 'a[href="/hazard-assessments?drawer=new"]',
         title: 'Start a new assessment',
-        body: 'Tap New to begin. Pick the assessment type your supervisor told you to use.',
+        body: 'Tap New assessment. Pick the assessment type your supervisor told you to use.',
       },
       {
         title: 'Tasks and hazards',
@@ -185,7 +185,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
         path: '/incidents',
         target: 'a[href="/incidents/new"]',
         title: 'Start a report',
-        body: 'Tap New incident. Do it as soon as you safely can — details fade fast.',
+        body: 'Tap Report incident. Do it as soon as you safely can — details fade fast.',
       },
       {
         title: 'What to include',
