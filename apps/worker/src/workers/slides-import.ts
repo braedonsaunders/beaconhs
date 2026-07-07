@@ -63,11 +63,26 @@ async function resolveSoffice(): Promise<string> {
   )
 }
 
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/g, '&')
+}
+
 /** Extract the visible text runs from a notes-slide XML document. */
 function notesTextFromXml(xml: string): string {
-  // Text runs live in <a:t>…</a:t>. Strip the slide-number placeholder
-  // fields by dropping runs that are purely numeric page artifacts.
-  const runs = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((r) => r[1] ?? '')
+  // Placeholder fields (<a:fld> — slide number, date) carry literal artifact
+  // text like "<number>"; LibreOffice adds one to every notes slide it saves.
+  // Drop the fields entirely, then collect the real <a:t>…</a:t> runs.
+  const withoutFields = xml.replace(/<a:fld\b[\s\S]*?<\/a:fld>/g, '')
+  const runs = [...withoutFields.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((r) =>
+    decodeXmlEntities(r[1] ?? ''),
+  )
   const text = runs.join(' ').replace(/\s+/g, ' ').trim()
   return text && !/^\d+$/.test(text) ? text : ''
 }
