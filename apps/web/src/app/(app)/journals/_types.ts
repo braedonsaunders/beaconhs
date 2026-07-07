@@ -10,7 +10,7 @@ export type GroupBy = 'date' | 'site' | 'topic'
 
 export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: 'date', label: 'Date' },
-  { value: 'site', label: 'Site' },
+  { value: 'site', label: 'Location' },
   { value: 'topic', label: 'Topic' },
 ]
 

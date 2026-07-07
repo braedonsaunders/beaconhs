@@ -139,8 +139,8 @@ export default async function JournalRecordsPage({
                 basePath="/journals/records"
                 currentParams={sp}
                 paramKey="site"
-                label="Site"
-                allLabel="All sites"
+                label="Location"
+                allLabel="All locations"
                 options={facets.sites.map((s) => ({ value: s.id, label: s.name, count: s.count }))}
               />
             ) : null}

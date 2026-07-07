@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     'Date',
     'Title',
     'Author',
-    'Site',
+    'Location',
     'Type',
     'Status',
     'Tags',

@@ -356,8 +356,11 @@ export function JournalEditor({
       </div>
 
       {/* Writing surface — flows within the pane's single scroll region (no
-          nested scrollbar; the EditorPane body owns the scroll). */}
-      <div className="mx-auto max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
+          nested scrollbar; the EditorPane body owns the scroll). w-full is
+          load-bearing: inside the flex column, mx-auto alone disables flex
+          stretching, so an EMPTY document collapses the editable area to 0px
+          and there is nothing to click into. */}
+      <div className="mx-auto w-full max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
         <EditorContent editor={editor} />
       </div>
     </div>

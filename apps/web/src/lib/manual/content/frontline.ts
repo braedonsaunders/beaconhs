@@ -41,7 +41,7 @@ Open **Journals** in the left menu. The page opens on your most recent entry. On
 2. Tap **New entry**. An entry for today opens.
 3. Type what happened. Your words save automatically as you go — there is no save button.
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
-5. Set the site and people in the bar above the text, if they apply.
+5. Set the location and people in the bar above the text, if they apply.
 
 ## Adding photos
 

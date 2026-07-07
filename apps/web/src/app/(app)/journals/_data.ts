@@ -152,10 +152,12 @@ export async function listMetaOptions(
   ctx: RequestContext,
 ): Promise<{ sites: JournalOption[]; people: JournalOption[] }> {
   return ctx.db(async (tx) => {
+    // Locations = TOP-LEVEL org units (customers). This tenant model logs
+    // journals against the customer/location, not project/site children.
     const sites = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
+      .where(eq(orgUnits.level, 'customer'))
       .orderBy(asc(orgUnits.name))
       .limit(500)
     const ppl = await tx
@@ -497,7 +499,7 @@ export async function buildTree(
   })
 
   if (groupBy === 'topic') return treeByTopic(ctx, where)
-  if (groupBy === 'site') return treeByKey(rows, (r) => r.siteName ?? 'No site')
+  if (groupBy === 'site') return treeByKey(rows, (r) => r.siteName ?? 'No location')
   return treeByDate(rows)
 }
 

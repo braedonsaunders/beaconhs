@@ -97,7 +97,7 @@ export function JournalView({
       {/* Meta row */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-y border-slate-100 py-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
         <span className="inline-flex items-center gap-1.5">
-          <MapPin size={13} className="text-slate-400" /> {entry.siteName ?? 'No site'}
+          <MapPin size={13} className="text-slate-400" /> {entry.siteName ?? 'No location'}
         </span>
         <span className="inline-flex items-center gap-1.5 capitalize">
           <Briefcase size={13} className="text-slate-400" /> {entry.definition}

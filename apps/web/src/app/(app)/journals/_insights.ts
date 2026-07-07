@@ -66,7 +66,7 @@ export async function getInsights(ctx: RequestContext): Promise<Insights> {
 
     const bySiteRows = await tx
       .select({
-        name: sql<string>`coalesce(${orgUnits.name}, 'No site')`,
+        name: sql<string>`coalesce(${orgUnits.name}, 'No location')`,
         count: sql<number>`count(*)::int`,
       })
       .from(journalEntries)

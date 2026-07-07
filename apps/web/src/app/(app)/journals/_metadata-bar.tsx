@@ -61,16 +61,16 @@ export function MetadataBar({
           />
         </Field>
 
-        <Field label="Site" icon={<MapPin size={13} />}>
+        <Field label="Location" icon={<MapPin size={13} />}>
           <SearchSelect
             value={entry.siteOrgUnitId ?? ''}
             disabled={!editable}
             clearable
-            emptyLabel="No site"
-            placeholder="No site"
-            searchPlaceholder="Search sites…"
-            sheetTitle="Site"
-            ariaLabel="Site"
+            emptyLabel="No location"
+            placeholder="No location"
+            searchPlaceholder="Search locations…"
+            sheetTitle="Location"
+            ariaLabel="Location"
             onChange={(v) => onPatch({ siteOrgUnitId: v || null })}
             options={sites.map((s) => ({ value: s.id, label: s.name }))}
           />
