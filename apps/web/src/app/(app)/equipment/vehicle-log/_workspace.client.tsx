@@ -283,12 +283,23 @@ export function VehicleLogWorkspaceClient({
   const savedRef = useRef<Record<string, string>>({})
   const scopeKeyRef = useRef('')
   const savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const draftsRef = useRef(drafts)
+
+  // Keep the ref in lock-step with state so the merge effect below can read
+  // the latest drafts without putting `drafts` in its dependency list. This
+  // effect is declared first so it runs before the merge on every commit.
+  useEffect(() => {
+    draftsRef.current = drafts
+  }, [drafts])
 
   const scopeKey = `${workspace.month.key}:${workspace.selectedDriverId}:${workspace.selectedEquipmentId}:${workspace.mode}`
 
   // Merge server rows into local drafts. On a scope change (month / driver /
   // vehicle / mode) everything resets; on a background refresh (row save,
   // import) only clean rows are replaced so in-flight typing is never lost.
+  // The merge is computed in the effect body — never inside a setState
+  // updater — because it mutates savedRef, and updaters must stay pure
+  // (React dev double-invokes them, which would corrupt the dirty check).
   useEffect(() => {
     const scopeChanged = scopeKeyRef.current !== scopeKey
     scopeKeyRef.current = scopeKey
@@ -299,20 +310,20 @@ export function VehicleLogWorkspaceClient({
       setActionResult(null)
       setImportPickerOpen(false)
     }
-    setDrafts((current) => {
-      const next: Record<string, VehicleLogEntryDraft> = {}
-      for (const row of workspace.rows) {
-        const existing = scopeChanged ? undefined : current[row.date]
-        const dirty = existing && serializeDraft(existing) !== savedRef.current[row.date]
-        if (existing && dirty) {
-          next[row.date] = existing
-        } else {
-          next[row.date] = cloneDraft(row.entry, workspace.mode)
-          savedRef.current[row.date] = serializeDraft(row.entry)
-        }
+    const current = draftsRef.current
+    const next: Record<string, VehicleLogEntryDraft> = {}
+    for (const row of workspace.rows) {
+      const existing = scopeChanged ? undefined : current[row.date]
+      const dirty = existing && serializeDraft(existing) !== savedRef.current[row.date]
+      if (existing && dirty) {
+        next[row.date] = existing
+      } else {
+        next[row.date] = cloneDraft(row.entry, workspace.mode)
+        savedRef.current[row.date] = serializeDraft(row.entry)
       }
-      return next
-    })
+    }
+    draftsRef.current = next
+    setDrafts(next)
     setSelectedImportSourceId((current) => {
       const sources = workspace.importSources.sources
       if (sources.some((source) => source.id === current && source.active)) return current
@@ -559,7 +570,7 @@ export function VehicleLogWorkspaceClient({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="grid gap-3 border-b border-slate-100 p-3 lg:grid-cols-[1.15fr_1.15fr_auto_1fr] dark:border-slate-800">
+        <div className="grid grid-cols-1 gap-3 border-b border-slate-100 p-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_auto_minmax(0,1fr)] dark:border-slate-800">
           <div className="space-y-1">
             <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
               Driver
