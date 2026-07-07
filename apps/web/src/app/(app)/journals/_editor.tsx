@@ -359,8 +359,25 @@ export function JournalEditor({
           nested scrollbar; the EditorPane body owns the scroll). w-full is
           load-bearing: inside the flex column, mx-auto alone disables flex
           stretching, so an EMPTY document collapses the editable area to 0px
-          and there is nothing to click into. */}
-      <div className="mx-auto w-full max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
+          and there is nothing to click into. Clicks on the padding gutter
+          focus the editor too — the whole surface is a writing target. */}
+      <div
+        // The arbitrary-variant chain renders TipTap's data-placeholder as the
+        // empty-entry prompt (the Placeholder extension ships no CSS of its own
+        // — without this the empty editor is a blank void with no cue).
+        className={cn(
+          'mx-auto w-full max-w-3xl cursor-text px-5 py-6 sm:px-8 sm:py-8',
+          '[&_p.is-editor-empty:first-child]:before:pointer-events-none',
+          '[&_p.is-editor-empty:first-child]:before:float-left',
+          '[&_p.is-editor-empty:first-child]:before:h-0',
+          '[&_p.is-editor-empty:first-child]:before:text-slate-400',
+          'dark:[&_p.is-editor-empty:first-child]:before:text-slate-500',
+          '[&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]',
+        )}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && editable) editor.chain().focus('end').run()
+        }}
+      >
         <EditorContent editor={editor} />
       </div>
     </div>
