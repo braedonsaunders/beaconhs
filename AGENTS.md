@@ -15,6 +15,7 @@ coherent than they found it.
 4. Ensure that before you build something new, there is no duplicate thing already built. Search first, inspect nearby modules, and reuse the existing system where it fits.
 5. Always unify existing systems and abstract shared behavior when it reduces real duplication or reconciles competing implementations.
 6. No dead code, duplicate implementations, abandoned files, unused exports, stale routes, or shadow systems. Always immediately flag and clean up dead or duplicate code.
+7. Keep the in-app user guide truthful. Whenever you add, change, remove, or rename a user-facing feature, route, button, or flow, update the matching manual article(s) in `apps/web/src/lib/manual/content/*` (and add a new article for a new module) in the same change. If the change moves or renames anything a guided tour points at, update the walkthrough steps in `apps/web/src/lib/walkthroughs/registry.ts` too. See "In-app user guide & walkthroughs" below.
 
 ## Quick Start
 
@@ -163,6 +164,29 @@ shared packages, database schema, auth, tenant scoping, workers, or UI primitive
 - Before adding a native module, verify it cannot be a configuration of forms,
   compliance, reports, data sources, or an existing module.
 - If two routes or packages solve the same product concept, consolidate them.
+
+## In-app User Guide & Walkthroughs
+
+- The platform ships a built-in, permission-aware user manual at `/help`,
+  written in plain language for non-technical construction trades workers.
+- Articles are code: `apps/web/src/lib/manual/content/*` (typed by
+  `apps/web/src/lib/manual/types.ts`, assembled in
+  `apps/web/src/lib/manual/registry.ts`). Visibility gates mirror the nav
+  registry's permissions so people only see help for features they can open.
+- The AI assistant reads the same registry via the `search_user_guide` /
+  `read_user_guide` tools — a stale article means the assistant gives wrong
+  instructions, not just a stale page.
+- Guided tours (spotlight walkthroughs) are defined in
+  `apps/web/src/lib/walkthroughs/registry.ts`; per-tenant role/auto-start
+  config lives in `walkthrough_settings` and is edited at
+  `/admin/walkthroughs` (with Preview). Steps target
+  `data-walkthrough="..."` attributes and stable `a[href="..."]` selectors —
+  keep those attributes when refactoring the components they sit on.
+- MANDATORY: any change to user-facing UI or flows updates the affected
+  manual articles and walkthrough steps in the same commit. New module =
+  new article (+ tour if it's a frontline task). Removed/renamed feature =
+  article and steps updated. Manual style: short sentences, numbered steps,
+  bold the exact button labels, no jargon.
 
 ## Quality Bar
 
