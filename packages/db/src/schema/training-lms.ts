@@ -332,6 +332,11 @@ export const trainingLessons = pgTable(
     // PPTX import lifecycle (worker writes these)
     importStatus: text('import_status'), // 'pending' | 'processing' | 'complete' | 'failed'
     importError: text('import_error'),
+    // PPTX master copy: when set, the referenced attachment (the uploaded
+    // .pptx) is the deck's source of truth — slides[] is a derived render that
+    // the worker replaces after every import/edit, and the deck is edited in
+    // the PowerPoint editor (Collabora) instead of the canvas editor.
+    sourceAttachmentId: uuid('source_attachment_id'),
     // kind = 'quiz' → existing native assessment engine
     assessmentTypeId: uuid('assessment_type_id').references(() => trainingAssessmentTypes.id, {
       onDelete: 'set null',
@@ -536,6 +541,8 @@ export const trainingContentItems = pgTable(
     slides: jsonb('slides').$type<Slide[]>().default([]).notNull(),
     importStatus: text('import_status'),
     importError: text('import_error'),
+    // PPTX master copy (see trainingLessons.sourceAttachmentId).
+    sourceAttachmentId: uuid('source_attachment_id'),
     attachmentId: uuid('attachment_id'),
     embedUrl: text('embed_url'),
     tags: jsonb('tags').$type<string[]>().default([]).notNull(),

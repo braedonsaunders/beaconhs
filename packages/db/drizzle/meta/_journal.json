@@ -106,6 +106,13 @@
       "when": 1783150000000,
       "tag": "0014_walkthroughs",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783250000000,
+      "tag": "0015_training_pptx_master",
+      "breakpoints": true
     }
   ]
 }
