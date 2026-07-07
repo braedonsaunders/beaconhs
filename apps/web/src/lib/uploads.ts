@@ -5,16 +5,28 @@ import { attachments } from '@beaconhs/db/schema'
 import { newAttachmentKey, presignPut, publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from './auth'
 
-const requestSchema = z.object({
-  kind: z.enum(['image', 'document', 'video', 'audio', 'signature', 'other']),
-  filename: z.string().min(1).max(255),
-  contentType: z.string().min(1).max(120),
-  sizeBytes: z
-    .number()
-    .int()
-    .nonnegative()
-    .max(50 * 1024 * 1024),
-})
+// Per-kind upload ceilings. Documents/videos go far beyond the old 50 MB cap
+// because complex PowerPoint masters and field-shot videos routinely exceed it
+// (uploads are presigned straight to storage, so the bytes never transit the app).
+const MAX_UPLOAD_BYTES: Record<string, number> = {
+  image: 50 * 1024 * 1024,
+  signature: 10 * 1024 * 1024,
+  audio: 200 * 1024 * 1024,
+  document: 500 * 1024 * 1024,
+  video: 500 * 1024 * 1024,
+  other: 500 * 1024 * 1024,
+}
+
+const requestSchema = z
+  .object({
+    kind: z.enum(['image', 'document', 'video', 'audio', 'signature', 'other']),
+    filename: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(120),
+    sizeBytes: z.number().int().nonnegative(),
+  })
+  .refine((v) => v.sizeBytes <= (MAX_UPLOAD_BYTES[v.kind] ?? 0), {
+    message: 'File is too large for this upload type',
+  })
 
 const finalizeSchema = z.object({
   kind: z.enum(['image', 'document', 'video', 'audio', 'signature', 'other']),

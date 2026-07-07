@@ -59,6 +59,23 @@ services:
       - '1025:1025'
       - '8025:8025'
 
+  # In-browser PowerPoint editor for PPTX-mastered training decks. The app
+  # iframes http://localhost:9980; Collabora calls back into the app's
+  # /wopi/files/* routes at host.docker.internal:3000 (COLLABORA_WOPI_URL).
+  collabora:
+    image: collabora/code:latest
+    container_name: beaconhs-collabora
+    environment:
+      # Allow the WOPI host (this app, as seen from inside the container).
+      - aliasgroup1=http://host.docker.internal:3000
+      # Plain http locally + let the app's origin iframe the editor.
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:net.frame_ancestors=http://localhost:3000
+    ports:
+      - '9980:9980'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:
