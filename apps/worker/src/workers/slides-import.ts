@@ -27,7 +27,13 @@ import { randomUUID } from 'node:crypto'
 import { eq, inArray } from 'drizzle-orm'
 import JSZip from 'jszip'
 import { db, withTenant } from '@beaconhs/db'
-import { attachments, trainingContentItems, trainingLessons, type Slide } from '@beaconhs/db/schema'
+import {
+  attachments,
+  renderedPageAttachmentIds,
+  trainingContentItems,
+  trainingLessons,
+  type Slide,
+} from '@beaconhs/db/schema'
 import { deleteObject, getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 
@@ -156,32 +162,6 @@ async function extractNotes(pptx: Buffer): Promise<Map<number, string>> {
     // Notes are best-effort — a malformed zip should not fail the import.
   }
   return notes
-}
-
-/**
- * Attachment ids of the locked full-bleed page renders this worker produces —
- * one per slide, never referenced anywhere else. Used to garbage-collect a
- * superseded render (rows + objects) after the deck is replaced.
- */
-function renderedPageAttachmentIds(slides: Slide[]): string[] {
-  const ids: string[] = []
-  for (const slide of slides) {
-    if (slide.layout !== 'canvas') continue
-    for (const el of slide.elements ?? []) {
-      if (
-        el.kind === 'image' &&
-        el.locked === true &&
-        el.attachmentId &&
-        el.x === 0 &&
-        el.y === 0 &&
-        el.w === 960 &&
-        el.h === 540
-      ) {
-        ids.push(el.attachmentId)
-      }
-    }
-  }
-  return ids
 }
 
 /** Best-effort delete of a render's page-image attachments (rows + objects). */

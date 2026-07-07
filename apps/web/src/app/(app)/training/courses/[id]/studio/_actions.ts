@@ -19,6 +19,7 @@ import { enqueueSlidesImport } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { purgeDeckAssets } from '../../../pptx/_lib'
 
 type LessonKind = 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
 type CompletionRule = 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
@@ -77,16 +78,32 @@ export async function updateModule(moduleId: string, courseId: string, formData:
 export async function deleteModule(moduleId: string, courseId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  await ctx.db(async (tx) => {
+  const decks = await ctx.db(async (tx) => {
+    const rows = await tx
+      .select({
+        slides: trainingLessons.slides,
+        sourceAttachmentId: trainingLessons.sourceAttachmentId,
+      })
+      .from(trainingLessons)
+      .where(eq(trainingLessons.moduleId, moduleId))
     const now = new Date()
     await tx
       .update(trainingLessons)
-      .set({ deletedAt: now })
+      .set({ deletedAt: now, slides: [], sourceAttachmentId: null })
       .where(eq(trainingLessons.moduleId, moduleId))
     await tx
       .update(trainingCourseModules)
       .set({ deletedAt: now })
       .where(eq(trainingCourseModules.id, moduleId))
+    return rows
+  })
+  const purged = await purgeDeckAssets(ctx.db, decks)
+  await recordAudit(ctx, {
+    entityType: 'training_course_module',
+    entityId: moduleId,
+    action: 'delete',
+    summary: 'Deleted module and its lessons',
+    metadata: purged ? { purgedAttachments: purged } : {},
   })
   revalidatePath(studioPath(courseId))
 }
@@ -398,11 +415,28 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
 export async function deleteLesson(lessonId: string, courseId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  await ctx.db(async (tx) => {
+  const deck = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        slides: trainingLessons.slides,
+        sourceAttachmentId: trainingLessons.sourceAttachmentId,
+      })
+      .from(trainingLessons)
+      .where(eq(trainingLessons.id, lessonId))
+      .limit(1)
     await tx
       .update(trainingLessons)
-      .set({ deletedAt: new Date() })
+      .set({ deletedAt: new Date(), slides: [], sourceAttachmentId: null })
       .where(eq(trainingLessons.id, lessonId))
+    return row ?? null
+  })
+  const purged = deck ? await purgeDeckAssets(ctx.db, [deck]) : 0
+  await recordAudit(ctx, {
+    entityType: 'training_lesson',
+    entityId: lessonId,
+    action: 'delete',
+    summary: 'Deleted lesson',
+    metadata: purged ? { purgedAttachments: purged } : {},
   })
   revalidatePath(studioPath(courseId))
 }

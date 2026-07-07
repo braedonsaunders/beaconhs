@@ -252,6 +252,33 @@ export function sanitizeCanvasSlide(slide: Slide): Slide {
   }
 }
 
+/**
+ * Attachment ids of the locked full-bleed page renders the slides-import
+ * worker produces — one per slide, created solely by the renderer and never
+ * referenced elsewhere. Used to garbage-collect superseded renders (worker)
+ * and to purge a deck's files when its lesson / library item is deleted (web).
+ */
+export function renderedPageAttachmentIds(slides: Slide[]): string[] {
+  const ids: string[] = []
+  for (const slide of slides) {
+    if (slide.layout !== 'canvas') continue
+    for (const el of slide.elements ?? []) {
+      if (
+        el.kind === 'image' &&
+        el.locked === true &&
+        el.attachmentId &&
+        el.x === 0 &&
+        el.y === 0 &&
+        el.w === 960 &&
+        el.h === 540
+      ) {
+        ids.push(el.attachmentId)
+      }
+    }
+  }
+  return ids
+}
+
 // Per-criteria checklist on a practical (hands-on) lesson, signed off by an
 // evaluator with training manage permission.
 export type PracticalCriterion = { id: string; text: string }

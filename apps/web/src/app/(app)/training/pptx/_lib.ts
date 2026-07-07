@@ -1,10 +1,16 @@
-// Shared loader for the PowerPoint-master surfaces (editor page, download
-// route, detach action): resolves a deck target (lesson or library item), its
-// master pptx attachment, and where "back" goes.
+// Shared helpers for the PowerPoint-master surfaces: deck-target resolution
+// (editor session, download route) and deck-file purge on deletion.
 
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
+import {
+  attachments,
+  renderedPageAttachmentIds,
+  trainingContentItems,
+  trainingLessons,
+  type Slide,
+} from '@beaconhs/db/schema'
+import { deleteObject } from '@beaconhs/storage'
 import type { WopiDeckTarget } from '@/lib/wopi'
 
 export type DeckMaster = {
@@ -80,4 +86,44 @@ export async function loadDeckMaster(
 
     return { target, targetId, title: title ?? 'Slides', backHref, attachment: att }
   })
+}
+
+/**
+ * Purge a deck's files when its lesson / library item is deleted: the pptx
+ * master and every rendered page image (attachment rows + storage objects).
+ * Decks are the heaviest content in the platform (a 100 MB master renders to
+ * hundreds of page images), so deletion reclaims them instead of parking them
+ * on the soft-deleted row — the deck is recreatable only by re-importing the
+ * file anyway. Returns the number of attachments removed.
+ */
+export async function purgeDeckAssets(
+  db: <T>(fn: (tx: Database) => Promise<T>) => Promise<T>,
+  decks: { slides: Slide[] | null; sourceAttachmentId: string | null }[],
+): Promise<number> {
+  const ids = new Set<string>()
+  for (const deck of decks) {
+    for (const id of renderedPageAttachmentIds(deck.slides ?? [])) ids.add(id)
+    if (deck.sourceAttachmentId) ids.add(deck.sourceAttachmentId)
+  }
+  if (ids.size === 0) return 0
+
+  const rows = await db(async (tx) => {
+    const found = await tx
+      .select({ id: attachments.id, key: attachments.r2Key })
+      .from(attachments)
+      .where(inArray(attachments.id, [...ids]))
+    if (found.length > 0) {
+      await tx.delete(attachments).where(
+        inArray(
+          attachments.id,
+          found.map((r) => r.id),
+        ),
+      )
+    }
+    return found
+  })
+  // Objects go best-effort after the rows — a failed object delete leaves an
+  // unreferenced blob, never a broken reference.
+  await Promise.all(rows.map((r) => deleteObject({ key: r.key }).catch(() => {})))
+  return rows.length
 }

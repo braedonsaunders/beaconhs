@@ -12,6 +12,7 @@ import { enqueueSlidesImport } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { purgeDeckAssets } from '../pptx/_lib'
 
 type ContentKind = 'rich' | 'video' | 'file' | 'embed' | 'slides'
 
@@ -118,7 +119,15 @@ export async function importContentItemPptx(id: string, attachmentId: string) {
 export async function deleteContentItem(id: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  await ctx.db(async (tx) => {
+  const deck = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({
+        slides: trainingContentItems.slides,
+        sourceAttachmentId: trainingContentItems.sourceAttachmentId,
+      })
+      .from(trainingContentItems)
+      .where(eq(trainingContentItems.id, id))
+      .limit(1)
     // Detach lessons that reference this item (content_item_id is a bare uuid).
     await tx
       .update(trainingLessons)
@@ -126,14 +135,17 @@ export async function deleteContentItem(id: string) {
       .where(eq(trainingLessons.contentItemId, id))
     await tx
       .update(trainingContentItems)
-      .set({ deletedAt: new Date() })
+      .set({ deletedAt: new Date(), slides: [], sourceAttachmentId: null })
       .where(eq(trainingContentItems.id, id))
+    return row ?? null
   })
+  const purged = deck ? await purgeDeckAssets(ctx.db, [deck]) : 0
   await recordAudit(ctx, {
     entityType: 'training_content_item',
     entityId: id,
     action: 'delete',
     summary: 'Deleted library item',
+    metadata: purged ? { purgedAttachments: purged } : {},
   })
   revalidatePath('/training/library')
   redirect('/training/library')
