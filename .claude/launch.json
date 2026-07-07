@@ -7,6 +7,22 @@
       "runtimeArgs": ["--filter", "@beaconhs/web", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "web-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "-C",
+        "/Users/braedonsaunders/Documents/Code/beaconhs-preview",
+        "--filter",
+        "@beaconhs/web",
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3105"
+      ],
+      "port": 3105
     }
   ]
 }
