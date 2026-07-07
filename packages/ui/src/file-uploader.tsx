@@ -51,7 +51,7 @@ export type FileUploaderProps = {
   accept?: string
   /** Allow more than one file at a time. */
   multiple?: boolean
-  /** Max size per file in bytes. Default 50 MB. */
+  /** Max size per file in bytes. Defaults per kind (mirrors the server caps). */
   maxSize?: number
   /** Compact dropzone (no big help text). */
   compact?: boolean
@@ -68,7 +68,16 @@ type Item = {
   progress?: number
 }
 
-const DEFAULT_MAX = 50 * 1024 * 1024
+// Client-side mirror of the server's per-kind ceilings (apps/web requestUpload)
+// so oversized files fail fast with a clear message instead of a server error.
+const DEFAULT_MAX_BY_KIND: Record<AttachmentKind, number> = {
+  image: 50 * 1024 * 1024,
+  signature: 10 * 1024 * 1024,
+  audio: 200 * 1024 * 1024,
+  document: 500 * 1024 * 1024,
+  video: 500 * 1024 * 1024,
+  other: 500 * 1024 * 1024,
+}
 
 export function FileUploader({
   requestUploadAction,
@@ -77,12 +86,13 @@ export function FileUploader({
   kind = 'document',
   accept,
   multiple = false,
-  maxSize = DEFAULT_MAX,
+  maxSize,
   compact = false,
   className,
   label = 'Drop files here or click to select',
   hint,
 }: FileUploaderProps) {
+  const effectiveMaxSize = maxSize ?? DEFAULT_MAX_BY_KIND[kind] ?? 50 * 1024 * 1024
   const inputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Item[]>([])
   const [dragOver, setDragOver] = useState(false)
@@ -92,10 +102,10 @@ export function FileUploader({
       const updateItem = (patch: Partial<Item>) =>
         setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
 
-      if (file.size > maxSize) {
+      if (file.size > effectiveMaxSize) {
         updateItem({
           status: 'error',
-          error: `File exceeds ${Math.round(maxSize / 1024 / 1024)} MB limit`,
+          error: `File exceeds ${Math.round(effectiveMaxSize / 1024 / 1024)} MB limit`,
         })
         return
       }
@@ -159,7 +169,7 @@ export function FileUploader({
         publicUrl: req.publicUrl,
       })
     },
-    [finalizeUploadAction, kind, maxSize, onUploaded, requestUploadAction],
+    [finalizeUploadAction, kind, effectiveMaxSize, onUploaded, requestUploadAction],
   )
 
   const handleFiles = useCallback(
