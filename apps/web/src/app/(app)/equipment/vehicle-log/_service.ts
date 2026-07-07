@@ -251,13 +251,17 @@ export function computeTotalKm(input: {
   businessKm?: number | null
   personalKm?: number | null
 }): number | null {
-  if (
-    input.entryMode === 'odometer' &&
-    typeof input.startOdometer === 'number' &&
-    typeof input.endOdometer === 'number' &&
-    input.endOdometer >= input.startOdometer
-  ) {
-    return input.endOdometer - input.startOdometer
+  // Odometer mode mirrors the legacy simple log: total is strictly end − start.
+  // Personal km rides along as its own column and never feeds the total.
+  if (input.entryMode === 'odometer') {
+    if (
+      typeof input.startOdometer === 'number' &&
+      typeof input.endOdometer === 'number' &&
+      input.endOdometer >= input.startOdometer
+    ) {
+      return input.endOdometer - input.startOdometer
+    }
+    return null
   }
   if (input.businessKm != null || input.personalKm != null) {
     return (input.businessKm ?? 0) + (input.personalKm ?? 0)
@@ -527,7 +531,9 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
     endOdometer: entryMode === 'odometer' ? endOdometer : null,
     kmDriven,
     businessKm: entryMode === 'destination' ? businessKm : null,
-    personalKm: entryMode === 'destination' ? personalKm : null,
+    // Personal km exists in both modes — the legacy simple (odometer) log has
+    // its own PERSONAL column alongside start/end.
+    personalKm,
     siteOrgUnitId: input.siteOrgUnitId || null,
     otherDestination: input.otherDestination?.trim() || null,
     hoursOnSite,

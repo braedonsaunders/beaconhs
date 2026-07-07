@@ -76,7 +76,7 @@ async function updateEntry(formData: FormData) {
     const entryMode = existing.entryMode
     const fields =
       entryMode === 'odometer'
-        ? { startOdometer, endOdometer, businessKm: null, personalKm: null }
+        ? { startOdometer, endOdometer, businessKm: null, personalKm }
         : { startOdometer: null, endOdometer: null, businessKm, personalKm }
     const kmDriven = computeTotalKm({ entryMode, ...fields })
     try {
@@ -282,6 +282,7 @@ export default async function TruckLogDetailPage({
                   : [
                       { label: 'Start odometer', value: entry.startOdometer ?? '—' },
                       { label: 'End odometer', value: entry.endOdometer ?? '—' },
+                      { label: 'Personal km', value: entry.personalKm ?? '—' },
                     ]),
                 { label: 'Km driven', value: entry.kmDriven ?? '—' },
                 { label: 'Hours on site', value: entry.hoursOnSite ?? '—' },
@@ -386,6 +387,15 @@ export default async function TruckLogDetailPage({
                             min="0"
                             step="1"
                             defaultValue={entry.endOdometer ?? ''}
+                          />
+                        </Field>
+                        <Field label="Personal km">
+                          <Input
+                            name="personalKm"
+                            type="number"
+                            min="0"
+                            step="1"
+                            defaultValue={entry.personalKm ?? ''}
                           />
                         </Field>
                       </>
