@@ -110,6 +110,7 @@ export const TENANT_SCOPED_TABLES = [
   'equipment_location_history',
   'equipment_work_orders',
   'truck_log_entries',
+  'vehicle_log_settings',
   'equipment_log_entries',
   'equipment_inspection_types',
   'equipment_inspection_groups',
@@ -298,4 +299,8 @@ export const TENANT_SCOPED_TABLES = [
   // locations). Values live on each record's metadata jsonb; this table holds
   // the field definitions.
   'custom_field_definitions',
+  // UI walkthroughs (guided tours): per-tenant role/auto-start config + per-user
+  // completion. Definitions are code (apps/web/src/lib/walkthroughs/registry.ts).
+  'walkthrough_settings',
+  'walkthrough_progress',
 ] as const

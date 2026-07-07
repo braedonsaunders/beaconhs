@@ -29,6 +29,7 @@ export const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
   { moduleKey: 'equipment', label: 'Equipment work orders' },
   { moduleKey: 'journals', label: 'Journals' },
   { moduleKey: 'inspections', label: 'Inspections' },
+  { moduleKey: 'vehicle-log', label: 'Vehicle log (monthly sheet)' },
 ]
 
 export function isModulePdfTarget(moduleKey: string): boolean {

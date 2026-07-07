@@ -1,12 +1,16 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { and, eq } from 'drizzle-orm'
 import { Truck } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { evaluateLogicRule } from '@beaconhs/forms-core'
+import { formAutomations } from '@beaconhs/db/schema'
 import { can, assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { createVehicleLogFlowAdapter } from '@/lib/flows/adapters/vehicle-log'
 import {
   applyVehicleLogImportToVehicleLog,
   deleteVehicleLogMonth,
@@ -15,7 +19,8 @@ import {
   type ApplyVehicleLogImportInput,
   type SaveVehicleLogEntryInput,
 } from './_service'
-import { VehicleLogWorkspaceClient } from './_workspace.client'
+import { runVehicleLogAction } from './_flow-actions'
+import { VehicleLogWorkspaceClient, type VehicleLogRecordAction } from './_workspace.client'
 
 export const metadata = { title: 'Vehicle log' }
 export const dynamic = 'force-dynamic'
@@ -87,6 +92,56 @@ export default async function VehicleLogPage({
     mode: pickString(sp.mode),
   })
 
+  // Manual-trigger flow buttons for the viewed month. The anchor record is the
+  // month's latest saved entry — the vehicle-log adapter expands it to the
+  // whole driver+vehicle month, so actions like "Email month PDF" cover the
+  // sheet on screen. Authored permission/showIf gates are applied server-side.
+  let recordActions: VehicleLogRecordAction[] = []
+  const actionEntryId = [...workspace.rows].reverse().find((row) => row.entry.id)?.entry.id ?? null
+  if (actionEntryId) {
+    const manualFlows = await ctx.db((tx) =>
+      tx
+        .select({ id: formAutomations.id, graph: formAutomations.graph })
+        .from(formAutomations)
+        .where(
+          and(
+            eq(formAutomations.subjectType, 'module'),
+            eq(formAutomations.subjectKey, 'vehicle-log'),
+            eq(formAutomations.enabled, true),
+          ),
+        ),
+    )
+    const withManual = manualFlows.filter((flow) =>
+      flow.graph.nodes.some(
+        (n) => n.data.kind === 'trigger' && n.data.trigger.trigger === 'manual',
+      ),
+    )
+    if (withManual.length > 0) {
+      const values = await createVehicleLogFlowAdapter(ctx, actionEntryId)
+        .loadValues()
+        .catch(() => ({}) as Record<string, unknown>)
+      for (const flow of withManual) {
+        for (const node of flow.graph.nodes) {
+          if (node.data.kind !== 'trigger') continue
+          const t = node.data.trigger
+          if (t.trigger !== 'manual') continue
+          if (t.requirePermission && !can(ctx, t.requirePermission)) continue
+          if (t.showIf && !evaluateLogicRule(t.showIf, { values, rows: {}, entities: {} })) continue
+          recordActions.push({
+            flowId: flow.id,
+            buttonId: t.buttonId,
+            label: t.label,
+            icon: t.icon,
+            variant: t.variant,
+            confirm: t.confirm,
+            order: t.order ?? 0,
+          })
+        }
+      }
+      recordActions = recordActions.sort((a, b) => a.order - b.order)
+    }
+  }
+
   return (
     <ListPageLayout
       header={
@@ -114,6 +169,9 @@ export default async function VehicleLogPage({
           saveAction={saveVehicleLogEntryAction}
           applyAction={applyVehicleLogImportAction}
           deleteMonthAction={deleteMonthAction}
+          recordActions={recordActions}
+          actionEntryId={actionEntryId}
+          runAction={runVehicleLogAction}
         />
       )}
     </ListPageLayout>

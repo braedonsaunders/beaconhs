@@ -74,6 +74,29 @@ export const truckLogEntries = pgTable(
   }),
 )
 
+// Tenant-level vehicle log configuration — one row per tenant, missing row =
+// built-in defaults (both modes enabled, destination default). Which entry
+// modes the workspace offers, and which one drivers land on. A per-driver
+// override lives on `people.metadata.vehicleLogMode` (managed from the same
+// settings page) and wins over `defaultMode` when its mode is enabled.
+export type VehicleLogEnabledModes = 'destination' | 'odometer' | 'both'
+
+export const vehicleLogSettings = pgTable(
+  'vehicle_log_settings',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    enabledModes: text('enabled_modes').$type<VehicleLogEnabledModes>().default('both').notNull(),
+    defaultMode: text('default_mode').$type<TruckLogEntryMode>().default('destination').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    uniq: uniqueIndex('vehicle_log_settings_uniq').on(t.tenantId),
+  }),
+)
+
 export const truckLogEntriesRelations = relations(truckLogEntries, ({ one }) => ({
   tenant: one(tenants, { fields: [truckLogEntries.tenantId], references: [tenants.id] }),
   truck: one(equipmentItems, {

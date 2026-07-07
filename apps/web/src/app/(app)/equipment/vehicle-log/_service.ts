@@ -7,12 +7,15 @@ import {
   people,
   syncConnections,
   truckLogEntries,
+  vehicleLogSettings,
   type TruckLogEntryMode,
   type TruckLogImportStatus,
+  type VehicleLogEnabledModes,
 } from '@beaconhs/db/schema'
 import { unsealSecret, type SealedSecret } from '@beaconhs/sync'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 export type VehicleLogMode = TruckLogEntryMode
 
@@ -57,6 +60,40 @@ export type VehicleLogWorkspaceRow = {
   entry: VehicleLogEntryDraft
 }
 
+// Tenant mode configuration resolved for the workspace: which modes the
+// segmented toggle offers, and where an unset URL mode lands (per-driver
+// metadata override first, then the tenant default).
+export type VehicleLogModeConfig = {
+  enabledModes: VehicleLogMode[]
+  defaultMode: VehicleLogMode
+}
+
+export function parseVehicleLogMode(raw: unknown): VehicleLogMode | null {
+  return raw === 'odometer' || raw === 'destination' ? raw : null
+}
+
+function modeConfigFromRow(
+  row: { enabledModes: VehicleLogEnabledModes; defaultMode: TruckLogEntryMode } | null | undefined,
+): VehicleLogModeConfig {
+  const enabledModes: VehicleLogMode[] =
+    row?.enabledModes === 'destination'
+      ? ['destination']
+      : row?.enabledModes === 'odometer'
+        ? ['odometer']
+        : ['destination', 'odometer']
+  const preferred = row?.defaultMode ?? 'destination'
+  const fallback = enabledModes[0] ?? 'destination'
+  return {
+    enabledModes,
+    defaultMode: enabledModes.includes(preferred) ? preferred : fallback,
+  }
+}
+
+/** A driver's own default mode (people.metadata.vehicleLogMode), if valid. */
+export function driverVehicleLogMode(metadata: unknown): VehicleLogMode | null {
+  return parseVehicleLogMode(recordValue(metadata).vehicleLogMode)
+}
+
 export type VehicleLogWorkspace = {
   month: {
     key: string
@@ -71,6 +108,8 @@ export type VehicleLogWorkspace = {
     daysInMonth: number
   }
   mode: VehicleLogMode
+  /** Modes the tenant has enabled — drives the segmented toggle. */
+  modeOptions: VehicleLogMode[]
   selectedDriverId: string
   selectedEquipmentId: string
   drivers: VehicleLogSelectorOption[]
@@ -321,10 +360,10 @@ export async function loadVehicleLogWorkspace(
   const today = new Date().toISOString().slice(0, 10)
   const elapsedDays =
     today < start ? 0 : today >= endExclusive ? dim : Math.max(1, Number(today.slice(8, 10)))
-  const mode: VehicleLogMode = opts.mode === 'odometer' ? 'odometer' : 'destination'
+  const requestedMode = parseVehicleLogMode(opts.mode)
 
   const result = await ctx.db(async (tx) => {
-    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows] = await Promise.all([
+    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows, settingsRows] = await Promise.all([
       tx
         .select({
           id: people.id,
@@ -332,6 +371,7 @@ export async function loadVehicleLogWorkspace(
           lastName: people.lastName,
           employeeNo: people.employeeNo,
           externalEmployeeId: people.externalEmployeeId,
+          metadata: people.metadata,
         })
         .from(people)
         .where(eq(people.status, 'active'))
@@ -367,7 +407,16 @@ export async function loadVehicleLogWorkspace(
         })
         .from(syncConnections)
         .where(isNull(syncConnections.deletedAt)),
+      tx
+        .select({
+          enabledModes: vehicleLogSettings.enabledModes,
+          defaultMode: vehicleLogSettings.defaultMode,
+        })
+        .from(vehicleLogSettings)
+        .where(eq(vehicleLogSettings.tenantId, ctx.tenantId))
+        .limit(1),
     ])
+    const modeConfig = modeConfigFromRow(settingsRows[0])
 
     const drivers = driversRaw.map((p) => ({
       id: p.id,
@@ -404,6 +453,14 @@ export async function loadVehicleLogWorkspace(
       canConfigureSources: can(ctx, 'admin.integrations.manage'),
     }
 
+    // URL mode wins when enabled; otherwise the driver's own default
+    // (people.metadata), then the tenant default. Disabled modes never render.
+    const driverDefault = selectedDriver ? driverVehicleLogMode(selectedDriver.metadata) : null
+    const mode: VehicleLogMode =
+      (requestedMode && modeConfig.enabledModes.includes(requestedMode) ? requestedMode : null) ??
+      (driverDefault && modeConfig.enabledModes.includes(driverDefault) ? driverDefault : null) ??
+      modeConfig.defaultMode
+
     if (!selectedDriver || !selectedVehicle) {
       return {
         month: {
@@ -419,6 +476,7 @@ export async function loadVehicleLogWorkspace(
           daysInMonth: dim,
         },
         mode,
+        modeOptions: modeConfig.enabledModes,
         selectedDriverId: selectedDriver?.id ?? '',
         selectedEquipmentId: selectedVehicle?.id ?? '',
         drivers,
@@ -490,6 +548,7 @@ export async function loadVehicleLogWorkspace(
         daysInMonth: dim,
       },
       mode,
+      modeOptions: modeConfig.enabledModes,
       selectedDriverId: selectedDriver.id,
       selectedEquipmentId: selectedVehicle.id,
       drivers,
@@ -511,6 +570,15 @@ export async function loadVehicleLogWorkspace(
   return result
 }
 
+export function assertNonNegativeKm(
+  fields: Record<string, number | string | null | undefined>,
+): void {
+  for (const [label, value] of Object.entries(fields)) {
+    const n = parseNumber(value)
+    if (n != null && n < 0) throw new Error(`${label} must be zero or greater.`)
+  }
+}
+
 export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehicleLogEntryInput) {
   if (!input.equipmentItemId || !input.driverPersonId || !ISO_DATE.test(input.entryDate)) {
     throw new Error('Vehicle, driver and date are required.')
@@ -520,6 +588,14 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
   const endOdometer = parseNumber(input.endOdometer)
   const businessKm = parseNumber(input.businessKm)
   const personalKm = parseNumber(input.personalKm)
+  assertNonNegativeKm({
+    'Start odometer': startOdometer,
+    'End odometer': endOdometer,
+    'Business km': businessKm,
+    'Personal km': personalKm,
+    'Hours on site': input.hoursOnSite,
+    'Crew count': input.manpowerCount,
+  })
   const kmDriven = computeTotalKm({ entryMode, startOdometer, endOdometer, businessKm, personalKm })
   const hoursOnSite = parseHours(input.hoursOnSite)
   const importStatus = input.importStatus ?? 'manual'
@@ -585,6 +661,8 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
     },
     metadata: { operation: 'upsert' },
   })
+  // Fire the vehicle-log Flows subject (guarded — never breaks the save).
+  await runModuleFlows(ctx, { moduleKey: 'vehicle-log', event: 'on_submit', subjectId: row.id })
   revalidateVehicleLogPaths(input.equipmentItemId, input.entryDate)
   return entryDraft(row, input.entryDate, entryMode)
 }

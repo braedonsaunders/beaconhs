@@ -293,6 +293,34 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
   },
   {
+    // Vehicle log is operationally an equipment tab, but it is its own flow /
+    // PDF subject ('vehicle-log') — so it registers here so the flows canvas,
+    // gate approvals and admin tiles resolve a module for that subject key.
+    moduleKey: 'vehicle-log',
+    label: 'Vehicle log',
+    href: '/equipment/vehicle-log',
+    managePath: '/equipment/vehicle-log/manage',
+    iconKey: 'gauge',
+    permission: 'equipment.manage',
+    tabs: [{ key: 'workspace', label: 'Vehicle log', href: '/equipment/vehicle-log' }],
+    sections: [
+      {
+        key: 'settings',
+        label: 'Log modes',
+        href: '/equipment/vehicle-log/settings',
+        iconKey: 'settings',
+        desc: 'Which entry modes drivers use (destination, odometer or both) and per-driver defaults.',
+      },
+      {
+        key: 'flows',
+        label: 'Automations',
+        href: '/equipment/vehicle-log/flows',
+        iconKey: 'workflow',
+        desc: 'When a log entry is saved — or on demand — email the month as a PDF, notify roles or call a webhook.',
+      },
+    ],
+  },
+  {
     moduleKey: 'ppe',
     label: 'PPE',
     href: '/ppe',

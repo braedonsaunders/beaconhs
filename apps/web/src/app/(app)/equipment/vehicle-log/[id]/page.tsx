@@ -22,7 +22,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PersonSelectField } from '@/components/person-select-field'
-import { computeTotalKm } from '../_service'
+import { assertNonNegativeKm, computeTotalKm } from '../_service'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +61,14 @@ async function updateEntry(formData: FormData) {
   const hoursRaw = safeStr(formData.get('hoursOnSite'))
   const manpowerCount = safeInt(formData.get('manpowerCount'))
   const notes = safeStr(formData.get('notes'))
+  assertNonNegativeKm({
+    'Start odometer': startOdometer,
+    'End odometer': endOdometer,
+    'Business km': businessKm,
+    'Personal km': personalKm,
+    'Hours on site': hoursRaw,
+    'Crew count': manpowerCount,
+  })
 
   const kmDriven = await ctx.db(async (tx) => {
     const [existing] = await tx

@@ -16,6 +16,7 @@ import {
   inspectionRecords,
   journalEntries,
   trainingAssessments,
+  truckLogEntries,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
@@ -37,6 +38,7 @@ const MODULE_SAMPLE_TABLE: Record<string, SampleTable> = {
   inspections: inspectionRecords,
   training: trainingAssessments,
   equipment: equipmentWorkOrders,
+  'vehicle-log': truckLogEntries,
   documents: documentManagementReviews,
 }
 

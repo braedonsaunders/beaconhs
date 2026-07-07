@@ -14,6 +14,7 @@ import { createCorrectiveActionFlowAdapter } from './adapters/corrective-actions
 import { createInspectionFlowAdapter } from './adapters/inspections'
 import { createTrainingFlowAdapter } from './adapters/training'
 import { createEquipmentFlowAdapter } from './adapters/equipment'
+import { createVehicleLogFlowAdapter } from './adapters/vehicle-log'
 import { createDocumentFlowAdapter } from './adapters/documents'
 import type { FlowSubjectAdapter } from './types'
 
@@ -31,6 +32,7 @@ export const MODULE_FLOW_ADAPTERS: Record<string, ModuleFlowAdapterFactory> = {
   inspections: createInspectionFlowAdapter,
   training: createTrainingFlowAdapter,
   equipment: createEquipmentFlowAdapter,
+  'vehicle-log': createVehicleLogFlowAdapter,
   documents: createDocumentFlowAdapter,
 }
 

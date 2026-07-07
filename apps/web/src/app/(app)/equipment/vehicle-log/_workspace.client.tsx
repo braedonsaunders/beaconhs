@@ -14,15 +14,21 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
+  Bell,
   CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Loader2,
+  Mail,
+  Play,
+  Send,
   Settings2,
   Trash2,
   WandSparkles,
+  Zap,
 } from 'lucide-react'
 import { Badge, Button, Popover, Select, cn } from '@beaconhs/ui'
 import type {
@@ -43,6 +49,33 @@ type ApplyAction = (
 type DeleteMonthAction = (
   input: ApplyVehicleLogImportInput,
 ) => Promise<{ ok: true; deleted: number } | { ok: false; error: string }>
+
+/** A manual-trigger Flow surfaced as a toolbar button (authored in /flows). */
+export type VehicleLogRecordAction = {
+  flowId: string
+  buttonId: string
+  label: string
+  icon?: string
+  variant?: 'default' | 'outline' | 'destructive' | 'secondary'
+  confirm?: string
+  order: number
+}
+
+type RunFlowAction = (input: {
+  entryId: string
+  flowId: string
+  buttonId: string
+}) => Promise<{ ok: boolean; ran?: string[]; failed?: string[]; error?: string }>
+
+// Small lucide subset authorable on manual flow buttons (mirrors Builder).
+const ACTION_ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
+  bell: Bell,
+  'file-text': FileText,
+  mail: Mail,
+  play: Play,
+  send: Send,
+  zap: Zap,
+}
 
 type RowState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -111,6 +144,13 @@ function withCarriedStart(
   return draft
 }
 
+// End odometer below the start it follows (typed or carried) — flag it red.
+function endBelowStart(draft: VehicleLogEntryDraft, prevEnd: number | null): boolean {
+  if (draft.endOdometer == null) return false
+  const start = draft.startOdometer ?? prevEnd
+  return start != null && draft.endOdometer < start
+}
+
 function plural(value: number, singular: string, pluralLabel = `${singular}s`) {
   return `${value} ${value === 1 ? singular : pluralLabel}`
 }
@@ -163,6 +203,8 @@ function KmInput({
   disabled,
   placeholder,
   mobile = false,
+  invalid = false,
+  title,
   className,
 }: {
   value: number | null
@@ -173,6 +215,9 @@ function KmInput({
   disabled: boolean
   placeholder?: string
   mobile?: boolean
+  /** Renders the value red — e.g. an End odometer below the Start it follows. */
+  invalid?: boolean
+  title?: string
   className?: string
 }) {
   return (
@@ -186,6 +231,8 @@ function KmInput({
       disabled={disabled}
       data-nav={nav}
       data-idx={idx}
+      aria-invalid={invalid || undefined}
+      title={invalid ? title : undefined}
       onChange={(e) => onValue(parseKmInput(e.currentTarget.value))}
       onFocus={(e) => e.currentTarget.select()}
       onBlur={onSave}
@@ -193,6 +240,8 @@ function KmInput({
       className={cn(
         mobile ? mobileCellClass : desktopCellClass,
         'text-right tabular-nums',
+        invalid &&
+          'border-red-300 text-red-600 focus:border-red-500 focus:ring-red-500/20 dark:border-red-900 dark:text-red-400',
         className,
       )}
     />
@@ -263,6 +312,9 @@ export function VehicleLogWorkspaceClient({
   saveAction,
   applyAction,
   deleteMonthAction,
+  recordActions,
+  actionEntryId,
+  runAction,
 }: {
   workspace: VehicleLogWorkspace
   /** equipment.manage — read-tier viewers get a read-only grid. */
@@ -270,6 +322,11 @@ export function VehicleLogWorkspaceClient({
   saveAction: SaveAction
   applyAction: ApplyAction
   deleteMonthAction: DeleteMonthAction
+  /** Manual-trigger flow buttons for the viewed month (already permission-filtered). */
+  recordActions: VehicleLogRecordAction[]
+  /** The month's latest saved entry — the anchor record manual flows run on. */
+  actionEntryId: string | null
+  runAction: RunFlowAction
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -340,6 +397,7 @@ export function VehicleLogWorkspaceClient({
 
   const activeDriver = workspace.drivers.find((d) => d.id === workspace.selectedDriverId)
   const activeVehicle = workspace.vehicles.find((v) => v.id === workspace.selectedEquipmentId)
+  const modeOptions = MODES.filter((m) => workspace.modeOptions.includes(m.value))
 
   const baseParams = useMemo(() => {
     const params = new URLSearchParams()
@@ -352,6 +410,9 @@ export function VehicleLogWorkspaceClient({
 
   function navigate(next: Partial<Record<'month' | 'driver' | 'vehicle' | 'mode', string>>) {
     const params = new URLSearchParams(baseParams)
+    // Switching drivers drops the explicit mode so the new driver lands on
+    // their own default (per-person override, then the tenant default).
+    if (next.driver !== undefined && next.mode === undefined) params.delete('mode')
     for (const [key, value] of Object.entries(next)) {
       if (value) params.set(key, value)
       else params.delete(key)
@@ -497,6 +558,29 @@ export function VehicleLogWorkspaceClient({
     })
   }
 
+  function runFlowButton(action: VehicleLogRecordAction) {
+    if (!actionEntryId) return
+    if (action.confirm && !window.confirm(action.confirm)) return
+    setActionResult(null)
+    startTransition(async () => {
+      const res = await runAction({
+        entryId: actionEntryId,
+        flowId: action.flowId,
+        buttonId: action.buttonId,
+      })
+      if (res.ok) {
+        setActionResult(
+          res.failed?.length
+            ? `${action.label}: issues ${res.failed.join(', ')}`
+            : `${action.label}: done`,
+        )
+        router.refresh()
+      } else {
+        setActionResult(res.error ?? 'Action failed')
+      }
+    })
+  }
+
   function deleteMonth() {
     if (!canEdit) return
     const label = `${activeDriver?.label ?? 'driver'} / ${activeVehicle?.hint ?? activeVehicle?.label}`
@@ -609,29 +693,58 @@ export function VehicleLogWorkspaceClient({
               ))}
             </Select>
           </div>
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              Log mode
+          {modeOptions.length > 1 ? (
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                Log mode
+              </div>
+              <div className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
+                {modeOptions.map((mode) => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => navigate({ mode: mode.value })}
+                    className={cn(
+                      'h-8 rounded-md px-3 text-sm font-medium transition-colors',
+                      workspace.mode === mode.value
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
+                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+                    )}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
-              {MODES.map((mode) => (
-                <button
-                  key={mode.value}
-                  type="button"
-                  onClick={() => navigate({ mode: mode.value })}
-                  className={cn(
-                    'h-8 rounded-md px-3 text-sm font-medium transition-colors',
-                    workspace.mode === mode.value
-                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
-                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
-                  )}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          ) : null}
           <div className="flex flex-wrap items-end justify-start gap-2 lg:justify-end">
+            {recordActions.map((action) => {
+              const Icon = action.icon ? ACTION_ICONS[action.icon] : undefined
+              return (
+                <Button
+                  key={`${action.flowId}:${action.buttonId}`}
+                  type="button"
+                  variant={action.variant ?? 'outline'}
+                  size="sm"
+                  onClick={() => runFlowButton(action)}
+                  disabled={!actionEntryId || pending}
+                >
+                  {Icon ? <Icon size={14} /> : <Zap size={14} />}
+                  {action.label}
+                </Button>
+              )
+            })}
+            {workspace.selectedDriverId && workspace.selectedEquipmentId ? (
+              <a
+                href={`/equipment/vehicle-log/pdf?${baseParams.toString()}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60"
+              >
+                <FileText size={14} />
+                PDF
+              </a>
+            ) : null}
             {!canManage ? null : hasSourcePicker ? (
               <Popover
                 open={importPickerOpen}
@@ -969,6 +1082,8 @@ export function VehicleLogWorkspaceClient({
                           nav="end"
                           idx={index}
                           disabled={!canEdit}
+                          invalid={endBelowStart(draft, derived?.prevEnd ?? null)}
+                          title="End odometer is below the start reading."
                           mobile
                         />
                       </MobileField>
@@ -1113,6 +1228,7 @@ function VehicleLogTableRow({
   updateAndSave: (date: string, patch: Partial<VehicleLogEntryDraft>) => void
   saveRow: (date: string) => Promise<void>
 }) {
+  const endInvalid = endBelowStart(draft, prevEnd)
   return (
     <>
       <tr
@@ -1153,6 +1269,8 @@ function VehicleLogTableRow({
                 nav="end"
                 idx={index}
                 disabled={!canEdit}
+                invalid={endInvalid}
+                title="End odometer is below the start reading."
               />
             </td>
           </>

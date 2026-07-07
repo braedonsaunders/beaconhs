@@ -92,6 +92,13 @@
       "when": 1782980000000,
       "tag": "0012_people_user_link_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783100000000,
+      "tag": "0013_vehicle_log_settings",
+      "breakpoints": true
     }
   ]
 }
