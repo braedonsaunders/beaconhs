@@ -87,48 +87,40 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
       'collabora',
     ],
     requiredPermission: 'training.course.manage',
-    body: `Slideshow lessons show one slide at a time, with speaker notes and a progress bar. You can build slides in BeaconHS, or import a PowerPoint file and keep it as the working copy.
+    body: `Slideshow lessons show one slide at a time, with speaker notes and a progress bar. Every slideshow is a PowerPoint file: import one you already have, or start a blank deck — either way you edit it in a full PowerPoint editor right inside BeaconHS, and you can download the file at any time.
 
 ## Where to find it
 
 Open **Training** in the left menu, then **Courses**. Open a course, add or open a lesson, and set its type to **Slideshow**. Reusable decks live in the **Content Library** the same way.
 
-## Build slides in BeaconHS
+## Start a deck
 
-1. In a slideshow lesson, use **+ Add slide…** to pick a layout.
-2. Click any text to edit it. Use the toolbar to add text boxes, images, and shapes.
-3. Type speaker notes in the box under the slide.
-4. Drag slides in the left strip to reorder. Changes save automatically in the course builder.
+1. Open a slideshow lesson. A new deck offers two choices.
+2. **Import PowerPoint** — drop in a .pptx file. It becomes the deck's working copy, with speaker notes carried over.
+3. **Start blank** — creates a new empty PowerPoint deck.
+4. Conversion runs in the background; the slides appear when it finishes and look exactly as they do in PowerPoint.
 
-## Import a PowerPoint
+## Edit the deck
 
-1. Click **Import** in the toolbar and drop in a .pptx file.
-2. The file becomes the deck's **master copy** — any slides already in the deck are replaced.
-3. Conversion runs in the background. Slides appear when it finishes, with speaker notes carried over.
-4. Slides render exactly as they look in PowerPoint.
+1. Open the slideshow lesson. The PowerPoint editor opens right in the page, with the file name in the toolbar.
+2. Make your changes — text, slides, images, layouts, anything. Changes save automatically.
+3. After each save the slideshow re-renders for learners; the toolbar shows **rendering…** until it catches up.
 
-## Edit an imported PowerPoint
-
-1. Open the slideshow lesson. Decks with a master copy show the file name in the toolbar.
-2. Click **Edit in PowerPoint**. A full PowerPoint-style editor opens in the browser.
-3. Make your changes — text, slides, images, anything. Changes save automatically.
-4. Close the editor when done. The slideshow re-renders itself after each save; the toolbar shows **rendering…** until it catches up.
-
-If the toolbar says PowerPoint editing is not configured, ask your administrator — the editor needs the Collabora server set up.
+If the page says PowerPoint editing is not configured, ask your administrator — the editor needs the Collabora server set up. The slideshow still plays and the file can still be downloaded.
 
 ## Download the PowerPoint
 
-Click **Download** in the deck toolbar to save the current master file, including every edit made in the browser.
+Click **Download** in the deck toolbar to save the current file, including every edit made in the browser.
 
-## Replace or detach the master
+## Replace the file
 
-- **Replace** — import a different .pptx. It becomes the new master and the slides re-render.
-- **Detach** — break the link to the PowerPoint file. The current slides stay and become editable with the BeaconHS slide tools, but saves in the PowerPoint editor no longer update the deck.
+Click **Replace** and drop in a different .pptx. It becomes the deck's new working copy and the slides re-render.
 
 ## Tips
 
-- Keep one person editing a deck at a time. The editor supports it, but training content rarely needs two authors at once.
-- Very large files can take a minute or two to convert. The **rendering…** badge shows while that runs.`,
+- Keep one person editing a deck at a time. The editor supports more, but training content rarely needs two authors at once.
+- Very large files can take a minute or two to convert. The **rendering…** badge shows while that runs.
+- Use **Present** to run the deck full-screen from the rendered slides.`,
   },
   {
     slug: 'documents',

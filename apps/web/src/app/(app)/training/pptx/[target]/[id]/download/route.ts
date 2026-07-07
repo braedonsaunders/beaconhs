@@ -8,7 +8,7 @@ import { attachments } from '@beaconhs/db/schema'
 import { getObjectStream } from '@beaconhs/storage'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { loadDeckMaster, parseDeckTarget } from '../_lib'
+import { loadDeckMaster, parseDeckTarget } from '../../../_lib'
 
 export const dynamic = 'force-dynamic'
 

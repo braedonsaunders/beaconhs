@@ -19,15 +19,13 @@ import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 // Shared bespoke editors (also used by the course Studio).
 import { BlockEditor } from '../../courses/[id]/studio/_block-editor'
-import { SlideEditor } from '../../courses/[id]/studio/_slide-editor'
+import { SlideDeckEditor } from '../../_editor/slide-deck-editor'
 import {
   deleteContentItem,
   importContentItemPptx,
   saveContentItemBlocks,
-  saveContentItemSlides,
   updateContentItem,
 } from '../_actions'
-import { detachPptxMaster } from '../../pptx/[target]/[id]/_actions'
 
 type Kind = 'rich' | 'video' | 'file' | 'embed' | 'slides'
 type Item = {
@@ -229,27 +227,26 @@ export function ContentItemEditor({
         <Card>
           <CardContent className="space-y-2 py-5">
             <Label>Slides</Label>
-            <SlideEditor
-              initialSlides={item.slides}
-              attachmentUrls={attachmentUrls}
-              importStatus={item.importStatus}
-              importError={item.importError}
-              onSave={async (slides) => saveContentItemSlides(item.id, slides)}
-              onImportPptx={async (attId) => importContentItemPptx(item.id, attId)}
-              master={
-                item.sourceAttachmentId
-                  ? {
-                      editHref: `/training/pptx/content_item/${item.id}`,
-                      downloadHref: `/training/pptx/content_item/${item.id}/download`,
-                      filename: item.sourceFilename ?? 'PowerPoint file',
-                    }
-                  : null
-              }
-              onDetach={async () => {
-                await detachPptxMaster('content_item', item.id)
-                router.refresh()
-              }}
-            />
+            <div className="flex h-[42rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+              <SlideDeckEditor
+                deck={item.slides}
+                attachmentUrls={attachmentUrls}
+                importStatus={item.importStatus}
+                importError={item.importError}
+                onImportPptx={async (attId) => importContentItemPptx(item.id, attId)}
+                target="content_item"
+                targetId={item.id}
+                master={
+                  item.sourceAttachmentId
+                    ? {
+                        attachmentId: item.sourceAttachmentId,
+                        filename: item.sourceFilename ?? 'PowerPoint file',
+                      }
+                    : null
+                }
+                className="min-h-0 flex-1"
+              />
+            </div>
           </CardContent>
         </Card>
       ) : null}

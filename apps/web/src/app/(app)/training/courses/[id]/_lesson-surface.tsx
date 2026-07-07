@@ -20,7 +20,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Button, FileUploader, Input, Label, Select, cn } from '@beaconhs/ui'
-import type { PracticalCriterion, Slide } from '@beaconhs/db/schema'
+import type { PracticalCriterion } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { RichEditor } from '../../_editor/rich-editor'
@@ -28,16 +28,8 @@ import { LessonRibbon } from '../../_editor/ribbon'
 import { lessonProseCss } from '../../_editor/prose'
 import { blocksToHtml } from '../../_editor/legacy'
 import { SlideDeckEditor } from '../../_editor/slide-deck-editor'
-import { ensureCanvasDeck } from '../../_editor/slide-model'
 import type { CompletionRule, LessonKind, LessonLite } from './_workspace'
-import {
-  deleteLesson,
-  importLessonPptx,
-  saveLessonRich,
-  saveLessonSlides,
-  updateLesson,
-} from './studio/_actions'
-import { detachPptxMaster } from '../../pptx/[target]/[id]/_actions'
+import { deleteLesson, importLessonPptx, saveLessonRich, updateLesson } from './studio/_actions'
 
 type SaveState = 'saved' | 'dirty' | 'saving'
 
@@ -81,13 +73,6 @@ export function LessonSurface({
   const [contentItemId, setContentItemId] = useState(lesson.contentItemId ?? '')
   const [duration, setDuration] = useState(lesson.durationMinutes?.toString() ?? '')
   const [criteria, setCriteria] = useState<PracticalCriterion[]>(lesson.practicalCriteria ?? [])
-
-  // --- slides deck (autosaved; legacy structured slides convert to the Fabric
-  // canvas model on the client and persist as canvas on first edit). The
-  // initializer must NOT convert: conversion needs DOMParser, which differs
-  // between SSR and the browser — the adopt effect below converts post-mount.
-  const [deck, setDeck] = useState<Slide[]>(lesson.slides ?? [])
-  const deckDirtyRef = useRef(false)
 
   // --- debounced autosave plumbing ---
   const inflight = useRef(0)
@@ -165,41 +150,14 @@ export function LessonSurface({
     [schedule, lesson.id, courseId],
   )
 
-  const deckRef = useRef(deck)
-  deckRef.current = deck
-  const touchDeck = useCallback(
-    (next: Slide[]) => {
-      deckDirtyRef.current = true
-      setDeck(next)
-      schedule('slides', 1200, async () => {
-        await saveLessonSlides(lesson.id, courseId, deckRef.current)
-        deckDirtyRef.current = false
-      })
-    },
-    [schedule, lesson.id, courseId],
-  )
-
-  // Convert to canvas on mount + adopt server slides (PPTX import finishing)
-  // when we have no local edits.
-  useEffect(() => {
-    if (!deckDirtyRef.current) setDeck(ensureCanvasDeck(lesson.slides ?? []))
-  }, [lesson.slides])
-  const importing = lesson.importStatus === 'pending' || lesson.importStatus === 'processing'
-  useEffect(() => {
-    if (!importing) return
-    const t = setInterval(() => router.refresh(), 3500)
-    return () => clearInterval(t)
-  }, [importing, router])
-
   function done() {
-    // Flush any pending debounce immediately, then close.
+    // Flush any pending debounce immediately, then close. (Slides save through
+    // the PowerPoint editor's own WOPI autosave — nothing to flush here.)
     const pending = Object.keys(timers.current)
     Object.values(timers.current).forEach(clearTimeout)
     timers.current = {}
     const flushes: Promise<void>[] = []
     if (pending.includes('meta')) flushes.push(saveMetaNow())
-    if (pending.includes('slides'))
-      flushes.push(saveLessonSlides(lesson.id, courseId, deckRef.current).then(() => undefined))
     void Promise.all(flushes).finally(() => {
       router.refresh()
       onClose()
@@ -208,7 +166,7 @@ export function LessonSurface({
 
   const reusable =
     kind === 'rich' || kind === 'video' || kind === 'file' || kind === 'embed' || kind === 'slides'
-  // Slides bring their own Fabric ribbon (inside SlideDeckEditor).
+  // Slides bring their own toolbar (the PowerPoint editor inside SlideDeckEditor).
   const showRibbon = (kind === 'rich' || kind === 'practical') && !contentItemId
 
   return (
@@ -418,8 +376,7 @@ export function LessonSurface({
           </div>
         ) : kind === 'slides' ? (
           <SlideDeckEditor
-            deck={deck}
-            onDeckChange={touchDeck}
+            deck={lesson.slides ?? []}
             attachmentUrls={attachmentUrls}
             importStatus={lesson.importStatus}
             importError={lesson.importError}
@@ -427,19 +384,16 @@ export function LessonSurface({
               await importLessonPptx(lesson.id, courseId, attachmentId)
               router.refresh()
             }}
+            target="lesson"
+            targetId={lesson.id}
             master={
               lesson.sourceAttachmentId
                 ? {
-                    editHref: `/training/pptx/lesson/${lesson.id}`,
-                    downloadHref: `/training/pptx/lesson/${lesson.id}/download`,
+                    attachmentId: lesson.sourceAttachmentId,
                     filename: lesson.sourceFilename ?? 'PowerPoint file',
                   }
                 : null
             }
-            onDetach={async () => {
-              await detachPptxMaster('lesson', lesson.id)
-              router.refresh()
-            }}
             className="min-h-0 flex-1"
           />
         ) : kind === 'practical' ? (
