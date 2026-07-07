@@ -1285,7 +1285,14 @@ async function upsertContact(
       await tx.update(customerContacts).set(fields).where(eq(customerContacts.id, beforeRow.id))
       await touchCrosswalk(tx, ctx, link.id, rowHash)
     }
-    return { action: 'updated', canonicalId: beforeRow.id, rowHash, before, after, diff: diff(before, after) }
+    return {
+      action: 'updated',
+      canonicalId: beforeRow.id,
+      rowHash,
+      before,
+      after,
+      diff: diff(before, after),
+    }
   }
 
   return createContact(tx, ctx, externalId, fields, rowHash)
