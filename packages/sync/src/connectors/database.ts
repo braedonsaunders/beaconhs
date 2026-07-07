@@ -247,6 +247,26 @@ function mapRow(
         data,
       }
     }
+    case 'contact': {
+      const data = {
+        name: g('name') ?? '',
+        role: g('role'),
+        email: g('email'),
+        phone: g('phone'),
+        notes: g('notes'),
+        isPrimary: boolish(g('isPrimary')) ?? false,
+        // external id of the parent location/customer — resolved to an org_unit via
+        // that entity's crosswalk in the upsert. A contact whose customer isn't synced
+        // is skipped there.
+        customerExternalId: g('customerExternalId') ?? '',
+      }
+      if (!data.name || !data.customerExternalId) return null
+      return {
+        entity: 'contact',
+        externalId: externalId(row, m, hashRow(row)),
+        data,
+      }
+    }
   }
 }
 
@@ -257,7 +277,7 @@ export const databaseConnector: Connector = {
     'Connect to any SQL database — PostgreSQL, MySQL/MariaDB or SQL Server. Browse tables, map one or more source tables to People, Locations & Projects, and Equipment, then sync on a schedule.',
   kind: 'native',
   iconKey: 'database',
-  entities: ['people', 'org_unit', 'equipment'],
+  entities: ['people', 'org_unit', 'equipment', 'contact'],
   supportsIntrospection: true,
   configFields: [
     {
@@ -314,7 +334,7 @@ export const databaseConnector: Connector = {
   async pull(ctx) {
     const c = cfgOf(ctx)
     const mappings = c.mappings ?? {}
-    const entities = (['people', 'org_unit', 'equipment'] as SyncEntityKey[]).filter(
+    const entities = (['people', 'org_unit', 'equipment', 'contact'] as SyncEntityKey[]).filter(
       (e) => mappingList(mappings, e).length > 0,
     )
     if (entities.length === 0) {

@@ -10,6 +10,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
+  customerContacts,
   departments,
   equipmentItems,
   equipmentTypes,
@@ -21,6 +22,7 @@ import {
   type SyncRecordDiff,
 } from '@beaconhs/db/schema'
 import type {
+  CanonicalContact,
   CanonicalEquipment,
   CanonicalOrgUnit,
   CanonicalPerson,
@@ -250,6 +252,8 @@ export async function upsertRecord(
       return upsertOrgUnit(tx, ctx, rec.externalId, rec.data)
     case 'equipment':
       return upsertEquipment(tx, ctx, rec.externalId, rec.data)
+    case 'contact':
+      return upsertContact(tx, ctx, rec.externalId, rec.data)
   }
 }
 
@@ -1165,6 +1169,118 @@ async function upsertEquipment(
   return createEquipment(tx, ctx, externalId, fields, rowHash, metadata)
 }
 
+// --- contact (customer / location contacts) -------------------------------
+// Links to its parent location via the org_unit crosswalk (the customer must be
+// synced first — it is, since the connector emits org_units before contacts).
+// customer_contacts has no soft-delete, so a crosswalk-linked contact missing
+// from a full sync is hard-deleted (never touches user-created contacts, which
+// have no crosswalk row).
+
+interface ContactFields {
+  orgUnitId: string
+  name: string
+  role: string | null
+  email: string | null
+  phone: string | null
+  notes: string | null
+  isPrimary: boolean
+}
+
+async function selectContact(tx: Database, id: string) {
+  const [row] = await tx
+    .select({
+      id: customerContacts.id,
+      orgUnitId: customerContacts.orgUnitId,
+      name: customerContacts.name,
+      role: customerContacts.role,
+      email: customerContacts.email,
+      phone: customerContacts.phone,
+      notes: customerContacts.notes,
+      isPrimary: customerContacts.isPrimary,
+      updatedAt: customerContacts.updatedAt,
+    })
+    .from(customerContacts)
+    .where(eq(customerContacts.id, id))
+    .limit(1)
+  return row ?? null
+}
+
+async function createContact(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  fields: ContactFields,
+  rowHash: string,
+): Promise<UpsertResult> {
+  const after = { ...fields }
+  if (ctx.dryRun)
+    return { action: 'created', rowHash, before: null, after, diff: diff(null, after) }
+  const id = firstId(
+    await tx
+      .insert(customerContacts)
+      .values({ tenantId: ctx.tenantId, ...fields })
+      .returning({ id: customerContacts.id }),
+  )
+  await linkCrosswalk(tx, ctx, 'contact', externalId, id, rowHash)
+  return {
+    action: 'created',
+    canonicalId: id,
+    rowHash,
+    before: null,
+    after: { id, ...after },
+    diff: diff(null, { id, ...after }),
+  }
+}
+
+async function upsertContact(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  data: CanonicalContact,
+): Promise<UpsertResult> {
+  if (!data.name) {
+    const message = `contact "${externalId}" is missing a name`
+    ctx.log('warn', `${message} — skipped`)
+    return { action: 'skipped', message }
+  }
+  // Resolve the parent location through the org_unit crosswalk.
+  const orgLink = await findCrosswalk(tx, ctx, 'org_unit', data.customerExternalId)
+  if (!orgLink) {
+    const message = `contact "${externalId}" → customer "${data.customerExternalId}" is not synced`
+    ctx.log('warn', `${message} — skipped`)
+    return { action: 'skipped', message }
+  }
+  const rowHash = hashData(data)
+  const fields: ContactFields = {
+    orgUnitId: orgLink.canonicalId,
+    name: data.name,
+    role: data.role ?? null,
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    notes: data.notes ?? null,
+    isPrimary: data.isPrimary ?? false,
+  }
+
+  const link = await findCrosswalk(tx, ctx, 'contact', externalId)
+  if (link) {
+    const beforeRow = await selectContact(tx, link.canonicalId)
+    if (!beforeRow) return createContact(tx, ctx, externalId, fields, rowHash) // gone → recreate
+    if (link.rowHash === rowHash) {
+      await touchCrosswalk(tx, ctx, link.id)
+      return { action: 'unchanged', canonicalId: link.canonicalId, rowHash }
+    }
+    const before = snap(beforeRow)
+    const after = { id: beforeRow.id, ...fields }
+    if (!ctx.dryRun) {
+      await tx.update(customerContacts).set(fields).where(eq(customerContacts.id, beforeRow.id))
+      await touchCrosswalk(tx, ctx, link.id, rowHash)
+    }
+    return { action: 'updated', canonicalId: beforeRow.id, rowHash, before, after, diff: diff(before, after) }
+  }
+
+  return createContact(tx, ctx, externalId, fields, rowHash)
+}
+
 // --- missing-source policy ------------------------------------------------
 
 async function activeSnapshot(
@@ -1179,6 +1295,8 @@ async function activeSnapshot(
       return snap(await selectOrgUnit(tx, id))
     case 'equipment':
       return snap(await selectEquipment(tx, id))
+    case 'contact':
+      return snap(await selectContact(tx, id))
   }
 }
 
@@ -1193,6 +1311,11 @@ async function archiveCanonical(tx: Database, entity: SyncEntityKey, id: string,
     case 'equipment':
       await tx.update(equipmentItems).set({ deletedAt: at }).where(eq(equipmentItems.id, id))
       return
+    case 'contact':
+      // Contacts are add/update-only — never auto-removed (no soft-delete column,
+      // and the engine's missing-record policy is conservative). Unreachable:
+      // archiveMissingRecords short-circuits 'contact' before this is called.
+      return
   }
 }
 
@@ -1202,6 +1325,9 @@ export async function archiveMissingRecords(
   entity: SyncEntityKey,
   seenExternalIds: Set<string>,
 ): Promise<ArchiveMissingResult[]> {
+  // Contacts have no soft-delete and are source-managed add/update-only — never
+  // archive them on a full sync (a removed source contact just stops updating).
+  if (entity === 'contact') return []
   const links = await tx
     .select({
       externalId: syncCrosswalk.externalId,

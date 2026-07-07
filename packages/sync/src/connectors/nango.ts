@@ -70,6 +70,8 @@ function mapNango(
   map: Record<string, string> | undefined,
 ): CanonicalRecord | null {
   switch (entity) {
+    case 'contact':
+      return null // not mapped by this connector
     case 'people': {
       const data = {
         firstName:

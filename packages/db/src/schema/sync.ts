@@ -22,7 +22,8 @@ import { tenants } from './core'
 
 // The canonical entities a connector can sync into. NOTE: "org_unit" covers
 // both Locations and Projects (the same org_units table, different `level`).
-export const SYNC_ENTITIES = ['people', 'org_unit', 'equipment'] as const
+// "contact" = a non-employee person attached to a location (customer_contacts).
+export const SYNC_ENTITIES = ['people', 'org_unit', 'equipment', 'contact'] as const
 export type SyncEntityKey = (typeof SYNC_ENTITIES)[number]
 
 export type SyncConnectionStatus = 'draft' | 'connected' | 'error' | 'disabled'

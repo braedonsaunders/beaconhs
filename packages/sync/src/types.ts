@@ -53,10 +53,25 @@ export interface CanonicalEquipment {
   metadata?: Record<string, unknown>
 }
 
+// A non-employee contact attached to a location/customer (org_unit). Links to its
+// parent via `customerExternalId` — the external id of the org_unit the source
+// system uses (resolved to the beaconhs org_unit through the org_unit crosswalk).
+export interface CanonicalContact {
+  name: string
+  role?: string | null
+  email?: string | null
+  phone?: string | null
+  notes?: string | null
+  isPrimary?: boolean
+  customerExternalId: string
+  metadata?: Record<string, unknown>
+}
+
 export type CanonicalRecord =
   | { entity: 'people'; externalId: string; data: CanonicalPerson }
   | { entity: 'org_unit'; externalId: string; data: CanonicalOrgUnit }
   | { entity: 'equipment'; externalId: string; data: CanonicalEquipment }
+  | { entity: 'contact'; externalId: string; data: CanonicalContact }
 
 // --- Runtime context handed to connector methods --------------------------
 

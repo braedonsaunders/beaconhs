@@ -166,6 +166,8 @@ export function mapNetsuiteRow(
   const externalId = val(row, m.idColumn) ?? ''
   if (!externalId) return null
   switch (entity) {
+    case 'contact':
+      return null // NetSuite connector maps employees + customers, not contacts
     case 'people': {
       const data = {
         firstName: g('firstName') ?? '',

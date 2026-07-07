@@ -14,6 +14,7 @@ const ENTITY_LABELS: Record<string, string> = {
   people: 'People',
   org_unit: 'Locations & Projects',
   equipment: 'Equipment',
+  contact: 'Contacts',
 }
 
 interface NangoClient {

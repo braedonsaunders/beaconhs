@@ -235,6 +235,7 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
     people: new Set(),
     org_unit: new Set(),
     equipment: new Set(),
+    contact: new Set(),
   }
   const lookups = await withTenant(db, tenantId, (tx) => loadLookups(tx))
 
@@ -273,6 +274,7 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
       people: new Set(),
       org_unit: new Set(),
       equipment: new Set(),
+      contact: new Set(),
     }
     try {
       await withTenant(db, tenantId, async (tx) => {
@@ -281,25 +283,36 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
           s.pulled++
           batchSeen[rec.entity].add(rec.externalId)
           try {
-            const res = await upsertRecord(
-              tx,
-              {
-                tenantId,
-                connectionId,
-                sourceSystem: conn.connectorKey,
-                lookups,
-                log,
-                dryRun,
-                ownershipMode: policy.ownership,
-              },
-              rec,
-            )
+            // Per-record savepoint: a failing upsert (e.g. a unique-constraint
+            // violation) rolls back only this record. Without it the first
+            // failure poisons the whole batch transaction — every later write,
+            // including the failure ledger insert, then errors and the entire
+            // batch (up to BATCH records, across all entities) is marked failed.
+            const res = await tx.transaction(async (spTx) => {
+              const sp = spTx as unknown as Database
+              const r = await upsertRecord(
+                sp,
+                {
+                  tenantId,
+                  connectionId,
+                  sourceSystem: conn.connectorKey,
+                  lookups,
+                  log,
+                  dryRun,
+                  ownershipMode: policy.ownership,
+                },
+                rec,
+              )
+              await recordChange(sp, rec, r)
+              return r
+            })
             actionStat(batchStats, rec.entity, res.action)
-            await recordChange(tx, rec, res)
           } catch (e) {
             const message = errMsg(e)
             s.failed++
             log('error', `${rec.entity} "${rec.externalId}": ${message}`)
+            // The savepoint rolled back but the batch tx is still healthy, so
+            // the failure ledger row commits with the real error message.
             await recordChange(tx, rec, { action: 'failed', message })
           }
         }

@@ -127,6 +127,8 @@ function mapRow(
 ): CanonicalRecord | null {
   const g = (key: string) => field(row, mapping, key)
   switch (entity) {
+    case 'contact':
+      return null // not mapped by this connector
     case 'people': {
       const fullName = g('fullName')
       const parsed = splitName(fullName)
