@@ -132,7 +132,14 @@ jobs:
           set -euo pipefail
           IMAGE="${IMAGE_NAME}:${GITHUB_SHA}"
           COMPOSE_FILE="$(cat deploy/dokploy-dev.compose.yaml)"
+          # Collabora is served same-origin on the app domain (Traefik path
+          # routes), so both editor and WOPI-callback bases are APP_URL; the
+          # server_name is the bare host for Collabora's generated URLs.
+          APP_HOST="$(printf '%s' "$APP_URL" | sed -E 's~^https?://~~; s~/+$~~')"
           ENV_BLOCK="IMAGE=${IMAGE}
+          COLLABORA_URL=${APP_URL}
+          COLLABORA_WOPI_URL=${APP_URL}
+          COLLABORA_SERVER_NAME=${APP_HOST}
           DATABASE_URL=${DEV_DATABASE_URL}
           SUPERADMIN_DATABASE_URL=${DEV_SUPERADMIN_DATABASE_URL}
           DIRECT_DATABASE_URL=${DEV_DIRECT_DATABASE_URL}
@@ -156,3 +163,43 @@ jobs:
             -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" \
             -d "{\"composeId\":\"$COMPOSE_ID\"}"
           echo "Redeployed $IMAGE"
+
+      # Same-origin Traefik routes for the Collabora editor: /browser, /cool
+      # and /hosting on the app domain → collabora:9980. Idempotent (skips
+      # paths that already exist) and cloned from the app domain's TLS config.
+      # Best-effort: a Dokploy API shape mismatch must not fail the app deploy —
+      # without these routes the editor just reports "not configured".
+      - name: Ensure Collabora path routes
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          APP_URL: ${{ secrets.DEV_APP_URL }}
+        run: |
+          set -uo pipefail
+          host="$(printf '%s' "$APP_URL" | sed -E 's~^https?://~~; s~/+$~~')"
+          existing="$(curl -sS "$DOKPLOY_URL/api/domain.byComposeId?composeId=$COMPOSE_ID" \
+            -H "x-api-key: $DOKPLOY_TOKEN")" || { echo "::warning::domain.byComposeId failed"; exit 0; }
+          if ! echo "$existing" | jq -e 'type=="array"' >/dev/null 2>&1; then
+            echo "::warning::unexpected domain list shape: $(echo "$existing" | head -c 300)"; exit 0
+          fi
+          webdom="$(echo "$existing" | jq -c --arg h "$host" '[.[] | select(.host==$h)][0] // empty')"
+          https="$(echo "$webdom" | jq -r 'if .https == false then "false" else "true" end' 2>/dev/null || echo true)"
+          cert="$(echo "$webdom" | jq -r '.certificateType // "none"' 2>/dev/null || echo none)"
+          for path in /browser /cool /hosting; do
+            if echo "$existing" | jq -e --arg h "$host" --arg p "$path" \
+                '.[] | select(.host==$h and .path==$p)' >/dev/null; then
+              echo "route $path already present"; continue
+            fi
+            status="$(jq -n --arg cid "$COMPOSE_ID" --arg h "$host" --arg p "$path" \
+                --argjson https "$https" --arg cert "$cert" \
+                '{composeId:$cid, host:$h, path:$p, port:9980, https:$https,
+                  certificateType:$cert, serviceName:"collabora", domainType:"compose"}' \
+              | curl -sS -o /tmp/dom.out -w "%{http_code}" -X POST "$DOKPLOY_URL/api/domain.create" \
+                  -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-)"
+            if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
+              echo "created route $path -> collabora:9980"
+            else
+              echo "::warning::domain.create $path returned HTTP $status: $(head -c 300 /tmp/dom.out)"
+            fi
+          done

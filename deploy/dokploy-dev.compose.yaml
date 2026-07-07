@@ -30,6 +30,11 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT}
+      # In-browser PowerPoint editor. Collabora is served SAME-ORIGIN on the
+      # app domain via Traefik path routes (/browser, /cool, /hosting), so the
+      # editor URL and the WOPI callback base are both just APP_URL.
+      COLLABORA_URL: ${COLLABORA_URL}
+      COLLABORA_WOPI_URL: ${COLLABORA_WOPI_URL}
     networks: [infra-net, dokploy-network]
     deploy:
       replicas: 1
@@ -84,6 +89,26 @@ services:
       # One-shot: register BullMQ repeatable jobs, then exit.
       restart_policy:
         condition: on-failure
+        delay: 5s
+
+  # In-browser PowerPoint editor for PPTX-mastered training decks. Reached by
+  # browsers and by the web app (discovery) through Traefik path routes on the
+  # app domain; Collabora itself calls back into the app's /wopi/files/* routes
+  # at APP_URL (aliasgroup1 allow-list).
+  collabora:
+    image: collabora/code:latest
+    environment:
+      aliasgroup1: ${APP_URL}
+      server_name: ${COLLABORA_SERVER_NAME}
+      # TLS terminates at Traefik; frame_ancestors lets the app iframe the editor.
+      extra_params: --o:ssl.enable=false --o:ssl.termination=true --o:net.frame_ancestors=${APP_URL}
+    networks: [dokploy-network]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.hostname==dokploy-mgr]
+      restart_policy:
+        condition: any
         delay: 5s
 
 networks:
