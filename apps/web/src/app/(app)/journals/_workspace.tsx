@@ -268,6 +268,8 @@ function EmptyEditor({
         <button
           type="button"
           onClick={onNew}
+          // Guided-tour anchor (lib/walkthroughs 'daily-journal').
+          data-walkthrough="journals-new"
           className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
         >
           <Plus size={16} /> New entry

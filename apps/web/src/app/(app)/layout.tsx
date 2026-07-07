@@ -12,12 +12,15 @@ import {
   listAccessibleTenants,
   listActiveTenantRoles,
 } from '@/lib/auth'
+import { Suspense } from 'react'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
 import { RiskMatrixProvider } from '@/components/risk-matrix'
 import { BackNavProviders } from '@/components/smart-back-link'
 import { ThemeProvider } from '@/components/theme-provider'
+import { WalkthroughProvider } from '@/components/walkthrough/provider.client'
 import { resolveNavGroups } from '@/lib/nav/resolve'
+import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
 
 // Every page in the authenticated app shell requires the per-request context
 // (auth + tenant + RLS-scoped DB), so none can be statically prerendered.
@@ -31,7 +34,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 
-  const [tenant, available, roles, unread, navGroups, sessionUser] = await Promise.all([
+  const [tenant, available, roles, unread, navGroups, sessionUser, walkthroughs] =
+    await Promise.all([
     withSuperAdmin(db, async (tx) => {
       const [t] = await tx
         .select({ id: tenants.id, name: tenants.name, riskMatrix: tenants.riskMatrix })
@@ -53,6 +57,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // filtered to what this user is permitted to open.
     ctx.db((tx) => resolveNavGroups(ctx, tx)),
     getSessionUser(),
+    // Guided tours this user may launch + the first-run auto-start pick.
+    ctx.db((tx) => resolveWalkthroughs(ctx, tx)),
   ])
   if (!tenant) redirect('/login')
 
@@ -116,6 +122,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </BackNavProviders>
           </RiskMatrixProvider>
           <Toaster richColors position="top-right" />
+          {/* Suspense: the provider reads useSearchParams (tour launch links). */}
+          <Suspense fallback={null}>
+            <WalkthroughProvider
+              availableIds={walkthroughs.visible.map((v) => v.walkthrough.id)}
+              autoStartId={walkthroughs.autoStartId}
+            />
+          </Suspense>
         </AppShell>
       </NavigationProvider>
     </ThemeProvider>

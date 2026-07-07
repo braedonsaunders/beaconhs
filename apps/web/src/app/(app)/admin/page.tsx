@@ -10,6 +10,7 @@ import {
   Mail,
   MessageSquare,
   PanelLeft,
+  PlayCircle,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -114,6 +115,13 @@ const STATIC_GROUPS: Group[] = [
         title: 'Navigation',
         desc: 'Reorder the sidebar, pin forms as modules',
         permission: 'admin.nav.manage',
+      },
+      {
+        href: '/admin/walkthroughs',
+        icon: <PlayCircle size={18} />,
+        title: 'Walkthroughs',
+        desc: 'Guided tours: who sees them & what auto-starts',
+        permission: 'admin.settings.manage',
       },
       {
         href: '/admin/data-sources',
@@ -229,8 +237,10 @@ export default async function AdminPage({
 
   // Per-module administration, driven by the module-admin registry — one tile per
   // module the viewer may administer, linking to that module's Manage hub.
+  // Guard-only entries (sections: [] — flow subjects like 'vehicle-log' whose
+  // admin surfaces live under a parent module's hub) contribute no tile.
   const moduleTiles: Tile[] = MODULE_ADMIN.filter(
-    (m) => ctx.isSuperAdmin || can(ctx, m.permission),
+    (m) => m.sections.length > 0 && (ctx.isSuperAdmin || can(ctx, m.permission)),
   ).map((m) => ({
     href: m.managePath,
     title: m.label,

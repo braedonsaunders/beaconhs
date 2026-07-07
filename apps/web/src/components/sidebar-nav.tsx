@@ -9,6 +9,7 @@ import {
   BookOpen,
   Building2,
   CheckCircle2,
+  CircleHelp,
   CircleUser,
   ClipboardCheck,
   ClipboardList,
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   book: BookOpen,
   building: Building2,
   check: CheckCircle2,
+  'circle-help': CircleHelp,
   'circle-user': CircleUser,
   'clipboard-check': ClipboardCheck,
   clipboard: ClipboardList,
@@ -146,6 +148,8 @@ export function SidebarNav({
                 href={item.href as any}
                 aria-current={active ? 'page' : undefined}
                 title={collapsed ? item.label : undefined}
+                // Guided-tour anchor (lib/walkthroughs) — spotlights nav items.
+                data-walkthrough={`nav:${item.href}`}
                 className={cn(
                   'group relative flex items-center rounded-md py-1.5 text-sm',
                   'transition-colors duration-150 ease-out',

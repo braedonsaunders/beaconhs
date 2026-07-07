@@ -99,6 +99,13 @@
       "when": 1783100000000,
       "tag": "0013_vehicle_log_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783150000000,
+      "tag": "0014_walkthroughs",
+      "breakpoints": true
     }
   ]
 }
