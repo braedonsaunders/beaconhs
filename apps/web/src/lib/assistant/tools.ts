@@ -19,6 +19,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { manualArticleForUser, searchManualArticles } from '@/lib/manual/registry'
 import { moduleScopeWhere, recordVisibilityWhere } from '@/lib/visibility'
 import { documentReadFilter } from './doc-access'
 import { getDocumentPdfBytes, getDocumentText } from './document-content'
@@ -817,6 +818,67 @@ const listMyOpenItems: AssistantToolDef = {
   },
 }
 
+// ---- user guide (the built-in manual at /help) ------------------------------
+// Pure code content (lib/manual), no DB. Both tools filter to articles the
+// current user could open at /help, so "how do I…" answers never describe
+// features the user can't see.
+
+const searchUserGuide: AssistantToolDef = {
+  name: 'search_user_guide',
+  description:
+    'Search the built-in BeaconHS user guide (plain-language how-to articles about USING THE APP: reporting incidents, filling hazard assessments, vehicle logs, training, admin, etc.). Use this whenever the user asks how to do something in the app. Returns matching articles with excerpts. Read-only.',
+  category: 'read',
+  gate: { mode: 'public' },
+  inputSchema: z.object({
+    query: z.string().min(1).max(120),
+  }),
+  execute: async (raw, ctx): Promise<ToolResult> => {
+    const a = raw as { query: string }
+    const hits = searchManualArticles(ctx, a.query).slice(0, 8)
+    return {
+      ok: true,
+      data: {
+        total: hits.length,
+        items: hits.map(({ article, excerpt }) => ({
+          slug: article.slug,
+          title: article.title,
+          group: article.group,
+          summary: article.summary,
+          excerpt: excerpt || undefined,
+          url: `/help/${article.slug}`,
+        })),
+      },
+    }
+  },
+}
+
+const readUserGuide: AssistantToolDef = {
+  name: 'read_user_guide',
+  description:
+    'Read one article from the built-in BeaconHS user guide by slug (find slugs with search_user_guide). Returns the full plain-language article as markdown. Read-only.',
+  category: 'read',
+  gate: { mode: 'public' },
+  inputSchema: z.object({
+    slug: z.string().min(1).max(80),
+  }),
+  execute: async (raw, ctx): Promise<ToolResult> => {
+    const a = raw as { slug: string }
+    const article = manualArticleForUser(ctx, a.slug)
+    if (!article) return { ok: false, error: 'article_not_found' }
+    return {
+      ok: true,
+      data: {
+        slug: article.slug,
+        title: article.title,
+        group: article.group,
+        summary: article.summary,
+        url: `/help/${article.slug}`,
+        body: article.body,
+      },
+    }
+  },
+}
+
 /** The read/search catalog. Write/draft tools are added in tools-write.ts. */
 export const READ_TOOLS: AssistantToolDef[] = [
   whoami,
@@ -831,4 +893,6 @@ export const READ_TOOLS: AssistantToolDef[] = [
   findPeople,
   findTrainingRecords,
   listMyOpenItems,
+  searchUserGuide,
+  readUserGuide,
 ]
