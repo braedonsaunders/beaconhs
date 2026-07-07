@@ -82,6 +82,7 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -247,7 +248,12 @@ async function updateEquipmentField(formData: FormData) {
     }
   }
 
-  await ctx.db(async (tx) => {
+  const before = await ctx.db(async (tx) => {
+    const [prior] = await tx
+      .select({ isDraft: equipmentItems.isDraft, status: equipmentItems.status })
+      .from(equipmentItems)
+      .where(eq(equipmentItems.id, id))
+      .limit(1)
     await tx
       .update(equipmentItems)
       .set({
@@ -264,6 +270,7 @@ async function updateEquipmentField(formData: FormData) {
     if (field === 'currentHolderPersonId' || field === 'status') {
       await refreshAvailability(tx, id)
     }
+    return prior ?? null
   })
   await recordAudit(ctx, {
     entityType: 'equipment',
@@ -272,6 +279,18 @@ async function updateEquipmentField(formData: FormData) {
     summary: `Updated ${field}`,
     after: { [field]: val },
   })
+  // Equipment-asset Flows (guarded — never break the save): committing a draft
+  // is the "asset registered" moment; a status edit fires status_change.
+  if (before?.isDraft) {
+    await runModuleFlows(ctx, { moduleKey: 'equipment-assets', event: 'on_create', subjectId: id })
+  } else if (field === 'status' && before && before.status !== val) {
+    await runModuleFlows(ctx, {
+      moduleKey: 'equipment-assets',
+      event: 'status_change',
+      subjectId: id,
+      toStatus: String(val),
+    })
+  }
   revalidatePath(`/equipment/${id}`)
   revalidatePath('/equipment')
 }
@@ -2643,7 +2662,7 @@ export default async function EquipmentDetailPage({
         closeHref={closeHref}
         itemId={id}
         drivers={holders}
-        sites={sites.filter((s) => s.level === 'site')}
+        sites={sites.filter((s) => s.level === 'customer')}
         defaultDate={new Date().toISOString().slice(0, 10)}
         action={createTruckLogEntryAction}
       />

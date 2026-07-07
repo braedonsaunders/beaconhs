@@ -103,7 +103,7 @@ export default async function NewTruckLogEntryPage({
       tx
         .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
         .from(orgUnits)
-        .where(eq(orgUnits.level, 'site'))
+        .where(eq(orgUnits.level, 'customer'))
         .orderBy(asc(orgUnits.name))
         .limit(500),
       tx
@@ -159,7 +159,7 @@ export default async function NewTruckLogEntryPage({
                     clearable={false}
                   />
                 </Field>
-                <Field label="Site">
+                <Field label="Customer / site">
                   <Select name="siteOrgUnitId" defaultValue="">
                     <option value="">—</option>
                     {sites.map((s) => (

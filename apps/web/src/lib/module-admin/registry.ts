@@ -284,41 +284,60 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         permission: 'equipment.manage',
       },
       {
+        key: 'asset-flows',
+        label: 'Asset automations',
+        href: '/equipment/assets/flows',
+        iconKey: 'workflow',
+        desc: 'When an asset is registered or its status changes, send emails, notify roles or call a webhook.',
+      },
+      {
         key: 'flows',
-        label: 'Automations',
+        label: 'Work order automations',
         href: '/equipment/flows',
         iconKey: 'workflow',
         desc: 'On work-order create or status change, send emails, notify roles or require approval.',
       },
-    ],
-  },
-  {
-    // Vehicle log is operationally an equipment tab, but it is its own flow /
-    // PDF subject ('vehicle-log') — so it registers here so the flows canvas,
-    // gate approvals and admin tiles resolve a module for that subject key.
-    moduleKey: 'vehicle-log',
-    label: 'Vehicle log',
-    href: '/equipment/vehicle-log',
-    managePath: '/equipment/vehicle-log/manage',
-    iconKey: 'gauge',
-    permission: 'equipment.manage',
-    tabs: [{ key: 'workspace', label: 'Vehicle log', href: '/equipment/vehicle-log' }],
-    sections: [
       {
-        key: 'settings',
-        label: 'Log modes',
+        key: 'vehicle-log-settings',
+        label: 'Vehicle log modes',
         href: '/equipment/vehicle-log/settings',
-        iconKey: 'settings',
+        iconKey: 'gauge',
         desc: 'Which entry modes drivers use (destination, odometer or both) and per-driver defaults.',
       },
       {
-        key: 'flows',
-        label: 'Automations',
+        key: 'vehicle-log-flows',
+        label: 'Vehicle log automations',
         href: '/equipment/vehicle-log/flows',
         iconKey: 'workflow',
         desc: 'When a log entry is saved — or on demand — email the month as a PDF, notify roles or call a webhook.',
       },
     ],
+  },
+  // GUARD-ONLY entries (no admin tiles of their own — sections: []). Vehicle
+  // log and the equipment register are their own FLOW/PDF subjects, and the
+  // guards (canManageModule, gate approvals, ModuleFlowsPage) resolve modules
+  // by subject key — but all their admin surfaces live under /equipment/manage
+  // above, so these contribute no tiles (the /admin rollup skips section-less
+  // modules).
+  {
+    moduleKey: 'vehicle-log',
+    label: 'Vehicle log',
+    href: '/equipment/vehicle-log',
+    managePath: '/equipment/manage',
+    iconKey: 'gauge',
+    permission: 'equipment.manage',
+    tabs: [{ key: 'workspace', label: 'Vehicle log', href: '/equipment/vehicle-log' }],
+    sections: [],
+  },
+  {
+    moduleKey: 'equipment-assets',
+    label: 'Equipment assets',
+    href: '/equipment',
+    managePath: '/equipment/manage',
+    iconKey: 'wrench',
+    permission: 'equipment.manage',
+    tabs: [{ key: 'equipment', label: 'Equipment', href: '/equipment' }],
+    sections: [],
   },
   {
     moduleKey: 'ppe',

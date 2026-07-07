@@ -13,6 +13,7 @@ export type EquipmentSubNavKey =
   | 'maintenance'
   | 'work-orders'
   | 'vehicle-log'
+  | 'vehicle-log-settings'
   | 'inspections'
   | 'station'
   | 'station-settings'

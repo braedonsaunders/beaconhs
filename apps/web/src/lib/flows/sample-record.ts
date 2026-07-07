@@ -9,6 +9,7 @@ import type { PgColumn, PgTable } from 'drizzle-orm/pg-core'
 import {
   correctiveActions,
   documentManagementReviews,
+  equipmentItems,
   equipmentWorkOrders,
   formResponses,
   hazidAssessments,
@@ -38,6 +39,7 @@ const MODULE_SAMPLE_TABLE: Record<string, SampleTable> = {
   inspections: inspectionRecords,
   training: trainingAssessments,
   equipment: equipmentWorkOrders,
+  'equipment-assets': equipmentItems,
   'vehicle-log': truckLogEntries,
   documents: documentManagementReviews,
 }

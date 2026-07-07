@@ -390,10 +390,12 @@ export async function loadVehicleLogWorkspace(
         .where(isNull(equipmentItems.deletedAt))
         .orderBy(asc(equipmentItems.assetTag))
         .limit(1000),
+      // The Customer / site picker offers TOP-LEVEL locations only (legacy
+      // logged against the customer, never a project/site).
       tx
         .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
         .from(orgUnits)
-        .where(inArray(orgUnits.level, ['customer', 'project', 'site']))
+        .where(eq(orgUnits.level, 'customer'))
         .orderBy(asc(orgUnits.name))
         .limit(5000),
       tx

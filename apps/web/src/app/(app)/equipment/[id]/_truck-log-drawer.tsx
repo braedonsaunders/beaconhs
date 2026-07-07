@@ -156,7 +156,7 @@ export function NewTruckLogEntryDrawer({
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="tl-site">Site</Label>
+            <Label htmlFor="tl-site">Customer / site</Label>
             <Select
               id="tl-site"
               value={siteOrgUnitId}

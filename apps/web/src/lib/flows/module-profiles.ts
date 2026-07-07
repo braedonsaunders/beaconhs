@@ -391,10 +391,13 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       },
     ],
   },
+  // The 'equipment' subject is WORK ORDERS specifically (its adapter loads an
+  // equipment_work_orders row). Assets themselves are the 'equipment-assets'
+  // subject below; the vehicle log is 'vehicle-log'.
   equipment: {
     subjectType: 'module',
     subjectKey: 'equipment',
-    label: 'Equipment',
+    label: 'Equipment work orders',
     triggers: ['on_create', 'status_change', 'manual'],
     actions: [
       'send_email',
@@ -421,6 +424,37 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'closed_at', label: 'Closed at', kind: 'date' },
       { key: 'status', label: 'Status (raw)', kind: 'enum' },
       { key: 'assigned_to_tenant_user_id', label: 'Assigned to (user id)', kind: 'person' },
+    ],
+  },
+  // The equipment REGISTER: fires when an asset is registered (draft committed)
+  // or its lifecycle status changes (in service → in repair → retired …).
+  'equipment-assets': {
+    subjectType: 'module',
+    subjectKey: 'equipment-assets',
+    label: 'Equipment assets',
+    triggers: ['on_create', 'status_change', 'manual'],
+    actions: ['send_email', 'notify_role', 'webhook', 'export_pdf'],
+    statusValues: ['in_service', 'out_of_service', 'in_repair', 'lost', 'retired'],
+    fields: [
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'asset_tag', label: 'Asset tag', kind: 'text' },
+      { key: 'name', label: 'Name', kind: 'text' },
+      { key: 'description', label: 'Description', kind: 'text' },
+      { key: 'serial_number', label: 'Serial number', kind: 'text' },
+      { key: 'manufacturer', label: 'Manufacturer', kind: 'text' },
+      { key: 'model', label: 'Model', kind: 'text' },
+      { key: 'vin', label: 'VIN', kind: 'text' },
+      { key: 'license_plate', label: 'License plate', kind: 'text' },
+      { key: 'category_name', label: 'Category', kind: 'text' },
+      { key: 'type_name', label: 'Type', kind: 'text' },
+      { key: 'ownership', label: 'Ownership', kind: 'text' },
+      { key: 'status_label', label: 'Status', kind: 'text' },
+      { key: 'status', label: 'Status (raw)', kind: 'enum' },
+      { key: 'site_name', label: 'Location', kind: 'text' },
+      { key: 'holder_name', label: 'Current holder', kind: 'text' },
+      // FK ids for conditions / recipient `field` targets.
+      { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
+      { key: 'site_org_unit_id', label: 'Location (id)', kind: 'org_unit' },
     ],
   },
   // The subject row is one truck_log_entries record, but its value map carries

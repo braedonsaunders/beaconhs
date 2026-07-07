@@ -206,7 +206,7 @@ export default async function TruckLogDetailPage({
       tx
         .select({ id: orgUnits.id, name: orgUnits.name })
         .from(orgUnits)
-        .where(eq(orgUnits.level, 'site'))
+        .where(eq(orgUnits.level, 'customer'))
         .orderBy(asc(orgUnits.name))
         .limit(500),
       tx
@@ -281,7 +281,7 @@ export default async function TruckLogDetailPage({
                     '—'
                   ),
                 },
-                { label: 'Site', value: site?.name ?? '—' },
+                { label: 'Customer / site', value: site?.name ?? '—' },
                 ...(entry.entryMode === 'destination'
                   ? [
                       { label: 'Business km', value: entry.businessKm ?? '—' },
@@ -346,7 +346,7 @@ export default async function TruckLogDetailPage({
                         clearable={false}
                       />
                     </Field>
-                    <Field label="Site">
+                    <Field label="Customer / site">
                       <Select name="siteOrgUnitId" defaultValue={entry.siteOrgUnitId ?? ''}>
                         <option value="">—</option>
                         {sites.map((s) => (

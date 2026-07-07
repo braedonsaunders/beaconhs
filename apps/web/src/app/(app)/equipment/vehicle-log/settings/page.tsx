@@ -3,7 +3,7 @@ import { PageHeader } from '@beaconhs/ui'
 import { people, vehicleLogSettings } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
-import { ModuleNav } from '@/components/module-admin/module-nav'
+import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { driverVehicleLogMode } from '../_service'
 import { VehicleLogSettingsForm } from './_form.client'
 
@@ -45,7 +45,7 @@ export default async function VehicleLogSettingsPage() {
             title="Vehicle log settings"
             description="Which entry modes drivers use and where each driver lands by default."
           />
-          <ModuleNav moduleKey="vehicle-log" active="settings" />
+          <EquipmentSubNav active="vehicle-log-settings" />
         </>
       }
     >
