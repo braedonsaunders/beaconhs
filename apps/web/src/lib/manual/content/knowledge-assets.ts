@@ -73,7 +73,8 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
     title: 'Documents & policies',
     group: 'Knowledge & training',
     iconKey: 'book',
-    summary: 'Find and read safe work practices, procedures, and policies, and sign off when asked.',
+    summary:
+      'Find and read safe work practices, procedures, and policies, and sign off when asked.',
     keywords: [
       'documents',
       'policies',

@@ -36,30 +36,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const [tenant, available, roles, unread, navGroups, sessionUser, walkthroughs] =
     await Promise.all([
-    withSuperAdmin(db, async (tx) => {
-      const [t] = await tx
-        .select({ id: tenants.id, name: tenants.name, riskMatrix: tenants.riskMatrix })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId))
-        .limit(1)
-      return t
-    }),
-    listAccessibleTenants(),
-    listActiveTenantRoles(),
-    ctx.db(async (tx) => {
-      const [row] = await tx
-        .select({ c: count() })
-        .from(notifications)
-        .where(and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt)))
-      return Number(row?.c ?? 0)
-    }),
-    // Build the sidebar from the registry + this tenant's saved nav config,
-    // filtered to what this user is permitted to open.
-    ctx.db((tx) => resolveNavGroups(ctx, tx)),
-    getSessionUser(),
-    // Guided tours this user may launch + the first-run auto-start pick.
-    ctx.db((tx) => resolveWalkthroughs(ctx, tx)),
-  ])
+      withSuperAdmin(db, async (tx) => {
+        const [t] = await tx
+          .select({ id: tenants.id, name: tenants.name, riskMatrix: tenants.riskMatrix })
+          .from(tenants)
+          .where(eq(tenants.id, ctx.tenantId))
+          .limit(1)
+        return t
+      }),
+      listAccessibleTenants(),
+      listActiveTenantRoles(),
+      ctx.db(async (tx) => {
+        const [row] = await tx
+          .select({ c: count() })
+          .from(notifications)
+          .where(and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt)))
+        return Number(row?.c ?? 0)
+      }),
+      // Build the sidebar from the registry + this tenant's saved nav config,
+      // filtered to what this user is permitted to open.
+      ctx.db((tx) => resolveNavGroups(ctx, tx)),
+      getSessionUser(),
+      // Guided tours this user may launch + the first-run auto-start pick.
+      ctx.db((tx) => resolveWalkthroughs(ctx, tx)),
+    ])
   if (!tenant) redirect('/login')
 
   // The account menu shows the real signed-in account. Prefer the tenant display

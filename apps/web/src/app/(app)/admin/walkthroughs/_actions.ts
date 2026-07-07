@@ -29,10 +29,7 @@ export async function saveWalkthroughSetting(formData: FormData): Promise<void> 
     const roleIds =
       requestedRoleIds.length > 0
         ? (
-            await tx
-              .select({ id: roles.id })
-              .from(roles)
-              .where(inArray(roles.id, requestedRoleIds))
+            await tx.select({ id: roles.id }).from(roles).where(inArray(roles.id, requestedRoleIds))
           ).map((r) => r.id)
         : []
 

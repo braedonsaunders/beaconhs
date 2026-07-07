@@ -298,7 +298,8 @@ The system then tracks every person in the audience and creates their tasks auto
     title: 'Builder (custom forms & apps)',
     group: 'Administration',
     iconKey: 'clipboard-check',
-    summary: 'Create your own forms and apps, publish them, assign them, and automate what happens after.',
+    summary:
+      'Create your own forms and apps, publish them, assign them, and automate what happens after.',
     keywords: [
       'builder',
       'forms',

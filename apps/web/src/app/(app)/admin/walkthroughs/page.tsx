@@ -25,10 +25,7 @@ export default async function AdminWalkthroughsPage() {
   const [settings, roleRows] = await ctx.db((tx) =>
     Promise.all([
       loadWalkthroughSettings(tx),
-      tx
-        .select({ id: roles.id, name: roles.name })
-        .from(roles)
-        .orderBy(asc(roles.name)),
+      tx.select({ id: roles.id, name: roles.name }).from(roles).orderBy(asc(roles.name)),
     ]),
   )
   const settingById = new Map(settings.map((s) => [s.walkthroughId, s]))

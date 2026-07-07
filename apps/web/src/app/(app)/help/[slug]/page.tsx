@@ -27,11 +27,7 @@ const ARTICLE_TOURS: Record<string, string> = {
   training: 'my-training',
 }
 
-export default async function HelpArticlePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}) {
+export default async function HelpArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const ctx = await requireRequestContext()
   const { slug } = await params
   const article = manualArticleForUser(ctx, slug)
