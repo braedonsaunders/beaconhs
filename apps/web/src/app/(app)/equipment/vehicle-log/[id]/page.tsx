@@ -17,6 +17,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
+import { isUuid } from '@/lib/list-params'
 import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -173,6 +174,9 @@ export default async function TruckLogDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  // Non-uuid segments (stale bookmarks like the removed /manage sub-route)
+  // must 404, not crash the uuid cast in Postgres.
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
