@@ -68,12 +68,16 @@ services:
     environment:
       # Allow the WOPI host (this app, as seen from inside the container).
       - aliasgroup1=http://host.docker.internal:3000
-      # Plain http locally + let the app's origin iframe the editor.
-      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:net.frame_ancestors=http://localhost:3000
+      # Plain http locally + let the app's origin iframe the editor. Welcome
+      # ("Explore the new version") dialogs are noise inside an embedded editor.
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:net.frame_ancestors=http://localhost:3000 --o:welcome.enable=false --o:home_mode.enable=true
     ports:
       - '9980:9980'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+    volumes:
+      # BeaconHS theme via the sanctioned branding.js hook (navy header etc.).
+      - ./deploy/collabora-branding.js:/usr/share/coolwsd/browser/dist/branding.js:ro
     restart: unless-stopped
 
 volumes:

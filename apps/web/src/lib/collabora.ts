@@ -75,7 +75,8 @@ export function editUrlFromDiscovery(xml: string): string | null {
 /**
  * Full iframe form-POST URL for editing one attachment: the discovery urlsrc
  * plus our WOPISrc. Collabora tolerates trailing placeholder tokens in urlsrc
- * (<ui=UI_LLCC&>…); strip them before appending.
+ * (<ui=UI_LLCC&>…); strip them before appending. Theming lives in the mounted
+ * branding.js (deploy/collabora-branding.js), not in URL params.
  */
 export function buildEditorUrl(editUrl: string, attachmentId: string): string {
   const cleaned = editUrl.replace(/<[^>]*>/g, '')

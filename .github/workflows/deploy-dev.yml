@@ -107,6 +107,17 @@ jobs:
             echo
           fi
 
+      # The collabora service bind-mounts this file over its stock branding.js
+      # (BeaconHS theme). The runner only has the docker socket, so write the
+      # host file through a helper container.
+      - name: Install Collabora branding on the swarm manager
+        run: |
+          set -euo pipefail
+          docker run --rm -i -v /etc/dokploy/beaconhs:/target alpine:3 \
+            sh -c 'cat > /target/collabora-branding.js && chmod 0644 /target/collabora-branding.js' \
+            < deploy/collabora-branding.js
+          echo "branding installed ($(wc -c < deploy/collabora-branding.js) bytes)"
+
       - name: Update env + redeploy on Dokploy
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}

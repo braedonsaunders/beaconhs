@@ -100,11 +100,7 @@ export function SlideDeckEditor({
           })
         }}
         label="Drop a .pptx or click to choose"
-        hint={
-          master
-            ? 'Replaces the current PowerPoint master and all slides.'
-            : 'The file becomes this deck’s master copy. Speaker notes are preserved.'
-        }
+        hint={master ? 'Replaces the current file and all slides.' : 'Speaker notes are preserved.'}
       />
     </div>
   )
@@ -147,9 +143,9 @@ export function SlideDeckEditor({
             {statusBadge}
           </div>
 
-          {/* editor */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-            {showImport ? importPanel : null}
+          {/* editor — flush against the toolbar, no wasted chrome */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {showImport ? <div className="p-3 pb-0">{importPanel}</div> : null}
             <CollaboraEmbed
               key={master.attachmentId}
               target={target}
@@ -163,17 +159,14 @@ export function SlideDeckEditor({
           <div className="mx-auto w-full max-w-2xl space-y-4 px-5 py-8">
             <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {importing ? 'Preparing the deck…' : 'Slideshows are PowerPoint decks'}
+                {importing ? 'Preparing the presentation…' : 'New presentation'}
               </h3>
               <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                Import an existing .pptx or start blank — either way the file is edited right here
-                and stays downloadable as PowerPoint.
+                Import a PowerPoint file or start a blank presentation.
               </p>
               {deck.length > 0 && !importing ? (
-                <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-300">
-                  This deck was built with the retired slide tools. It still plays, but editing
-                  requires a PowerPoint master — importing or starting blank replaces the current
-                  slides.
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  Importing or starting blank replaces the current slides.
                 </p>
               ) : null}
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">

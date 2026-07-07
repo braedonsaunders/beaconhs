@@ -100,8 +100,13 @@ services:
     environment:
       aliasgroup1: ${APP_URL}
       server_name: ${COLLABORA_SERVER_NAME}
-      # TLS terminates at Traefik; frame_ancestors lets the app iframe the editor.
-      extra_params: --o:ssl.enable=false --o:ssl.termination=true --o:net.frame_ancestors=${APP_URL}
+      # TLS terminates at Traefik; frame_ancestors lets the app iframe the
+      # editor; welcome dialogs are noise inside an embedded editor.
+      extra_params: --o:ssl.enable=false --o:ssl.termination=true --o:net.frame_ancestors=${APP_URL} --o:welcome.enable=false --o:home_mode.enable=true
+    volumes:
+      # BeaconHS theme via the sanctioned branding.js hook. The deploy workflow
+      # writes this file onto the swarm manager before deploying the stack.
+      - /etc/dokploy/beaconhs/collabora-branding.js:/usr/share/coolwsd/browser/dist/branding.js:ro
     networks: [dokploy-network]
     deploy:
       replicas: 1
