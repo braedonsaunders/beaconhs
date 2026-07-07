@@ -1250,6 +1250,16 @@ async function upsertContact(
     ctx.log('warn', `${message} — skipped`)
     return { action: 'skipped', message }
   }
+  // Only attach contacts to a LIVE customer. A soft-deleted parent (e.g. a
+  // customer that reverted from closed-won to a prospect) shouldn't accrue
+  // contacts — skip and leave any existing contact untouched. selectOrgUnit
+  // filters soft-deleted rows, so a null here means the parent is archived/gone.
+  const parent = await selectOrgUnit(tx, orgLink.canonicalId)
+  if (!parent) {
+    const message = `contact "${externalId}" → customer "${data.customerExternalId}" is archived`
+    ctx.log('warn', `${message} — skipped`)
+    return { action: 'skipped', message }
+  }
   const rowHash = hashData(data)
   const fields: ContactFields = {
     orgUnitId: orgLink.canonicalId,
