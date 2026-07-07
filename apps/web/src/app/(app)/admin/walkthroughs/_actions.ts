@@ -48,13 +48,14 @@ export async function saveWalkthroughSetting(formData: FormData): Promise<void> 
         set: { enabled, autoStart, roleIds, updatedAt: sql`now()` },
       })
 
+    // entity_id is a uuid column; the walkthrough's stable slug goes in metadata.
     await recordAudit(ctx, {
       entityType: 'walkthrough_setting',
-      entityId: walkthroughId,
       action: 'update',
       summary: `Walkthrough "${walkthrough.title}" settings updated`,
       before: before ? { ...before } : null,
       after: { walkthroughId, enabled, autoStart, roleIds },
+      metadata: { walkthroughId },
     })
   })
 
