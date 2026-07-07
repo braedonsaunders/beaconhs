@@ -22,7 +22,12 @@ import {
   type TenantNavConfig,
 } from '@beaconhs/db/schema'
 import type { SidebarNavGroup, SidebarNavItem } from '@/components/sidebar-nav'
-import { buildDefaultNavConfig, moduleByKey, PINNED_FORM_DEFAULT_ICON } from './registry'
+import {
+  buildDefaultNavConfig,
+  moduleByKey,
+  PINNED_FORM_DEFAULT_ICON,
+  withMissingModules,
+} from './registry'
 
 // Stable per-tenant slug of the built-in lift-plan form template (see
 // packages/db/src/seed/lift-plan-template.ts). Kept local to avoid a deep
@@ -51,7 +56,9 @@ function canSeePinnedForm(ctx: RequestContext): boolean {
  */
 export async function loadNavConfig(tx: Database): Promise<TenantNavConfig> {
   const [row] = await tx.select().from(tenantNavConfigs).limit(1)
-  if (row?.config) return row.config
+  // Saved configs predate any module shipped after they were saved — layer
+  // missing registry modules into their default groups so new built-ins appear.
+  if (row?.config) return withMissingModules(row.config)
 
   // No saved row → computed defaults. Auto-pin the built-in forms (lift-plan,
   // toolbox-talk) so the old native "Lift plans" / "Toolbox talks" entries

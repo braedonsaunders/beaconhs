@@ -115,6 +115,8 @@ export const NAV_MODULES: NavModule[] = [
   // Knowledge
   { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Knowledge' },
   { key: 'documents', href: '/documents', label: 'Documents', iconKey: 'book', group: 'Knowledge' },
+  // The built-in, permission-aware user manual + guided tours. Everyone gets it.
+  { key: 'help', href: '/help', label: 'User Guide', iconKey: 'circle-help', group: 'Knowledge' },
 
   // Assets & people
   { key: 'people', href: '/people', label: 'People', iconKey: 'users', group: 'Assets & people' },
@@ -220,6 +222,36 @@ export function buildDefaultNavConfig(): TenantNavConfig {
       })),
     })).filter((g) => g.items.length > 0),
   }
+}
+
+/**
+ * Layer registry modules a saved config doesn't know about into their default
+ * group. Without this, a tenant that saved a nav config before a new built-in
+ * module shipped would NEVER see it — saved configs only render the module
+ * keys they contain. Admins can still hide the module in /admin/navigation
+ * (hiding keeps the key in the config, so it never re-appends). Pure; returns
+ * the input untouched when nothing is missing.
+ */
+export function withMissingModules(config: TenantNavConfig): TenantNavConfig {
+  const present = new Set(
+    config.groups
+      .flatMap((g) => g.items)
+      .map((i) => (i.kind === 'module' ? i.moduleKey : null))
+      .filter((k): k is string => k !== null),
+  )
+  const missing = NAV_MODULES.filter((m) => !present.has(m.key))
+  if (missing.length === 0) return config
+  const groups = config.groups.map((g) => ({ ...g, items: [...g.items] }))
+  for (const mod of missing) {
+    const gid = defaultGroupId(mod.group)
+    let group = groups.find((g) => g.id === gid)
+    if (!group) {
+      group = { id: gid, label: mod.group, items: [] }
+      groups.push(group)
+    }
+    group.items.push({ kind: 'module', moduleKey: mod.key })
+  }
+  return { ...config, groups }
 }
 
 // Default icon for a pinned form when neither the pin nor the template sets one.
