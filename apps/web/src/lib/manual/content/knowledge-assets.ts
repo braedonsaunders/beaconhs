@@ -69,6 +69,68 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 - Lessons marked **opt** are optional. Everything else must be completed.`,
   },
   {
+    slug: 'training-slideshows',
+    title: 'Course slideshows & PowerPoint',
+    group: 'Knowledge & training',
+    iconKey: 'grad',
+    summary: 'Build slideshow lessons, or import a PowerPoint and keep editing it in the browser.',
+    keywords: [
+      'powerpoint',
+      'pptx',
+      'slides',
+      'slideshow',
+      'deck',
+      'import',
+      'presentation',
+      'course builder',
+      'lesson',
+      'collabora',
+    ],
+    requiredPermission: 'training.course.manage',
+    body: `Slideshow lessons show one slide at a time, with speaker notes and a progress bar. You can build slides in BeaconHS, or import a PowerPoint file and keep it as the working copy.
+
+## Where to find it
+
+Open **Training** in the left menu, then **Courses**. Open a course, add or open a lesson, and set its type to **Slideshow**. Reusable decks live in the **Content Library** the same way.
+
+## Build slides in BeaconHS
+
+1. In a slideshow lesson, use **+ Add slide…** to pick a layout.
+2. Click any text to edit it. Use the toolbar to add text boxes, images, and shapes.
+3. Type speaker notes in the box under the slide.
+4. Drag slides in the left strip to reorder. Changes save automatically in the course builder.
+
+## Import a PowerPoint
+
+1. Click **Import** in the toolbar and drop in a .pptx file.
+2. The file becomes the deck's **master copy** — any slides already in the deck are replaced.
+3. Conversion runs in the background. Slides appear when it finishes, with speaker notes carried over.
+4. Slides render exactly as they look in PowerPoint.
+
+## Edit an imported PowerPoint
+
+1. Open the slideshow lesson. Decks with a master copy show the file name in the toolbar.
+2. Click **Edit in PowerPoint**. A full PowerPoint-style editor opens in the browser.
+3. Make your changes — text, slides, images, anything. Changes save automatically.
+4. Close the editor when done. The slideshow re-renders itself after each save; the toolbar shows **rendering…** until it catches up.
+
+If the toolbar says PowerPoint editing is not configured, ask your administrator — the editor needs the Collabora server set up.
+
+## Download the PowerPoint
+
+Click **Download** in the deck toolbar to save the current master file, including every edit made in the browser.
+
+## Replace or detach the master
+
+- **Replace** — import a different .pptx. It becomes the new master and the slides re-render.
+- **Detach** — break the link to the PowerPoint file. The current slides stay and become editable with the BeaconHS slide tools, but saves in the PowerPoint editor no longer update the deck.
+
+## Tips
+
+- Keep one person editing a deck at a time. The editor supports it, but training content rarely needs two authors at once.
+- Very large files can take a minute or two to convert. The **rendering…** badge shows while that runs.`,
+  },
+  {
     slug: 'documents',
     title: 'Documents & policies',
     group: 'Knowledge & training',

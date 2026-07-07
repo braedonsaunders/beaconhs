@@ -37,6 +37,7 @@ import {
   saveLessonSlides,
   updateLesson,
 } from './studio/_actions'
+import { detachPptxMaster } from '../../pptx/[target]/[id]/_actions'
 
 type SaveState = 'saved' | 'dirty' | 'saving'
 
@@ -424,6 +425,19 @@ export function LessonSurface({
             importError={lesson.importError}
             onImportPptx={async (attachmentId) => {
               await importLessonPptx(lesson.id, courseId, attachmentId)
+              router.refresh()
+            }}
+            master={
+              lesson.sourceAttachmentId
+                ? {
+                    editHref: `/training/pptx/lesson/${lesson.id}`,
+                    downloadHref: `/training/pptx/lesson/${lesson.id}/download`,
+                    filename: lesson.sourceFilename ?? 'PowerPoint file',
+                  }
+                : null
+            }
+            onDetach={async () => {
+              await detachPptxMaster('lesson', lesson.id)
               router.refresh()
             }}
             className="min-h-0 flex-1"

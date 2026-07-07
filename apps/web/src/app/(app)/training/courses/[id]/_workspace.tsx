@@ -90,6 +90,9 @@ export type LessonLite = {
   practicalCriteria: PracticalCriterion[]
   importStatus: string | null
   importError: string | null
+  /** Set when the deck is mastered by an uploaded PowerPoint file. */
+  sourceAttachmentId: string | null
+  sourceFilename: string | null
 }
 export type ModuleLite = {
   id: string

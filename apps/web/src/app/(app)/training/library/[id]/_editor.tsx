@@ -27,6 +27,7 @@ import {
   saveContentItemSlides,
   updateContentItem,
 } from '../_actions'
+import { detachPptxMaster } from '../../pptx/[target]/[id]/_actions'
 
 type Kind = 'rich' | 'video' | 'file' | 'embed' | 'slides'
 type Item = {
@@ -42,6 +43,8 @@ type Item = {
   slides: Slide[]
   importStatus: string | null
   importError: string | null
+  sourceAttachmentId: string | null
+  sourceFilename: string | null
 }
 
 export function ContentItemEditor({
@@ -233,6 +236,19 @@ export function ContentItemEditor({
               importError={item.importError}
               onSave={async (slides) => saveContentItemSlides(item.id, slides)}
               onImportPptx={async (attId) => importContentItemPptx(item.id, attId)}
+              master={
+                item.sourceAttachmentId
+                  ? {
+                      editHref: `/training/pptx/content_item/${item.id}`,
+                      downloadHref: `/training/pptx/content_item/${item.id}/download`,
+                      filename: item.sourceFilename ?? 'PowerPoint file',
+                    }
+                  : null
+              }
+              onDetach={async () => {
+                await detachPptxMaster('content_item', item.id)
+                router.refresh()
+              }}
             />
           </CardContent>
         </Card>

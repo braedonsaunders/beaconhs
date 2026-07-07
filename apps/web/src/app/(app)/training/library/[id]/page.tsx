@@ -50,9 +50,10 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
         }
       }
     }
+    if (it.sourceAttachmentId) attIds.add(it.sourceAttachmentId)
     const atts = attIds.size
       ? await tx
-          .select({ id: attachments.id, key: attachments.r2Key })
+          .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
           .from(attachments)
           .where(inArray(attachments.id, [...attIds]))
       : []
@@ -85,6 +86,10 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
           slides: data.it.slides ?? [],
           importStatus: data.it.importStatus,
           importError: data.it.importError,
+          sourceAttachmentId: data.it.sourceAttachmentId,
+          sourceFilename: data.it.sourceAttachmentId
+            ? (data.atts.find((a) => a.id === data.it.sourceAttachmentId)?.filename ?? null)
+            : null,
         }}
         usedCount={data.used}
         attachmentUrls={Object.fromEntries(

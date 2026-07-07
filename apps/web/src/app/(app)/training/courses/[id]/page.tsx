@@ -136,6 +136,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
     }
     for (const l of lessons) {
       if (l.attachmentId) attIds.add(l.attachmentId)
+      if (l.sourceAttachmentId) attIds.add(l.sourceAttachmentId)
       collectBlocks(l.contentBlocks)
       collectSlides(l.slides)
     }
@@ -274,6 +275,10 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         practicalCriteria: l.practicalCriteria ?? [],
         importStatus: l.importStatus,
         importError: l.importError,
+        sourceAttachmentId: l.sourceAttachmentId,
+        sourceFilename: l.sourceAttachmentId
+          ? (attachmentMeta[l.sourceAttachmentId]?.filename ?? null)
+          : null,
       })),
   }))
 

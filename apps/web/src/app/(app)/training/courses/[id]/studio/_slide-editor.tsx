@@ -21,6 +21,8 @@ export function SlideEditor({
   importError,
   onSave,
   onImportPptx,
+  master,
+  onDetach,
 }: {
   initialSlides: Slide[]
   attachmentUrls: Record<string, string | null | undefined>
@@ -28,6 +30,9 @@ export function SlideEditor({
   importError: string | null
   onSave: (slides: Slide[]) => Promise<void>
   onImportPptx: (attachmentId: string) => Promise<void>
+  /** Set when the deck is mastered by an uploaded PowerPoint (read-only here). */
+  master?: { editHref: string; downloadHref: string; filename: string } | null
+  onDetach?: () => Promise<void>
 }) {
   const router = useRouter()
   // Initialize raw (NOT converted): conversion needs DOMParser, which differs
@@ -77,17 +82,22 @@ export function SlideEditor({
             toast.success('PowerPoint queued — slides will appear here when converted')
             router.refresh()
           }}
+          master={master}
+          onDetach={onDetach}
         />
       </div>
-      <div className="flex items-center justify-end gap-2">
-        {dirty ? (
-          <span className="text-xs text-amber-600 dark:text-amber-300">Unsaved changes</span>
-        ) : null}
-        <Button type="button" size="sm" onClick={save} disabled={pending || !dirty}>
-          {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          Save slides
-        </Button>
-      </div>
+      {/* Mastered decks save through the PowerPoint editor — nothing to save here. */}
+      {master ? null : (
+        <div className="flex items-center justify-end gap-2">
+          {dirty ? (
+            <span className="text-xs text-amber-600 dark:text-amber-300">Unsaved changes</span>
+          ) : null}
+          <Button type="button" size="sm" onClick={save} disabled={pending || !dirty}>
+            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            Save slides
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
