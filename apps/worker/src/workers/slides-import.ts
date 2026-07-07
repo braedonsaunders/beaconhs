@@ -1,10 +1,17 @@
-// PowerPoint → slides import.
+// PowerPoint → slides render (import + master-copy re-render).
 //
-// Converts an uploaded .pptx into pixel-perfect per-slide PNG images and
-// appends them (plus extracted speaker notes) to the Slide[] deck on a
-// training lesson or library content item:
+// Converts a .pptx into pixel-perfect per-slide PNG images and REPLACES the
+// Slide[] deck on a training lesson or library content item, marking the pptx
+// attachment as the deck's master copy (sourceAttachmentId). The same job runs
+// for the initial import and for every re-render after the master is edited in
+// the in-browser PowerPoint editor (Collabora save → WOPI PutFile):
 //
 //   pptx ─(soffice --headless)→ pdf ─(pdftoppm)→ slide-N.png → attachments
+//
+// Concurrency: PutFile enqueues renders with unique job ids, so two renders of
+// the same deck can overlap. Before persisting, the worker re-reads the master
+// attachment's updatedAt — if the file changed since this render started, the
+// result is stale and is discarded (the newer save's own job persists instead).
 //
 // Requires LibreOffice (soffice) + poppler (pdftoppm) on the worker host —
 // both are in the production image; locally `brew install --cask libreoffice`
@@ -17,11 +24,11 @@ import { mkdtemp, readFile, readdir, rm, writeFile, access } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import JSZip from 'jszip'
 import { db, withTenant } from '@beaconhs/db'
 import { attachments, trainingContentItems, trainingLessons, type Slide } from '@beaconhs/db/schema'
-import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
+import { deleteObject, getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 
 const exec = promisify(execFile)
@@ -136,6 +143,58 @@ async function extractNotes(pptx: Buffer): Promise<Map<number, string>> {
   return notes
 }
 
+/**
+ * Attachment ids of the locked full-bleed page renders this worker produces —
+ * one per slide, never referenced anywhere else. Used to garbage-collect a
+ * superseded render (rows + objects) after the deck is replaced.
+ */
+function renderedPageAttachmentIds(slides: Slide[]): string[] {
+  const ids: string[] = []
+  for (const slide of slides) {
+    if (slide.layout !== 'canvas') continue
+    for (const el of slide.elements ?? []) {
+      if (
+        el.kind === 'image' &&
+        el.locked === true &&
+        el.attachmentId &&
+        el.x === 0 &&
+        el.y === 0 &&
+        el.w === 960 &&
+        el.h === 540
+      ) {
+        ids.push(el.attachmentId)
+      }
+    }
+  }
+  return ids
+}
+
+/** Best-effort delete of a render's page-image attachments (rows + objects). */
+async function gcRenderedPages(tenantId: string, slides: Slide[]): Promise<void> {
+  const ids = renderedPageAttachmentIds(slides)
+  if (ids.length === 0) return
+  try {
+    const rows = await withTenant(db, tenantId, async (tx) => {
+      const found = await tx
+        .select({ id: attachments.id, key: attachments.r2Key })
+        .from(attachments)
+        .where(inArray(attachments.id, ids))
+      if (found.length > 0) {
+        await tx.delete(attachments).where(
+          inArray(
+            attachments.id,
+            found.map((r) => r.id),
+          ),
+        )
+      }
+      return found
+    })
+    await Promise.all(rows.map((r) => deleteObject({ key: r.key }).catch(() => {})))
+  } catch (err) {
+    console.warn('[slides-import] page-image GC failed (continuing):', err)
+  }
+}
+
 type Target = { table: typeof trainingLessons | typeof trainingContentItems; label: string }
 
 function targetFor(kind: 'lesson' | 'content_item'): Target {
@@ -165,16 +224,23 @@ export async function importSlidesFromPptx(args: {
 
   let workDir: string | null = null
   try {
-    // 1. Fetch the uploaded pptx.
+    // 1. Fetch the pptx master. updatedAt is the render's version stamp: a
+    // WOPI save bumps it, so a mismatch at persist time means this render is
+    // stale.
     const att = await withTenant(db, tenantId, async (tx) => {
       const [row] = await tx
-        .select({ key: attachments.r2Key, filename: attachments.filename })
+        .select({
+          key: attachments.r2Key,
+          filename: attachments.filename,
+          updatedAt: attachments.updatedAt,
+        })
         .from(attachments)
         .where(eq(attachments.id, attachmentId))
         .limit(1)
       return row ?? null
     })
     if (!att?.key) throw new Error('Uploaded PowerPoint file not found')
+    const renderedVersion = att.updatedAt?.getTime() ?? 0
     const pptx = await getObject({ key: att.key })
 
     // 2. Convert: pptx → pdf → per-page PNGs.
@@ -254,28 +320,55 @@ export async function importSlidesFromPptx(args: {
       })
     }
 
-    // 5. Append to the existing deck + mark complete.
-    await withTenant(db, tenantId, async (tx) => {
+    // 5. Replace the deck (the pptx is the master copy — slides are a derived
+    // render) + mark complete. Skipped when the master changed mid-render: the
+    // newer save's own render job persists the up-to-date result.
+    const superseded = await withTenant(db, tenantId, async (tx) => {
+      const [current] = await tx
+        .select({ updatedAt: attachments.updatedAt })
+        .from(attachments)
+        .where(eq(attachments.id, attachmentId))
+        .limit(1)
+      if ((current?.updatedAt?.getTime() ?? 0) !== renderedVersion) return null
+
       const [row] = await tx
         .select({ slides: table.slides })
         .from(table)
         .where(eq(table.id, targetId))
         .limit(1)
-      const existing = (row?.slides ?? []) as Slide[]
+      const previous = (row?.slides ?? []) as Slide[]
       await tx
         .update(table)
-        .set({ slides: [...existing, ...imported], importStatus: 'complete', importError: null })
+        .set({
+          slides: imported,
+          sourceAttachmentId: attachmentId,
+          importStatus: 'complete',
+          importError: null,
+        })
         .where(eq(table.id, targetId))
       await audit(tx, {
         tenantId,
         entityType: label,
         entityId: targetId,
         action: 'update',
-        summary: `Imported ${imported.length} slide${imported.length === 1 ? '' : 's'} from PowerPoint "${att.filename ?? 'deck.pptx'}"`,
+        summary: `Rendered ${imported.length} slide${imported.length === 1 ? '' : 's'} from PowerPoint "${att.filename ?? 'deck.pptx'}"`,
         metadata: { slideCount: imported.length, sourceAttachmentId: attachmentId },
       })
+      return previous
     })
-    console.log(`[slides-import] ${label} ${targetId}: imported ${imported.length} slides`)
+
+    if (superseded === null) {
+      // Stale render — throw away the page images we just uploaded.
+      await gcRenderedPages(tenantId, imported)
+      console.log(`[slides-import] ${label} ${targetId}: master changed mid-render, discarded`)
+      return
+    }
+
+    // 6. GC the previous render's page images (each save would otherwise leak
+    // one PNG per slide). Only attachments matching the import-render pattern
+    // are touched — they are created solely by this worker and never reused.
+    await gcRenderedPages(tenantId, superseded)
+    console.log(`[slides-import] ${label} ${targetId}: rendered ${imported.length} slides`)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'PowerPoint import failed'
     console.error(`[slides-import] ${label} ${targetId} failed:`, message)

@@ -161,6 +161,23 @@ export async function getObject(args: { key: string }): Promise<Buffer> {
   return Buffer.from(bytes)
 }
 
+/**
+ * Server-side streaming download for large objects (e.g. PowerPoint masters
+ * served through the WOPI host) — avoids buffering the whole file in memory.
+ */
+export async function getObjectStream(args: {
+  key: string
+}): Promise<{ stream: ReadableStream; contentLength?: number; contentType?: string }> {
+  const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: args.key }))
+  const body = res.Body
+  if (!body) throw new Error(`Object not found: ${args.key}`)
+  return {
+    stream: body.transformToWebStream() as ReadableStream,
+    contentLength: res.ContentLength,
+    contentType: res.ContentType,
+  }
+}
+
 export async function deleteObject(args: { key: string }): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: args.key }))
 }
