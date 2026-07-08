@@ -12,7 +12,19 @@
 // M3 per-record/expiry completion adapters — when those land, this becomes a
 // single query over `compliance_status`.
 
-import { and, desc, eq, inArray, isNotNull, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import {
   correctiveActions,
   documents,
@@ -97,6 +109,9 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
 
     // ---- Training: certification expiry ----
     {
+      // Certs belong to a person, so only ACTIVE people count — a terminated
+      // employee's expired tickets aren't outstanding compliance work (same
+      // rule as the audience resolver, dashboards, and report_training_matrix).
       const rows = await tx
         .select({
           id: trainingRecords.id,
@@ -107,7 +122,7 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
           expiresOn: trainingRecords.expiresOn,
         })
         .from(trainingRecords)
-        .leftJoin(people, eq(people.id, trainingRecords.personId))
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
         .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
         .where(
           and(
@@ -115,8 +130,13 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
             isNull(trainingRecords.deletedAt),
             isNotNull(trainingRecords.expiresOn),
             lte(trainingRecords.expiresOn, horizonIso),
+            eq(people.status, 'active'),
+            isNull(people.deletedAt),
           ),
         )
+        // Soonest expiry first so the cap keeps the most overdue rows when a
+        // tenant has more than 1000 expiring certs.
+        .orderBy(asc(trainingRecords.expiresOn))
         .limit(1000)
       for (const r of rows) {
         const due = isoDate(r.expiresOn)

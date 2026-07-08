@@ -283,7 +283,7 @@ The system then tracks every person in the audience and creates their tasks auto
 
 ## See who is overdue
 
-1. Open the **Due & expiring** tab. The cards at the top show **Overdue**, **Expired**, **Due soon (30d)**, and **Open tasks**. Filter the list by status to work through it.
+1. Open the **Due & expiring** tab. The cards at the top show **Overdue**, **Expired**, **Due soon (30d)**, and **Open tasks**. Filter the list by status to work through it. Certifications only count for active people — someone marked inactive or terminated in People drops off this list.
 2. Open the **Aging** tab to see how long items have been overdue, grouped into 0–7 days, 7–30 days, and 30+ days. Start with the oldest.
 3. Open the **By person** tab and pick a person to see every requirement on their plate, with status badges like **Overdue**, **Expiring**, and **Completed**.
 
