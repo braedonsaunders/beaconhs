@@ -86,7 +86,9 @@ export async function executeFlowPlan(
     return r?.id ?? null
   }
 
-  // person id → best email (people.email, else the linked user's email).
+  // person id → best email (people.email, else the linked user's email). Some
+  // subject fields of kind 'person' hold a tenant_users id instead (e.g. a
+  // record's owner/inspector), so miss falls through to that lookup.
   const personEmail = async (personId: string): Promise<string | null> => {
     const [p] = await ctx.db((tx) =>
       tx
@@ -95,15 +97,25 @@ export async function executeFlowPlan(
         .where(eq(people.id, personId))
         .limit(1),
     )
-    if (!p) return null
-    if (p.email && p.email.includes('@')) return p.email.trim()
-    if (p.userId) {
-      const [u] = await ctx.db((tx) =>
-        tx.select({ email: users.email }).from(users).where(eq(users.id, p.userId!)).limit(1),
-      )
-      return u?.email ?? null
+    if (p) {
+      if (p.email && p.email.includes('@')) return p.email.trim()
+      if (p.userId) {
+        const [u] = await ctx.db((tx) =>
+          tx.select({ email: users.email }).from(users).where(eq(users.id, p.userId!)).limit(1),
+        )
+        return u?.email ?? null
+      }
+      return null
     }
-    return null
+    const [tu] = await ctx.db((tx) =>
+      tx
+        .select({ email: users.email })
+        .from(tenantUsers)
+        .innerJoin(users, eq(users.id, tenantUsers.userId))
+        .where(and(eq(tenantUsers.id, personId), eq(tenantUsers.tenantId, ctx.tenantId)))
+        .limit(1),
+    )
+    return tu?.email ?? null
   }
 
   const resolveEmails = async (targets: EmailTarget[]): Promise<string[]> => {

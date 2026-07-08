@@ -87,6 +87,7 @@
     "react-querybuilder": "^8.20.2",
     "recharts": "^3.9.0",
     "remark-gfm": "^4.0.1",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "unpdf": "^1.6.2",
