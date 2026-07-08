@@ -99,8 +99,8 @@ export default async function SchedulesListPage({
           }
           action={
             rows.length === 0 ? (
-              <Link href="/reports/definitions">
-                <Button variant="outline">Browse the library</Button>
+              <Link href="/reports">
+                <Button variant="outline">Browse reports</Button>
               </Link>
             ) : undefined
           }

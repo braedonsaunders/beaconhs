@@ -61,7 +61,11 @@ type StudioTemplate = {
 // Client-side mirror of the engine defaults (see @beaconhs/reports/document —
 // kept local so this bundle never pulls the db schema's runtime barrel). The
 // server re-validates/clamps every save and preview.
-const DEFAULT_LAYOUT: ReportLayoutConfig = { paperSize: 'letter', orientation: 'landscape', marginMm: 15 }
+const DEFAULT_LAYOUT: ReportLayoutConfig = {
+  paperSize: 'letter',
+  orientation: 'landscape',
+  marginMm: 15,
+}
 const PAPER_CHOICES: { key: ReportPaperSize; label: string }[] = [
   { key: 'letter', label: 'Letter' },
   { key: 'a4', label: 'A4' },

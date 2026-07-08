@@ -120,7 +120,10 @@ export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string
         .map(
           (r) =>
             `<tr>${r
-              .map((v) => `<td>${v === null || v === undefined ? '<em>—</em>' : escapeHtml(String(v))}</td>`)
+              .map(
+                (v) =>
+                  `<td>${v === null || v === undefined ? '<em>—</em>' : escapeHtml(String(v))}</td>`,
+              )
               .join('')}</tr>`,
         )
         .join('')

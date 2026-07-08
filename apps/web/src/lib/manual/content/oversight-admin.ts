@@ -130,7 +130,7 @@ The list page shows locations with their projects and sites. For one flat, searc
     title: 'Reports',
     group: 'Oversight & reports',
     iconKey: 'file',
-    summary: 'Run built-in or custom reports, export them, and schedule email delivery.',
+    summary: 'Preview print-ready reports, export them, and schedule email delivery.',
     keywords: [
       'reports',
       'export',
@@ -140,9 +140,10 @@ The list page shows locations with their projects and sites. For one flat, searc
       'schedule',
       'email report',
       'subscribe',
-      'report library',
+      'print preview',
+      'page setup',
     ],
-    body: `Reports turn your records into documents you can read, print, export, and email on a schedule.
+    body: `Reports turn your records into print-ready documents you can preview, export, and email on a schedule.
 
 ## What this is for
 
@@ -150,22 +151,24 @@ Use Reports when you need a document: a weekly incident summary for a meeting, a
 
 ## Where to find it
 
-Open [Reports](/reports) from the sidebar. It has three tabs: **Overview**, **Library**, and **Schedules**.
+Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Schedules**.
 
 ## Run a report
 
-1. Open the **Library** tab. It lists built-in reports and any custom ones your team made. Custom reports show a small **custom** badge.
-2. Use **Search reports…** or the **Kind** and **Category** filters to find the one you need.
-3. Click **View** to run it.
-4. Use the day-range buttons (like **30 days**) to change how far back the report looks.
+1. The list on the left shows built-in reports and any custom ones your team made. Custom reports show a small **custom** badge.
+2. Use **Search reports…** or the **Kind** and **Category** filters to narrow the list.
+3. Click a report. The right side shows the printed pages, exactly as the PDF will look.
+4. Click **Open** to see the full document. Use the day-range buttons (like **30 days**) to change how far back the report looks.
+
+On a phone, the list fills the screen; picking a report opens its preview, and **All reports** takes you back.
 
 ## Export a report
 
-1. Run the report.
-2. Click **CSV**, **Excel**, or **PDF** at the top.
-3. The file downloads. PDF is best for printing or sending; CSV and Excel are best for working with the numbers.
+1. Select or open the report.
+2. Click **CSV**, **Excel**, or **PDF**.
+3. The file downloads. The PDF matches the preview page-for-page; CSV and Excel are best for working with the numbers.
 
-You can also click **Email PDF** to send the report right away instead of downloading it.
+You can also click **Email PDF** on the full report to send it right away instead of downloading it.
 
 ## Schedule a report by email
 
@@ -181,7 +184,11 @@ The **Schedules** tab shows every schedule with its next run and last run. Use t
 
 ## Build your own report
 
-If no built-in report fits, click **New report** in the Library to build a custom one. You can also open a built-in report and click **Edit a copy** to start from something close.`,
+If no built-in report fits, click **New report** to build a custom one. You can also open a built-in report and click **Edit a copy** to start from something close.
+
+The builder shows a live print preview while you work. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, and set the page margin — the preview and every export follow it.
+
+On the full report, subscriptions, past runs, and report details live on the **Schedules & activity** tab.`,
   },
   {
     slug: 'insights',
