@@ -31,8 +31,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
   })
   if (!att) return new NextResponse('File not found', { status: 404 })
 
-  // Collabora insists on a recognised extension to pick the Impress editor.
-  const baseFileName = /\.pptx?$/i.test(att.filename) ? att.filename : `${att.filename}.pptx`
+  // Collabora insists on a recognised extension to pick the right editor
+  // (Impress for decks, Writer for documents).
+  const fallbackExt = grant.target === 'document' ? 'docx' : 'pptx'
+  const baseFileName = /\.(pptx?|docx?)$/i.test(att.filename)
+    ? att.filename
+    : `${att.filename}.${fallbackExt}`
 
   return NextResponse.json({
     BaseFileName: baseFileName,

@@ -1,13 +1,14 @@
-// WOPI GetFile / PutFile — Collabora Online streams the pptx master out of
+// WOPI GetFile / PutFile — Collabora Online streams an office master out of
 // storage on session open (GET) and writes the edited file back on every save
-// (POST, X-WOPI-Override: PUT). A successful save bumps the attachment,
-// re-queues the slide render so the learner-facing deck catches up, and audits
-// the edit against the owning lesson / library item.
+// (POST, X-WOPI-Override: PUT). A successful save bumps the attachment and
+// audits the edit against the owning entity; training decks additionally
+// re-queue the slide render so the learner-facing deck catches up (documents
+// need no derived render — Writer is the draft view, PDFs snapshot at publish).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
-import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
+import { attachments, documents, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
 import { getObjectStream, putObject } from '@beaconhs/storage'
 import { enqueueSlidesRender } from '@beaconhs/jobs'
 import { audit } from '@beaconhs/audit'
@@ -15,9 +16,9 @@ import { verifyWopiToken, type WopiGrant } from '@/lib/wopi'
 
 export const dynamic = 'force-dynamic'
 
-// Generous ceiling for large field decks (the user-facing upload cap is lower);
-// protects the host from a runaway body, not a policy limit.
-const MAX_PPTX_BYTES = 1024 * 1024 * 1024
+// Generous ceiling for large office files (the user-facing upload cap is
+// lower); protects the host from a runaway body, not a policy limit.
+const MAX_OFFICE_BYTES = 1024 * 1024 * 1024
 
 function authenticate(req: NextRequest, fileId: string): WopiGrant | null {
   const token = req.nextUrl.searchParams.get('access_token') ?? ''
@@ -87,19 +88,38 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
 
   const body = Buffer.from(await req.arrayBuffer())
   if (body.length === 0) return new NextResponse('Empty file body', { status: 400 })
-  if (body.length > MAX_PPTX_BYTES) return new NextResponse('File too large', { status: 413 })
+  if (body.length > MAX_OFFICE_BYTES) return new NextResponse('File too large', { status: 413 })
 
   // Overwrite the master in place (S3 PUT is atomic), then bump the version
-  // stamp and kick a re-render for the deck that owns this master.
+  // stamp; deck targets also kick a re-render of the derived slides.
   await putObject({
     key: att.key,
     body,
-    contentType:
-      att.contentType ||
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    contentType: att.contentType || 'application/octet-stream',
   })
 
   const savedAt = new Date()
+
+  if (grant.target === 'document') {
+    await withTenant(db, grant.tenantId, async (tx) => {
+      await tx
+        .update(attachments)
+        .set({ sizeBytes: body.length, updatedAt: savedAt })
+        .where(eq(attachments.id, fileId))
+      await tx.update(documents).set({ updatedAt: savedAt }).where(eq(documents.id, grant.targetId))
+      await audit(tx, {
+        tenantId: grant.tenantId,
+        actorUserId: grant.userId,
+        entityType: 'document',
+        entityId: grant.targetId,
+        action: 'update',
+        summary: `Saved "${att.filename}" in the editor`,
+        metadata: { attachmentId: fileId, sizeBytes: body.length },
+      })
+    })
+    return NextResponse.json({ LastModifiedTime: savedAt.toISOString() })
+  }
+
   const table = grant.target === 'lesson' ? trainingLessons : trainingContentItems
   const entityType = grant.target === 'lesson' ? 'training_lesson' : 'training_content_item'
 

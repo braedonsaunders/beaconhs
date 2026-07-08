@@ -1,30 +1,35 @@
 'use client'
 
-// Inline Collabora editor for a PowerPoint-mastered deck. Fetches a WOPI
-// session (discovery URL + single-file token) via a server action, then — as
-// WOPI mandates — form-POSTs the access token into the iframe. Remount with a
-// fresh `key` when the master attachment changes (Replace / new deck).
+// Inline Collabora editor (Impress for training decks, Writer for documents).
+// Fetches a WOPI session (discovery URL + single-file token) via the server
+// action supplied by the host surface, then — as WOPI mandates — form-POSTs
+// the access token into the iframe. Remount with a fresh `key` when the
+// backing attachment changes (Replace / new master / different version).
 
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Presentation } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
-import { getPptxEditorSession, type PptxEditorSession } from '../pptx/_actions'
+
+export type CollaboraSession =
+  | { ok: true; actionUrl: string; accessToken: string; accessTokenTtl: number }
+  | { ok: false; error: 'not_configured' | 'no_master' | 'unknown_target' }
 
 export function CollaboraEmbed({
-  target,
-  targetId,
+  fetchSession,
+  frameName,
   className,
 }: {
-  target: 'lesson' | 'content_item'
-  targetId: string
+  fetchSession: () => Promise<CollaboraSession>
+  /** Unique name for the target iframe (e.g. the entity id). */
+  frameName: string
   className?: string
 }) {
-  const [session, setSession] = useState<PptxEditorSession | null>(null)
+  const [session, setSession] = useState<CollaboraSession | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
     let cancelled = false
-    getPptxEditorSession(target, targetId)
+    fetchSession()
       .then((s) => {
         if (!cancelled) setSession(s)
       })
@@ -34,7 +39,8 @@ export function CollaboraEmbed({
     return () => {
       cancelled = true
     }
-  }, [target, targetId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameName])
 
   useEffect(() => {
     if (session?.ok) formRef.current?.submit()
@@ -67,13 +73,13 @@ export function CollaboraEmbed({
           <p className="flex items-center justify-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
             <Presentation size={15} />
             {session.error === 'not_configured'
-              ? 'PowerPoint editing is not configured'
-              : 'This deck has no PowerPoint file yet'}
+              ? 'In-browser editing is not configured'
+              : 'This item has no source file yet'}
           </p>
           <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
             {session.error === 'not_configured'
-              ? 'The editor needs a Collabora Online server (COLLABORA_URL). The slideshow still plays from its last render, and the file can be downloaded.'
-              : 'Import a PowerPoint or start a blank deck to begin.'}
+              ? 'The editor needs a Collabora Online server (COLLABORA_URL). Published content and downloads keep working.'
+              : 'Import a file or start a blank one to begin.'}
           </p>
         </div>
       </div>
@@ -86,7 +92,7 @@ export function CollaboraEmbed({
         ref={formRef}
         action={session.actionUrl}
         method="POST"
-        target={`collabora-${targetId}`}
+        target={`collabora-${frameName}`}
         className="hidden"
       >
         <input type="hidden" name="access_token" value={session.accessToken} readOnly />
@@ -98,8 +104,8 @@ export function CollaboraEmbed({
         />
       </form>
       <iframe
-        name={`collabora-${targetId}`}
-        title="PowerPoint editor"
+        name={`collabora-${frameName}`}
+        title="Editor"
         className="h-full w-full bg-white dark:bg-slate-900"
         allow="clipboard-read *; clipboard-write *; fullscreen *"
         allowFullScreen

@@ -12,7 +12,14 @@
 // surfaces explain that PowerPoint editing isn't configured (import, playback
 // and download keep working; they don't need Collabora).
 
-const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+/** Office app inside Collabora: Impress (slides) or Writer (documents). */
+export type CollaboraApp = 'presentation' | 'text'
+
+const APP_MIME: Record<CollaboraApp, string> = {
+  presentation: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  text: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+const APP_EXT: Record<CollaboraApp, string> = { presentation: 'pptx', text: 'docx' }
 const DISCOVERY_TTL_MS = 10 * 60 * 1000
 
 export function collaboraConfigured(): boolean {
@@ -29,17 +36,20 @@ export function wopiCallbackBase(): string {
   return base.replace(/\/+$/, '')
 }
 
-let cached: { url: string; at: number } | null = null
+const cached: Partial<Record<CollaboraApp, { url: string; at: number }>> = {}
 
 /**
- * Resolve the Collabora edit-action URL for pptx from its WOPI discovery XML
- * (cached 10 min). Returns null when Collabora is not configured or not
- * reachable — callers must surface a real disabled/config-error state.
+ * Resolve the Collabora edit-action URL for an office app from its WOPI
+ * discovery XML (cached 10 min). Returns null when Collabora is not
+ * configured or not reachable — callers must surface a real disabled state.
  */
-export async function getCollaboraEditUrl(): Promise<string | null> {
+export async function getCollaboraEditUrl(
+  app: CollaboraApp = 'presentation',
+): Promise<string | null> {
   const base = process.env.COLLABORA_URL?.replace(/\/+$/, '')
   if (!base) return null
-  if (cached && Date.now() - cached.at < DISCOVERY_TTL_MS) return cached.url
+  const hit = cached[app]
+  if (hit && Date.now() - hit.at < DISCOVERY_TTL_MS) return hit.url
 
   try {
     const res = await fetch(`${base}/hosting/discovery`, {
@@ -48,27 +58,30 @@ export async function getCollaboraEditUrl(): Promise<string | null> {
     })
     if (!res.ok) return null
     const xml = await res.text()
-    // <app name="...pptx-mime..."><action name="edit" urlsrc="https://..."/></app>
-    // Match the edit action tied to the pptx MIME type (or the impress ext
-    // fallback some builds use).
-    const url = editUrlFromDiscovery(xml)
+    const url = editUrlFromDiscovery(xml, app)
     if (!url) return null
-    cached = { url, at: Date.now() }
+    cached[app] = { url, at: Date.now() }
     return url
   } catch {
     return null
   }
 }
 
-export function editUrlFromDiscovery(xml: string): string | null {
+export function editUrlFromDiscovery(
+  xml: string,
+  app: CollaboraApp = 'presentation',
+): string | null {
+  // <app name="...mime..."><action name="edit" urlsrc="https://..."/></app>
   const apps = [...xml.matchAll(/<app[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/app>/g)]
   for (const [, name, body] of apps) {
-    if (name !== PPTX_MIME) continue
+    if (name !== APP_MIME[app]) continue
     const action = body?.match(/<action[^>]*name="edit"[^>]*urlsrc="([^"]+)"/)
     if (action?.[1]) return action[1]
   }
   // Older discovery layouts key actions by extension instead of MIME type.
-  const byExt = xml.match(/<action[^>]*ext="pptx"[^>]*name="edit"[^>]*urlsrc="([^"]+)"/)
+  const byExt = xml.match(
+    new RegExp(`<action[^>]*ext="${APP_EXT[app]}"[^>]*name="edit"[^>]*urlsrc="([^"]+)"`),
+  )
   return byExt?.[1] ?? null
 }
 

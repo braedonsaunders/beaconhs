@@ -1663,8 +1663,6 @@ async function main() {
           reviewFrequencyMonths: d.reviewFreq,
           nextReviewOn: isoDate(new Date(today.getTime() + d.reviewFreq * 30 * dayMs - 30 * dayMs)),
           ownerTenantUserId: membership.id,
-          printHeader: true,
-          printFooter: true,
         })
         .returning()
       const [v1] = await tx
@@ -1673,7 +1671,7 @@ async function main() {
           tenantId: tenant.id,
           documentId: doc!.id,
           version: 1,
-          contentMarkdown: d.body,
+          textContent: d.body,
           publishedAt: new Date(today.getTime() - 200 * dayMs),
           publishedBy: admin.id,
           changelog: 'Initial release',
@@ -1685,7 +1683,7 @@ async function main() {
           tenantId: tenant.id,
           documentId: doc!.id,
           version: 2,
-          contentMarkdown: d.body + '\n\n## Revision\n\nUpdated reporting contact emails.',
+          textContent: d.body + '\n\nRevision: updated reporting contact emails.',
           publishedAt: new Date(today.getTime() - 30 * dayMs),
           publishedBy: admin.id,
           changelog: 'Updated emergency contact roster',

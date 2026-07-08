@@ -134,8 +134,6 @@ export const TENANT_SCOPED_TABLES = [
   'ppe_annual_records',
   'documents',
   'document_versions',
-  'document_drafts',
-  'document_comments',
   'document_acknowledgments',
   'document_acknowledgment_sessions',
   'document_reviews',

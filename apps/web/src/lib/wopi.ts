@@ -34,6 +34,9 @@ function key(): Buffer {
   return cachedKey
 }
 
+/** What a WOPI-edited file belongs to: a training deck target or a document. */
+export type WopiTarget = 'lesson' | 'content_item' | 'document'
+/** Training-deck subset (slides lessons + library items). */
 export type WopiDeckTarget = 'lesson' | 'content_item'
 
 export type WopiGrant = {
@@ -41,7 +44,7 @@ export type WopiGrant = {
   tenantId: string
   userId: string
   userName: string
-  target: WopiDeckTarget
+  target: WopiTarget
   targetId: string
   canWrite: boolean
   /** Expiry, ms since epoch. */
@@ -90,7 +93,7 @@ export function verifyWopiToken(token: string, attachmentId: string): WopiGrant 
     typeof grant.tenantId !== 'string' ||
     typeof grant.userId !== 'string' ||
     typeof grant.targetId !== 'string' ||
-    (grant.target !== 'lesson' && grant.target !== 'content_item') ||
+    (grant.target !== 'lesson' && grant.target !== 'content_item' && grant.target !== 'document') ||
     typeof grant.exp !== 'number'
   ) {
     return null

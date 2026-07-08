@@ -46,12 +46,12 @@ export const documents = pgTable(
     nextReviewOn: date('next_review_on'),
     requiredForRoleKeys: jsonb('required_for_role_keys').$type<string[]>().default([]).notNull(),
     requiredForTradeIds: jsonb('required_for_trade_ids').$type<string[]>().default([]).notNull(),
-    printHeader: boolean('print_header').default(true).notNull(),
-    printFooter: boolean('print_footer').default(true).notNull(),
-    // Page setup for the in-app editor + PDF. pageSize maps to Puppeteer `format`.
-    pageSize: text('page_size').default('Letter').notNull(), // 'Letter' | 'A4'
-    headerText: text('header_text'), // running header text (PDF); falls back to tenant·title
-    footerText: text('footer_text'), // running footer text (PDF); falls back to tenant·key
+    // DOCX master copy: the working draft, edited inline in Collabora Writer
+    // (page setup, headers/footers, comments and track changes all live in the
+    // file). Publishing snapshots it into an immutable document_versions row.
+    // Null for file-only documents (uploaded PDFs — see
+    // document_versions.contentAttachmentId).
+    sourceAttachmentId: uuid('source_attachment_id'),
     ...timestamps,
     ...softDelete,
   },
@@ -74,9 +74,19 @@ export const documentVersions = pgTable(
       .notNull()
       .references(() => documents.id, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
+    // File-only documents (uploaded PDF or other artifact) — the uploaded file
+    // IS the version content.
     contentAttachmentId: uuid('content_attachment_id'),
-    contentMarkdown: text('content_markdown'), // in-app authored docs — stores HTML (legacy name)
-    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(), // ProseMirror JSON (fidelity / marks)
+    // Authored documents: immutable snapshot of the DOCX master at publish
+    // time, plus the worker-rendered PDF (what readers see — identical
+    // pagination on every device) and extracted plain text (search / AI).
+    docxAttachmentId: uuid('docx_attachment_id'),
+    pdfAttachmentId: uuid('pdf_attachment_id'),
+    textContent: text('text_content'),
+    // PDF render lifecycle (worker writes these): 'pending' | 'processing' |
+    // 'complete' | 'failed'.
+    renderStatus: text('render_status'),
+    renderError: text('render_error'),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     publishedBy: text('published_by').references(() => users.id),
     changelog: text('changelog'),
@@ -85,61 +95,6 @@ export const documentVersions = pgTable(
   (t) => ({
     documentIdx: index('document_versions_document_idx').on(t.documentId, t.version),
     tenantIdx: index('document_versions_tenant_idx').on(t.tenantId),
-  }),
-)
-
-// One editable working draft per document. Autosaves while a user edits;
-// `publishDraft` snapshots it into an immutable document_versions row and
-// re-seeds the draft from the just-published content (never a blank page).
-export const documentDrafts = pgTable(
-  'document_drafts',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    documentId: uuid('document_id')
-      .notNull()
-      .references(() => documents.id, { onDelete: 'cascade' }),
-    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(), // ProseMirror JSON (source of truth)
-    contentHtml: text('content_html'), // sanitized HTML (render / PDF / export)
-    baseVersionId: uuid('base_version_id').references(() => documentVersions.id), // version this draft forked from
-    updatedByTenantUserId: uuid('updated_by_tenant_user_id').references(() => tenantUsers.id),
-    ...timestamps,
-  },
-  (t) => ({
-    documentUx: uniqueIndex('document_drafts_document_ux').on(t.documentId),
-    tenantIdx: index('document_drafts_tenant_idx').on(t.tenantId),
-  }),
-)
-
-// Threaded comments anchored to ranges via a `comment` mark whose commentId
-// equals `anchorId`. Replies set `threadId` to the root comment's id.
-export const documentComments = pgTable(
-  'document_comments',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    documentId: uuid('document_id')
-      .notNull()
-      .references(() => documents.id, { onDelete: 'cascade' }),
-    anchorId: text('anchor_id'), // matches the comment mark's id; null once the anchored text is gone
-    quotedText: text('quoted_text'), // snapshot of the marked text for detached/orphaned threads
-    body: text('body').notNull(),
-    authorTenantUserId: uuid('author_tenant_user_id')
-      .notNull()
-      .references(() => tenantUsers.id),
-    threadId: uuid('thread_id'), // null on a root comment; root id on replies (soft self-reference)
-    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-    resolvedByTenantUserId: uuid('resolved_by_tenant_user_id').references(() => tenantUsers.id),
-    ...timestamps,
-  },
-  (t) => ({
-    docIdx: index('document_comments_doc_idx').on(t.documentId),
-    threadIdx: index('document_comments_thread_idx').on(t.threadId),
-    tenantIdx: index('document_comments_tenant_idx').on(t.tenantId),
   }),
 )
 

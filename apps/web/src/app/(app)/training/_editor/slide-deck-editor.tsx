@@ -15,8 +15,8 @@ import type { Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { SlidePlayer } from '../_components/slide-player'
-import { CollaboraEmbed } from './collabora-embed'
-import { createBlankDeckMaster } from '../pptx/_actions'
+import { CollaboraEmbed } from '@/components/collabora-embed'
+import { createBlankDeckMaster, getPptxEditorSession } from '../pptx/_actions'
 
 export function SlideDeckEditor({
   deck,
@@ -148,8 +148,8 @@ export function SlideDeckEditor({
             {showImport ? <div className="p-3 pb-0">{importPanel}</div> : null}
             <CollaboraEmbed
               key={master.attachmentId}
-              target={target}
-              targetId={targetId}
+              frameName={targetId}
+              fetchSession={() => getPptxEditorSession(target, targetId)}
               className="min-h-[26rem] flex-1"
             />
           </div>
