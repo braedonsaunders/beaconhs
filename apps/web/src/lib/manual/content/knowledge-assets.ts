@@ -250,6 +250,12 @@ Open the **Versions** tab. Every published version keeps its own PDF and Word fi
 
 Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. Once a PDF is in place, **Replace** in the PDF toolbar swaps in a new file.
 
+## Archive or delete
+
+- **Archive** (select documents in the list, pick **Archive**) retires a document but keeps it findable under the Archived filter. Use this for superseded documents.
+- **Delete** removes a document completely: click **Delete** on the document's page, or select documents in the list and pick **Delete**. Readers lose access, it leaves every book, and it disappears from all lists. Version history is kept for audit.
+- A document that an active compliance obligation still requires cannot be deleted — end the obligation first.
+
 ## Tips
 
 - Acknowledgments always point at published versions, so you can edit the draft freely without affecting sign-offs.

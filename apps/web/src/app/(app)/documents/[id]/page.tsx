@@ -13,6 +13,7 @@ import {
   Info,
   Mail,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react'
 import {
   Alert,
@@ -52,6 +53,8 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendDocumentEmail } from './_send-email'
 import { publishDocumentVersion } from './_master-actions'
+import { deleteDocument } from '../_actions'
+import { ConfirmButton } from '@/components/confirm-button'
 import { getTenantAiSettings } from '@/lib/ai-config'
 import { DocumentPane } from './_document-pane'
 import { AcknowledgmentsPanel, type AckRow } from './_acknowledgments-panel'
@@ -405,6 +408,16 @@ export default async function DocumentDetailPage({
                   </Button>
                 </form>
               )}
+              <form action={deleteDocument} className="inline">
+                <input type="hidden" name="id" value={id} />
+                <ConfirmButton
+                  message="Delete this document? Readers lose access, it is removed from books, and it disappears from every list. Version history is kept for audit."
+                  size="md"
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  <Trash2 size={14} /> Delete
+                </ConfirmButton>
+              </form>
             </>
           ) : null}
         </div>

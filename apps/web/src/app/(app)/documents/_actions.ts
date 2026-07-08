@@ -14,7 +14,12 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { documentBookItems, documentBooks, documents } from '@beaconhs/db/schema'
+import {
+  complianceObligations,
+  documentBookItems,
+  documentBooks,
+  documents,
+} from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -144,6 +149,110 @@ export async function bulkArchiveDocuments(args: {
 
   revalidatePath('/documents')
   return { ok: true, updated: result.updated, skipped: result.skipped }
+}
+
+// Soft-delete: the document leaves every list and its editor sessions stop
+// minting (queries filter deletedAt); versions, acknowledgments and audit
+// history stay intact. Book memberships are removed so books never render a
+// deleted member. Documents an ACTIVE compliance obligation still targets are
+// skipped — deleting one would orphan the obligation.
+async function softDeleteDocuments(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  ids: string[],
+): Promise<{ deleted: string[]; blocked: number }> {
+  return ctx.db(async (tx) => {
+    const rows = await tx
+      .select({ id: documents.id, deletedAt: documents.deletedAt })
+      .from(documents)
+      .where(inArray(documents.id, ids))
+    const live = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
+    let withObligations = new Set<string>()
+    if (live.length > 0) {
+      const obligated = await tx
+        .select({ docId: sql<string>`${complianceObligations.targetRef}->>'documentId'` })
+        .from(complianceObligations)
+        .where(
+          and(
+            eq(complianceObligations.sourceModule, 'document'),
+            eq(complianceObligations.status, 'active'),
+            isNull(complianceObligations.deletedAt),
+            inArray(sql`${complianceObligations.targetRef}->>'documentId'`, live),
+          ),
+        )
+      withObligations = new Set(obligated.map((r) => r.docId))
+    }
+    const deletable = live.filter((id) => !withObligations.has(id))
+    const blocked = ids.length - deletable.length
+    if (deletable.length === 0) return { deleted: [], blocked }
+    await tx
+      .update(documents)
+      .set({ deletedAt: new Date() })
+      .where(inArray(documents.id, deletable))
+    await tx.delete(documentBookItems).where(inArray(documentBookItems.documentId, deletable))
+    return { deleted: deletable, blocked }
+  })
+}
+
+/** Delete one document from its page (form action). */
+export async function deleteDocument(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
+  const id = String(formData.get('id') ?? '')
+  if (!id) throw new Error('Missing document id')
+
+  const { deleted } = await softDeleteDocuments(ctx, [id])
+  if (deleted.length === 0) {
+    throw new Error(
+      'This document is required by an active compliance obligation. End the obligation first.',
+    )
+  }
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: id,
+    action: 'delete',
+    summary: 'Document deleted',
+  })
+  revalidatePath('/documents')
+  redirect('/documents')
+}
+
+export async function bulkDeleteDocuments(args: {
+  documentIds: string[]
+}): Promise<BulkActionResult> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
+  if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
+  const ids = args.documentIds.slice(0, MAX_BULK)
+  const batchId = makeBatchId()
+
+  const { deleted, blocked } = await softDeleteDocuments(ctx, ids)
+  if (deleted.length === 0 && blocked > 0) {
+    return {
+      ok: false,
+      error: 'Nothing deleted — the selected documents are required by active obligations.',
+    }
+  }
+
+  for (const id of deleted) {
+    await recordAudit(ctx, {
+      entityType: 'document',
+      entityId: id,
+      action: 'delete',
+      summary: 'Bulk action: deleted',
+      metadata: { batchId },
+    })
+  }
+  if (deleted.length > 0) {
+    await recordAudit(ctx, {
+      entityType: 'document',
+      action: 'delete',
+      summary: `Bulk deleted ${deleted.length} document${deleted.length === 1 ? '' : 's'}`,
+      metadata: { batchId, documentIds: deleted, skipped: blocked },
+    })
+  }
+
+  revalidatePath('/documents')
+  return { ok: true, updated: deleted.length, skipped: blocked }
 }
 
 /**

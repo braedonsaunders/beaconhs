@@ -4,9 +4,14 @@ import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Archive, BookOpen, CheckSquare, Send, Square, X } from 'lucide-react'
+import { Archive, BookOpen, CheckSquare, Send, Square, Trash2, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
-import { bulkAddDocumentsToBook, bulkArchiveDocuments, bulkPublishDocuments } from './_actions'
+import {
+  bulkAddDocumentsToBook,
+  bulkArchiveDocuments,
+  bulkDeleteDocuments,
+  bulkPublishDocuments,
+} from './_actions'
 
 export type DocumentBookOption = { id: string; label: string }
 
@@ -21,7 +26,7 @@ export function BulkDocumentsBar({
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'publish' | 'archive' | 'addToBook'>('publish')
+  const [action, setAction] = useState<'publish' | 'archive' | 'addToBook' | 'delete'>('publish')
   const [bookId, setBookId] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -58,6 +63,25 @@ export function BulkDocumentsBar({
           return
         }
         toast.success(`Archived ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+        onClear()
+        router.refresh()
+      })
+      return
+    }
+    if (action === 'delete') {
+      if (
+        !confirm(
+          `Delete ${selectedIds.length} document(s)? Readers lose access and they disappear from every list. Version history is kept for audit.`,
+        )
+      )
+        return
+      start(async () => {
+        const res = await bulkDeleteDocuments({ documentIds: selectedIds })
+        if (!res.ok) {
+          setError(res.error)
+          return
+        }
+        toast.success(`Deleted ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
         onClear()
         router.refresh()
       })
@@ -107,6 +131,7 @@ export function BulkDocumentsBar({
           <option value="publish">Publish</option>
           <option value="archive">Archive</option>
           <option value="addToBook">Add to book</option>
+          <option value="delete">Delete</option>
         </Select>
 
         {action === 'addToBook' ? (
@@ -128,7 +153,12 @@ export function BulkDocumentsBar({
           </div>
         ) : null}
 
-        <Button size="sm" onClick={go} disabled={pending}>
+        <Button
+          size="sm"
+          variant={action === 'delete' ? 'destructive' : 'default'}
+          onClick={go}
+          disabled={pending}
+        >
           {pending ? (
             'Working…'
           ) : action === 'publish' ? (
@@ -138,6 +168,10 @@ export function BulkDocumentsBar({
           ) : action === 'archive' ? (
             <span className="inline-flex items-center gap-1">
               <Archive size={14} /> Archive
+            </span>
+          ) : action === 'delete' ? (
+            <span className="inline-flex items-center gap-1">
+              <Trash2 size={14} /> Delete
             </span>
           ) : (
             <span className="inline-flex items-center gap-1">
