@@ -10,7 +10,7 @@ import type { Database } from '@beaconhs/db'
 import { formTemplates } from '@beaconhs/db/schema'
 import { loadCustomFieldColumns, type ReportEntityColumn } from '@beaconhs/reports'
 import { deriveSemanticType, type AnalyticsColumn, type AnalyticsEntity } from '../semantic'
-import { discoverEntities, scopedFormAppEntity } from './discover'
+import { discoverEntities, discoverEntityMap, scopedFormAppEntity } from './discover'
 
 function decorate(col: ReportEntityColumn): AnalyticsColumn {
   const semanticType = deriveSemanticType(col)
@@ -71,4 +71,26 @@ export async function discoverEntitiesWithApps(tx: Database): Promise<AnalyticsE
     .map((a) => scopedFormAppEntity(a.id, a.name))
     .filter((e): e is AnalyticsEntity => e != null)
   return [...base, ...appEntities]
+}
+
+/** Map form of {@link discoverEntitiesWithApps} for executors. Scoped per-app
+ *  keys resolve to entities that CARRY their app title (so a per-app report
+ *  prints "Lift Plan", not the generic form_responses label); any scoped key
+ *  outside the tenant's current template list still resolves statelessly via
+ *  the discoverEntityMap() proxy fallback. */
+export async function discoverEntityMapWithApps(
+  tx: Database,
+): Promise<Record<string, AnalyticsEntity>> {
+  const entities = await discoverEntitiesWithApps(tx)
+  const own: Record<string, AnalyticsEntity> = Object.fromEntries(entities.map((e) => [e.key, e]))
+  const fallback = discoverEntityMap()
+  return new Proxy(own, {
+    get(target, prop) {
+      if (typeof prop === 'string' && !(prop in target)) return fallback[prop]
+      return target[prop as string]
+    },
+    has(target, prop) {
+      return prop in target || prop in fallback
+    },
+  })
 }

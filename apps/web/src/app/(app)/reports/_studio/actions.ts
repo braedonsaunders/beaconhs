@@ -21,7 +21,7 @@ import {
   runReport,
   type ReportEntity,
 } from '@beaconhs/reports'
-import { discoverEntityMap } from '@beaconhs/analytics/server'
+import { discoverEntityMapWithApps } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { loadDefinitionById } from '../_definitions'
@@ -80,7 +80,9 @@ function parseStudioForm(formData: FormData, entityMap: Record<string, ReportEnt
 async function resolveStudioEntityMap(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
 ): Promise<Record<string, ReportEntity>> {
-  return ctx.db((tx) => augmentEntityMapWithCustomFields(tx, discoverEntityMap()))
+  return ctx.db(async (tx) =>
+    augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+  )
 }
 
 export async function createCustomDefinition(formData: FormData): Promise<void> {
@@ -206,7 +208,10 @@ export async function previewCustomReport(payload: {
     assertCan(ctx, 'reports.builder')
     const range = computeRangeFor('custom_query', {})
     const result = await ctx.db(async (tx) => {
-      const entityMap = await augmentEntityMapWithCustomFields(tx, discoverEntityMap())
+      const entityMap = await augmentEntityMapWithCustomFields(
+        tx,
+        await discoverEntityMapWithApps(tx),
+      )
       const customQuery = validateCustomQuery(payload.query, entityMap)
       return runReport(tx, {
         queryKind: 'custom_query',

@@ -21,7 +21,7 @@ import {
 } from '@beaconhs/db/schema'
 import { enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
 import { computeRangeFor, resolveReportLayout, runReport } from '@beaconhs/reports'
-import { discoverEntityMap } from '@beaconhs/analytics/server'
+import { discoverEntityMapWithApps } from '@beaconhs/analytics/server'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { newAttachmentKey, presignGet, putObject } from '@beaconhs/storage'
 import { appBaseUrl } from '../lib/app-base-url'
@@ -73,13 +73,13 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
 
     // 3. Compute date range and run the shared engine under the tenant scope.
     const range = computeRangeFor(ctx.definition.queryKind, ctx.schedule.filters)
-    const { groups, summary, rowCount } = await withTenant(db, tenantId, (tx) =>
+    const { groups, summary, rowCount } = await withTenant(db, tenantId, async (tx) =>
       runReport(tx, {
         queryKind: ctx.definition.queryKind,
         filters: ctx.schedule.filters,
         range,
         customQuery: (ctx.definition.customQuery as ReportCustomQuery | null) ?? null,
-        entityMap: discoverEntityMap(),
+        entityMap: await discoverEntityMapWithApps(tx),
       }),
     )
 

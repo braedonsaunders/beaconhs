@@ -13,7 +13,7 @@ import {
   runReport,
   type ReportRunResult,
 } from '@beaconhs/reports'
-import { discoverEntityMap } from '@beaconhs/analytics/server'
+import { discoverEntityMapWithApps } from '@beaconhs/analytics/server'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { ReportDefinitionRow } from './_definitions'
 
@@ -56,7 +56,7 @@ export async function runReportForViewer(
         range,
         customQuery: definition.customQuery,
         maxRows: opts.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS,
-        entityMap: await augmentEntityMapWithCustomFields(tx, discoverEntityMap()),
+        entityMap: await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
       }),
     )
     return { result, rangeLabel: range.label, rangeMode: mode, days, error: null }

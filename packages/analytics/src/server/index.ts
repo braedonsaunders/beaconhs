@@ -15,6 +15,7 @@ export { discoverEntities, discoverEntityMap, scopedFormAppEntity } from './disc
 export {
   discoverEntitiesWithApps,
   discoverEntitiesWithCustomFields,
+  discoverEntityMapWithApps,
   discoverEntityMapWithCustomFields,
 } from './custom-fields'
 
