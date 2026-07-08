@@ -39,6 +39,7 @@ import {
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import {
+  buildReportDocumentCss,
   buildReportPageCss,
   renderReportDocumentBodyHtml,
   resolveReportLayout,
@@ -216,9 +217,10 @@ async function DocumentTab({
     summary: run.result.summary,
     groups: run.result.groups,
   })
-  const pageCss = buildReportPageCss(layout, {
-    marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
-  })
+  const css =
+    buildReportPageCss(layout, {
+      marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
+    }) + buildReportDocumentCss(branding.primaryColor)
   const truncated = run.result.rowCount >= DOCUMENT_PREVIEW_MAX_ROWS
 
   const exportBase = `/reports/definitions/${definition.id}/export${run.days ? `?days=${run.days}` : ''}`
@@ -294,7 +296,7 @@ async function DocumentTab({
         ) : (
           <ReportPagedPreview
             bodyHtml={bodyHtml}
-            pageCss={pageCss}
+            css={css}
             caption={
               truncated
                 ? `Preview truncated at ${DOCUMENT_PREVIEW_MAX_ROWS} rows — export PDF for the complete document.`

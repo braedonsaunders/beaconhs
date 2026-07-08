@@ -917,7 +917,7 @@ export function ReportStudio({
                 ) : (
                   <ReportPagedPreview
                     bodyHtml={preview.bodyHtml}
-                    pageCss={preview.pageCss}
+                    css={preview.css}
                     caption={
                       preview.rowCount >= STUDIO_PREVIEW_ROWS
                         ? `Preview paginates the first ${STUDIO_PREVIEW_ROWS} rows; saved reports use the configured row limit.`

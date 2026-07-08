@@ -13,6 +13,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import {
   augmentEntityMapWithCustomFields,
+  buildReportDocumentCss,
   buildReportPageCss,
   computeRangeFor,
   renderReportDocumentBodyHtml,
@@ -178,7 +179,7 @@ export async function updateCustomDefinition(
 }
 
 export type StudioPreviewResult =
-  | { ok: true; bodyHtml: string; pageCss: string; rowCount: number; rangeLabel: string }
+  | { ok: true; bodyHtml: string; css: string; rowCount: number; rangeLabel: string }
   | { ok: false; error: string }
 
 // Not exported: 'use server' modules may only export async functions.
@@ -224,10 +225,11 @@ export async function previewCustomReport(payload: {
       summary: result.summary,
       groups: result.groups,
     })
-    const pageCss = buildReportPageCss(layout, {
-      marginBoxes: { footerLeft: `${branding.name} — ${reportName}` },
-    })
-    return { ok: true, bodyHtml, pageCss, rowCount: result.rowCount, rangeLabel: range.label }
+    const css =
+      buildReportPageCss(layout, {
+        marginBoxes: { footerLeft: `${branding.name} — ${reportName}` },
+      }) + buildReportDocumentCss(branding.primaryColor)
+    return { ok: true, bodyHtml, css, rowCount: result.rowCount, rangeLabel: range.label }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

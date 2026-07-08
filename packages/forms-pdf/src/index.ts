@@ -21,6 +21,7 @@ import {
   type DesignDocument,
 } from '@beaconhs/design-studio'
 import {
+  buildReportDocumentCss,
   buildReportPageCss,
   renderReportDocumentBodyHtml,
   resolveReportLayout,
@@ -686,7 +687,7 @@ export async function renderReportPdf(
   const layout = resolveReportLayout(input.layout)
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"/>
-<style>${buildReportPageCss(layout)} body { margin: 0; }</style>
+<style>${buildReportPageCss(layout)} body { margin: 0; } ${buildReportDocumentCss(input.primaryColor)}</style>
 </head><body>${renderReportDocumentBodyHtml(input)}</body></html>`
   const m = `${layout.marginMm}mm`
   const b = await browser()

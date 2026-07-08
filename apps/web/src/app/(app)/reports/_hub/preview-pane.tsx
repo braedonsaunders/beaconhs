@@ -38,6 +38,7 @@ import {
 import { reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import {
+  buildReportDocumentCss,
   buildReportPageCss,
   renderReportDocumentBodyHtml,
   resolveReportLayout,
@@ -80,9 +81,10 @@ export async function PreviewPane({
     summary: run.result.summary,
     groups: run.result.groups,
   })
-  const pageCss = buildReportPageCss(resolveReportLayout(definition.layout), {
-    marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
-  })
+  const css =
+    buildReportPageCss(resolveReportLayout(definition.layout), {
+      marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
+    }) + buildReportDocumentCss(branding.primaryColor)
   const truncated = run.result.rowCount >= HUB_PREVIEW_MAX_ROWS
 
   const canSchedule = can(ctx, 'reports.schedule')
@@ -175,7 +177,7 @@ export async function PreviewPane({
         ) : (
           <ReportPagedPreview
             bodyHtml={bodyHtml}
-            pageCss={pageCss}
+            css={css}
             caption={
               truncated
                 ? `Preview shows the first ${HUB_PREVIEW_MAX_ROWS} rows — open the report for the full document.`

@@ -46,14 +46,21 @@ export function resolveReportLayout(
   return { paperSize, orientation, marginMm }
 }
 
-/** CSS @page size keyword per paper size. */
+/** CSS @page size keyword per paper size. Casing matters: Paged.js looks the
+ *  keyword up in a case-SENSITIVE map ("letter"/"legal" lowercase, "A4"
+ *  uppercase) while Chromium print parses keywords case-insensitively — these
+ *  exact spellings satisfy both. */
 const PAGE_SIZE_NAME: Record<ReportPaperSize, string> = {
+  letter: 'letter',
+  a4: 'A4',
+  legal: 'legal',
+}
+
+export const REPORT_PAPER_SIZE_LABELS: Record<ReportPaperSize, string> = {
   letter: 'Letter',
   a4: 'A4',
   legal: 'Legal',
 }
-
-export const REPORT_PAPER_SIZE_LABELS: Record<ReportPaperSize, string> = PAGE_SIZE_NAME
 
 export type ReportDocumentInput = {
   tenantName: string
@@ -89,56 +96,16 @@ export function buildReportPageCss(
 }`
 }
 
-/** The document body fragment: scoped styles + cover header + summary band +
- *  one section per group. No <html> wrapper and no @page rule — callers pair
- *  it with buildReportPageCss() (preview) or the print document shell (PDF).
- *  Every element selector is scoped under .bhs-report-doc so the fragment can
- *  mount inside the app without restyling the page around it. */
-export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string {
-  const primary = input.primaryColor ?? '#0f766e'
-
-  const summaryCells = (input.summary ?? [])
-    .map(
-      (s) => `<div class="sum">
-        <div class="sum-label">${escapeHtml(s.label)}</div>
-        <div class="sum-value">${escapeHtml(String(s.value))}</div>
-      </div>`,
-    )
-    .join('')
-
-  const groupsHtml = input.groups
-    .map((g) => {
-      if (g.isEmpty || g.rows.length === 0) {
-        return `<section class="group">
-          <h2>${escapeHtml(g.title)}</h2>
-          ${g.subtitle ? `<div class="subtitle">${escapeHtml(g.subtitle)}</div>` : ''}
-          <div class="empty">No data.</div>
-        </section>`
-      }
-      const head = g.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
-      const body = g.rows
-        .map(
-          (r) =>
-            `<tr>${r
-              .map(
-                (v) =>
-                  `<td>${v === null || v === undefined ? '<em>—</em>' : escapeHtml(String(v))}</td>`,
-              )
-              .join('')}</tr>`,
-        )
-        .join('')
-      return `<section class="group">
-        <h2>${escapeHtml(g.title)}</h2>
-        ${g.subtitle ? `<div class="subtitle">${escapeHtml(g.subtitle)}</div>` : ''}
-        <table>
-          <thead><tr>${head}</tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </section>`
-    })
-    .join('')
-
-  return `<style>
+/** Element styles for the document markup. Kept SEPARATE from the markup so
+ *  the browser preview can hand them to Paged.js's Polisher (which only
+ *  processes CSS passed through its stylesheets argument — inline <style>
+ *  tags inside the flowed content are never parsed, so @page/break rules in
+ *  them would be silently ignored). Selectors are scoped under
+ *  .bhs-report-doc so the fragment can mount inside the app without
+ *  restyling the page around it. */
+export function buildReportDocumentCss(primaryColor?: string | null): string {
+  const primary = primaryColor ?? '#0f766e'
+  return `
   .bhs-report-doc { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial; color: #111; font-size: 10pt; }
   .bhs-report-doc * { box-sizing: border-box; }
   .bhs-report-doc header.cover {
@@ -201,8 +168,56 @@ export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string
   .bhs-report-doc tbody tr:nth-child(even) { background: #fafafa; }
   .bhs-report-doc .empty { color: #999; font-style: italic; padding: 8px 0; }
   .bhs-report-doc img { max-width: 100%; height: auto; }
-</style>
-<div class="bhs-report-doc">
+`
+}
+
+/** The document body fragment: cover header + summary band + one section per
+ *  group. Style-free and @page-free — callers pair it with
+ *  buildReportDocumentCss() and buildReportPageCss() (browser preview passes
+ *  both to Paged.js; the PDF shell puts them in <head>). */
+export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string {
+  const summaryCells = (input.summary ?? [])
+    .map(
+      (s) => `<div class="sum">
+        <div class="sum-label">${escapeHtml(s.label)}</div>
+        <div class="sum-value">${escapeHtml(String(s.value))}</div>
+      </div>`,
+    )
+    .join('')
+
+  const groupsHtml = input.groups
+    .map((g) => {
+      if (g.isEmpty || g.rows.length === 0) {
+        return `<section class="group">
+          <h2>${escapeHtml(g.title)}</h2>
+          ${g.subtitle ? `<div class="subtitle">${escapeHtml(g.subtitle)}</div>` : ''}
+          <div class="empty">No data.</div>
+        </section>`
+      }
+      const head = g.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
+      const body = g.rows
+        .map(
+          (r) =>
+            `<tr>${r
+              .map(
+                (v) =>
+                  `<td>${v === null || v === undefined ? '<em>—</em>' : escapeHtml(String(v))}</td>`,
+              )
+              .join('')}</tr>`,
+        )
+        .join('')
+      return `<section class="group">
+        <h2>${escapeHtml(g.title)}</h2>
+        ${g.subtitle ? `<div class="subtitle">${escapeHtml(g.subtitle)}</div>` : ''}
+        <table>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </section>`
+    })
+    .join('')
+
+  return `<div class="bhs-report-doc">
   <header class="cover">
     <div>
       ${input.tenantLogoUrl ? `<img class="logo" src="${escapeHtml(input.tenantLogoUrl)}" alt=""/>` : ''}

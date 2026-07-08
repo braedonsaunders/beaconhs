@@ -10,21 +10,47 @@ import { cn } from '@beaconhs/ui'
 
 export function ReportPagedPreview({
   bodyHtml,
-  pageCss,
+  css,
   caption,
   className,
 }: {
   /** Fully rendered document body (renderReportDocumentBodyHtml output). */
   bodyHtml: string
-  /** @page CSS (buildReportPageCss with marginBoxes for live page numbers). */
-  pageCss: string
+  /** Document CSS: @page rule (buildReportPageCss with marginBoxes for live
+   *  page numbers) + element styles (buildReportDocumentCss). Passed through
+   *  Paged.js's stylesheets argument — its Polisher only processes CSS given
+   *  there; inline <style> tags in the flowed content are never parsed. */
+  css: string
   /** Optional note appended to the page-count line (e.g. a row-cap notice). */
   caption?: string | null
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [pages, setPages] = useState<number | null>(null)
   const [err, setErr] = useState<string | null>(null)
+
+  // Scale pages down to the pane width (landscape paper is wider than most
+  // panes). `zoom` participates in layout, so the scroll container stays
+  // correct — no transform/height bookkeeping needed.
+  const fitToWidth = () => {
+    const host = ref.current
+    const scroller = scrollRef.current
+    if (!host || !scroller) return
+    const page = host.querySelector<HTMLElement>('.pagedjs_page')
+    if (!page) return
+    const available = scroller.clientWidth - 48
+    const pageWidth = page.offsetWidth
+    host.style.zoom = pageWidth > available ? String(Math.max(0.35, available / pageWidth)) : '1'
+  }
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const ro = new ResizeObserver(() => fitToWidth())
+    ro.observe(scroller)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -48,8 +74,11 @@ export function ReportPagedPreview({
         const { Previewer } = await import('pagedjs')
         if (cancelled) return
         const previewer = new Previewer()
-        const result = await previewer.preview(`<style>${pageCss}</style>${bodyHtml}`, [], el)
-        if (!cancelled) setPages((result as { total?: number })?.total ?? null)
+        const result = await previewer.preview(bodyHtml, [{ [window.location.href]: css }], el)
+        if (!cancelled) {
+          setPages((result as { total?: number })?.total ?? null)
+          fitToWidth()
+        }
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : String(e))
       }
@@ -58,10 +87,11 @@ export function ReportPagedPreview({
       cancelled = true
       if (el) el.innerHTML = ''
     }
-  }, [bodyHtml, pageCss])
+  }, [bodyHtml, css])
 
   return (
     <div
+      ref={scrollRef}
       className={cn(
         'app-scroll h-full overflow-auto bg-slate-200 p-4 sm:p-6 dark:bg-slate-950',
         className,
