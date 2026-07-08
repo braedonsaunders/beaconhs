@@ -186,7 +186,7 @@ The **Schedules** tab shows every schedule with its next run and last run. Use t
 
 If no built-in report fits, click **New report** to build a custom one. You can also open a built-in report and click **Edit a copy** to start from something close.
 
-The builder shows a live print preview while you work. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, and set the page margin — the preview and every export follow it.
+The builder shows a live print preview while you work. Your Builder apps appear in the **Data source** list by their own names — pick one to report on its submissions. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, and set the page margin — the preview and every export follow it.
 
 On the full report, subscriptions, past runs, and report details live on the **Schedules & activity** tab.`,
   },
