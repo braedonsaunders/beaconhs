@@ -60,6 +60,9 @@ export type PdfJobData =
   // Render a published document version's artifacts (DOCX snapshot → PDF +
   // extracted text). Enqueued by publish; state tracked on the version row.
   | { kind: 'document_version_render'; tenantId: string; documentId: string; versionId: string }
+  // On-demand PDF of a document's CURRENT working master (the manager's
+  // Write→PDF preview) — transient artifact, never persisted to the document.
+  | { kind: 'document_master_pdf'; tenantId: string; documentId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }
   | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
   | { kind: 'ppe_issue'; tenantId: string; issueReportId: string }
@@ -87,6 +90,7 @@ export type OnDemandPdfJobData =
   // A tenant PDF template merged with a record's values (the configurable
   // per-module default print template); the HTML is merged before enqueue.
   | Extract<PdfJobData, { kind: 'template_pdf' }>
+  | Extract<PdfJobData, { kind: 'document_master_pdf' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
   | Extract<PdfJobData, { kind: 'equipment_workorder' }>
   | Extract<PdfJobData, { kind: 'ppe_issue' }>
@@ -128,6 +132,8 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|template_pdf|${data.entityId ?? 'doc'}`
     case 'document_version_render':
       return `pdf|${data.tenantId}|document_version_render|${data.versionId}`
+    case 'document_master_pdf':
+      return `pdf|${data.tenantId}|document_master_pdf|${data.documentId}`
     case 'document_book':
       return `pdf|${data.tenantId}|document_book|${data.bookId}`
     case 'equipment_workorder':

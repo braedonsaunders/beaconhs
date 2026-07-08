@@ -80,8 +80,8 @@ import {
 } from '@beaconhs/jobs'
 import { deleteObject, getObject, presignGet, publicUrl, putObject } from '@beaconhs/storage'
 import { importSlidesFromPptx } from './slides-import'
-import { renderDocumentVersion } from './document-render'
-import { pdfUnite } from '../lib/office'
+import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
+import { pdfUnite } from '@beaconhs/office'
 import { audit } from '@beaconhs/audit'
 import { appBaseUrl } from '../lib/app-base-url'
 import { escapeHtml } from '../lib/escape-html'
@@ -121,6 +121,8 @@ async function dispatchPdf(data: PdfJobData): Promise<unknown> {
       return await renderTemplatePdf(data)
     case 'document_version_render':
       return await renderDocumentVersion(data)
+    case 'document_master_pdf':
+      return await renderDocumentMasterPdf(data)
     case 'document_book':
       return await renderDocumentBook(data.tenantId, data.bookId)
     case 'equipment_workorder':

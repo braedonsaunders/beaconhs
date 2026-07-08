@@ -85,11 +85,22 @@ export function editUrlFromDiscovery(
   return byExt?.[1] ?? null
 }
 
+// Open with the properties sidebar closed in every app — the embedded editor
+// should start as clean as the rest of the platform. (Users who open it get
+// their preference remembered by Collabora per browser.)
+const UI_DEFAULTS = [
+  'TextSidebar=false',
+  'PresentationSidebar=false',
+  'SpreadsheetSidebar=false',
+  'DrawingSidebar=false',
+].join(';')
+
 /**
  * Full iframe form-POST URL for editing one attachment: the discovery urlsrc
- * plus our WOPISrc. Collabora tolerates trailing placeholder tokens in urlsrc
- * (<ui=UI_LLCC&>…); strip them before appending. Theming lives in the mounted
- * branding.js (deploy/collabora-branding.js), not in URL params.
+ * plus our WOPISrc and UI defaults. Collabora tolerates trailing placeholder
+ * tokens in urlsrc (<ui=UI_LLCC&>…); strip them before appending. Colors live
+ * in the mounted branding.js (deploy/collabora-branding.js); the embed adds
+ * the theme (darkTheme) client-side to match the app.
  */
 export function buildEditorUrl(editUrl: string, attachmentId: string): string {
   const cleaned = editUrl.replace(/<[^>]*>/g, '')
@@ -99,5 +110,5 @@ export function buildEditorUrl(editUrl: string, attachmentId: string): string {
       ? ''
       : '&'
   const wopiSrc = `${wopiCallbackBase()}/wopi/files/${attachmentId}`
-  return `${cleaned}${sep}WOPISrc=${encodeURIComponent(wopiSrc)}`
+  return `${cleaned}${sep}WOPISrc=${encodeURIComponent(wopiSrc)}&ui_defaults=${encodeURIComponent(UI_DEFAULTS)}`
 }

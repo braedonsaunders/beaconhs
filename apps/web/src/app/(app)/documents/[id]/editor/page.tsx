@@ -4,7 +4,7 @@
 // import/replace live on the document page's Write pane.
 
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { Download } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
@@ -34,6 +34,9 @@ export default async function DocumentEditorPage({
   const ctx = await requireRequestContext()
   // The live master is a manage-only surface (it exposes unpublished edits).
   if (!can(ctx, 'documents.manage')) notFound()
+  // The Write pane on the document page is THE editing surface (with AI panel
+  // and fullscreen). This route only serves read-only version snapshots.
+  if (!versionId) redirect(`/documents/${id}`)
 
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx

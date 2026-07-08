@@ -52,7 +52,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendDocumentEmail } from './_send-email'
 import { publishDocumentVersion } from './_master-actions'
-import { DocumentPdfButton } from './_pdf-viewer'
+import { getTenantAiSettings } from '@/lib/ai-config'
 import { DocumentPane } from './_document-pane'
 import { AcknowledgmentsPanel, type AckRow } from './_acknowledgments-panel'
 import { DocumentCompliancePanel, loadDocumentObligations } from './_compliance-panel'
@@ -314,6 +314,8 @@ export default async function DocumentDetailPage({
   // uploaded-file docs and read-only users.
   const isFileDoc = !doc.sourceAttachmentId && !!currentVersion?.contentAttachmentId
   const canReview = can(ctx, 'documents.review')
+  const aiSettings = canManage ? await getTenantAiSettings(ctx) : null
+  const aiEnabled = !!aiSettings && aiSettings.enabled && aiSettings.hasKey
 
   // Acknowledgments → flat rows for the panel (with signature thumbnails).
   const ackRows: AckRow[] = acks.map((a) => ({
@@ -376,7 +378,6 @@ export default async function DocumentDetailPage({
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <DocumentPdfButton documentId={id} />
           {canManage ? (
             <>
               <Link
@@ -720,6 +721,7 @@ export default async function DocumentDetailPage({
                   }
                 : null
             }
+            aiEnabled={aiEnabled}
           />
         </div>
       </div>

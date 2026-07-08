@@ -1,7 +1,7 @@
-// LibreOffice + poppler helpers shared by the slides importer (pptx → pdf →
-// page images) and the document version renderer (docx → pdf + text).
-// Both binaries ship in the production worker image; locally
-// `brew install --cask libreoffice` + `brew install poppler`.
+// LibreOffice + poppler helpers shared by the worker (slides import, document
+// version renders, book concatenation) and the web app (draft text extraction
+// for the document AI panel). Both binaries ship in the production image;
+// locally `brew install --cask libreoffice` + `brew install poppler`.
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'

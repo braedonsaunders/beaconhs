@@ -34,7 +34,7 @@ import {
 } from '@beaconhs/db/schema'
 import { deleteObject, getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
-import { exec, resolveSoffice } from '../lib/office'
+import { exec, resolveSoffice } from '@beaconhs/office'
 
 function decodeXmlEntities(s: string): string {
   return s

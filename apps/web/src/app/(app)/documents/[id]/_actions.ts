@@ -1,14 +1,10 @@
 'use server'
 
-// Editor server actions for the world-class document editor:
-//   • saveDraft       — debounced autosave of the live working draft
-//   • publishDraft    — snapshot the draft into an immutable version (+ legacy fallback)
-//   • comments CRUD   — threaded, anchor-bound margin comments
-//   • listDocumentComments — re-fetch threads after a mutation
-//
-// The live draft (document_drafts, 1:1) holds ProseMirror JSON + sanitized HTML.
-// Publishing freezes a document_versions row and re-seeds the draft so editing
-// continues toward the next version (never a blank page).
+// Document metadata + PDF-source actions. Authoring lives in Collabora Writer
+// (see _master-actions.ts): getDocumentPdfUrl resolves what the PDF pane shows
+// — a fresh render of the working master for managers (draft mode), the
+// published version's PDF for readers, or the uploaded file for file-only
+// documents.
 
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, isNotNull, isNull, or } from 'drizzle-orm'
@@ -50,11 +46,32 @@ export type DocumentPdfUrlResult = { ok: true; url: string } | { ok: false; erro
 // Returns a short-lived URL to view the document inline. Prefers an uploaded
 // PDF version; otherwise points the viewer at the dynamic PDF route, which
 // renders the document on demand.
-export async function getDocumentPdfUrl(documentId: string): Promise<DocumentPdfUrlResult> {
+export async function getDocumentPdfUrl(
+  documentId: string,
+  opts: { draft?: boolean } = {},
+): Promise<DocumentPdfUrlResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
   if (!documentId) return { ok: false, error: 'Missing document id' }
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+
+  // Managers previewing an authored document get a FRESH render of the
+  // current working master (the /pdf route dispatches the worker job).
+  if (opts.draft) {
+    if (!can(ctx, 'documents.manage')) return { ok: false, error: 'Not allowed' }
+    const [doc] = await ctx.db((tx) =>
+      tx
+        .select({ sourceAttachmentId: documents.sourceAttachmentId })
+        .from(documents)
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+        .limit(1),
+    )
+    if (!doc) return { ok: false, error: 'Document not found.' }
+    if (!doc.sourceAttachmentId) {
+      return { ok: false, error: 'This document has no Word file to render.' }
+    }
+    return { ok: true, url: `/documents/${documentId}/pdf?render=${Date.now()}` }
+  }
 
   // Readers may only view published documents — the same rule the list and
   // detail pages apply. Managers can preview any live document.

@@ -14,7 +14,7 @@ import { db, withTenant } from '@beaconhs/db'
 import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
 import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
-import { sofficeConvert } from '../lib/office'
+import { sofficeConvert } from '@beaconhs/office'
 
 const MAX_TEXT_CHARS = 1_500_000
 
@@ -110,4 +110,45 @@ export async function renderDocumentVersion(args: {
     await setStatus('failed', message).catch(() => {})
     throw err
   }
+}
+
+/**
+ * On-demand PDF of the CURRENT working master — the manager's Write→PDF
+ * preview. Returns a transient artifact (never attached to the document);
+ * published versions keep their own immutable PDFs.
+ */
+export async function renderDocumentMasterPdf(args: {
+  tenantId: string
+  documentId: string
+}): Promise<{ attachmentId?: string | null; r2Key: string; sizeBytes: number; filename: string }> {
+  const { tenantId, documentId } = args
+  const data = await withTenant(db, tenantId, async (tx) => {
+    const [doc] = await tx
+      .select({
+        key: documents.key,
+        title: documents.title,
+        sourceAttachmentId: documents.sourceAttachmentId,
+      })
+      .from(documents)
+      .where(eq(documents.id, documentId))
+      .limit(1)
+    if (!doc?.sourceAttachmentId) return null
+    const [att] = await tx
+      .select({ key: attachments.r2Key })
+      .from(attachments)
+      .where(eq(attachments.id, doc.sourceAttachmentId))
+      .limit(1)
+    return att ? { doc, docxKey: att.key } : null
+  })
+  if (!data) throw new Error('This document has no Word file to render')
+
+  const docx = await getObject({ key: data.docxKey })
+  const pdf = await sofficeConvert(docx, 'document.docx', 'pdf')
+
+  const stamp = Date.now()
+  const base = (data.doc.key || data.doc.title || 'document').replace(/[^\w.\- ]+/g, '')
+  const key = `tmp/pdfs/documents/${tenantId}/${documentId}-draft-${stamp}.pdf`
+  await putObject({ key, body: pdf, contentType: 'application/pdf' })
+  console.log(`[document-render] draft pdf ${documentId} rendered (${pdf.length} bytes)`)
+  return { r2Key: key, sizeBytes: pdf.length, filename: `${base}-draft.pdf` }
 }

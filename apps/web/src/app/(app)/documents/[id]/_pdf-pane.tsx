@@ -1,9 +1,13 @@
 'use client'
 
-// Right-pane PDF surface. Shows the document's PDF — either an uploaded source
-// or one generated from the written content — and (for managers) lets you
-// upload/replace the PDF source and flip back to Write mode. `readOnly` hides
-// every write affordance for documents.read-only users.
+// Right-pane PDF surface with two modes:
+//   • file-only documents — the uploaded PDF is the document; this pane is the
+//     primary view (managers can upload/replace the source here).
+//   • authored documents  — opening the pane generates a fresh PDF of the
+//     CURRENT working draft (worker render of the DOCX master) with download
+//     links. Readers always get the published version's PDF instead.
+// Rendering uses the app-themed pdf.js viewer so the chrome follows the
+// platform's light/dark theme.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -11,6 +15,7 @@ import { Download, ExternalLink, Loader2, RefreshCw, Upload } from 'lucide-react
 import { Button, FileUploader, cn } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { requestUpload, finalizeUpload } from '@/lib/uploads'
+import { PdfViewer } from '@/components/pdf-viewer'
 import { attachFileVersion, getDocumentPdfUrl } from './_actions'
 import { ModeSwitch, type DocumentMode } from './_mode-switch'
 
@@ -19,11 +24,14 @@ export function DocumentPdfPane({
   mode,
   onModeChange,
   readOnly = false,
+  draft = false,
 }: {
   documentId: string
   mode?: DocumentMode
   onModeChange?: (m: DocumentMode) => void
   readOnly?: boolean
+  /** Authored document, manage surface: render the CURRENT working draft. */
+  draft?: boolean
 }) {
   const router = useRouter()
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -34,7 +42,7 @@ export function DocumentPdfPane({
   const load = useCallback(async () => {
     setStatus('loading')
     setError(null)
-    const r = await getDocumentPdfUrl(documentId)
+    const r = await getDocumentPdfUrl(documentId, { draft })
     if (!r.ok) {
       setStatus('error')
       setError(r.error)
@@ -42,7 +50,7 @@ export function DocumentPdfPane({
     }
     setUrl(r.url)
     setStatus('ready')
-  }, [documentId])
+  }, [documentId, draft])
 
   useEffect(() => {
     void load()
@@ -70,8 +78,22 @@ export function DocumentPdfPane({
         ) : (
           <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Document</span>
         )}
+        {draft && !readOnly ? (
+          <span className="hidden text-[11px] text-slate-500 sm:inline dark:text-slate-400">
+            Generated from the current draft
+          </span>
+        ) : null}
         <div className="ml-auto flex items-center gap-1.5">
-          {!readOnly ? (
+          {draft && !readOnly ? (
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+            >
+              <RefreshCw size={13} /> Regenerate
+            </button>
+          ) : null}
+          {!readOnly && !draft ? (
             <button
               type="button"
               onClick={() => setUploadOpen((v) => !v)}
@@ -107,7 +129,7 @@ export function DocumentPdfPane({
         </div>
       </div>
 
-      {!readOnly && uploadOpen ? (
+      {!readOnly && !draft && uploadOpen ? (
         <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
           <FileUploader
             requestUploadAction={requestUpload}
@@ -122,18 +144,27 @@ export function DocumentPdfPane({
 
       <div className="min-h-0 flex-1">
         {status === 'ready' && url ? (
-          <iframe src={url} title="Document PDF" className="h-full w-full" />
+          <PdfViewer url={url} className="h-full" />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-600 dark:text-slate-300">
             {status === 'error' ? (
               <>
-                <p className="text-rose-600">{error ?? 'Could not load the PDF.'}</p>
+                <p className="text-rose-600 dark:text-rose-400">
+                  {error ?? 'Could not load the PDF.'}
+                </p>
                 <Button variant="outline" onClick={load}>
                   <RefreshCw size={14} /> Retry
                 </Button>
               </>
             ) : (
-              <Loader2 size={20} className="animate-spin text-slate-400" />
+              <>
+                <Loader2 size={20} className="animate-spin text-slate-400" />
+                {draft && !readOnly ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Generating a PDF of the current draft…
+                  </p>
+                ) : null}
+              </>
             )}
           </div>
         )}

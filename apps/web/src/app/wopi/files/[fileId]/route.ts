@@ -52,6 +52,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
     // BeaconHS UI where it is audited).
     UserCanNotWriteRelative: true,
     UserCanRename: false,
+    // Lets the embedding app talk to the editor over postMessage (loading
+    // status for the splash, insert-at-cursor for the AI panel).
+    PostMessageOrigin: (process.env.APP_URL ?? process.env.BETTER_AUTH_URL ?? '').replace(
+      /\/+$/,
+      '',
+    ),
     LastModifiedTime: (att.updatedAt ?? new Date(0)).toISOString(),
   })
 }
