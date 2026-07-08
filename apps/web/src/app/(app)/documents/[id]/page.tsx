@@ -32,7 +32,6 @@ import {
   documentAcknowledgmentSessions,
   documentAcknowledgments,
   documentCategories,
-  documentDrafts,
   documentReviews,
   documentTypes,
   documentVersions,
@@ -44,7 +43,6 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { getTenantAiSettings } from '@/lib/ai-config'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -53,7 +51,7 @@ import { DocumentOverview } from './_overview'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendDocumentEmail } from './_send-email'
-import { listDocumentComments, publishDraft } from './_actions'
+import { publishDocumentVersion } from './_master-actions'
 import { DocumentPdfButton } from './_pdf-viewer'
 import { DocumentPane } from './_document-pane'
 import { AcknowledgmentsPanel, type AckRow } from './_acknowledgments-panel'
@@ -97,10 +95,9 @@ async function publish(formData: FormData) {
   assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  // Snapshots the live draft into an immutable version (or publishes the latest
-  // existing version for legacy / uploaded-file documents). Handles audit +
-  // revalidate + PDF re-render internally.
-  await publishDraft({ documentId: id })
+  // Snapshots the DOCX master into an immutable numbered version and queues
+  // its PDF render. Handles audit + revalidate internally.
+  await publishDocumentVersion(id)
 }
 
 async function unpublish(formData: FormData) {
@@ -238,7 +235,7 @@ export default async function DocumentDetailPage({
       .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
       .limit(1)
     if (!doc) return null
-    const [versions, acks, reviews, currentPerson, draft] = await Promise.all([
+    const [versions, acks, reviews, currentPerson, masterAtt] = await Promise.all([
       tx
         .select()
         .from(documentVersions)
@@ -274,7 +271,13 @@ export default async function DocumentDetailPage({
         .where(eq(documentReviews.documentId, id))
         .orderBy(desc(documentReviews.reviewedAt)),
       tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1),
-      tx.select().from(documentDrafts).where(eq(documentDrafts.documentId, id)).limit(1),
+      doc.sourceAttachmentId
+        ? tx
+            .select({ id: attachments.id, filename: attachments.filename })
+            .from(attachments)
+            .where(eq(attachments.id, doc.sourceAttachmentId))
+            .limit(1)
+        : Promise.resolve([]),
     ])
     const categories = await tx
       .select({ id: documentCategories.id, name: documentCategories.name })
@@ -292,14 +295,14 @@ export default async function DocumentDetailPage({
       acks,
       reviews,
       currentPerson: currentPerson[0] ?? null,
-      draft: draft[0] ?? null,
+      masterAtt: masterAtt[0] ?? null,
       categories,
       types,
     }
   })
 
   if (!data) notFound()
-  const { doc, versions, acks, reviews, currentPerson, draft, categories, types } = data
+  const { doc, versions, acks, reviews, currentPerson, masterAtt, categories, types } = data
   // Non-managers may only view PUBLISHED documents — same rule the list page
   // applies via `eq(documents.status, 'published')`.
   if (!canManage && doc.status !== 'published') notFound()
@@ -307,30 +310,9 @@ export default async function DocumentDetailPage({
   const publishedVersion = versions.find((v) => v.publishedAt) ?? null
   const basePath = `/documents/${id}`
 
-  // Right pane: the live editor for in-app docs, or the PDF for uploaded-file
-  // docs. Readers never see the working draft — they get the published PDF
-  // (the document of record) via a read-only pane, so seed editor content from
-  // the draft only for managers.
-  const isFileDoc = !draft && !!currentVersion?.contentAttachmentId
-  const initialJson = (
-    canManage
-      ? (draft?.contentJson ?? publishedVersion?.contentJson ?? null)
-      : (publishedVersion?.contentJson ?? null)
-  ) as Record<string, unknown> | null
-  const initialHtml = canManage
-    ? (draft?.contentHtml ?? publishedVersion?.contentMarkdown ?? '')
-    : (publishedVersion?.contentMarkdown ?? '')
-  const initialLayout = {
-    pageSize: (doc.pageSize === 'A4' ? 'A4' : 'Letter') as 'Letter' | 'A4',
-    headerText: doc.headerText ?? '',
-    footerText: doc.footerText ?? '',
-    printHeader: doc.printHeader,
-    printFooter: doc.printFooter,
-  }
-  // Review comments are internal discussion — only loaded for the manage surface.
-  const comments = isFileDoc || !canManage ? [] : await listDocumentComments(id)
-  const aiSettings = canManage ? await getTenantAiSettings(ctx) : null
-  const aiEnabled = !!aiSettings && aiSettings.enabled && aiSettings.hasKey
+  // Right pane: the inline Writer for authored docs, or the PDF for
+  // uploaded-file docs and read-only users.
+  const isFileDoc = !doc.sourceAttachmentId && !!currentVersion?.contentAttachmentId
   const canReview = can(ctx, 'documents.review')
 
   // Acknowledgments → flat rows for the panel (with signature thumbnails).
@@ -497,11 +479,6 @@ export default async function DocumentDetailPage({
                     reviewFrequencyMonths:
                       doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
                     nextReviewOn: doc.nextReviewOn ?? '',
-                    pageSize: doc.pageSize === 'A4' ? 'A4' : 'Letter',
-                    printHeader: doc.printHeader,
-                    printFooter: doc.printFooter,
-                    headerText: doc.headerText ?? '',
-                    footerText: doc.footerText ?? '',
                   }}
                 />
               ) : (
@@ -573,6 +550,46 @@ export default async function DocumentDetailPage({
                                 {v.changelog}
                               </p>
                             ) : null}
+                            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                              {v.pdfAttachmentId || v.contentAttachmentId ? (
+                                <a
+                                  href={`${basePath}/versions/${v.id}/download`}
+                                  className="text-teal-700 hover:underline dark:text-teal-300"
+                                >
+                                  PDF
+                                </a>
+                              ) : v.renderStatus === 'pending' ||
+                                v.renderStatus === 'processing' ? (
+                                <span className="text-slate-400 dark:text-slate-500">
+                                  PDF rendering…
+                                </span>
+                              ) : v.renderStatus === 'failed' ? (
+                                <span
+                                  className="text-rose-600 dark:text-rose-400"
+                                  title={v.renderError ?? undefined}
+                                >
+                                  PDF render failed
+                                </span>
+                              ) : null}
+                              {v.docxAttachmentId ? (
+                                <>
+                                  <a
+                                    href={`${basePath}/versions/${v.id}/download?kind=docx`}
+                                    className="text-teal-700 hover:underline dark:text-teal-300"
+                                  >
+                                    DOCX
+                                  </a>
+                                  {canManage ? (
+                                    <Link
+                                      href={`${basePath}/editor?version=${v.id}`}
+                                      className="text-teal-700 hover:underline dark:text-teal-300"
+                                    >
+                                      Open read-only
+                                    </Link>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
                           </li>
                         ))}
                       </ul>
@@ -690,16 +707,19 @@ export default async function DocumentDetailPage({
             documentId={id}
             canManage={canManage}
             defaultMode={isFileDoc ? 'pdf' : 'write'}
-            initialTitle={doc.title}
-            initialHtml={initialHtml}
-            initialJson={initialJson}
-            initialLayout={initialLayout}
-            initialComments={comments}
-            aiEnabled={aiEnabled}
-            currentUser={{
-              tenantUserId: ctx.membership?.id ?? null,
-              name: ctx.membership?.displayName || 'You',
-            }}
+            master={
+              doc.sourceAttachmentId && masterAtt
+                ? { attachmentId: masterAtt.id, filename: masterAtt.filename }
+                : null
+            }
+            latestPublished={
+              publishedVersion
+                ? {
+                    version: publishedVersion.version,
+                    renderStatus: publishedVersion.renderStatus,
+                  }
+                : null
+            }
           />
         </div>
       </div>

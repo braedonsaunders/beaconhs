@@ -10,7 +10,7 @@
 // scanned/image-only PDF that has no extractable text.
 
 import { and, desc, eq, isNull, type SQL } from 'drizzle-orm'
-import { attachments, documentDrafts, documentVersions, documents } from '@beaconhs/db/schema'
+import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { presignExistingGet } from '@beaconhs/storage'
@@ -61,11 +61,12 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
       .limit(1)
     if (!doc) return { ok: false, error: 'not_found' }
 
-    // The latest version either carries inline HTML (in-app documents) or points
-    // at an uploaded file via contentAttachmentId (e.g. a PDF).
+    // The latest version points at a PDF either way: the worker-rendered PDF
+    // of the DOCX snapshot (authored documents) or the uploaded file itself.
     const [version] = await tx
       .select({
-        html: documentVersions.contentMarkdown,
+        text: documentVersions.textContent,
+        pdfAttachmentId: documentVersions.pdfAttachmentId,
         attachmentId: documentVersions.contentAttachmentId,
       })
       .from(documentVersions)
@@ -73,31 +74,23 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
-    // Uploaded-PDF version → hand the reader a short-lived presigned URL so it
-    // can show the real pages in an <iframe>. Mirrors getDocumentPdfUrl on the
-    // documents detail page. (This is what lets a human read a scanned PDF.)
+    // Hand the reader a short-lived presigned URL so it can show the real
+    // pages in an <iframe>. Mirrors getDocumentPdfUrl on the detail page.
     let pdfUrl: string | null = null
-    if (version?.attachmentId) {
+    const pdfCandidateId = version?.pdfAttachmentId ?? version?.attachmentId ?? null
+    if (pdfCandidateId) {
       const [att] = await tx
         .select({ r2Key: attachments.r2Key, contentType: attachments.contentType })
         .from(attachments)
-        .where(eq(attachments.id, version.attachmentId))
+        .where(eq(attachments.id, pdfCandidateId))
         .limit(1)
-      if (att?.contentType === 'application/pdf') {
+      if (att && (version?.pdfAttachmentId || att.contentType === 'application/pdf')) {
         pdfUrl = await presignExistingGet({ key: att.r2Key, expiresInSeconds: 300 })
       }
     }
 
-    // In-app documents: prefer the latest published HTML, fall back to the draft.
-    let html = pdfUrl ? null : (version?.html ?? null)
-    if (!pdfUrl && !html) {
-      const [draft] = await tx
-        .select({ html: documentDrafts.contentHtml })
-        .from(documentDrafts)
-        .where(eq(documentDrafts.documentId, id))
-        .limit(1)
-      html = draft?.html ?? null
-    }
+    // Fallback body when no PDF exists yet: the extracted plain text.
+    const html = pdfUrl ? null : (version?.text ?? null)
 
     return {
       ok: true,

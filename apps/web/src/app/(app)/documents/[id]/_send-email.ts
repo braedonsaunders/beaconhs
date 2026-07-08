@@ -71,8 +71,8 @@ export async function sendDocumentEmail(
     `Description:`,
     data.doc.description ?? '(none)',
     ``,
-    data.publishedVersion?.v.contentMarkdown
-      ? `Content:\n${data.publishedVersion.v.contentMarkdown}\n`
+    data.publishedVersion?.v.textContent
+      ? `Content:\n${data.publishedVersion.v.textContent.slice(0, 4000)}\n`
       : '',
     `View in app: ${docUrl}`,
     attachmentUrl ? `Download attachment: ${attachmentUrl}` : '',
@@ -100,8 +100,8 @@ export async function sendDocumentEmail(
           : ''
       }
       ${
-        data.publishedVersion?.v.contentMarkdown
-          ? `<div style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px;">${sanitizeDocumentHtml(data.publishedVersion.v.contentMarkdown)}</div>`
+        data.publishedVersion?.v.textContent
+          ? `<div style="font-size:13px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px;white-space:pre-wrap;">${sanitizeDocumentHtml(data.publishedVersion.v.textContent.slice(0, 4000))}</div>`
           : ''
       }
       <p style="margin:18px 0 4px;font-size:13px;">

@@ -18,11 +18,6 @@ export type OverviewMeta = {
   description: string
   reviewFrequencyMonths: string
   nextReviewOn: string
-  pageSize: 'Letter' | 'A4'
-  printHeader: boolean
-  printFooter: boolean
-  headerText: string
-  footerText: string
 }
 
 type SaveState = 'idle' | 'saving' | 'saved'
@@ -57,11 +52,6 @@ export function DocumentOverview({
           ? Number(next.reviewFrequencyMonths)
           : null,
         nextReviewOn: next.nextReviewOn || null,
-        pageSize: next.pageSize,
-        printHeader: next.printHeader,
-        printFooter: next.printFooter,
-        headerText: next.headerText || null,
-        footerText: next.footerText || null,
       })
       setSaveState(res.ok ? 'saved' : 'idle')
       // Reflect title/status changes elsewhere on the page, but debounced so we
@@ -177,52 +167,6 @@ export function DocumentOverview({
               onChange={(e) => field('nextReviewOn', e.currentTarget.value)}
             />
           </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="o-page">Page size</Label>
-          <Select
-            id="o-page"
-            value={m.pageSize}
-            onChange={(e) => field('pageSize', e.currentTarget.value as 'Letter' | 'A4')}
-          >
-            <option value="Letter">Letter</option>
-            <option value="A4">A4</option>
-          </Select>
-        </div>
-        <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            PDF header &amp; footer
-          </p>
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={m.printHeader}
-              onChange={(e) => field('printHeader', e.currentTarget.checked)}
-            />
-            Print header
-          </label>
-          {m.printHeader ? (
-            <Input
-              value={m.headerText}
-              onChange={(e) => field('headerText', e.currentTarget.value)}
-              placeholder="Header text (optional)"
-            />
-          ) : null}
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={m.printFooter}
-              onChange={(e) => field('printFooter', e.currentTarget.checked)}
-            />
-            Print footer + page number
-          </label>
-          {m.printFooter ? (
-            <Input
-              value={m.footerText}
-              onChange={(e) => field('footerText', e.currentTarget.value)}
-              placeholder="Footer text (optional)"
-            />
-          ) : null}
         </div>
       </div>
     </div>

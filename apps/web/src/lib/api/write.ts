@@ -16,7 +16,6 @@ import {
   correctiveActions,
   departments,
   documentCategories,
-  documentDrafts,
   documents,
   documentStatus,
   documentTypes,
@@ -1086,19 +1085,11 @@ const documentCreate = z.object({
   nextReviewOn: isoDate.nullish(),
   requiredForRoleKeys: z.array(z.string().trim().min(1).max(120)).default([]),
   requiredForTradeIds: z.array(uuid).default([]),
-  printHeader: z.boolean().default(true),
-  printFooter: z.boolean().default(true),
-  pageSize: z.enum(['Letter', 'A4']).default('Letter'),
-  headerText: z.string().max(500).nullish(),
-  footerText: z.string().max(500).nullish(),
 })
 
 const documentPatch = documentCreate.partial().extend({
   requiredForRoleKeys: z.array(z.string().trim().min(1).max(120)).optional(),
   requiredForTradeIds: z.array(uuid).optional(),
-  printHeader: z.boolean().optional(),
-  printFooter: z.boolean().optional(),
-  pageSize: z.enum(['Letter', 'A4']).optional(),
   status: z.enum(documentStatus.enumValues).optional(),
 })
 
@@ -1147,11 +1138,6 @@ function documentResult(row: typeof documents.$inferSelect): WriteResult {
     next_review_on: row.nextReviewOn,
     required_for_role_keys: row.requiredForRoleKeys,
     required_for_trade_ids: row.requiredForTradeIds,
-    print_header: row.printHeader,
-    print_footer: row.printFooter,
-    page_size: row.pageSize,
-    header_text: row.headerText,
-    footer_text: row.footerText,
   }
 }
 
@@ -1182,21 +1168,9 @@ async function createDocument(ctx: RequestContext, raw: unknown): Promise<WriteR
         nextReviewOn: optionalDate(b.nextReviewOn),
         requiredForRoleKeys: b.requiredForRoleKeys,
         requiredForTradeIds: b.requiredForTradeIds,
-        printHeader: b.printHeader,
-        printFooter: b.printFooter,
-        pageSize: b.pageSize,
-        headerText: stripEmpty(b.headerText),
-        footerText: stripEmpty(b.footerText),
       })
       .returning()
     if (!created) return null
-    await tx.insert(documentDrafts).values({
-      tenantId: ctx.tenantId,
-      documentId: created.id,
-      contentHtml: '',
-      contentJson: null,
-      updatedByTenantUserId: safeTenantUserId(ctx),
-    })
     return created
   })
 
@@ -1249,11 +1223,6 @@ async function updateDocument(ctx: RequestContext, id: string, raw: unknown): Pr
     if (hasOwn(b, 'nextReviewOn')) patch.nextReviewOn = optionalDate(b.nextReviewOn)
     if (hasOwn(b, 'requiredForRoleKeys')) patch.requiredForRoleKeys = b.requiredForRoleKeys ?? []
     if (hasOwn(b, 'requiredForTradeIds')) patch.requiredForTradeIds = b.requiredForTradeIds ?? []
-    if (hasOwn(b, 'printHeader')) patch.printHeader = b.printHeader
-    if (hasOwn(b, 'printFooter')) patch.printFooter = b.printFooter
-    if (hasOwn(b, 'pageSize')) patch.pageSize = b.pageSize
-    if (hasOwn(b, 'headerText')) patch.headerText = stripEmpty(b.headerText)
-    if (hasOwn(b, 'footerText')) patch.footerText = stripEmpty(b.footerText)
     assertPatchNotEmpty(patch)
 
     const [updated] = await tx.update(documents).set(patch).where(eq(documents.id, id)).returning()
@@ -1324,11 +1293,6 @@ const DOCUMENT_BODY: Json = {
     nextReviewOn: { type: 'string', format: 'date' },
     requiredForRoleKeys: { type: 'array', items: { type: 'string' } },
     requiredForTradeIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
-    printHeader: { type: 'boolean', default: true },
-    printFooter: { type: 'boolean', default: true },
-    pageSize: { type: 'string', enum: ['Letter', 'A4'], default: 'Letter' },
-    headerText: { type: 'string' },
-    footerText: { type: 'string' },
   },
 }
 

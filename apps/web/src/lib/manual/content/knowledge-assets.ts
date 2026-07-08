@@ -187,6 +187,62 @@ A book bundles related documents into one big PDF — for example, a full safety
 - Need training instead of a document? See [Training & certificates](/help/training).`,
   },
   {
+    slug: 'documents-authoring',
+    title: 'Writing documents',
+    group: 'Knowledge & training',
+    iconKey: 'book',
+    summary: 'Write documents in a full Word editor, publish numbered versions, keep history.',
+    keywords: [
+      'write document',
+      'word',
+      'docx',
+      'publish',
+      'version',
+      'track changes',
+      'draft',
+      'author',
+      'edit document',
+    ],
+    requiredPermission: 'documents.manage',
+    body: `Documents are Word files. You write them in a full Word editor right inside BeaconHS, and readers always see a numbered, published PDF that looks identical on every device and on paper.
+
+## Start a document
+
+1. Open [Documents](/documents) and create a document.
+2. On its page, the **Write** tab offers two choices: **Import Word file** (drop in a .docx) or **Start blank**.
+3. The file becomes the working draft. Everything you type saves automatically.
+
+## Edit the draft
+
+1. Open the document's **Write** tab. The Word editor opens right in the page.
+2. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
+3. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
+4. **Download DOCX** saves the working file; **Replace** swaps in a different Word file.
+
+## Publish a version
+
+1. Click **Publish** in the Write toolbar.
+2. Add a short note about what changed (optional), then confirm.
+3. The draft is frozen as the next numbered version — v1, v2, v3 — and its PDF renders in the background. Readers always see the latest published version; your draft stays private until the next publish.
+
+## Version history
+
+Open the **Versions** tab. Every published version keeps its own PDF and Word file:
+
+- **PDF** — read or print that exact version.
+- **DOCX** — download the Word snapshot.
+- **Open read-only** — view the old version in the editor without changing anything.
+
+## Uploaded PDFs
+
+Documents can also be plain uploaded PDFs (scanned or externally produced). Use **Upload PDF** on the PDF tab — there is no editor for these; the file itself is the document.
+
+## Tips
+
+- Acknowledgments always point at published versions, so you can edit the draft freely without affecting sign-offs.
+- Keep one person editing a document at a time.`,
+  },
+  {
     slug: 'equipment',
     title: 'Equipment',
     group: 'Equipment & PPE',

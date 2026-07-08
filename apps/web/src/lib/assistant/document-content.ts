@@ -10,7 +10,7 @@
 // (documents.read/manage + published-only for non-managers via documentReadFilter).
 
 import { and, desc, eq, isNull, type SQL } from 'drizzle-orm'
-import { attachments, documentDrafts, documentVersions, documents } from '@beaconhs/db/schema'
+import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { getObject } from '@beaconhs/storage'
 import { documentReadFilter } from './doc-access'
@@ -134,7 +134,7 @@ export async function getDocumentText(
       .select({
         id: documentVersions.id,
         version: documentVersions.version,
-        html: documentVersions.contentMarkdown,
+        text: documentVersions.textContent,
         attachmentId: documentVersions.contentAttachmentId,
       })
       .from(documentVersions)
@@ -171,17 +171,10 @@ export async function getDocumentText(
         entry = { source: 'empty', text: '', pages: null, scanned: false }
       }
     } else {
-      // In-app authored document → HTML flattened to text.
-      let html = version?.html ?? null
-      if (!html) {
-        const [draft] = await tx
-          .select({ html: documentDrafts.contentHtml })
-          .from(documentDrafts)
-          .where(eq(documentDrafts.documentId, id))
-          .limit(1)
-        html = draft?.html ?? null
-      }
-      const text = htmlToText(html)
+      // Authored document → the text the worker extracted from the published
+      // DOCX snapshot (unpublished drafts live in the Word master and aren't
+      // readable here).
+      const text = (version?.text ?? '').trim()
       entry = { source: text ? 'html' : 'empty', text, pages: null, scanned: false }
     }
 

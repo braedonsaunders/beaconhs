@@ -13,7 +13,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { documentBookItems, documentBooks, documentDrafts, documents } from '@beaconhs/db/schema'
+import { documentBookItems, documentBooks, documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -33,13 +33,6 @@ export async function createBlankDocument(): Promise<
       .values({ tenantId: ctx.tenantId, key, title: 'Untitled document', status: 'draft' })
       .returning({ id: documents.id })
     if (!doc) throw new Error('Failed to create document')
-    await tx.insert(documentDrafts).values({
-      tenantId: ctx.tenantId,
-      documentId: doc.id,
-      contentHtml: '',
-      contentJson: null,
-      updatedByTenantUserId: ctx.membership?.id ?? null,
-    })
     return doc.id
   })
   await recordAudit(ctx, {
