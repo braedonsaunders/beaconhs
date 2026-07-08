@@ -13,6 +13,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import {
   augmentEntityMapWithCustomFields,
+  refineEntityMapForDocuments,
   buildReportDocumentCss,
   buildReportPageCss,
   computeRangeFor,
@@ -81,7 +82,9 @@ async function resolveStudioEntityMap(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
 ): Promise<Record<string, ReportEntity>> {
   return ctx.db(async (tx) =>
-    augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+    refineEntityMapForDocuments(
+      await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+    ),
   )
 }
 
@@ -208,9 +211,8 @@ export async function previewCustomReport(payload: {
     assertCan(ctx, 'reports.builder')
     const range = computeRangeFor('custom_query', {})
     const result = await ctx.db(async (tx) => {
-      const entityMap = await augmentEntityMapWithCustomFields(
-        tx,
-        await discoverEntityMapWithApps(tx),
+      const entityMap = refineEntityMapForDocuments(
+        await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
       )
       const customQuery = validateCustomQuery(payload.query, entityMap)
       return runReport(tx, {

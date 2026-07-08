@@ -1,6 +1,7 @@
 export * from './types'
 export * from './document'
 export * from './entities'
+export * from './refine'
 export * from './custom-columns'
 export * from './filters'
 export * from './custom-query'

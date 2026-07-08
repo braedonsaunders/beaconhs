@@ -118,6 +118,7 @@ async function runRowQuery(
   const groups: ReportGroup[] = []
   const groupByValid = q.groupBy && entityColumnSql(entity, q.groupBy) ? q.groupBy : null
   const columnLabels = requestedColumns.map((c) => labelFor(entity, c))
+  const cell = (column: string, v: unknown) => formatCellValue(entity, column, v)
 
   if (groupByValid) {
     const byKey = new Map<string, Record<string, unknown>[]>()
@@ -135,7 +136,7 @@ async function runRowQuery(
           title: `${labelFor(entity, groupByValid)}: ${formatLabel(k)}`,
           subtitle: `${list.length} row(s)`,
           columns: columnLabels,
-          rows: list.map((row) => requestedColumns.map((c) => formatCustomValue(row[c]))),
+          rows: list.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
         })
       }
     }
@@ -144,7 +145,7 @@ async function runRowQuery(
       title: 'Results',
       subtitle: `${dataRows.length} row(s)`,
       columns: columnLabels,
-      rows: dataRows.map((row) => requestedColumns.map((c) => formatCustomValue(row[c]))),
+      rows: dataRows.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
       isEmpty: dataRows.length === 0,
     })
   }
@@ -227,7 +228,11 @@ async function runAggregateQuery(
     ...measures.map((m) => measureLabel(entity, m)),
   ]
   const rows = dataRows.map((row) => [
-    ...breakouts.map((b, i) => formatBreakoutValue(row[`d${i}`], b.bin)),
+    ...breakouts.map((b, i) =>
+      b.bin
+        ? formatBreakoutValue(row[`d${i}`], b.bin)
+        : formatCellValue(entity, b.column, row[`d${i}`]),
+    ),
     ...measures.map((_, i) => formatCustomValue(row[`m${i}`])),
   ])
 
@@ -328,6 +333,14 @@ function resolveLimit(requested: number | null | undefined, maxRows?: number): n
 
 function labelFor(entity: ReportEntity, key: string): string {
   return entity.columns.find((c) => c.key === key)?.label ?? formatLabel(key)
+}
+
+/** Cell value for display: enum-kind columns print humanised (underscores →
+ *  spaces), everything else through formatCustomValue. */
+function formatCellValue(entity: ReportEntity, column: string, v: unknown): string | number | null {
+  const kind = entity.columns.find((c) => c.key === column)?.kind
+  if (kind === 'enum' && typeof v === 'string') return formatLabel(v)
+  return formatCustomValue(v)
 }
 
 function formatCustomValue(v: unknown): string | number | null {

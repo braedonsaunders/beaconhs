@@ -8,6 +8,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import {
   augmentEntityMapWithCustomFields,
+  refineEntityMapForDocuments,
   computeRangeFor,
   rangeModeFor,
   runReport,
@@ -56,7 +57,9 @@ export async function runReportForViewer(
         range,
         customQuery: definition.customQuery,
         maxRows: opts.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS,
-        entityMap: await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+        entityMap: refineEntityMapForDocuments(
+          await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+        ),
       }),
     )
     return { result, rangeLabel: range.label, rangeMode: mode, days, error: null }
