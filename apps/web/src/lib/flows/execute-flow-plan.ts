@@ -122,7 +122,16 @@ export async function executeFlowPlan(
         for (const u of await getRoleUsers(t.role)) add(u.email)
       } else if (t.type === 'field') {
         const v = values[t.field]
-        if (typeof v === 'string') add(v.includes('@') ? v : await personEmail(v))
+        if (typeof v === 'string' && v.trim()) {
+          if (v.includes('@')) {
+            // One address OR a comma/semicolon/space-separated list (e.g. a
+            // subject's `attendee_emails` roster field).
+            for (const part of v.split(/[,;\s]+/)) add(part)
+          } else {
+            // Not an address — treat the value as a person id.
+            add(await personEmail(v))
+          }
+        }
       } else if (t.type === 'person') {
         add(await personEmail(t.personId))
       } else if (t.type === 'submitter_manager') {

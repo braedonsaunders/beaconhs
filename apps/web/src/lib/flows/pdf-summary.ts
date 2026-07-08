@@ -21,7 +21,15 @@ export function summarizeFlowValues(
   values: Record<string, unknown>,
 ): { label: string; value: string }[] {
   return Object.entries(values)
-    .filter(([k, v]) => !SKIP_KEYS.has(k) && v != null && v !== '')
+    .filter(
+      ([k, v]) =>
+        !SKIP_KEYS.has(k) &&
+        v != null &&
+        v !== '' &&
+        // Collections (arrays of row objects) have no scalar rendering — they
+        // would print as "[object Object]" — so the summary skips them.
+        typeof v !== 'object',
+    )
     .map(([k, v]) => ({ label: humanize(k), value: String(v) }))
 }
 
