@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, ExternalLink, Loader2, RefreshCw, Upload } from 'lucide-react'
+import { Download, ExternalLink, Loader2, RefreshCw, UploadCloud } from 'lucide-react'
 import { Button, FileUploader, cn } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { requestUpload, finalizeUpload } from '@/lib/uploads'
@@ -37,15 +37,18 @@ export function DocumentPdfPane({
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [noSource, setNoSource] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
 
   const load = useCallback(async () => {
     setStatus('loading')
     setError(null)
+    setNoSource(false)
     const r = await getDocumentPdfUrl(documentId, { draft })
     if (!r.ok) {
       setStatus('error')
       setError(r.error)
+      setNoSource(r.reason === 'no_source')
       return
     }
     setUrl(r.url)
@@ -93,7 +96,7 @@ export function DocumentPdfPane({
               <RefreshCw size={13} /> Regenerate
             </button>
           ) : null}
-          {!readOnly && !draft ? (
+          {!readOnly && !draft && url ? (
             <button
               type="button"
               onClick={() => setUploadOpen((v) => !v)}
@@ -104,7 +107,7 @@ export function DocumentPdfPane({
                   : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
               )}
             >
-              <Upload size={13} /> Upload PDF
+              <UploadCloud size={13} /> Replace
             </button>
           ) : null}
           {url ? (
@@ -142,14 +145,38 @@ export function DocumentPdfPane({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1">
+      <div className={cn('min-h-0 flex-1', status !== 'ready' && 'app-scroll overflow-y-auto')}>
         {status === 'ready' && url ? (
           <PdfViewer url={url} className="h-full" />
+        ) : status === 'error' && noSource && !readOnly && !draft ? (
+          // No PDF yet — the same centered card the Write tab uses for a new
+          // document, with the uploader front and center.
+          <div className="mx-auto w-full max-w-xl px-5 py-10">
+            <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                No PDF yet
+              </h3>
+              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                Upload a PDF to make it this document&apos;s source. Authored documents are written
+                on the Write tab instead.
+              </p>
+              <div className="mt-4 text-left">
+                <FileUploader
+                  requestUploadAction={requestUpload}
+                  finalizeUploadAction={finalizeUpload}
+                  kind="document"
+                  accept=".pdf"
+                  label="Drop a PDF here or click to choose"
+                  onUploaded={(f) => onUploaded(f.attachmentId)}
+                />
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-600 dark:text-slate-300">
             {status === 'error' ? (
               <>
-                <p className="text-rose-600 dark:text-rose-400">
+                <p className={noSource ? '' : 'text-rose-600 dark:text-rose-400'}>
                   {error ?? 'Could not load the PDF.'}
                 </p>
                 <Button variant="outline" onClick={load}>

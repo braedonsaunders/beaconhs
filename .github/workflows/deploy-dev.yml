@@ -109,14 +109,30 @@ jobs:
 
       # The collabora service bind-mounts this file over its stock branding.js
       # (BeaconHS theme). The runner only has the docker socket, so write the
-      # host file through a helper container.
+      # host file through a helper container. coolwsd caches browser assets in
+      # memory at startup, so a changed file needs the collabora service
+      # force-updated before it is actually served.
       - name: Install Collabora branding on the swarm manager
         run: |
           set -euo pipefail
+          before="$(docker run --rm -v /etc/dokploy/beaconhs:/target alpine:3 \
+            sh -c 'sha256sum /target/collabora-branding.js 2>/dev/null | cut -d" " -f1' || true)"
           docker run --rm -i -v /etc/dokploy/beaconhs:/target alpine:3 \
             sh -c 'cat > /target/collabora-branding.js && chmod 0644 /target/collabora-branding.js' \
             < deploy/collabora-branding.js
+          after="$(sha256sum deploy/collabora-branding.js | cut -d' ' -f1)"
           echo "branding installed ($(wc -c < deploy/collabora-branding.js) bytes)"
+          if [ "$before" != "$after" ]; then
+            svc="$(docker service ls --format '{{.Name}}' | grep -i collabora | head -1 || true)"
+            if [ -n "$svc" ]; then
+              echo "branding changed — restarting $svc so coolwsd re-caches it"
+              docker service update --force "$svc" >/dev/null
+            else
+              echo "::warning::branding changed but no collabora service found to restart"
+            fi
+          else
+            echo "branding unchanged — no restart needed"
+          fi
 
       - name: Update env + redeploy on Dokploy
         env:

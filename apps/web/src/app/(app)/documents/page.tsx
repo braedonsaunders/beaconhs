@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
 import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-orm'
@@ -12,7 +11,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { listDocumentBooksForBulk } from './_actions'
+import { createDocument, listDocumentBooksForBulk } from './_actions'
 import { DocumentsRecordsTable, type DocumentsTableRow } from './_records-table'
 import { DocumentsSubNav } from './_components/documents-sub-nav'
 import { ReadOnlyDocumentsGrid, type ReadOnlyDoc } from './_read-only-grid'
@@ -180,9 +179,9 @@ export default async function DocumentsPage({
                       <Button variant="outline">Export CSV</Button>
                     </a>
                   ) : null}
-                  <Link href="/documents/new">
-                    <Button>New document</Button>
-                  </Link>
+                  <form action={createDocument}>
+                    <Button type="submit">New document</Button>
+                  </form>
                 </div>
               ) : null
             }
@@ -240,9 +239,9 @@ export default async function DocumentsPage({
           }
           action={
             canManage ? (
-              <Link href="/documents/new">
-                <Button>New document</Button>
-              </Link>
+              <form action={createDocument}>
+                <Button type="submit">New document</Button>
+              </form>
             ) : undefined
           }
         />

@@ -40,8 +40,10 @@ const cached: Partial<Record<CollaboraApp, { url: string; at: number }>> = {}
 
 /**
  * Resolve the Collabora edit-action URL for an office app from its WOPI
- * discovery XML (cached 10 min). Returns null when Collabora is not
- * configured or not reachable — callers must surface a real disabled state.
+ * discovery XML (cached 10 min). The action URL practically never changes, so
+ * a failed refresh serves the stale cache instead of surfacing a hard
+ * "not configured" error mid-session. Returns null only when Collabora is not
+ * configured or has never answered discovery.
  */
 export async function getCollaboraEditUrl(
   app: CollaboraApp = 'presentation',
@@ -56,14 +58,14 @@ export async function getCollaboraEditUrl(
       signal: AbortSignal.timeout(8000),
       cache: 'no-store',
     })
-    if (!res.ok) return null
+    if (!res.ok) throw new Error(`discovery ${res.status}`)
     const xml = await res.text()
     const url = editUrlFromDiscovery(xml, app)
-    if (!url) return null
+    if (!url) throw new Error('no edit action in discovery')
     cached[app] = { url, at: Date.now() }
     return url
   } catch {
-    return null
+    return hit?.url ?? null
   }
 }
 
@@ -100,7 +102,9 @@ const UI_DEFAULTS = [
  * plus our WOPISrc and UI defaults. Collabora tolerates trailing placeholder
  * tokens in urlsrc (<ui=UI_LLCC&>…); strip them before appending. Colors live
  * in the mounted branding.js (deploy/collabora-branding.js); the embed adds
- * the theme (darkTheme) client-side to match the app.
+ * the theme (bhsTheme, enforced by branding.js) client-side to match the app.
+ * NEVER pass Collabora's own darkTheme param — the mere presence of the param
+ * (even darkTheme=false) makes COOL default to dark AND clobbers ui_defaults.
  */
 export function buildEditorUrl(editUrl: string, attachmentId: string): string {
   const cleaned = editUrl.replace(/<[^>]*>/g, '')

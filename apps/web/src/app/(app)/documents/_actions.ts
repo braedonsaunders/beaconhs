@@ -12,18 +12,17 @@
 // per affected document plus a summary entry, sharing a batchId.
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { documentBookItems, documentBooks, documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
-// Lazy draft create: called by the /documents/new page's LazyRecordProvider on
-// the user's first title edit — so glancing at "new" and leaving creates
-// nothing. Returns the id; the provider then navigates to the manage page.
-export async function createBlankDocument(): Promise<
-  { ok: true; id: string } | { ok: false; error: string }
-> {
+// "New document": create the draft and land straight on its full page — title
+// and everything else are edited inline there. Form action (POST) so a
+// prefetch or history re-navigation can never create a record.
+export async function createDocument(): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   const key = `untitled-${Math.random().toString(36).slice(2, 8)}`
@@ -42,21 +41,7 @@ export async function createBlankDocument(): Promise<
     summary: 'Created document',
   })
   revalidatePath('/documents')
-  return { ok: true, id }
-}
-
-// Title field-update for the lazy /documents/new title field (LiveField FormData
-// contract). Existing docs rename via the editor's renameDocument.
-export async function updateDocumentTitle(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  const id = String(formData.get('id') ?? '')
-  const value = String(formData.get('value') ?? '')
-  if (!id) throw new Error('Missing id')
-  const title = value.trim() || 'Untitled document'
-  await ctx.db((tx) => tx.update(documents).set({ title }).where(eq(documents.id, id)))
-  revalidatePath(`/documents/${id}`)
-  revalidatePath('/documents')
+  redirect(`/documents/${id}`)
 }
 
 export type BulkActionResult =

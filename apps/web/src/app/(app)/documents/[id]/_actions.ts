@@ -41,7 +41,11 @@ export async function renameDocument(input: {
   return { ok: true }
 }
 
-export type DocumentPdfUrlResult = { ok: true; url: string } | { ok: false; error: string }
+export type DocumentPdfUrlResult =
+  | { ok: true; url: string }
+  // reason 'no_source' = the document simply has no PDF yet (nothing uploaded,
+  // nothing published) — the pane shows the centered upload state for it.
+  | { ok: false; error: string; reason?: 'no_source' }
 
 // Returns a short-lived URL to view the document inline. Prefers an uploaded
 // PDF version; otherwise points the viewer at the dynamic PDF route, which
@@ -120,7 +124,13 @@ export async function getDocumentPdfUrl(
       .orderBy(desc(documentVersions.version))
       .limit(1),
   )
-  if (!published) return { ok: false, error: 'This document has no published version yet.' }
+  if (!published) {
+    return {
+      ok: false,
+      error: 'This document has no published version yet.',
+      reason: 'no_source',
+    }
+  }
   if (!published.pdfAttachmentId) {
     if (published.renderStatus === 'failed') {
       return { ok: false, error: published.renderError || 'The PDF render failed.' }

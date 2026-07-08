@@ -210,8 +210,8 @@ A book bundles related documents into one big PDF — for example, a full safety
 
 ## Start a document
 
-1. Open [Documents](/documents) and create a document.
-2. On its page, the **Write** tab offers two choices: **Import Word file** (drop in a .docx) or **Start blank**.
+1. Open [Documents](/documents) and click **New document** — a draft opens right away.
+2. On the **Write** tab, pick **Import Word file** (drop in a .docx) or **Start blank**. Set the title and details in the panel on the left.
 3. The file becomes the working draft. Everything you type saves automatically.
 
 ## Edit the draft
@@ -248,7 +248,7 @@ Open the **Versions** tab. Every published version keeps its own PDF and Word fi
 
 ## Uploaded PDFs
 
-Documents can also be plain uploaded PDFs (scanned or externally produced). Use **Upload PDF** on the PDF tab — there is no editor for these; the file itself is the document.
+Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. Once a PDF is in place, **Replace** in the PDF toolbar swaps in a new file.
 
 ## Tips
 

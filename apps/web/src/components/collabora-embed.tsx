@@ -4,7 +4,11 @@
 //
 // - Fetches a WOPI session via the server action supplied by the host surface,
 //   then — as WOPI mandates — form-POSTs the access token into the iframe.
-// - Passes darkTheme so the editor follows the app's light/dark mode.
+// - Passes bhsTheme (our own param, enforced inside the frame by the mounted
+//   branding.js) so the editor follows the app's light/dark mode. Collabora's
+//   native darkTheme param is unusable: its mere presence forces dark mode
+//   and clobbers ui_defaults, and COOL's per-browser saved theme would win
+//   over it anyway.
 // - Shows the animated BeaconHS lighthouse splash over the frame until
 //   Collabora reports Document_Loaded (its own spinner never shows).
 // - Speaks Collabora's postMessage API (Host_PostmessageReady handshake) and
@@ -17,6 +21,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { Presentation } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { LogoMark } from '@/components/brand-logo'
+import { useTheme } from '@/components/theme-provider'
 
 export type CollaboraSession =
   | { ok: true; actionUrl: string; accessToken: string; accessTokenTtl: number }
@@ -40,20 +45,39 @@ export const CollaboraEmbed = forwardRef<
 >(function CollaboraEmbed({ fetchSession, frameName, className }, ref) {
   const [session, setSession] = useState<CollaboraSession | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const formRef = useRef<HTMLFormElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const originRef = useRef<string>('')
+  const { resolvedTheme } = useTheme()
+
+  // In production Collabora is routed same-origin (/browser/*), so the frame
+  // shares this page's localStorage. COOL resolves its theme from the
+  // 'darkTheme' key (which beats every default) and live-updates on the
+  // storage event — writing it here pins the editor to the app theme,
+  // including live toggles, with no Collabora-side caching in the way.
+  useEffect(() => {
+    if (!session?.ok || !originRef.current) return
+    if (originRef.current !== window.location.origin) return
+    try {
+      window.localStorage.setItem('darkTheme', resolvedTheme === 'dark' ? 'true' : 'false')
+    } catch {
+      /* storage unavailable — branding.js enforcement still applies */
+    }
+  }, [session, resolvedTheme])
 
   useEffect(() => {
     let cancelled = false
+    setSession(null)
+    setLoaded(false)
     fetchSession()
       .then((s) => {
         if (cancelled) return
         if (s.ok) {
-          // Follow the app theme exactly — pass it explicitly rather than
-          // letting Collabora guess from the browser preference.
+          // Follow the app theme exactly — branding.js inside the frame reads
+          // this param and pins Collabora's theme to it.
           const dark = document.documentElement.classList.contains('dark')
-          s = { ...s, actionUrl: `${s.actionUrl}&darkTheme=${dark ? 'true' : 'false'}` }
+          s = { ...s, actionUrl: `${s.actionUrl}&bhsTheme=${dark ? 'dark' : 'light'}` }
           originRef.current = new URL(s.actionUrl).origin
         }
         setSession(s)
@@ -65,7 +89,7 @@ export const CollaboraEmbed = forwardRef<
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameName])
+  }, [frameName, attempt])
 
   useEffect(() => {
     if (session?.ok) formRef.current?.submit()
@@ -139,9 +163,18 @@ export const CollaboraEmbed = forwardRef<
           </p>
           <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
             {session.error === 'not_configured'
-              ? 'The editor needs a Collabora Online server (COLLABORA_URL). Published content and downloads keep working.'
+              ? 'The editor server did not respond. Published content and downloads keep working.'
               : 'Import a file or start a blank one to begin.'}
           </p>
+          {session.error === 'not_configured' ? (
+            <button
+              type="button"
+              onClick={() => setAttempt((n) => n + 1)}
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-amber-400 px-3 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+            >
+              Retry
+            </button>
+          ) : null}
         </div>
       </div>
     )
