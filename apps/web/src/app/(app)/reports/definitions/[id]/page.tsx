@@ -1,11 +1,16 @@
-// Report viewer — runs the definition in-app (same engine as scheduled PDFs)
-// and renders summary cards and the grouped result tables, with
-// range switching, CSV/XLSX export, subscribe, and manage actions.
+// Report viewer — a true print preview. Runs the definition in-app (same
+// engine and same document template as scheduled PDFs) and paginates it into
+// real paper pages with Paged.js, so the screen matches the exported PDF
+// page-for-page. The Document tab owns the viewport height; subscriptions,
+// run history, and definition details live on the Schedules & activity tab.
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { desc, eq, inArray } from 'drizzle-orm'
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Card,
@@ -33,20 +38,29 @@ import {
 } from 'lucide-react'
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { requireRequestContext } from '@/lib/auth'
-import { DetailPageLayout } from '@/components/page-layout'
-import { loadDefinitionById } from '../../_definitions'
-import { runReportForViewer, VIEWER_RANGE_CHOICES } from '../../_run'
-import { formatCadence, formatDateTime, CategoryBadge, KindBadge, StatusBadge } from '../../_format'
 import {
-  ReportGroupTables,
-  ReportRunError,
-  ReportSummaryCards,
-} from '../../_components/report-results'
+  buildReportPageCss,
+  renderReportDocumentBodyHtml,
+  resolveReportLayout,
+} from '@beaconhs/reports'
+import { requireRequestContext } from '@/lib/auth'
+import { FadeInHeader } from '@/components/page-layout-motion'
+import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { loadDefinitionById } from '../../_definitions'
+import {
+  DOCUMENT_PREVIEW_MAX_ROWS,
+  VIEWER_RANGE_CHOICES,
+  loadTenantBranding,
+  runReportForViewer,
+} from '../../_run'
+import { formatCadence, formatDateTime, CategoryBadge, KindBadge, StatusBadge } from '../../_format'
+import { ReportPagedPreview } from '../../_components/report-paged-preview.client'
 import { runOnceFromDefinition, deleteDefinition } from './actions'
 
 export const metadata = { title: 'Report' }
 export const dynamic = 'force-dynamic'
+
+const TABS = ['document', 'activity'] as const
 
 export default async function ReportViewerPage({
   params,
@@ -62,10 +76,11 @@ export default async function ReportViewerPage({
   const definition = await loadDefinitionById(ctx.tenantId!, id)
   if (!definition) notFound()
 
+  const tab = pickActiveTab(sp, TABS, 'document')
   const daysParam = typeof sp.days === 'string' ? Number(sp.days) : null
-  const run = await runReportForViewer(ctx, definition, { days: daysParam })
 
-  // Schedules pointing at this definition + their recent runs.
+  // Schedules pointing at this definition + their recent runs (tab count +
+  // the activity tab body).
   const [scheduleRows, runRows] = await ctx.db(async (tx) => {
     const s = await tx
       .select()
@@ -97,55 +112,122 @@ export default async function ReportViewerPage({
     : `/reports/definitions/new?from=${id}`
   const runBound = runOnceFromDefinition.bind(null, id)
   const deleteBound = deleteDefinition.bind(null, id)
-  const exportBase = `/reports/definitions/${id}/export${run.days ? `?days=${run.days}` : ''}`
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
+          <DetailHeader
+            back={{ href: '/reports', label: 'Back to reports' }}
+            title={definition.name}
+            subtitle={definition.description ?? undefined}
+            badge={
+              <div className="flex items-center gap-1.5">
+                <KindBadge kind={definition.kind} />
+                <CategoryBadge category={definition.category} />
+              </div>
+            }
+            actions={
+              <>
+                {canSchedule ? (
+                  <form action={runBound}>
+                    <Button type="submit" variant="outline" size="sm">
+                      <Mail size={14} className="mr-1.5" />
+                      Email PDF
+                    </Button>
+                  </form>
+                ) : null}
+                {canBuild ? (
+                  <Link href={editHref as never}>
+                    <Button variant="outline" size="sm">
+                      <Pencil size={14} className="mr-1.5" />
+                      Edit
+                    </Button>
+                  </Link>
+                ) : null}
+                {canSchedule ? (
+                  <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
+                    <Button size="sm">
+                      <Calendar size={14} className="mr-1.5" />
+                      Subscribe
+                    </Button>
+                  </Link>
+                ) : null}
+              </>
+            }
+          />
+          <TabNav
+            basePath={`/reports/definitions/${id}`}
+            currentParams={sp}
+            active={tab}
+            className="mt-2.5 sm:mt-4"
+            tabs={[
+              { key: 'document', label: 'Document' },
+              { key: 'activity', label: 'Schedules & activity', count: scheduleRows.length },
+            ]}
+          />
+        </FadeInHeader>
+      </div>
+
+      {tab === 'document' ? (
+        <DocumentTab ctx={ctx} definition={definition} daysParam={daysParam} sp={sp} />
+      ) : (
+        <ActivityTab
+          definition={definition}
+          scheduleRows={scheduleRows}
+          runRows={runRows}
+          canSchedule={canSchedule}
+          canBuild={canBuild}
+          isCustom={isCustom}
+          editHref={editHref}
+          deleteBound={deleteBound}
+        />
+      )}
+    </div>
+  )
+}
+
+// --- Document tab (print preview) -------------------------------------------
+
+async function DocumentTab({
+  ctx,
+  definition,
+  daysParam,
+  sp,
+}: {
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>
+  definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
+  daysParam: number | null
+  sp: Record<string, string | string[] | undefined>
+}) {
+  const [run, branding] = await Promise.all([
+    runReportForViewer(ctx, definition, { days: daysParam }),
+    loadTenantBranding(ctx),
+  ])
+
+  const layout = resolveReportLayout(definition.layout)
+  const bodyHtml = renderReportDocumentBodyHtml({
+    tenantName: branding.name,
+    tenantLogoUrl: branding.logoUrl,
+    primaryColor: branding.primaryColor,
+    reportName: definition.name,
+    dateRangeLabel: run.rangeLabel,
+    generatedAt: new Date(),
+    summary: run.result.summary,
+    groups: run.result.groups,
+  })
+  const pageCss = buildReportPageCss(layout, {
+    marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
+  })
+  const truncated = run.result.rowCount >= DOCUMENT_PREVIEW_MAX_ROWS
+
+  const exportBase = `/reports/definitions/${definition.id}/export${run.days ? `?days=${run.days}` : ''}`
   const exportJoin = run.days ? '&' : '?'
 
   return (
-    <DetailPageLayout
-      header={
-        <DetailHeader
-          back={{ href: '/reports/definitions', label: 'Back to library' }}
-          title={definition.name}
-          subtitle={definition.description ?? undefined}
-          badge={
-            <div className="flex items-center gap-1.5">
-              <KindBadge kind={definition.kind} />
-              <CategoryBadge category={definition.category} />
-            </div>
-          }
-          actions={
-            <>
-              {canSchedule ? (
-                <form action={runBound}>
-                  <Button type="submit" variant="outline" size="sm">
-                    <Mail size={14} className="mr-1.5" />
-                    Email PDF
-                  </Button>
-                </form>
-              ) : null}
-              {canBuild ? (
-                <Link href={editHref as never}>
-                  <Button variant="outline" size="sm">
-                    <Pencil size={14} className="mr-1.5" />
-                    Edit
-                  </Button>
-                </Link>
-              ) : null}
-              {canSchedule ? (
-                <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
-                  <Button size="sm">
-                    <Calendar size={14} className="mr-1.5" />
-                    Subscribe
-                  </Button>
-                </Link>
-              ) : null}
-            </>
-          }
-        />
-      }
-    >
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-2">
           {run.rangeMode === 'as_of' ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">{run.rangeLabel}</p>
           ) : (
@@ -159,7 +241,9 @@ export default async function ReportViewerPage({
                 return (
                   <Link
                     key={d}
-                    href={`/reports/definitions/${id}?days=${d}` as never}
+                    href={
+                      `/reports/definitions/${definition.id}?days=${d}${typeof sp.tab === 'string' ? `&tab=${sp.tab}` : ''}` as never
+                    }
                     className={cn(
                       'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
                       active
@@ -197,16 +281,56 @@ export default async function ReportViewerPage({
             </a>
           </div>
         </div>
+      </div>
 
+      <div className="min-h-0 flex-1">
         {run.error ? (
-          <ReportRunError error={run.error} />
+          <div className="mx-auto max-w-screen-2xl p-3 sm:p-6">
+            <Alert variant="destructive">
+              <AlertTitle>This report failed to run</AlertTitle>
+              <AlertDescription>{run.error}</AlertDescription>
+            </Alert>
+          </div>
         ) : (
-          <>
-            <ReportSummaryCards summary={run.result.summary} />
-            <ReportGroupTables groups={run.result.groups} />
-          </>
+          <ReportPagedPreview
+            bodyHtml={bodyHtml}
+            pageCss={pageCss}
+            caption={
+              truncated
+                ? `Preview truncated at ${DOCUMENT_PREVIEW_MAX_ROWS} rows — export PDF for the complete document.`
+                : null
+            }
+          />
         )}
+      </div>
+    </div>
+  )
+}
 
+// --- Schedules & activity tab -------------------------------------------------
+
+function ActivityTab({
+  definition,
+  scheduleRows,
+  runRows,
+  canSchedule,
+  canBuild,
+  isCustom,
+  editHref,
+  deleteBound,
+}: {
+  definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
+  scheduleRows: readonly (typeof reportSchedules.$inferSelect)[]
+  runRows: readonly (typeof reportRuns.$inferSelect)[]
+  canSchedule: boolean
+  canBuild: boolean
+  isCustom: boolean
+  editHref: string
+  deleteBound: () => Promise<void>
+}) {
+  return (
+    <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-screen-2xl space-y-4 p-3 sm:p-6">
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -374,7 +498,7 @@ export default async function ReportViewerPage({
           </CardContent>
         </Card>
       </div>
-    </DetailPageLayout>
+    </div>
   )
 }
 

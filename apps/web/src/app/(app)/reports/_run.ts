@@ -28,9 +28,10 @@ export type ViewerRun = {
 
 export const VIEWER_RANGE_CHOICES = [7, 14, 30, 90, 365]
 
-/** Viewer cap on custom-query rows; exports run uncapped (to the plan limit).
- *  Tables paginate client-side, so a larger cap is cheap to browse in-app. */
-const VIEWER_MAX_ROWS = 2000
+/** Row cap for the in-app paginated document preview. Paged.js lays out every
+ *  row into page boxes client-side, so the preview stays deliberately small;
+ *  exports and scheduled PDFs run to the plan limit (10k / uncapped). */
+export const DOCUMENT_PREVIEW_MAX_ROWS = 500
 
 export async function runReportForViewer(
   ctx: RequestContext,
@@ -54,7 +55,7 @@ export async function runReportForViewer(
         filters,
         range,
         customQuery: definition.customQuery,
-        maxRows: opts.maxRows ?? VIEWER_MAX_ROWS,
+        maxRows: opts.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS,
         entityMap: await augmentEntityMapWithCustomFields(tx, discoverEntityMap()),
       }),
     )
