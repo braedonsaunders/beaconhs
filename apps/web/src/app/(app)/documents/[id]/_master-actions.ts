@@ -11,7 +11,6 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
 import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
-import { sofficeConvert } from '@beaconhs/office'
 import { enqueueDocumentVersionRender } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -249,40 +248,4 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
     metadata: { versionId, changelog: changelog?.trim() || null },
   })
   revalidatePath(`/documents/${documentId}`)
-}
-
-/**
- * Plain text of the CURRENT working master (LibreOffice extraction) — grounds
- * the document AI panel in what the author is actually editing, not just the
- * last published version.
- */
-export async function getDocumentDraftText(
-  documentId: string,
-): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-
-  const att = await ctx.db(async (tx) => {
-    const [doc] = await tx
-      .select({ sourceAttachmentId: documents.sourceAttachmentId })
-      .from(documents)
-      .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
-      .limit(1)
-    if (!doc?.sourceAttachmentId) return null
-    const [row] = await tx
-      .select({ key: attachments.r2Key })
-      .from(attachments)
-      .where(eq(attachments.id, doc.sourceAttachmentId))
-      .limit(1)
-    return row ?? null
-  })
-  if (!att) return { ok: false, error: 'This document has no Word file yet.' }
-
-  try {
-    const docx = await getObject({ key: att.key })
-    const text = (await sofficeConvert(docx, 'document.docx', 'txt:Text')).toString('utf8')
-    return { ok: true, text: text.slice(0, 24_000) }
-  } catch {
-    return { ok: false, error: 'Could not read the document text.' }
-  }
 }

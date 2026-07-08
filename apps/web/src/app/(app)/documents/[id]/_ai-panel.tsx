@@ -1,81 +1,129 @@
 'use client'
 
-// Document AI panel — docked beside the Writer embed. Chat is grounded in the
-// CURRENT working draft (LibreOffice text extraction of the DOCX master) and
-// streams from /documents/ai (tenant-configured provider). Assistant replies
-// can be inserted at the editor's cursor through the Collabora postMessage
-// channel, or copied.
+// Document AI panel — docked beside the Writer embed. Each turn runs a full
+// server-side agent loop that can read the DOCX master, draft the entire
+// document, and apply surgical exact-match edits directly to the file; when
+// the document changed, the host remounts the editor so Writer reloads the
+// new master. Threads persist per user per document (ai_conversations).
 
 import { useEffect, useRef, useState } from 'react'
-import { CornerDownLeft, Copy, Loader2, Sparkles, TextCursorInput, X } from 'lucide-react'
+import {
+  CornerDownLeft,
+  Copy,
+  FilePenLine,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+  TextCursorInput,
+  X,
+} from 'lucide-react'
 import { Button, Textarea, cn } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import type { CollaboraHandle } from '@/components/collabora-embed'
-import { getDocumentDraftText } from './_master-actions'
+import {
+  appendDocMessages,
+  loadDocConversation,
+  newDocConversation,
+  runDocumentAiTurn,
+} from './_ai-actions'
 
-type Msg = { role: 'user' | 'assistant'; content: string }
+type Msg = { role: 'user' | 'assistant'; content: string; actions?: string[] }
 
 export function DocumentAiPanel({
   documentId,
   editorRef,
   onClose,
+  onDocChanged,
   className,
 }: {
   documentId: string
   editorRef: React.RefObject<CollaboraHandle | null>
   onClose: () => void
+  /** The agent changed the DOCX master — reload the editor. */
+  onDocChanged: () => void
   className?: string
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const docTextRef = useRef<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    let cancelled = false
+    loadDocConversation(documentId)
+      .then((c) => {
+        if (cancelled) return
+        setConversationId(c.conversationId)
+        setMessages(c.messages.map((m) => ({ role: m.role, content: m.content })))
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [documentId])
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [messages])
+  }, [messages, busy])
 
   async function send() {
     const q = input.trim()
-    if (!q || busy) return
+    if (!q || busy || loading) return
     setInput('')
     setBusy(true)
-    const history: Msg[] = [...messages, { role: 'user', content: q }]
-    setMessages([...history, { role: 'assistant', content: '' }])
+    const history = [...messages, { role: 'user' as const, content: q }]
+    setMessages(history)
     try {
-      if (docTextRef.current === null) {
-        const t = await getDocumentDraftText(documentId)
-        docTextRef.current = t.ok ? t.text : ''
-      }
-      const res = await fetch('/documents/ai', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: history, docText: docTextRef.current || undefined }),
-      })
-      if (!res.ok || !res.body) {
-        const detail =
-          res.status === 503 ? 'AI is not configured for this tenant.' : 'AI request failed.'
+      const result = await runDocumentAiTurn(
+        documentId,
+        history.map((m) => ({ role: m.role, content: m.content })),
+      )
+      if (!result.ok) {
         setMessages((prev) => prev.slice(0, -1))
-        toast.error(detail)
+        setInput(q)
+        toast.error(result.error)
         return
       }
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let acc = ''
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        acc += decoder.decode(value, { stream: true })
-        const text = acc
-        setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: text }])
+      const reply: Msg = {
+        role: 'assistant',
+        content: result.text || 'Done.',
+        actions: result.actions.length > 0 ? result.actions : undefined,
+      }
+      setMessages((prev) => [...prev, reply])
+      if (result.docChanged) onDocChanged()
+      if (conversationId) {
+        void appendDocMessages({
+          conversationId,
+          messages: [
+            { role: 'user', content: q },
+            { role: 'assistant', content: reply.content },
+          ],
+        })
       }
     } catch {
       setMessages((prev) => prev.slice(0, -1))
-      toast.error('AI request failed.')
+      setInput(q)
+      toast.error('The AI request failed.')
     } finally {
       setBusy(false)
     }
+  }
+
+  function startNewChat() {
+    if (busy) return
+    setLoading(true)
+    newDocConversation(documentId)
+      .then((c) => {
+        setConversationId(c.conversationId)
+        setMessages([])
+      })
+      .catch(() => toast.error('Could not start a new chat'))
+      .finally(() => setLoading(false))
   }
 
   function insert(text: string) {
@@ -100,25 +148,49 @@ export function DocumentAiPanel({
         <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
           AI assistant
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close AI panel"
-          className="ml-auto grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        >
-          <X size={13} />
-        </button>
+        <div className="ml-auto flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={startNewChat}
+            disabled={busy || loading}
+            aria-label="New chat"
+            title="New chat"
+            className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <RotateCcw size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close AI panel"
+            className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <X size={13} />
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="app-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-        {messages.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Loader2 size={12} className="animate-spin" /> Loading conversation…
+          </div>
+        ) : messages.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Ask about this document or request new content — replies can be inserted at the cursor.
-            The assistant reads the current draft.
+            The assistant edits this document directly — ask it to draft the full document, rewrite
+            a section, or fix specific wording. It reads the current draft before answering.
           </p>
         ) : null}
         {messages.map((m, i) => (
           <div key={i} className={m.role === 'user' ? 'text-right' : ''}>
+            {m.actions?.map((a, j) => (
+              <div
+                key={j}
+                className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-950/40 dark:text-teal-300"
+              >
+                <FilePenLine size={11} /> {a}
+              </div>
+            ))}
             <div
               className={cn(
                 'inline-block max-w-full rounded-lg px-3 py-2 text-left text-xs whitespace-pre-wrap',
@@ -127,9 +199,9 @@ export function DocumentAiPanel({
                   : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100',
               )}
             >
-              {m.content || (busy && i === messages.length - 1 ? '…' : '')}
+              {m.content}
             </div>
-            {m.role === 'assistant' && m.content && !(busy && i === messages.length - 1) ? (
+            {m.role === 'assistant' && m.content ? (
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"
@@ -152,6 +224,11 @@ export function DocumentAiPanel({
             ) : null}
           </div>
         ))}
+        {busy ? (
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Loader2 size={12} className="animate-spin" /> Working on the document…
+          </div>
+        ) : null}
       </div>
 
       <div className="shrink-0 border-t border-slate-200 p-2 dark:border-slate-800">
@@ -166,13 +243,13 @@ export function DocumentAiPanel({
                 void send()
               }
             }}
-            placeholder="Ask or draft…"
+            placeholder="Draft, edit, or ask…"
             className="flex-1 text-xs"
           />
           <Button
             type="button"
             size="sm"
-            disabled={busy || !input.trim()}
+            disabled={busy || loading || !input.trim()}
             onClick={() => void send()}
           >
             {busy ? <Loader2 size={13} className="animate-spin" /> : <CornerDownLeft size={13} />}

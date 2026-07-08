@@ -202,6 +202,8 @@ A book bundles related documents into one big PDF — for example, a full safety
       'draft',
       'author',
       'edit document',
+      'ai',
+      'assistant',
     ],
     requiredPermission: 'documents.manage',
     body: `Documents are Word files. You write them in a full Word editor right inside BeaconHS, and readers always see a numbered, published PDF that looks identical on every device and on paper.
@@ -218,6 +220,17 @@ A book bundles related documents into one big PDF — for example, a full safety
 2. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
 3. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
 4. **Download DOCX** saves the working file; **Replace** swaps in a different Word file.
+
+## AI assistant
+
+If AI is set up for your company, an **AI** button appears in the Write toolbar.
+
+1. Click **AI** to open the assistant beside the editor.
+2. Ask it to draft the whole document, rewrite a section, or fix specific wording — it edits the document for you, and the editor reloads with the changes.
+3. You can also just ask questions; the assistant reads the current draft before answering.
+4. Use **Insert at cursor** to place a reply exactly where you are typing instead.
+
+Changes the assistant makes save into the working draft like your own edits — nothing publishes until you click **Publish**.
 
 ## Publish a version
 

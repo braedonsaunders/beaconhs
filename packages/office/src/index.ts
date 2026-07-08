@@ -89,3 +89,4 @@ export async function pdfUnite(pdfs: Buffer[]): Promise<Buffer> {
     await rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
 }
+export * from './fodt'

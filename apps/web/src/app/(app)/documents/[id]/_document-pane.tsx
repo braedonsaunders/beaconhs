@@ -57,6 +57,9 @@ export function DocumentPane({
   const [showPublish, setShowPublish] = useState(false)
   const [changelog, setChangelog] = useState('')
   const [busy, startTransition] = useTransition()
+  // Bumped when the AI agent rewrites the DOCX master behind the editor's
+  // back — remounting the embed makes Writer load the new file.
+  const [editorEpoch, setEditorEpoch] = useState(0)
   const editorRef = useRef<CollaboraHandle | null>(null)
 
   // Refresh while a published version's PDF is still rendering so the PDF
@@ -220,7 +223,7 @@ export function DocumentPane({
           {master ? (
             <>
               <CollaboraEmbed
-                key={master.attachmentId}
+                key={`${master.attachmentId}:${editorEpoch}`}
                 ref={editorRef}
                 frameName={documentId}
                 fetchSession={() => getDocumentWriterSession(documentId)}
@@ -231,6 +234,10 @@ export function DocumentPane({
                   documentId={documentId}
                   editorRef={editorRef}
                   onClose={() => setAiOpen(false)}
+                  onDocChanged={() => {
+                    setEditorEpoch((v) => v + 1)
+                    router.refresh()
+                  }}
                   className="w-80 shrink-0"
                 />
               ) : null}
