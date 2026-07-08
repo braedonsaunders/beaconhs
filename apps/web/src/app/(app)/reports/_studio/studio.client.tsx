@@ -26,7 +26,9 @@ import {
 import type {
   ReportAggFn,
   ReportCustomQuery,
+  ReportLayoutConfig,
   ReportMeasure,
+  ReportPaperSize,
   ReportRule,
   ReportRuleGroup,
   ReportTemporalBin,
@@ -43,7 +45,7 @@ import {
   BuilderShell,
   BuilderSurfaceHeader,
 } from '@/components/builder/builder-shell'
-import { PaginatedReportTable } from '../_components/paginated-report-table.client'
+import { ReportPagedPreview } from '../_components/report-paged-preview.client'
 import { previewCustomReport, type StudioPreviewResult } from './actions'
 
 type QueryMode = 'rows' | 'summarize'
@@ -55,6 +57,17 @@ type StudioTemplate = {
   description: string
   query: ReportCustomQuery
 }
+
+// Client-side mirror of the engine defaults (see @beaconhs/reports/document —
+// kept local so this bundle never pulls the db schema's runtime barrel). The
+// server re-validates/clamps every save and preview.
+const DEFAULT_LAYOUT: ReportLayoutConfig = { paperSize: 'letter', orientation: 'landscape', marginMm: 15 }
+const PAPER_CHOICES: { key: ReportPaperSize; label: string }[] = [
+  { key: 'letter', label: 'Letter' },
+  { key: 'a4', label: 'A4' },
+  { key: 'legal', label: 'Legal' },
+]
+const STUDIO_PREVIEW_ROWS = 50
 
 const AGG_FNS: { value: ReportAggFn; label: string; needsColumn: boolean }[] = [
   { value: 'count', label: 'Count of rows', needsColumn: false },
@@ -237,6 +250,7 @@ export function ReportStudio({
   initialDescription,
   initialEntityKey,
   initialQuery,
+  initialLayout,
   cloneFromId,
   action,
 }: {
@@ -247,6 +261,7 @@ export function ReportStudio({
   initialDescription?: string
   initialEntityKey?: string | null
   initialQuery?: ReportCustomQuery | null
+  initialLayout?: ReportLayoutConfig | null
   cloneFromId?: string | null
   action: (formData: FormData) => Promise<void>
 }) {
@@ -307,6 +322,10 @@ export function ReportStudio({
     initialQuery?.sort?.direction ?? entity.defaultSort?.direction ?? 'desc',
   )
   const [limit, setLimit] = useState<number>(initialQuery?.limit ?? 1000)
+  const [layout, setLayout] = useState<ReportLayoutConfig>(() => ({
+    ...DEFAULT_LAYOUT,
+    ...(initialLayout ?? {}),
+  }))
   const [columnSearch, setColumnSearch] = useState('')
 
   // react-querybuilder assigns random ids, which never match between SSR and
@@ -402,7 +421,10 @@ export function ReportStudio({
 
   const [preview, setPreview] = useState<StudioPreviewResult | null>(null)
   const [isPreviewing, startPreview] = useTransition()
-  const previewKey = useMemo(() => JSON.stringify(customQuery), [customQuery])
+  const previewKey = useMemo(
+    () => JSON.stringify({ query: customQuery, layout, name }),
+    [customQuery, layout, name],
+  )
   const latest = useRef(previewKey)
   const hasSomething =
     queryMode === 'rows' ? columns.size > 0 : breakouts.length > 0 || measures.length > 0
@@ -457,6 +479,7 @@ export function ReportStudio({
   return (
     <form action={action} className="flex h-full min-h-0 flex-col">
       <input type="hidden" name="customQuery" value={JSON.stringify(customQuery)} />
+      <input type="hidden" name="layout" value={JSON.stringify(layout)} />
       <input type="hidden" name="cloneFromId" value={cloneFromId ?? ''} />
 
       <div className="min-h-0 flex-1">
@@ -791,6 +814,66 @@ export function ReportStudio({
                     List values are comma-separated.
                   </p>
                 </div>
+
+                {/* Page setup */}
+                <div className={sectionCls}>
+                  <h3 className={headCls}>Page setup</h3>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label>Paper</Label>
+                        <Select
+                          value={layout.paperSize}
+                          onChange={(e) =>
+                            setLayout((l) => ({
+                              ...l,
+                              paperSize: e.target.value as ReportPaperSize,
+                            }))
+                          }
+                          className={selectCls}
+                        >
+                          {PAPER_CHOICES.map((p) => (
+                            <option key={p.key} value={p.key}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Margin (mm)</Label>
+                        <Input
+                          type="number"
+                          min={5}
+                          max={30}
+                          value={layout.marginMm}
+                          onChange={(e) =>
+                            setLayout((l) => ({
+                              ...l,
+                              marginMm: Math.min(Math.max(Number(e.target.value) || 15, 5), 30),
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
+                      {(['landscape', 'portrait'] as const).map((o) => (
+                        <button
+                          key={o}
+                          type="button"
+                          onClick={() => setLayout((l) => ({ ...l, orientation: o }))}
+                          className={cn(
+                            'rounded px-3 py-1 text-xs font-medium transition',
+                            layout.orientation === o
+                              ? 'bg-teal-600 text-white'
+                              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                          )}
+                        >
+                          {o === 'landscape' ? 'Landscape' : 'Portrait'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </BuilderScroll>
             </>
           }
@@ -798,7 +881,7 @@ export function ReportStudio({
             <>
               <BuilderSurfaceHeader
                 icon={<Eye size={15} className="text-teal-600" />}
-                title="Live preview"
+                title="Print preview"
                 actions={
                   <>
                     {isPreviewing ? (
@@ -807,7 +890,7 @@ export function ReportStudio({
                       </span>
                     ) : preview?.ok ? (
                       <span className="text-xs text-slate-400">
-                        {preview.result.rowCount} row{preview.result.rowCount === 1 ? '' : 's'}
+                        {preview.rowCount} row{preview.rowCount === 1 ? '' : 's'}
                       </span>
                     ) : null}
                     <Button type="submit" size="sm" disabled={!canSave}>
@@ -816,78 +899,34 @@ export function ReportStudio({
                   </>
                 }
               />
-              <BuilderScroll className="space-y-3 lg:p-6">
-                {preview?.ok ? <ReportSummaryStrip summary={preview.result.summary} /> : null}
+              <div className="min-h-0 flex-1">
                 {!preview ? (
                   <p className="py-16 text-center text-sm text-slate-400">
                     Preview updates automatically as you build.
                   </p>
                 ) : !preview.ok ? (
-                  <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50/40 px-4 py-8 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
-                    {preview.error}
+                  <div className="p-4 lg:p-6">
+                    <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50/40 px-4 py-8 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
+                      {preview.error}
+                    </div>
                   </div>
                 ) : (
-                  <>
-                    {preview.result.groups.map((g, i) => (
-                      <div key={`${g.title}-${i}`} className="space-y-1.5">
-                        {preview.result.groups.length > 1 || queryMode === 'rows' ? (
-                          <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                            {g.title}
-                            {g.subtitle ? (
-                              <span className="ml-1.5 font-normal text-slate-400">
-                                {g.subtitle}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {g.rows.length ? (
-                          <PaginatedReportTable
-                            columns={g.columns}
-                            rows={g.rows}
-                            initialPageSize={10}
-                            dense
-                          />
-                        ) : (
-                          <p className="rounded-lg border border-slate-200 px-3 py-6 text-center text-xs text-slate-400 dark:border-slate-800">
-                            No rows matched.
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                      Preview is capped at 25 rows. Saved reports use the configured row limit.
-                    </p>
-                  </>
+                  <ReportPagedPreview
+                    bodyHtml={preview.bodyHtml}
+                    pageCss={preview.pageCss}
+                    caption={
+                      preview.rowCount >= STUDIO_PREVIEW_ROWS
+                        ? `Preview paginates the first ${STUDIO_PREVIEW_ROWS} rows; saved reports use the configured row limit.`
+                        : null
+                    }
+                  />
                 )}
-              </BuilderScroll>
+              </div>
             </>
           }
         />
       </div>
     </form>
-  )
-}
-
-// --- summary strip -----------------------------------------------------------
-
-function ReportSummaryStrip({ summary }: { summary: { label: string; value: string | number }[] }) {
-  if (!summary.length) return null
-  return (
-    <div className="flex flex-wrap gap-2">
-      {summary.map((s) => (
-        <div
-          key={s.label}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900"
-        >
-          <div className="text-[10px] tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            {s.label}
-          </div>
-          <div className="text-sm font-semibold text-slate-900 tabular-nums dark:text-slate-100">
-            {s.value}
-          </div>
-        </div>
-      ))}
-    </div>
   )
 }
 

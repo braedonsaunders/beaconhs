@@ -14,11 +14,12 @@ import {
   REPORT_TEMPORAL_BINS,
   type ReportBreakout,
   type ReportCustomQuery,
+  type ReportLayoutConfig,
   type ReportMeasure,
   type ReportRule,
   type ReportRuleGroup,
 } from '@beaconhs/db/schema'
-import { REPORT_ENTITY_MAP, type ReportEntity } from '@beaconhs/reports'
+import { REPORT_ENTITY_MAP, resolveReportLayout, type ReportEntity } from '@beaconhs/reports'
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 
 const MAX_DEPTH = 5
@@ -178,6 +179,14 @@ export function validateCustomQuery(
     sort,
     limit,
   }
+}
+
+/** Sanitise the studio's page-setup payload: whitelist paper/orientation and
+ *  clamp margins via the engine resolver. Returns null when absent so the
+ *  definition falls back to the default landscape Letter document. */
+export function validateReportLayout(raw: unknown): ReportLayoutConfig | null {
+  if (!raw || typeof raw !== 'object') return null
+  return resolveReportLayout(raw as Partial<ReportLayoutConfig>)
 }
 
 function sanitizeValue(v: unknown): ReportRule['value'] {

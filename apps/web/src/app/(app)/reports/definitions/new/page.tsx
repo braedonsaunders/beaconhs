@@ -47,6 +47,7 @@ export default async function NewCustomDefinitionPage({
         initialDescription={cloneFrom?.description ?? ''}
         initialEntityKey={presetEntity ?? seed?.entity ?? null}
         initialQuery={seed}
+        initialLayout={cloneFrom?.layout ?? null}
         cloneFromId={cloneFromId}
         action={createCustomDefinition}
       />

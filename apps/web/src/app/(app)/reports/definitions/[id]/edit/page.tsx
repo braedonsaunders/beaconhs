@@ -47,6 +47,7 @@ export default async function EditCustomDefinitionPage({
         initialName={definition.name}
         initialDescription={definition.description ?? ''}
         initialQuery={definition.customQuery}
+        initialLayout={definition.layout}
         action={action}
       />
     </DetailPageLayout>

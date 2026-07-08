@@ -13,16 +13,19 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import {
   augmentEntityMapWithCustomFields,
+  buildReportPageCss,
   computeRangeFor,
+  renderReportDocumentBodyHtml,
+  resolveReportLayout,
   runReport,
   type ReportEntity,
-  type ReportRunResult,
 } from '@beaconhs/reports'
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { loadDefinitionById } from '../_definitions'
-import { validateCustomQuery } from './validate'
+import { loadTenantBranding } from '../_run'
+import { validateCustomQuery, validateReportLayout } from './validate'
 
 /** Build a stable, URL-safe slug for a custom definition. */
 function buildSlug(name: string): string {
@@ -48,7 +51,21 @@ function parseStudioForm(formData: FormData, entityMap: Record<string, ReportEnt
   } catch (err) {
     throw new Error(`Invalid customQuery JSON: ${err instanceof Error ? err.message : String(err)}`)
   }
-  return { name, description, customQuery: validateCustomQuery(parsed, entityMap) }
+  const layoutRaw = String(formData.get('layout') ?? '').trim()
+  let layoutParsed: unknown = null
+  if (layoutRaw) {
+    try {
+      layoutParsed = JSON.parse(layoutRaw)
+    } catch (err) {
+      throw new Error(`Invalid layout JSON: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  return {
+    name,
+    description,
+    customQuery: validateCustomQuery(parsed, entityMap),
+    layout: validateReportLayout(layoutParsed),
+  }
 }
 
 /** Discovered catalog augmented with the tenant's custom-field columns, so the
@@ -62,7 +79,7 @@ async function resolveStudioEntityMap(
 export async function createCustomDefinition(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.builder')
-  const { name, description, customQuery } = parseStudioForm(
+  const { name, description, customQuery, layout } = parseStudioForm(
     formData,
     await resolveStudioEntityMap(ctx),
   )
@@ -92,6 +109,7 @@ export async function createCustomDefinition(formData: FormData): Promise<void> 
         category,
         queryKind: 'custom_query',
         customQuery,
+        layout,
       })
       .returning({ id: reportDefinitions.id })
     return row!.id
@@ -116,7 +134,7 @@ export async function updateCustomDefinition(
 ): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.builder')
-  const { name, description, customQuery } = parseStudioForm(
+  const { name, description, customQuery, layout } = parseStudioForm(
     formData,
     await resolveStudioEntityMap(ctx),
   )
@@ -134,7 +152,14 @@ export async function updateCustomDefinition(
     }
     await tx
       .update(reportDefinitions)
-      .set({ name, description, category: customQuery.entity, customQuery, updatedAt: new Date() })
+      .set({
+        name,
+        description,
+        category: customQuery.entity,
+        customQuery,
+        layout,
+        updatedAt: new Date(),
+      })
       .where(eq(reportDefinitions.id, definitionId))
   })
 
@@ -153,29 +178,56 @@ export async function updateCustomDefinition(
 }
 
 export type StudioPreviewResult =
-  | { ok: true; result: ReportRunResult; rangeLabel: string }
+  | { ok: true; bodyHtml: string; pageCss: string; rowCount: number; rangeLabel: string }
   | { ok: false; error: string }
 
-const PREVIEW_MAX_ROWS = 25
+// Not exported: 'use server' modules may only export async functions.
+const STUDIO_PREVIEW_MAX_ROWS = 50
 
-export async function previewCustomReport(payload: unknown): Promise<StudioPreviewResult> {
+/** Live studio preview — runs the draft plan (row-capped) and returns the
+ *  rendered DOCUMENT (body HTML + @page CSS with live page counters) so the
+ *  builder shows the same paginated pages the saved report will print. */
+export async function previewCustomReport(payload: {
+  query: unknown
+  layout?: unknown
+  name?: string
+}): Promise<StudioPreviewResult> {
   try {
     const ctx = await requireRequestContext()
     assertCan(ctx, 'reports.builder')
     const range = computeRangeFor('custom_query', {})
     const result = await ctx.db(async (tx) => {
       const entityMap = await augmentEntityMapWithCustomFields(tx, discoverEntityMap())
-      const customQuery = validateCustomQuery(payload, entityMap)
+      const customQuery = validateCustomQuery(payload.query, entityMap)
       return runReport(tx, {
         queryKind: 'custom_query',
         filters: {},
         range,
         customQuery,
-        maxRows: PREVIEW_MAX_ROWS,
+        maxRows: STUDIO_PREVIEW_MAX_ROWS,
         entityMap,
       })
     })
-    return { ok: true, result, rangeLabel: range.label }
+    const branding = await loadTenantBranding(ctx)
+    const layout = resolveReportLayout(validateReportLayout(payload.layout))
+    const reportName =
+      typeof payload.name === 'string' && payload.name.trim()
+        ? payload.name.trim()
+        : 'Untitled report'
+    const bodyHtml = renderReportDocumentBodyHtml({
+      tenantName: branding.name,
+      tenantLogoUrl: branding.logoUrl,
+      primaryColor: branding.primaryColor,
+      reportName,
+      dateRangeLabel: range.label,
+      generatedAt: new Date(),
+      summary: result.summary,
+      groups: result.groups,
+    })
+    const pageCss = buildReportPageCss(layout, {
+      marginBoxes: { footerLeft: `${branding.name} — ${reportName}` },
+    })
+    return { ok: true, bodyHtml, pageCss, rowCount: result.rowCount, rangeLabel: range.label }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
