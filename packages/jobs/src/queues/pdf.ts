@@ -57,7 +57,9 @@ export type PdfJobData =
       filename?: string
       email?: PdfEmailPayload
     }
-  | { kind: 'document'; tenantId: string; documentId: string }
+  // Render a published document version's artifacts (DOCX snapshot → PDF +
+  // extracted text). Enqueued by publish; state tracked on the version row.
+  | { kind: 'document_version_render'; tenantId: string; documentId: string; versionId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }
   | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
   | { kind: 'ppe_issue'; tenantId: string; issueReportId: string }
@@ -85,7 +87,6 @@ export type OnDemandPdfJobData =
   // A tenant PDF template merged with a record's values (the configurable
   // per-module default print template); the HTML is merged before enqueue.
   | Extract<PdfJobData, { kind: 'template_pdf' }>
-  | Extract<PdfJobData, { kind: 'document' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
   | Extract<PdfJobData, { kind: 'equipment_workorder' }>
   | Extract<PdfJobData, { kind: 'ppe_issue' }>
@@ -125,8 +126,8 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|record_summary|${data.subjectId}`
     case 'template_pdf':
       return `pdf|${data.tenantId}|template_pdf|${data.entityId ?? 'doc'}`
-    case 'document':
-      return `pdf|${data.tenantId}|document|${data.documentId}`
+    case 'document_version_render':
+      return `pdf|${data.tenantId}|document_version_render|${data.versionId}`
     case 'document_book':
       return `pdf|${data.tenantId}|document_book|${data.bookId}`
     case 'equipment_workorder':
@@ -215,6 +216,13 @@ export async function enqueueSlidesImport(data: Extract<PdfJobData, { kind: 'sli
   // atomically, so run a single attempt and surface failures through
   // importStatus='failed' instead of retry loops.
   await addPdfJob(data, { attempts: 1 })
+}
+
+/** Render a just-published document version's PDF + text in the background. */
+export async function enqueueDocumentVersionRender(
+  data: Extract<PdfJobData, { kind: 'document_version_render' }>,
+) {
+  await addPdfJob(data, { attempts: 2 })
 }
 
 /**

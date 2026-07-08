@@ -33,12 +33,6 @@ import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './te
 import { renderHazidHtml, type HazidRenderInput } from './templates/hazid'
 import { renderCaHtml, type CaRenderInput } from './templates/ca'
 import {
-  renderDocumentHtml,
-  renderDocumentBookHtml,
-  type DocumentRenderInput,
-  type DocumentBookRenderInput,
-} from './templates/document'
-import {
   renderEquipmentWorkOrderHtml,
   type EquipmentWorkOrderRenderInput,
 } from './templates/equipment-workorder'
@@ -53,8 +47,6 @@ export type {
   ReportGroup,
   HazidRenderInput,
   CaRenderInput,
-  DocumentRenderInput,
-  DocumentBookRenderInput,
   EquipmentWorkOrderRenderInput,
   PpeIssueRenderInput,
   CredentialDesignFormat,
@@ -73,8 +65,6 @@ export {
   renderReportHtml,
   renderHazidHtml,
   renderCaHtml,
-  renderDocumentHtml,
-  renderDocumentBookHtml,
   renderEquipmentWorkOrderHtml,
   renderPpeIssueHtml,
   closeBrowser,
@@ -993,36 +983,6 @@ export async function renderCaPdf(input: CaRenderInput): Promise<Buffer> {
     title: 'Corrective Action',
     footerLeft: input.tenantName,
     footerRight: `CA ${input.ca.reference}`,
-  })
-}
-
-// --- Document PDF ---------------------------------------------------------
-
-export async function renderDocumentPdf(input: DocumentRenderInput): Promise<Buffer> {
-  const headerText = input.document.headerText?.trim()
-  return printLetterheadPdf({
-    body: renderDocumentHtml(input),
-    title: input.document.title,
-    footerLeft: input.document.footerText?.trim() || input.tenantName,
-    footerRight: input.document.key,
-    margin: { top: '1in', bottom: '1in', left: '1in', right: '1in' },
-    pageSize: input.document.pageSize === 'A4' ? 'A4' : 'Letter',
-    showFooter: input.document.printFooter !== false,
-    headerHtml:
-      input.document.printHeader && headerText
-        ? `<div style="font-size:8px;width:100%;padding:0 12mm;text-align:center;color:#888;">${escapeHtml(headerText)}</div>`
-        : `<div></div>`,
-  })
-}
-
-// --- Document Book PDF ----------------------------------------------------
-
-export async function renderDocumentBookPdf(input: DocumentBookRenderInput): Promise<Buffer> {
-  return printLetterheadPdf({
-    body: renderDocumentBookHtml(input),
-    title: input.book.title,
-    footerLeft: input.tenantName,
-    footerRight: input.book.title,
   })
 }
 

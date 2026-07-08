@@ -18,8 +18,6 @@
 // + `brew install poppler`. Missing binaries surface as importStatus='failed'
 // with a human-readable importError, never a crash loop (attempts: 1).
 
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { mkdtemp, readFile, readdir, rm, writeFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -36,38 +34,7 @@ import {
 } from '@beaconhs/db/schema'
 import { deleteObject, getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
-
-const exec = promisify(execFile)
-
-const SOFFICE_CANDIDATES = [
-  process.env.SOFFICE_PATH,
-  'soffice',
-  '/usr/bin/soffice',
-  '/Applications/LibreOffice.app/Contents/MacOS/soffice',
-].filter((p): p is string => !!p)
-
-async function resolveSoffice(): Promise<string> {
-  for (const candidate of SOFFICE_CANDIDATES) {
-    if (candidate.includes('/')) {
-      try {
-        await access(candidate)
-        return candidate
-      } catch {
-        continue
-      }
-    } else {
-      try {
-        await exec(candidate, ['--version'], { timeout: 15_000 })
-        return candidate
-      } catch {
-        continue
-      }
-    }
-  }
-  throw new Error(
-    'LibreOffice (soffice) is not installed on the worker — install libreoffice (mac: brew install --cask libreoffice) or set SOFFICE_PATH.',
-  )
-}
+import { exec, resolveSoffice } from '../lib/office'
 
 function decodeXmlEntities(s: string): string {
   return s

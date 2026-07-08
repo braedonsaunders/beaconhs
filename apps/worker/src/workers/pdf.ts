@@ -18,7 +18,6 @@ import {
   departments,
   documentBookItems,
   documentBooks,
-  documentDrafts,
   documentVersions,
   documents,
   equipmentItems,
@@ -63,8 +62,6 @@ import QRCode from 'qrcode'
 import {
   renderCaPdf,
   renderCertificatePdf,
-  renderDocumentBookPdf,
-  renderDocumentPdf,
   renderEquipmentWorkOrderPdf,
   renderFormPdf,
   renderHazidPdf,
@@ -83,6 +80,8 @@ import {
 } from '@beaconhs/jobs'
 import { deleteObject, getObject, presignGet, publicUrl, putObject } from '@beaconhs/storage'
 import { importSlidesFromPptx } from './slides-import'
+import { renderDocumentVersion } from './document-render'
+import { pdfUnite } from '../lib/office'
 import { audit } from '@beaconhs/audit'
 import { appBaseUrl } from '../lib/app-base-url'
 import { escapeHtml } from '../lib/escape-html'
@@ -120,8 +119,8 @@ async function dispatchPdf(data: PdfJobData): Promise<unknown> {
       return await renderRecordSummary(data)
     case 'template_pdf':
       return await renderTemplatePdf(data)
-    case 'document':
-      return await renderDocument(data.tenantId, data.documentId)
+    case 'document_version_render':
+      return await renderDocumentVersion(data)
     case 'document_book':
       return await renderDocumentBook(data.tenantId, data.bookId)
     case 'equipment_workorder':
@@ -1492,119 +1491,16 @@ async function renderCa(tenantId: string, caId: string): Promise<StoredPdfResult
 
 // --- document --------------------------------------------------------------
 
-async function renderDocument(tenantId: string, documentId: string): Promise<StoredPdfResult> {
-  const data = await withTenant(db, tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        d: documents,
-        tenant: tenants,
-        ownerMember: tenantUsers,
-        ownerUser: user,
-      })
-      .from(documents)
-      .innerJoin(tenants, eq(tenants.id, documents.tenantId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, documents.ownerTenantUserId))
-      .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(documents.id, documentId))
-      .limit(1)
-    if (!row) return null
-
-    const [version] = await tx
-      .select()
-      .from(documentVersions)
-      .where(eq(documentVersions.documentId, documentId))
-      .orderBy(desc(documentVersions.version))
-      .limit(1)
-
-    // The live working draft (what the author sees in the editor). The on-demand
-    // PDF previews this so it's WYSIWYG — otherwise an unpublished doc renders
-    // empty because nothing has been snapshotted into a version yet.
-    const [draft] = await tx
-      .select({ contentHtml: documentDrafts.contentHtml })
-      .from(documentDrafts)
-      .where(eq(documentDrafts.documentId, documentId))
-      .limit(1)
-
-    let publishedByName: string | null = null
-    if (version?.publishedBy) {
-      const [u] = await tx
-        .select({ name: user.name })
-        .from(user)
-        .where(eq(user.id, version.publishedBy))
-        .limit(1)
-      publishedByName = u?.name ?? null
-    }
-
-    return { ...row, version: version ?? null, draft: draft ?? null, publishedByName }
-  })
-
-  if (!data) {
-    throw new Error(`Document ${documentId} not found`)
-  }
-
-  const d = data.d
-  const t = data.tenant
-
-  // The published version is the document of record. Fall back to the live draft
-  // only when nothing has been published yet (e.g. a brand-new AI-drafted doc) so
-  // the PDF reflects the editor instead of rendering blank — without leaking a
-  // published doc's unpublished edits to readers. `version` is passed only when
-  // there's body content to render.
-  const versionHtml = data.version?.contentMarkdown?.trim() || null
-  const draftHtml = data.draft?.contentHtml?.trim() || null
-  const bodyMarkdown = versionHtml ?? draftHtml
-
-  const pdf = await renderDocumentPdf({
-    tenantName: t.name,
-    tenantLogoUrl: t.branding.logoUrl,
-    primaryColor: t.branding.primaryColor,
-    document: {
-      key: d.key,
-      title: d.title,
-      description: d.description,
-      category: d.category,
-      status: d.status,
-      printHeader: d.printHeader,
-      printFooter: d.printFooter,
-      pageSize: d.pageSize === 'A4' ? 'A4' : 'Letter',
-      headerText: d.headerText,
-      footerText: d.footerText,
-      nextReviewOn: d.nextReviewOn,
-      ownerName: memberDisplayName({
-        member: data.ownerMember,
-        user: data.ownerUser,
-      }),
-    },
-    version: bodyMarkdown
-      ? {
-          // Version metadata only when rendering the published version; a draft
-          // fallback renders as an unnumbered, unpublished preview.
-          version: versionHtml ? (data.version?.version ?? 0) : 0,
-          publishedAt: versionHtml ? (data.version?.publishedAt ?? null) : null,
-          publishedBy: versionHtml ? data.publishedByName : null,
-          contentMarkdown: bodyMarkdown,
-          changelog: versionHtml ? (data.version?.changelog ?? null) : null,
-        }
-      : null,
-    generatedAt: new Date(),
-  })
-
-  const stamp = Date.now()
-  const stored = await storeTransientPdfArtifact({
-    tenantId,
-    pdf,
-    filename: `document-${d.key || documentId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `tmp/pdfs/documents/${tenantId}/${documentId}-${stamp}.pdf`,
-    entityType: 'document',
-    entityId: documentId,
-    summary: 'Rendered document PDF',
-  })
-
-  console.log(`[pdf] document ${documentId} rendered (${pdf.length} bytes)`)
-  return stored
-}
-
 // --- document_book ---------------------------------------------------------
+//
+// Books concatenate the members' published version PDFs (rendered from their
+// DOCX snapshots) behind a generated cover + table of contents. File-only
+// documents contribute their uploaded PDF; members without a published PDF are
+// listed in the contents as unavailable rather than silently dropped.
+
+function escapeBookHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 async function renderDocumentBook(tenantId: string, bookId: string): Promise<StoredPdfResult> {
   const data = await withTenant(db, tenantId, async (tx) => {
@@ -1623,19 +1519,35 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       .where(eq(documentBookItems.bookId, bookId))
       .orderBy(asc(documentBookItems.position))
 
-    const versions = await Promise.all(
+    const entries = await Promise.all(
       items.map(async (i) => {
         const [v] = await tx
-          .select()
+          .select({
+            version: documentVersions.version,
+            pdfAttachmentId: documentVersions.pdfAttachmentId,
+            contentAttachmentId: documentVersions.contentAttachmentId,
+          })
           .from(documentVersions)
           .where(eq(documentVersions.documentId, i.doc.id))
           .orderBy(desc(documentVersions.version))
           .limit(1)
-        return { docId: i.doc.id, version: v ?? null }
+        let pdfKey: string | null = null
+        const attachmentId = v?.pdfAttachmentId ?? v?.contentAttachmentId ?? null
+        if (attachmentId) {
+          const [att] = await tx
+            .select({ key: attachments.r2Key, contentType: attachments.contentType })
+            .from(attachments)
+            .where(eq(attachments.id, attachmentId))
+            .limit(1)
+          if (att && (v?.pdfAttachmentId || att.contentType === 'application/pdf')) {
+            pdfKey = att.key
+          }
+        }
+        return { title: i.doc.title, key: i.doc.key, version: v?.version ?? null, pdfKey }
       }),
     )
 
-    return { ...row, items, versions }
+    return { ...row, entries }
   })
 
   if (!data) {
@@ -1643,39 +1555,36 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
   }
 
   const b = data.b
-  const t = data.tenant
-  const versionMap = new Map(data.versions.map((v) => [v.docId, v.version] as const))
-
-  const pdf = await renderDocumentBookPdf({
-    tenantName: t.name,
-    tenantLogoUrl: t.branding.logoUrl,
-    primaryColor: t.branding.primaryColor,
-    book: {
-      title: b.title || b.name || 'Document Book',
-      description: b.description,
-      category: b.category,
-      status: b.status,
-      publishedAt: b.publishedAt,
-    },
-    items: data.items.map((i) => {
-      const v = versionMap.get(i.doc.id) ?? null
-      return {
-        document: {
-          key: i.doc.key,
-          title: i.doc.title,
-          category: i.doc.category,
-        },
-        version: v
-          ? {
-              version: v.version,
-              contentMarkdown: v.contentMarkdown,
-              publishedAt: v.publishedAt,
-            }
-          : null,
-      }
-    }),
-    generatedAt: new Date(),
+  const title = b.title || b.name || 'Document Book'
+  const toc = data.entries
+    .map((e, i) => {
+      const label = `${i + 1}. ${escapeBookHtml(e.title)}${e.version ? ` — v${e.version}` : ''}`
+      const note = e.pdfKey ? '' : ' <em>(no published PDF)</em>'
+      return `<li style="margin:4px 0">${label} <span style="color:#64748b">${escapeBookHtml(e.key)}</span>${note}</li>`
+    })
+    .join('')
+  const coverHtml = `
+    <div style="font-family: Arial, Helvetica, sans-serif; padding-top: 96px;">
+      <div style="color:#64748b; font-size:12px;">${escapeBookHtml(data.tenant.name)}</div>
+      <h1 style="font-size:30px; margin:8px 0 4px 0;">${escapeBookHtml(title)}</h1>
+      ${b.description ? `<p style="color:#334155">${escapeBookHtml(b.description)}</p>` : ''}
+      <h2 style="font-size:14px; margin-top:48px; text-transform:uppercase; letter-spacing:0.05em; color:#334155;">Contents</h2>
+      <ol style="list-style:none; padding:0; font-size:13px;">${toc}</ol>
+    </div>`
+  const coverPdf = await renderHtmlDocumentPdf({
+    bodyHtml: coverHtml,
+    paperSize: 'letter',
+    orientation: 'portrait',
+    marginMm: 18,
+    headerHtml: null,
+    footerHtml: null,
   })
+
+  const parts: Buffer[] = [coverPdf]
+  for (const e of data.entries) {
+    if (e.pdfKey) parts.push(await getObject({ key: e.pdfKey }))
+  }
+  const pdf = await pdfUnite(parts)
 
   const stamp = Date.now()
   const stored = await storeTransientPdfArtifact({
