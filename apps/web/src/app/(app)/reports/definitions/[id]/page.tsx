@@ -214,13 +214,13 @@ async function DocumentTab({
     reportName: definition.name,
     dateRangeLabel: run.rangeLabel,
     generatedAt: new Date(),
-    summary: run.result.summary,
+    summary: layout.showSummary ? run.result.summary : undefined,
     groups: run.result.groups,
   })
   const css =
     buildReportPageCss(layout, {
       marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
-    }) + buildReportDocumentCss(branding.primaryColor)
+    }) + buildReportDocumentCss(branding.primaryColor, layout.density)
   const truncated = run.result.rowCount >= DOCUMENT_PREVIEW_MAX_ROWS
 
   const exportBase = `/reports/definitions/${definition.id}/export${run.days ? `?days=${run.days}` : ''}`

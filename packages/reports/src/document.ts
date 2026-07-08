@@ -11,27 +11,31 @@
 
 import {
   REPORT_PAPER_SIZES,
+  type ReportDensity,
   type ReportLayoutConfig,
   type ReportPaperSize,
 } from '@beaconhs/db/schema'
 import type { ReportGroup, ReportSummaryItem } from './types'
 
-export type { ReportLayoutConfig, ReportPaperSize }
+export type { ReportDensity, ReportLayoutConfig, ReportPaperSize }
 
-export const DEFAULT_REPORT_LAYOUT: ReportLayoutConfig = {
+export const DEFAULT_REPORT_LAYOUT: Required<ReportLayoutConfig> = {
   paperSize: 'letter',
   orientation: 'landscape',
   marginMm: 15,
+  showSummary: true,
+  density: 'standard',
 }
 
 export const REPORT_MARGIN_MM_MIN = 5
 export const REPORT_MARGIN_MM_MAX = 30
 
-/** Normalise a stored (or user-supplied) layout: whitelist paper/orientation,
- *  clamp margins, and fall back to the default landscape Letter document. */
+/** Normalise a stored (or user-supplied) layout: whitelist paper/orientation/
+ *  density, clamp margins, default the optionals — always returns a fully
+ *  populated config. */
 export function resolveReportLayout(
   layout?: Partial<ReportLayoutConfig> | null,
-): ReportLayoutConfig {
+): Required<ReportLayoutConfig> {
   const paperSize = REPORT_PAPER_SIZES.includes(layout?.paperSize as ReportPaperSize)
     ? (layout?.paperSize as ReportPaperSize)
     : DEFAULT_REPORT_LAYOUT.paperSize
@@ -43,7 +47,9 @@ export function resolveReportLayout(
   const marginMm = Number.isFinite(m)
     ? Math.min(Math.max(Math.round(m), REPORT_MARGIN_MM_MIN), REPORT_MARGIN_MM_MAX)
     : DEFAULT_REPORT_LAYOUT.marginMm
-  return { paperSize, orientation, marginMm }
+  const showSummary = layout?.showSummary !== false
+  const density: ReportDensity = layout?.density === 'compact' ? 'compact' : 'standard'
+  return { paperSize, orientation, marginMm, showSummary, density }
 }
 
 /** CSS @page size keyword per paper size. Casing matters: Paged.js looks the
@@ -102,64 +108,104 @@ export function buildReportPageCss(
  *  tags inside the flowed content are never parsed, so @page/break rules in
  *  them would be silently ignored). Selectors are scoped under
  *  .bhs-report-doc so the fragment can mount inside the app without
- *  restyling the page around it. */
-export function buildReportDocumentCss(primaryColor?: string | null): string {
+ *  restyling the page around it. `density: 'compact'` shrinks type + padding
+ *  so more rows fit per page. */
+export function buildReportDocumentCss(
+  primaryColor?: string | null,
+  density: ReportDensity = 'standard',
+): string {
   const primary = primaryColor ?? '#0f766e'
+  const compact = density === 'compact'
+  const s = compact
+    ? {
+        body: '9pt',
+        h1: '14pt',
+        meta: '8pt',
+        logo: '30px',
+        summaryMargin: '8px 0 12px',
+        sumPad: '5px 8px',
+        sumLabel: '8pt',
+        sumValue: '11.5pt',
+        section: '10px 0',
+        h2: '10.5pt',
+        subtitle: '8pt',
+        table: '8.5pt',
+        cellPad: '3px 6px',
+        headerPad: '0 0 7px',
+        headerMargin: '10px',
+      }
+    : {
+        body: '10pt',
+        h1: '18pt',
+        meta: '9pt',
+        logo: '40px',
+        summaryMargin: '12px 0 18px',
+        sumPad: '8px 10px',
+        sumLabel: '9pt',
+        sumValue: '14pt',
+        section: '14px 0',
+        h2: '11.5pt',
+        subtitle: '9pt',
+        table: '9.5pt',
+        cellPad: '5px 8px',
+        headerPad: '0 0 10px',
+        headerMargin: '14px',
+      }
   return `
-  .bhs-report-doc { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial; color: #111; font-size: 10pt; }
+  .bhs-report-doc { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial; color: #111; font-size: ${s.body}; }
   .bhs-report-doc * { box-sizing: border-box; }
   .bhs-report-doc header.cover {
     border-bottom: 3px solid ${primary};
-    padding: 0 0 10px;
-    margin-bottom: 14px;
+    padding: ${s.headerPad};
+    margin-bottom: ${s.headerMargin};
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
   }
-  .bhs-report-doc header.cover h1 { font-size: 18pt; margin: 0; color: #111; }
-  .bhs-report-doc header.cover .meta { text-align: right; font-size: 9pt; color: #444; }
+  .bhs-report-doc header.cover h1 { font-size: ${s.h1}; margin: 0; color: #111; }
+  .bhs-report-doc header.cover .meta { text-align: right; font-size: ${s.meta}; color: #444; }
   .bhs-report-doc header.cover .meta div + div { margin-top: 2px; }
-  .bhs-report-doc header.cover img.logo { max-height: 40px; margin-bottom: 6px; }
+  .bhs-report-doc header.cover img.logo { max-height: ${s.logo}; margin-bottom: 6px; }
   .bhs-report-doc .summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 8px;
-    margin: 12px 0 18px;
+    margin: ${s.summaryMargin};
   }
   .bhs-report-doc .sum {
     border: 1px solid #e5e7eb;
     border-left: 3px solid ${primary};
-    padding: 8px 10px;
+    padding: ${s.sumPad};
     border-radius: 3px;
     background: #fafafa;
     break-inside: avoid;
   }
-  .bhs-report-doc .sum-label { color: #6b7280; font-size: 9pt; }
-  .bhs-report-doc .sum-value { font-size: 14pt; font-weight: 600; color: #111; margin-top: 2px; }
-  .bhs-report-doc section.group { margin: 14px 0; }
+  .bhs-report-doc .sum-label { color: #6b7280; font-size: ${s.sumLabel}; }
+  .bhs-report-doc .sum-value { font-size: ${s.sumValue}; font-weight: 600; color: #111; margin-top: 2px; }
+  .bhs-report-doc section.group { margin: ${s.section}; }
   .bhs-report-doc section.group h2 {
-    font-size: 11.5pt;
+    font-size: ${s.h2};
     color: ${primary};
     margin: 8px 0 4px;
     border-bottom: 1px solid #ddd;
     padding-bottom: 3px;
     break-after: avoid;
   }
-  .bhs-report-doc section.group .subtitle { font-size: 9pt; color: #666; margin-bottom: 6px; break-after: avoid; }
-  .bhs-report-doc table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  .bhs-report-doc section.group .subtitle { font-size: ${s.subtitle}; color: #666; margin-bottom: 6px; break-after: avoid; }
+  .bhs-report-doc table { width: 100%; max-width: 100%; border-collapse: collapse; font-size: ${s.table}; }
   .bhs-report-doc thead { display: table-header-group; }
   .bhs-report-doc tr { break-inside: avoid; }
   .bhs-report-doc thead th {
     text-align: left;
     background: #f3f4f6;
     border-bottom: 1px solid #d1d5db;
-    padding: 5px 8px;
+    padding: ${s.cellPad};
     color: #374151;
     font-weight: 600;
     overflow-wrap: anywhere;
   }
   .bhs-report-doc tbody td {
-    padding: 5px 8px;
+    padding: ${s.cellPad};
     border-bottom: 1px solid #f1f5f9;
     vertical-align: top;
     overflow-wrap: anywhere;

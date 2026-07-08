@@ -71,6 +71,7 @@ export async function PreviewPane({
     loadTenantBranding(ctx),
   ])
 
+  const layout = resolveReportLayout(definition.layout)
   const bodyHtml = renderReportDocumentBodyHtml({
     tenantName: branding.name,
     tenantLogoUrl: branding.logoUrl,
@@ -78,13 +79,13 @@ export async function PreviewPane({
     reportName: definition.name,
     dateRangeLabel: run.rangeLabel,
     generatedAt: new Date(),
-    summary: run.result.summary,
+    summary: layout.showSummary ? run.result.summary : undefined,
     groups: run.result.groups,
   })
   const css =
-    buildReportPageCss(resolveReportLayout(definition.layout), {
+    buildReportPageCss(layout, {
       marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
-    }) + buildReportDocumentCss(branding.primaryColor)
+    }) + buildReportDocumentCss(branding.primaryColor, layout.density)
   const truncated = run.result.rowCount >= HUB_PREVIEW_MAX_ROWS
 
   const canSchedule = can(ctx, 'reports.schedule')

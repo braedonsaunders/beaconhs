@@ -65,6 +65,8 @@ const DEFAULT_LAYOUT: ReportLayoutConfig = {
   paperSize: 'letter',
   orientation: 'landscape',
   marginMm: 15,
+  showSummary: true,
+  density: 'standard',
 }
 const PAPER_CHOICES: { key: ReportPaperSize; label: string }[] = [
   { key: 'letter', label: 'Letter' },
@@ -859,23 +861,57 @@ export function ReportStudio({
                         />
                       </div>
                     </div>
-                    <div className="inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-                      {(['landscape', 'portrait'] as const).map((o) => (
-                        <button
-                          key={o}
-                          type="button"
-                          onClick={() => setLayout((l) => ({ ...l, orientation: o }))}
-                          className={cn(
-                            'rounded px-3 py-1 text-xs font-medium transition',
-                            layout.orientation === o
-                              ? 'bg-teal-600 text-white'
-                              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
-                          )}
-                        >
-                          {o === 'landscape' ? 'Landscape' : 'Portrait'}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
+                        {(['landscape', 'portrait'] as const).map((o) => (
+                          <button
+                            key={o}
+                            type="button"
+                            onClick={() => setLayout((l) => ({ ...l, orientation: o }))}
+                            className={cn(
+                              'rounded px-3 py-1 text-xs font-medium transition',
+                              layout.orientation === o
+                                ? 'bg-teal-600 text-white'
+                                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                            )}
+                          >
+                            {o === 'landscape' ? 'Landscape' : 'Portrait'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
+                        {(['standard', 'compact'] as const).map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setLayout((l) => ({ ...l, density: d }))}
+                            className={cn(
+                              'rounded px-3 py-1 text-xs font-medium transition',
+                              (layout.density ?? 'standard') === d
+                                ? 'bg-teal-600 text-white'
+                                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                            )}
+                          >
+                            {d === 'standard' ? 'Standard' : 'Compact'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={layout.showSummary !== false}
+                        onChange={(e) =>
+                          setLayout((l) => ({ ...l, showSummary: e.target.checked }))
+                        }
+                        className="h-3.5 w-3.5"
+                      />
+                      Summary cards
+                    </label>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Compact fits more rows per page. Summary cards print the key figures under the
+                      header.
+                    </p>
                   </div>
                 </div>
               </BuilderScroll>

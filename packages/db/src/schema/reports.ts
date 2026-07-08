@@ -119,14 +119,24 @@ export type ReportRuleGroup = {
 export const REPORT_PAPER_SIZES = ['letter', 'a4', 'legal'] as const
 export type ReportPaperSize = (typeof REPORT_PAPER_SIZES)[number]
 
+/** Document densities: compact shrinks type and cell padding so more rows fit
+ *  per page. */
+export const REPORT_DENSITIES = ['standard', 'compact'] as const
+export type ReportDensity = (typeof REPORT_DENSITIES)[number]
+
 /** Per-definition page setup for the printed document — drives the in-app
  *  paginated preview AND the PDF renderer (they share one template). A null
- *  layout means the default: landscape Letter with 15 mm margins. */
+ *  layout means the default: landscape Letter, 15 mm margins, standard
+ *  density, summary band shown. */
 export type ReportLayoutConfig = {
   paperSize: ReportPaperSize
   orientation: 'portrait' | 'landscape'
   /** Uniform page margin in millimetres. */
   marginMm: number
+  /** Print the key-figures summary band under the header. Default true. */
+  showSummary?: boolean
+  /** Type/padding scale for the whole document. Default 'standard'. */
+  density?: ReportDensity
 }
 
 /** Aggregate functions a Summarize-mode measure can use. */

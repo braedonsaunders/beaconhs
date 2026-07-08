@@ -235,13 +235,13 @@ export async function previewCustomReport(payload: {
       reportName,
       dateRangeLabel: range.label,
       generatedAt: new Date(),
-      summary: result.summary,
+      summary: layout.showSummary ? result.summary : undefined,
       groups: result.groups,
     })
     const css =
       buildReportPageCss(layout, {
         marginBoxes: { footerLeft: `${branding.name} — ${reportName}` },
-      }) + buildReportDocumentCss(branding.primaryColor)
+      }) + buildReportDocumentCss(branding.primaryColor, layout.density)
     return { ok: true, bodyHtml, css, rowCount: result.rowCount, rangeLabel: range.label }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

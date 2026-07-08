@@ -687,8 +687,11 @@ export async function renderReportPdf(
   const layout = resolveReportLayout(input.layout)
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"/>
-<style>${buildReportPageCss(layout)} body { margin: 0; } ${buildReportDocumentCss(input.primaryColor)}</style>
-</head><body>${renderReportDocumentBodyHtml(input)}</body></html>`
+<style>${buildReportPageCss(layout)} body { margin: 0; } ${buildReportDocumentCss(input.primaryColor, layout.density)}</style>
+</head><body>${renderReportDocumentBodyHtml({
+    ...input,
+    summary: layout.showSummary ? input.summary : undefined,
+  })}</body></html>`
   const m = `${layout.marginMm}mm`
   const b = await browser()
   const page = await b.newPage()
