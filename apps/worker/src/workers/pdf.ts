@@ -194,6 +194,8 @@ async function renderRecordSummary(
     reference: data.reference ?? null,
     subtitle: data.subtitle ?? null,
     fields: data.fields,
+    sections: data.sections,
+    photos: data.photos,
   })
   const stamp = Date.now()
   const ref = data.reference || data.subjectId.slice(0, 8)

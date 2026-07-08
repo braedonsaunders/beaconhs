@@ -36,6 +36,17 @@ export type PdfJobData =
       reference?: string | null
       subtitle?: string | null
       fields: { label: string; value: string }[]
+      // Row collections (inspection criteria, log entries, attendees, …)
+      // rendered as sectioned tables after the field summary.
+      sections?: {
+        label: string
+        columns: { key: string; label: string }[]
+        rows: Record<string, string>[]
+        /** Rows dropped past the render cap — surfaced as a "+N more" note. */
+        moreRows?: number
+      }[]
+      // Photo attachments rendered as an image grid.
+      photos?: { url: string; caption?: string }[]
       filename?: string
       email?: PdfEmailPayload
     }

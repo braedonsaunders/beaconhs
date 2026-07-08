@@ -1037,6 +1037,16 @@ export type RecordSummaryRenderInput = {
   reference?: string | null
   subtitle?: string | null
   fields: { label: string; value: string }[]
+  // Row collections (inspection criteria, log entries, attendees, …) printed
+  // as sectioned tables after the field summary.
+  sections?: {
+    label: string
+    columns: { key: string; label: string }[]
+    rows: Record<string, string>[]
+    moreRows?: number
+  }[]
+  // Record photos printed as an image grid.
+  photos?: { url: string; caption?: string }[]
 }
 
 export async function renderRecordSummaryPdf(input: RecordSummaryRenderInput): Promise<Buffer> {
@@ -1064,6 +1074,48 @@ function renderRecordSummaryHtml(input: RecordSummaryRenderInput): string {
             </tr>`,
           )
           .join('')
+  const sections = (input.sections ?? [])
+    .map((s) => {
+      const head = s.columns
+        .map(
+          (c) =>
+            `<th style="text-align:left;padding:6px 8px;background:#f1f5f9;border:1px solid #e2e8f0;font-weight:600;color:#334155;">${escapeHtml(c.label)}</th>`,
+        )
+        .join('')
+      const body = s.rows
+        .map(
+          (r) =>
+            `<tr>${s.columns
+              .map(
+                (c) =>
+                  `<td style="padding:6px 8px;border:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap;color:#0f172a;">${escapeHtml(r[c.key] ?? '')}</td>`,
+              )
+              .join('')}</tr>`,
+        )
+        .join('')
+      const more = s.moreRows
+        ? `<p style="margin:4px 0 0;font-size:11px;color:#64748b;">+ ${s.moreRows} more row${s.moreRows === 1 ? '' : 's'} not shown.</p>`
+        : ''
+      return `
+        <h2 style="font-size:14px;margin:18px 0 6px;color:#0f172a;">${escapeHtml(s.label)}</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+        ${more}`
+    })
+    .join('')
+  const photos =
+    input.photos && input.photos.length > 0
+      ? `
+        <h2 style="font-size:14px;margin:18px 0 6px;color:#0f172a;">Photos</h2>
+        <div>${input.photos
+          .map(
+            (p) => `
+          <div style="display:inline-block;vertical-align:top;width:46%;margin:0 2% 12px 0;">
+            <img src="${escapeHtml(p.url)}" style="width:100%;border:1px solid #e2e8f0;border-radius:4px;" />
+            ${p.caption ? `<div style="font-size:10px;color:#475569;margin-top:2px;">${escapeHtml(p.caption)}</div>` : ''}
+          </div>`,
+          )
+          .join('')}</div>`
+      : ''
   return `
     <h1 style="font-size:19px;margin:0 0 4px;color:#0f172a;">${escapeHtml(input.heading)}</h1>
     ${input.subtitle ? `<p style="margin:0 0 2px;font-size:13px;color:#475569;">${escapeHtml(input.subtitle)}</p>` : ''}
@@ -1073,5 +1125,7 @@ function renderRecordSummaryHtml(input: RecordSummaryRenderInput): string {
         : '<div style="height:10px"></div>'
     }
     <table style="width:100%;border-collapse:collapse;font-size:12px;">${rows}</table>
+    ${sections}
+    ${photos}
   `
 }
