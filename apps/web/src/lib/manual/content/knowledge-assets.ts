@@ -248,7 +248,7 @@ Open the **Versions** tab. Every published version keeps its own PDF and Word fi
 
 ## Uploaded PDFs
 
-Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. Once a PDF is in place, **Replace** in the PDF toolbar swaps in a new file.
+Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. Once a PDF is in place, **Replace** in the PDF toolbar swaps in a new file, and **Publish** at the top of the page makes it visible to readers.
 
 ## Archive or delete
 

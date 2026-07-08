@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import {
   Activity,
   BadgeCheck,
@@ -52,7 +52,6 @@ import { DocumentOverview } from './_overview'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendDocumentEmail } from './_send-email'
-import { publishDocumentVersion } from './_master-actions'
 import { deleteDocument } from '../_actions'
 import { ConfirmButton } from '@/components/confirm-button'
 import { getTenantAiSettings } from '@/lib/ai-config'
@@ -92,15 +91,43 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 // ---------- Server actions ----------
 
-async function publish(formData: FormData) {
+// Publish for FILE-ONLY documents (uploaded PDFs): there is no draft to
+// snapshot — the latest uploaded version simply becomes visible to readers.
+// Authored documents publish from the Write toolbar (publishDocumentVersion:
+// changelog + numbered snapshot + render); this page never shows both.
+async function publishFileDocument(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  // Snapshots the DOCX master into an immutable numbered version and queues
-  // its PDF render. Handles audit + revalidate internally.
-  await publishDocumentVersion(id)
+  await ctx.db(async (tx) => {
+    const [version] = await tx
+      .select({ id: documentVersions.id })
+      .from(documentVersions)
+      .where(
+        and(
+          eq(documentVersions.documentId, id),
+          sql`${documentVersions.contentAttachmentId} is not null`,
+        ),
+      )
+      .orderBy(desc(documentVersions.version))
+      .limit(1)
+    if (!version) throw new Error('Upload a PDF before publishing')
+    await tx
+      .update(documentVersions)
+      .set({ publishedAt: new Date(), publishedBy: ctx.userId })
+      .where(and(eq(documentVersions.id, version.id), isNull(documentVersions.publishedAt)))
+    await tx.update(documents).set({ status: 'published' }).where(eq(documents.id, id))
+  })
+  await recordAudit(ctx, {
+    entityType: 'document',
+    entityId: id,
+    action: 'publish',
+    summary: 'Published the uploaded document',
+  })
+  revalidatePath(`/documents/${id}`)
+  revalidatePath('/documents')
 }
 
 async function unpublish(formData: FormData) {
@@ -400,14 +427,16 @@ export default async function DocumentDetailPage({
                     Unpublish
                   </Button>
                 </form>
-              ) : (
-                <form action={publish} className="inline">
+              ) : isFileDoc ? (
+                // Authored documents publish from the Write toolbar (with a
+                // changelog) — only file-only PDFs publish from here.
+                <form action={publishFileDocument} className="inline">
                   <input type="hidden" name="id" value={id} />
                   <Button type="submit">
                     <Check size={14} /> Publish
                   </Button>
                 </form>
-              )}
+              ) : null}
               <form action={deleteDocument} className="inline">
                 <input type="hidden" name="id" value={id} />
                 <ConfirmButton
@@ -610,16 +639,6 @@ export default async function DocumentDetailPage({
                     )}
                   </CardContent>
                 </Card>
-                {canManage ? (
-                  <div className="flex justify-end">
-                    <form action={publish}>
-                      <input type="hidden" name="id" value={id} />
-                      <Button type="submit">
-                        <Check size={14} /> Publish new version
-                      </Button>
-                    </form>
-                  </div>
-                ) : null}
               </div>
             ) : null}
 
