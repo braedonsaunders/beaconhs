@@ -13,6 +13,8 @@ let browserPromise: Promise<Browser> | null = null
 function resolveExecutablePath(): string {
   const candidates = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
+    // The Docker image's pinned Chrome-for-Testing shell (see Dockerfile).
+    '/usr/local/bin/chrome-headless-shell',
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
