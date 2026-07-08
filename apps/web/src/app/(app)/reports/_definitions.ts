@@ -5,7 +5,11 @@
 
 import { and, asc, eq, isNull, or } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { reportDefinitions, type ReportCustomQuery } from '@beaconhs/db/schema'
+import {
+  reportDefinitions,
+  type ReportCustomQuery,
+  type ReportLayoutConfig,
+} from '@beaconhs/db/schema'
 
 export type ReportDefinitionRow = {
   id: string
@@ -17,6 +21,7 @@ export type ReportDefinitionRow = {
   category: string | null
   queryKind: string
   customQuery: ReportCustomQuery | null
+  layout: ReportLayoutConfig | null
   createdAt: Date
   updatedAt: Date
 }
@@ -32,6 +37,7 @@ export async function loadVisibleDefinitions(tenantId: string): Promise<ReportDe
       ...r,
       tenantId: r.tenantId ?? null,
       customQuery: (r.customQuery as ReportCustomQuery | null) ?? null,
+      layout: (r.layout as ReportLayoutConfig | null) ?? null,
     }))
   })
 }
@@ -56,6 +62,7 @@ export async function loadDefinitionById(
       ...r,
       tenantId: r.tenantId ?? null,
       customQuery: (r.customQuery as ReportCustomQuery | null) ?? null,
+      layout: (r.layout as ReportLayoutConfig | null) ?? null,
     }
   })
 }

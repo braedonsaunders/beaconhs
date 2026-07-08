@@ -20,6 +20,13 @@ import {
   type CredentialDesignData,
   type DesignDocument,
 } from '@beaconhs/design-studio'
+import {
+  buildReportPageCss,
+  renderReportDocumentBodyHtml,
+  resolveReportLayout,
+  type ReportDocumentInput,
+  type ReportLayoutConfig,
+} from '@beaconhs/reports/document'
 import { renderIncidentHtml, type IncidentRenderInput } from './templates/incident'
 import { renderCertificateHtml, type CertificateRenderInput } from './templates/certificate'
 import { renderWalletHtml, type WalletRenderInput } from './templates/wallet'
@@ -29,7 +36,6 @@ import type {
   CredentialDesignTemplateId,
   CredentialDesignTypeface,
 } from './templates/credential-theme'
-import { renderReportHtml, type ReportRenderInput, type ReportGroup } from './templates/report'
 import { renderHazidHtml, type HazidRenderInput } from './templates/hazid'
 import { renderCaHtml, type CaRenderInput } from './templates/ca'
 import {
@@ -43,8 +49,6 @@ export type {
   IncidentRenderInput,
   CertificateRenderInput,
   WalletRenderInput,
-  ReportRenderInput,
-  ReportGroup,
   HazidRenderInput,
   CaRenderInput,
   EquipmentWorkOrderRenderInput,
@@ -62,7 +66,6 @@ export {
   renderIncidentHtml,
   renderCertificateHtml,
   renderWalletHtml,
-  renderReportHtml,
   renderHazidHtml,
   renderCaHtml,
   renderEquipmentWorkOrderHtml,
@@ -671,11 +674,21 @@ function wrapDocument(body: string, title: string): string {
 }
 
 // --- Scheduled-report PDF -------------------------------------------------
+//
+// Prints the SAME document body the in-app Paged.js preview paginates, on the
+// definition's configured paper (size/orientation/margins). Page numbers come
+// from Puppeteer's footerTemplate — the preview's @page margin boxes are
+// deliberately NOT emitted here (they would double up the footer).
 
-export async function renderReportPdf(input: ReportRenderInput): Promise<Buffer> {
-  // The report template owns its own <html>+<head> (with @page size) so we
-  // pass it through to the page directly.
-  const html = renderReportHtml(input)
+export async function renderReportPdf(
+  input: ReportDocumentInput & { layout?: Partial<ReportLayoutConfig> | null },
+): Promise<Buffer> {
+  const layout = resolveReportLayout(input.layout)
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"/>
+<style>${buildReportPageCss(layout)} body { margin: 0; }</style>
+</head><body>${renderReportDocumentBodyHtml(input)}</body></html>`
+  const m = `${layout.marginMm}mm`
   const b = await browser()
   const page = await b.newPage()
   try {
@@ -685,11 +698,11 @@ export async function renderReportPdf(input: ReportRenderInput): Promise<Buffer>
       preferCSSPageSize: true,
       displayHeaderFooter: true,
       headerTemplate: `<div></div>`,
-      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#666;">
+      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 ${m};display:flex;justify-content:space-between;color:#666;">
         <span>${escapeHtml(input.tenantName)} — ${escapeHtml(input.reportName)}</span>
         <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
       </div>`,
-      margin: { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+      margin: { top: m, bottom: m, left: m, right: m },
     })
     return Buffer.from(pdf)
   } finally {

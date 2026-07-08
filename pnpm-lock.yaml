@@ -713,6 +713,9 @@ importers:
       '@beaconhs/forms-core':
         specifier: workspace:*
         version: link:../forms-core
+      '@beaconhs/reports':
+        specifier: workspace:*
+        version: link:../reports
       puppeteer-core:
         specifier: ^25.2.1
         version: 25.2.1

@@ -15,6 +15,7 @@
   "dependencies": {
     "@beaconhs/design-studio": "workspace:*",
     "@beaconhs/forms-core": "workspace:*",
+    "@beaconhs/reports": "workspace:*",
     "puppeteer-core": "^25.2.1"
   },
   "devDependencies": {

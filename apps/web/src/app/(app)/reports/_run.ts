@@ -3,6 +3,9 @@
 // scheduled PDFs, so what you see in the viewer is exactly what subscribers
 // get emailed.
 
+import { eq } from 'drizzle-orm'
+import { db, withSuperAdmin } from '@beaconhs/db'
+import { tenants } from '@beaconhs/db/schema'
 import {
   augmentEntityMapWithCustomFields,
   computeRangeFor,
@@ -64,5 +67,32 @@ export async function runReportForViewer(
       days,
       error: err instanceof Error ? err.message : String(err),
     }
+  }
+}
+
+// --- Tenant branding for the document header --------------------------------
+
+export type TenantBranding = {
+  name: string
+  logoUrl: string | null
+  primaryColor: string | null
+}
+
+/** Tenant name + branding for the report document header. Shared by the
+ *  viewer preview, the hub preview pane, the studio preview, and PDF export.
+ *  Reads the global tenants table with the super-admin bypass (same pattern
+ *  as the export route). */
+export async function loadTenantBranding(ctx: RequestContext): Promise<TenantBranding> {
+  const [tenant] = await withSuperAdmin(db, (tx) =>
+    tx
+      .select({ name: tenants.name, branding: tenants.branding })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId!))
+      .limit(1),
+  )
+  return {
+    name: tenant?.name ?? 'BeaconHS',
+    logoUrl: tenant?.branding?.logoUrl ?? null,
+    primaryColor: tenant?.branding?.primaryColor ?? null,
   }
 }

@@ -115,6 +115,20 @@ export type ReportRuleGroup = {
   rules: (ReportRule | ReportRuleGroup)[]
 }
 
+/** Paper sizes a report document can print on. */
+export const REPORT_PAPER_SIZES = ['letter', 'a4', 'legal'] as const
+export type ReportPaperSize = (typeof REPORT_PAPER_SIZES)[number]
+
+/** Per-definition page setup for the printed document — drives the in-app
+ *  paginated preview AND the PDF renderer (they share one template). A null
+ *  layout means the default: landscape Letter with 15 mm margins. */
+export type ReportLayoutConfig = {
+  paperSize: ReportPaperSize
+  orientation: 'portrait' | 'landscape'
+  /** Uniform page margin in millimetres. */
+  marginMm: number
+}
+
 /** Aggregate functions a Summarize-mode measure can use. */
 export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
 export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
@@ -177,6 +191,8 @@ export const reportDefinitions = pgTable(
     queryKind: text('query_kind').notNull(),
     /** Populated when kind='custom'. JSON-encoded ReportCustomQuery. */
     customQuery: jsonb('custom_query').$type<ReportCustomQuery | null>(),
+    /** Page setup for the printed document; null = landscape Letter default. */
+    layout: jsonb('layout').$type<ReportLayoutConfig | null>(),
     ...timestamps,
   },
   (t) => ({

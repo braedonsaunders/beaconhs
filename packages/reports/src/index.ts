@@ -1,4 +1,5 @@
 export * from './types'
+export * from './document'
 export * from './entities'
 export * from './custom-columns'
 export * from './filters'

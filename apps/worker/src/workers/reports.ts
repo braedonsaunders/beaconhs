@@ -20,7 +20,7 @@ import {
   type ReportCustomQuery,
 } from '@beaconhs/db/schema'
 import { enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
-import { computeRangeFor, runReport } from '@beaconhs/reports'
+import { computeRangeFor, resolveReportLayout, runReport } from '@beaconhs/reports'
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { newAttachmentKey, presignGet, putObject } from '@beaconhs/storage'
@@ -93,6 +93,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
       generatedAt: new Date(),
       summary,
       groups,
+      layout: resolveReportLayout(ctx.definition.layout),
     })
 
     // 5. Upload + create attachment row.

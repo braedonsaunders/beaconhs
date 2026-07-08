@@ -6,15 +6,13 @@
 import { notFound } from 'next/navigation'
 import { NextResponse, type NextRequest } from 'next/server'
 import ExcelJS from 'exceljs'
-import { eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
-import { db, withSuperAdmin } from '@beaconhs/db'
-import { tenants } from '@beaconhs/db/schema'
+import { resolveReportLayout } from '@beaconhs/reports'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { loadDefinitionById } from '../../../_definitions'
-import { runReportForViewer } from '../../../_run'
+import { loadTenantBranding, runReportForViewer } from '../../../_run'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,22 +59,17 @@ export async function GET(
   }
 
   if (format === 'pdf') {
-    const [tenant] = await withSuperAdmin(db, (tx) =>
-      tx
-        .select({ name: tenants.name, branding: tenants.branding })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId))
-        .limit(1),
-    )
+    const branding = await loadTenantBranding(ctx)
     const pdf = await renderReportPdf({
-      tenantName: tenant?.name ?? 'BeaconHS',
-      tenantLogoUrl: tenant?.branding?.logoUrl ?? null,
-      primaryColor: tenant?.branding?.primaryColor ?? null,
+      tenantName: branding.name,
+      tenantLogoUrl: branding.logoUrl,
+      primaryColor: branding.primaryColor,
       reportName: definition.name,
       dateRangeLabel: run.rangeLabel,
       generatedAt: new Date(),
       summary: run.result.summary,
       groups: run.result.groups,
+      layout: resolveReportLayout(definition.layout),
     })
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
