@@ -14,7 +14,7 @@ import { planAutomation } from '@beaconhs/forms-core'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import { interpolate, resolveEmails, roleUserIds } from './session-overdue-flows'
 import { lastCronOccurrenceBetween, parseCron, type CronFields } from './form-assignment-scanner'
-import { escapeHtml } from './escape-html'
+import { renderEmail } from '@beaconhs/email-render'
 
 export type ScheduledFlowScanResult = { flows: number; ran: number }
 
@@ -82,12 +82,19 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
               } else if (action.action === 'send_email') {
                 const to = await resolveEmails(tx, t.id, action.to, null, {})
                 if (to.length > 0) {
-                  const body = interpolate(action.bodyTemplate ?? '', {})
+                  const rendered = renderEmail(
+                    {
+                      mode: 'inline',
+                      subject: action.subject || 'Scheduled automation',
+                      bodyTemplate: action.bodyTemplate ?? '',
+                    },
+                    {},
+                  )
                   await enqueueEmail({
                     to,
-                    subject: interpolate(action.subject ?? '', {}) || 'Scheduled automation',
-                    text: body,
-                    html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${escapeHtml(body)}</div>`,
+                    subject: rendered.subject,
+                    text: rendered.text,
+                    html: rendered.html,
                     meta: { tenantId: t.id, category: 'automation' },
                   })
                   result.ran += 1

@@ -22,13 +22,31 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+// --- merge-value plainification ----------------------------------------------
+//
+// Merge values are record DATA, and rich-text fields store HTML ('<p>…</p>').
+// Substituting them verbatim shows literal tags (escaped) or injects markup
+// (raw). Every substituted value is therefore reduced to readable plain text —
+// tags become text with line breaks preserved — before insertion; the authored
+// template markup around it is untouched. `{{{raw}}}` stays the explicit
+// opt-in for values that really are trusted HTML.
+
+const HTML_VALUE_RE = /<\/?[a-z][a-z0-9-]*(\s[^<>]*)?\/?>|&(?:amp|lt|gt|quot|nbsp|#\d+);/i
+
+/** Stringify a merge value; if it looks like HTML, reduce it to plain text. */
+export function plainValue(v: unknown): string {
+  const s = v == null ? '' : String(v)
+  return HTML_VALUE_RE.test(s) ? htmlToPlainText(s) : s
+}
+
 // --- {{token}} interpolation (scalar only; inline path uses this) -----------
 
 /**
- * Replace `{{ token }}` occurrences with values[token]. When `escapeHtml` is set,
- * only the SUBSTITUTED VALUE is HTML-escaped (the surrounding template is left
- * intact) — use that when interpolating into trusted HTML. Scalar-only — for
- * collections / conditionals use {@link renderTemplate}.
+ * Replace `{{ token }}` occurrences with values[token] (reduced to plain text —
+ * see {@link plainValue}). When `escapeHtml` is set, only the SUBSTITUTED VALUE
+ * is HTML-escaped (the surrounding template is left intact) — use that when
+ * interpolating into trusted HTML. Scalar-only — for collections / conditionals
+ * use {@link renderTemplate}.
  */
 export function interpolate(
   tpl: string,
@@ -36,8 +54,7 @@ export function interpolate(
   opts?: { escapeHtml?: boolean },
 ): string {
   return tpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k: string) => {
-    const v = values[k]
-    const s = v == null ? '' : String(v)
+    const s = plainValue(values[k])
     return opts?.escapeHtml ? escapeHtml(s) : s
   })
 }
@@ -179,7 +196,9 @@ function renderNodes(nodes: TplNode[], stack: Frame[], escape: boolean): string 
       out += n.v
     } else if (n.t === 'var') {
       const v = resolvePath(n.expr, stack)
-      const s = v == null ? '' : String(v)
+      // {{{raw}}} passes trusted HTML through untouched; plain {{tokens}} are
+      // data — reduce HTML-bearing values to text, then escape when required.
+      const s = n.raw ? (v == null ? '' : String(v)) : plainValue(v)
       out += escape && !n.raw ? escapeHtml(s) : s
     } else if (n.t === 'each') {
       const coll = resolvePath(n.expr, stack)
@@ -314,24 +333,59 @@ export function sanitizeEmailHtml(html: string): string {
 
 // --- The single render entry point ------------------------------------------
 
+/** Optional call-to-action button appended to an inline email. */
+export type EmailCta = { url: string; label: string }
+
 export type RenderableEmail =
-  // Legacy inline body — byte-for-byte the old run-automations.ts shell.
-  | { mode: 'inline'; subject: string; bodyTemplate: string }
+  // Inline body: plain text with {{tokens}}, rendered into the shared shell.
+  | { mode: 'inline'; subject: string; bodyTemplate: string; cta?: EmailCta; brandName?: string }
   // A saved library template OR a one-off design: pre-sanitized, compiled HTML
   // with {{tokens}} / {{#each}} blocks still embedded.
   | { mode: 'template' | 'design'; subjectTemplate: string; compiledHtml: string }
 
 export type RenderedEmail = { subject: string; html: string; text: string }
 
-const INLINE_SHELL_OPEN =
-  '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:680px;white-space:pre-wrap;">'
-const INLINE_SHELL_CLOSE = '</div>'
+// Inline authoring is "Label: {{token}}" lines — when the token resolves empty
+// the line reads "Label:" with nothing after it. Drop those lines entirely and
+// collapse the gap they leave.
+function dropEmptyLabelLines(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !/^\s*[^:\n]{1,60}:\s*$/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** The shared shell for inline flow emails: a clean card that renders the plain
+ *  body with real line breaks (clients ignore `white-space` CSS) + optional CTA. */
+function inlineShellHtml(body: string, cta: EmailCta | undefined, brandName: string): string {
+  const bodyHtml = escapeHtml(body).replace(/\n/g, '<br/>')
+  const font = "font-family:system-ui,'Segoe UI',Arial,sans-serif;"
+  const button = cta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 2px;"><tr>
+        <td style="background:#1b2b4a;border-radius:6px;">
+          <a href="${escapeHtml(cta.url)}" style="display:inline-block;padding:10px 18px;${font}font-size:13px;font-weight:600;color:#ffffff;text-decoration:none;">${escapeHtml(cta.label)}</a>
+        </td></tr></table>`
+    : ''
+  return `<div style="background:#f1f5f9;padding:24px 12px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;">
+      <tr><td style="padding:0 6px 10px;${font}font-size:13px;font-weight:700;letter-spacing:.4px;color:#475569;">${escapeHtml(brandName)}</td></tr>
+      <tr><td style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:24px 28px;${font}font-size:14px;line-height:1.65;color:#0f172a;">${bodyHtml}${button}</td></tr>
+      <tr><td style="padding:10px 6px 0;${font}font-size:11px;color:#94a3b8;">This message was sent automatically by ${escapeHtml(brandName)}.</td></tr>
+    </table>
+  </td></tr></table>
+</div>`
+}
 
 export function renderEmail(spec: RenderableEmail, values: Record<string, unknown>): RenderedEmail {
   if (spec.mode === 'inline') {
-    const subject = interpolate(spec.subject, values) || 'Notification'
-    const text = interpolate(spec.bodyTemplate, values)
-    const html = `${INLINE_SHELL_OPEN}${escapeHtml(text)}${INLINE_SHELL_CLOSE}`
+    const subject =
+      interpolate(spec.subject, values).replace(/\s+/g, ' ').trim() || 'Notification'
+    const body = dropEmptyLabelLines(interpolate(spec.bodyTemplate, values))
+    const text = spec.cta ? `${body}\n\n${spec.cta.label}: ${spec.cta.url}` : body
+    const html = inlineShellHtml(body, spec.cta, spec.brandName?.trim() || 'BeaconHS')
     return { subject, html, text }
   }
   // template | design — render {{tokens}} + {{#each}} blocks (escaped values)

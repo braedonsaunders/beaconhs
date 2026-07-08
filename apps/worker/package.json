@@ -17,6 +17,7 @@
     "@beaconhs/audit": "workspace:*",
     "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
+    "@beaconhs/email-render": "workspace:*",
     "@beaconhs/emails": "workspace:*",
     "@beaconhs/events": "workspace:*",
     "@beaconhs/forms-core": "workspace:*",

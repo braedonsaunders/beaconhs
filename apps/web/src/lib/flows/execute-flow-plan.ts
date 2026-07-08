@@ -15,7 +15,8 @@ import {
   type EmailTarget,
   type EvalContext,
 } from '@beaconhs/forms-core'
-import { people, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
+import { db, withSuperAdmin } from '@beaconhs/db'
+import { people, roleAssignments, roles, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
 import {
@@ -244,6 +245,28 @@ export async function executeFlowPlan(
 
   const { enqueueEmail, enqueueNotification, enqueuePdfEmail } = await import('@beaconhs/jobs')
 
+  // Inline flow emails carry the tenant's name in the shell and a "View
+  // record" button to the subject's page. Both resolved once per run.
+  const appBase = (
+    process.env.PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    'http://localhost:3000'
+  ).replace(/\/$/, '')
+  let tenantNameCache: string | null | undefined
+  const tenantName = async (): Promise<string | null> => {
+    if (tenantNameCache !== undefined) return tenantNameCache
+    tenantNameCache = await withSuperAdmin(db, async (tx) => {
+      const [t] = await tx
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId))
+        .limit(1)
+      return t?.name ?? null
+    }).catch(() => null)
+    return tenantNameCache
+  }
+
   for (const action of plan.actions) {
     try {
       switch (action.action) {
@@ -304,6 +327,8 @@ export async function executeFlowPlan(
               mode: 'inline',
               subject: action.subject ?? 'Notification',
               bodyTemplate: action.bodyTemplate ?? '',
+              cta: { url: `${appBase}${adapter.deepLink()}`, label: 'View record' },
+              brandName: (await tenantName()) ?? undefined,
             }
           }
           const { subject, html, text } = renderEmail(spec, values)

@@ -5,6 +5,7 @@ import 'server-only'
 // inspections). Reserved compliance keys are dropped; remaining values become
 // labelled rows.
 
+import { plainValue } from '@beaconhs/email-render'
 import type { PdfEmailableJobData } from '@beaconhs/jobs'
 
 const SKIP_KEYS = new Set(['compliance_score', 'compliance_status'])
@@ -24,13 +25,20 @@ export function summarizeFlowValues(
     .filter(
       ([k, v]) =>
         !SKIP_KEYS.has(k) &&
+        // FK / raw ids exist for flow conditions and recipient targets — they
+        // are machine keys, not something a reader of the PDF can use.
+        !/(^|_)ids?$/.test(k) &&
+        // Raw enum twins ('status' next to 'status_label') would print twice —
+        // keep the human label.
+        !(`${k}_label` in values) &&
         v != null &&
         v !== '' &&
         // Collections (arrays of row objects) have no scalar rendering — they
         // would print as "[object Object]" — so the summary skips them.
         typeof v !== 'object',
     )
-    .map(([k, v]) => ({ label: humanize(k), value: String(v) }))
+    .map(([k, v]) => ({ label: humanize(k), value: plainValue(v) }))
+    .filter((f) => f.value.trim() !== '')
 }
 
 function asStr(v: unknown): string | null {
