@@ -17,6 +17,7 @@ import { trainingClasses, trainingCourses, trainingRecords } from '@beaconhs/db/
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 // Lazy draft create: called by the /training/classes/new page's
 // LazyRecordProvider on the user's FIRST field edit — so glancing at "new" and
@@ -63,6 +64,8 @@ export async function createClassDraft(): Promise<
     action: 'create',
     summary: 'Created class draft',
   })
+  // Classes have no separate publish step — the lazy draft IS the creation.
+  await runModuleFlows(ctx, { moduleKey: 'training-classes', event: 'on_create', subjectId: newId })
   revalidatePath('/training/classes')
   return { ok: true, id: newId }
 }
@@ -157,6 +160,12 @@ export async function cancelClass(id: string, _formData: FormData): Promise<void
     action: 'update',
     summary: 'Cancelled training class',
   })
+  await runModuleFlows(ctx, {
+    moduleKey: 'training-classes',
+    event: 'status_change',
+    subjectId: id,
+    toStatus: 'cancelled',
+  })
   revalidatePath(`/training/classes/${id}`)
   revalidatePath('/training/classes')
 }
@@ -173,6 +182,12 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
     entityId: id,
     action: 'update',
     summary: 'Reopened training class',
+  })
+  await runModuleFlows(ctx, {
+    moduleKey: 'training-classes',
+    event: 'status_change',
+    subjectId: id,
+    toStatus: 'scheduled',
   })
   revalidatePath(`/training/classes/${id}`)
   revalidatePath('/training/classes')

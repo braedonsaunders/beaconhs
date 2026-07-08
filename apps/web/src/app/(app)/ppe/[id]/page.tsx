@@ -66,6 +66,7 @@ import { PersonSelectField } from '@/components/person-select-field'
 import { LiveField, LiveSelect } from '@/components/live-field'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { CertificateDrawer, type CertificateInput } from './_certificate-drawer'
 import { PpeInspectionForm } from './_inspection-form'
 import { pickString } from '@/lib/list-params'
@@ -227,6 +228,10 @@ async function recordInspection(formData: FormData) {
         .join('\n\n'),
       severity: highestSeverityFailQuestion.severity,
     })
+  }
+
+  if (inspectionId) {
+    await runModuleFlows(ctx, { moduleKey: 'ppe', event: 'on_submit', subjectId: inspectionId })
   }
 
   revalidatePath(`/ppe/${itemId}`)
