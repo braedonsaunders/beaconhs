@@ -6,7 +6,7 @@
 //   rows      — detail rows (optionally bucketed into sections by groupBy).
 //   summarize — GROUP BY breakouts + aggregate measures (count/sum/avg/…), with
 //               optional temporal bucketing on a date/timestamp breakout.
-// Both emit the same ReportRunResult shape (groups + summary + charts), so the
+// Both emit the same ReportRunResult shape (groups + summary), so the
 // viewer, PDF, CSV and XLSX consumers are identical.
 //
 // The entity whitelist is INJECTED by the caller (opts.entityMap — the discovered
@@ -25,19 +25,16 @@ import {
   REPORT_TEMPORAL_BINS,
   type ReportAggFn,
   type ReportBreakout,
-  type ReportChartConfig,
   type ReportCustomQuery,
   type ReportMeasure,
   type ReportTemporalBin,
 } from '@beaconhs/db/schema'
 import { REPORT_ENTITY_MAP, columnRef, entityColumnSql, type ReportEntity } from './entities'
 import { compileCustomFilters } from './filters'
-import { formatLabel, type ReportChartSpec, type ReportGroup, type ReportRunResult } from './types'
+import { formatLabel, type ReportGroup, type ReportRunResult } from './types'
 
 const DEFAULT_LIMIT = 1000
 const MAX_LIMIT = 10_000
-/** Max distinct dimension values plotted; the long tail folds into "(other)". */
-const CHART_CATEGORY_CAP = 20
 
 export type RunCustomQueryOpts = {
   maxRows?: number
@@ -146,19 +143,12 @@ async function runRowQuery(
     })
   }
 
-  const charts: ReportChartSpec[] = []
-  if (q.chart?.dimension && entityColumnSql(entity, q.chart.dimension)) {
-    const chart = await runChartAggregate(tx, entity, q.chart, where)
-    if (chart) charts.push(chart)
-  }
-
   return {
     groups,
     summary: [
       { label: 'Rows', value: dataRows.length },
       { label: 'Entity', value: entity.label },
     ],
-    charts,
     rowCount: dataRows.length,
   }
 }
@@ -259,13 +249,7 @@ async function runAggregateQuery(
     }
   })
 
-  const charts: ReportChartSpec[] = []
-  if (q.chart?.type && breakouts.length > 0) {
-    const chart = buildSummarizeChart(entity, q.chart, breakouts, measures, dataRows)
-    if (chart) charts.push(chart)
-  }
-
-  return { groups, summary, charts, rowCount: dataRows.length }
+  return { groups, summary, rowCount: dataRows.length }
 }
 
 /** SQL for a group-by dimension, with optional temporal bucketing. The bin is
@@ -327,31 +311,6 @@ function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin): string | numb
   }
 }
 
-function buildSummarizeChart(
-  entity: ReportEntity,
-  chart: ReportChartConfig,
-  breakouts: ReportBreakout[],
-  measures: ReportMeasure[],
-  dataRows: Record<string, unknown>[],
-): ReportChartSpec | null {
-  if (!dataRows.length) return null
-  const dimIdx = Math.max(
-    0,
-    breakouts.findIndex((b) => b.column === chart.dimension),
-  )
-  const b = breakouts[dimIdx]!
-  const sliced = dataRows.slice(0, CHART_CATEGORY_CAP)
-  const xLabels = sliced.map((r) => String(formatBreakoutValue(r[`d${dimIdx}`], b.bin) ?? '(none)'))
-  const data = sliced.map((r) => Number(r['m0']) || 0)
-  return {
-    id: 'summarize',
-    title: `${measureLabel(entity, measures[0]!)} by ${breakoutLabel(entity, b)}`,
-    type: chart.type,
-    xLabels,
-    series: [{ name: measureLabel(entity, measures[0]!), data }],
-  }
-}
-
 // --- shared helpers ----------------------------------------------------------
 
 function resolveLimit(requested: number | null | undefined, maxRows?: number): number {
@@ -359,51 +318,6 @@ function resolveLimit(requested: number | null | undefined, maxRows?: number): n
   let limit = Math.min(Math.max(Number.isFinite(n) ? n : DEFAULT_LIMIT, 1), MAX_LIMIT)
   if (maxRows) limit = Math.min(limit, maxRows)
   return limit
-}
-
-/** COUNT(*) per distinct dimension value, under the same WHERE as the main
- *  query, so the chart always agrees with the table (rows mode). */
-async function runChartAggregate(
-  tx: Database,
-  entity: ReportEntity,
-  chart: ReportChartConfig,
-  where: SQL | null,
-): Promise<ReportChartSpec | null> {
-  const dimSql = sql.raw(columnRef(entity, chart.dimension)!)
-  const kind = entity.columns.find((c) => c.key === chart.dimension)?.kind
-  // Bucket timestamps/dates by day so a time dimension charts sensibly.
-  const keyExpr =
-    kind === 'timestamp' || kind === 'date'
-      ? sql.join([sql.raw('to_char('), dimSql, sql.raw(`, 'YYYY-MM-DD')`)], sql.raw(''))
-      : dimSql
-
-  const queryText = sql.join(
-    [
-      sql.raw('SELECT '),
-      keyExpr,
-      sql.raw(` AS "k", COUNT(*)::int AS "c" FROM "${entity.table}" `),
-      where ? sql.join([sql.raw('WHERE '), where], sql.raw('')) : sql.raw(''),
-      sql.raw(' GROUP BY 1 ORDER BY '),
-      kind === 'timestamp' || kind === 'date' ? sql.raw('1 ASC') : sql.raw('2 DESC'),
-      sql.raw(` LIMIT ${CHART_CATEGORY_CAP}`),
-    ],
-    sql.raw(''),
-  )
-
-  const result = (await tx.execute(queryText)) as unknown
-  const rows = extractRows(result) as { k: unknown; c: number }[]
-  if (!rows.length) return null
-
-  const xLabels = rows.map((r) => formatLabel(String(r.k ?? '(none)')))
-  const data = rows.map((r) => Number(r.c))
-
-  return {
-    id: 'custom',
-    title: `${labelFor(entity, chart.dimension)} — row count`,
-    type: chart.type,
-    xLabels,
-    series: [{ name: 'Rows', data }],
-  }
 }
 
 function labelFor(entity: ReportEntity, key: string): string {

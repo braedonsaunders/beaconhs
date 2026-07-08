@@ -4,7 +4,7 @@
 // viewer / exports (web).
 //
 // Every function takes a tenant-scoped transaction — callers own the scope
-// (web: ctx.db, worker: withTenant). Each returns groups + summary + charts.
+// (web: ctx.db, worker: withTenant). Each returns groups + summary.
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
@@ -35,7 +35,6 @@ import {
   formatLabel,
   isoDate,
   pickUuid,
-  type ReportChartSpec,
   type ReportGroup,
   type ReportRange,
   type ReportRunResult,
@@ -154,31 +153,11 @@ export async function queryIncidentsSummary(
     }
   }
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const sevEntries = [...bySeverity.entries()].sort()
-    charts.push({
-      id: 'severity',
-      title: 'Incidents by severity',
-      type: 'donut',
-      xLabels: sevEntries.map(([s]) => formatLabel(s)),
-      series: [{ name: 'Incidents', data: sevEntries.map(([, l]) => l.length) }],
-    })
-    const statusEntries = [...byStatus.entries()].sort()
-    charts.push({
-      id: 'status',
-      title: 'Incidents by status',
-      type: 'bar',
-      xLabels: statusEntries.map(([s]) => formatLabel(s)),
-      series: [{ name: 'Incidents', data: statusEntries.map(([, c]) => c) }],
-    })
-  }
-
   const summary = [
     { label: 'Total', value: rows.length },
     ...[...byStatus.entries()].map(([s, c]) => ({ label: formatLabel(s), value: c })),
   ]
-  return { groups, summary, charts, rowCount: rows.length }
+  return { groups, summary, rowCount: rows.length }
 }
 
 // --- training_expiring ------------------------------------------------------
@@ -225,25 +204,12 @@ export async function queryTrainingExpiring(
     }
   }
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const top = [...byCourse.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 12)
-    charts.push({
-      id: 'by-course',
-      title: 'Expiring records by course',
-      type: 'bar',
-      xLabels: top.map(([k]) => k),
-      series: [{ name: 'Expiring', data: top.map(([, l]) => l.length) }],
-    })
-  }
-
   return {
     groups,
     summary: [
       { label: 'Total expiring', value: rows.length },
       { label: 'Courses affected', value: byCourse.size },
     ],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -307,32 +273,9 @@ export async function queryCorrectiveActionsOpen(
     }
   }
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const statusEntries = [...byStatus.entries()].sort()
-    charts.push({
-      id: 'status',
-      title: 'Open CAs by status',
-      type: 'donut',
-      xLabels: statusEntries.map(([s]) => formatLabel(s)),
-      series: [{ name: 'Actions', data: statusEntries.map(([, l]) => l.length) }],
-    })
-    const bySeverity = new Map<string, number>()
-    for (const r of rows) bySeverity.set(r.severity, (bySeverity.get(r.severity) ?? 0) + 1)
-    const sevEntries = [...bySeverity.entries()].sort()
-    charts.push({
-      id: 'severity',
-      title: 'Open CAs by severity',
-      type: 'bar',
-      xLabels: sevEntries.map(([s]) => formatLabel(s)),
-      series: [{ name: 'Actions', data: sevEntries.map(([, c]) => c) }],
-    })
-  }
-
   return {
     groups,
     summary: [{ label: 'Open total', value: rows.length }],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -399,25 +342,12 @@ export async function queryInspectionsCompleted(
     }
   }
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const top = [...byTemplate.values()].sort((a, b) => b.list.length - a.list.length).slice(0, 12)
-    charts.push({
-      id: 'by-template',
-      title: 'Completed inspections by template',
-      type: 'bar',
-      xLabels: top.map((t) => t.name),
-      series: [{ name: 'Completed', data: top.map((t) => t.list.length) }],
-    })
-  }
-
   return {
     groups,
     summary: [
       { label: 'Total completed', value: rows.length },
       { label: 'Templates', value: byTemplate.size },
     ],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -477,22 +407,9 @@ export async function queryDocumentsOverdueReview(
     }
   }
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const entries = [...byCategory.entries()].sort((a, b) => b[1].length - a[1].length)
-    charts.push({
-      id: 'by-category',
-      title: 'Overdue documents by category',
-      type: 'bar',
-      xLabels: entries.map(([c]) => formatLabel(c)),
-      series: [{ name: 'Documents', data: entries.map(([, l]) => l.length) }],
-    })
-  }
-
   return {
     groups,
     summary: [{ label: 'Overdue', value: rows.length }],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -618,17 +535,6 @@ export async function querySafetyKpiSummary(
     ],
   })
 
-  const charts: ReportChartSpec[] = []
-  if (incRows.length > 0) {
-    charts.push({
-      id: 'severity',
-      title: 'Incidents by severity',
-      type: 'donut',
-      xLabels: incRows.map((r) => formatLabel(r.severity)),
-      series: [{ name: 'Incidents', data: incRows.map((r) => Number(r.c)) }],
-    })
-  }
-
   const totalIncidents = incRows.reduce((acc, r) => acc + Number(r.c), 0)
   return {
     groups,
@@ -638,7 +544,6 @@ export async function querySafetyKpiSummary(
       { label: 'Overdue CAs', value: Number(overdueCa?.c ?? 0) },
       { label: 'Inspections', value: Number(insp?.c ?? 0) },
     ],
-    charts,
     rowCount: totalIncidents,
   }
 }
@@ -721,29 +626,12 @@ export async function querySiteScorecard(
     },
   ]
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const top = rows.slice(0, 12)
-    charts.push({
-      id: 'per-site',
-      title: 'Activity by site',
-      type: 'bar',
-      xLabels: top.map((r) => r.siteName),
-      series: [
-        { name: 'Incidents', data: top.map((r) => r.incidents) },
-        { name: 'Open CAs', data: top.map((r) => r.openCAs) },
-        { name: 'Inspections', data: top.map((r) => r.inspections) },
-      ],
-    })
-  }
-
   return {
     groups,
     summary: [
       { label: 'Sites with activity', value: rows.length },
       { label: 'Total incidents', value: rows.reduce((acc, r) => acc + r.incidents, 0) },
     ],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -877,22 +765,6 @@ export async function queryOverdueRollup(
 
   const total = caRows.length + trgRows.length + docRows.length + eqRows.length + ppeRows.length
 
-  const charts: ReportChartSpec[] = []
-  if (total > 0) {
-    charts.push({
-      id: 'by-module',
-      title: 'Overdue items by module',
-      type: 'bar',
-      xLabels: ['Corrective actions', 'Training', 'Documents', 'Equipment', 'PPE'],
-      series: [
-        {
-          name: 'Overdue',
-          data: [caRows.length, trgRows.length, docRows.length, eqRows.length, ppeRows.length],
-        },
-      ],
-    })
-  }
-
   return {
     groups,
     summary: [
@@ -903,7 +775,6 @@ export async function queryOverdueRollup(
       { label: 'Eq. inspections', value: eqRows.length },
       { label: 'PPE inspections', value: ppeRows.length },
     ],
-    charts,
     rowCount: total,
   }
 }
@@ -970,25 +841,12 @@ export async function queryLoneWorkerSummary(
     }
   }
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const entries = [...byStatus.entries()].sort()
-    charts.push({
-      id: 'status',
-      title: 'Sessions by status',
-      type: 'donut',
-      xLabels: entries.map(([s]) => formatLabel(s)),
-      series: [{ name: 'Sessions', data: entries.map(([, l]) => l.length) }],
-    })
-  }
-
   return {
     groups,
     summary: [
       { label: 'Total sessions', value: rows.length },
       ...[...byStatus.entries()].map(([s, l]) => ({ label: formatLabel(s), value: l.length })),
     ],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -1080,24 +938,6 @@ export async function queryTrainingComplianceSnapshot(
     },
   ]
 
-  const charts: ReportChartSpec[] = []
-  if (list.length > 0) {
-    const top = list.slice(0, 12)
-    charts.push({
-      id: 'per-obligation',
-      title: 'Compliance by obligation',
-      type: 'bar',
-      stacked: true,
-      xLabels: top.map((b) => b.name),
-      series: [
-        { name: 'Completed', data: top.map((b) => b.completed) },
-        { name: 'In progress', data: top.map((b) => b.in_progress) },
-        { name: 'Pending', data: top.map((b) => b.pending) },
-        { name: 'Overdue', data: top.map((b) => b.overdue) },
-      ],
-    })
-  }
-
   const total = list.reduce((acc, b) => acc + b.total, 0)
   const completed = list.reduce((acc, b) => acc + b.completed, 0)
   const overall = total === 0 ? null : Math.round((completed / total) * 100)
@@ -1108,7 +948,6 @@ export async function queryTrainingComplianceSnapshot(
       { label: 'Records', value: total },
       { label: 'Overall %', value: overall === null ? '—' : `${overall}%` },
     ],
-    charts,
     rowCount: list.length,
   }
 }
@@ -1158,25 +997,12 @@ export async function queryDocumentComplianceSnapshot(
     },
   ]
 
-  const charts: ReportChartSpec[] = []
-  if (rows.length > 0) {
-    const top = [...rows].sort((a, b) => Number(b.ackCount) - Number(a.ackCount)).slice(0, 12)
-    charts.push({
-      id: 'acks',
-      title: 'Acknowledgments by assignment',
-      type: 'bar',
-      xLabels: top.map((r) => r.title ?? r.documentTitle),
-      series: [{ name: 'Acknowledged', data: top.map((r) => Number(r.ackCount)) }],
-    })
-  }
-
   return {
     groups,
     summary: [
       { label: 'Assignments', value: rows.length },
       { label: 'Total acks', value: rows.reduce((acc, r) => acc + Number(r.ackCount), 0) },
     ],
-    charts,
     rowCount: rows.length,
   }
 }
@@ -1232,20 +1058,6 @@ export async function queryIncidentsTrend12m(
     },
   ]
 
-  const charts: ReportChartSpec[] = [
-    {
-      id: 'trend',
-      title: 'Monthly incidents by severity',
-      type: 'bar',
-      stacked: true,
-      xLabels: months,
-      series: severities.map((s) => ({
-        name: formatLabel(s),
-        data: months.map((m) => grid.get(m)!.get(s) ?? 0),
-      })),
-    },
-  ]
-
   const total = rows.reduce((acc, r) => acc + Number(r.c), 0)
   return {
     groups,
@@ -1253,7 +1065,6 @@ export async function queryIncidentsTrend12m(
       { label: 'Total incidents (12mo)', value: total },
       { label: 'Months covered', value: 12 },
     ],
-    charts,
     rowCount: total,
   }
 }
@@ -1339,7 +1150,6 @@ export async function queryOsha300Log(
   let daysAwayTotal = 0
   let daysRestrictedTotal = 0
   let fatalities = 0
-  const byOutcome = new Map<Osha300Outcome, number>()
 
   const logRows = incRows.map((row) => {
     const inj = injuryByIncident.get(row.inc.id)
@@ -1359,7 +1169,6 @@ export async function queryOsha300Log(
     daysAwayTotal += lt.daysAway
     daysRestrictedTotal += lt.daysRestricted
     if (outcome === 'death') fatalities += 1
-    byOutcome.set(outcome, (byOutcome.get(outcome) ?? 0) + 1)
     const classification = row.cls
       ? `${row.cls.code ? `${row.cls.code} ` : ''}${row.cls.name}`
       : 'Unclassified'
@@ -1396,18 +1205,6 @@ export async function queryOsha300Log(
     },
   ]
 
-  const charts: ReportChartSpec[] = []
-  if (logRows.length > 0) {
-    const entries = [...byOutcome.entries()].sort((a, b) => b[1] - a[1])
-    charts.push({
-      id: 'by-outcome',
-      title: 'Recordable cases by outcome',
-      type: 'bar',
-      xLabels: entries.map(([o]) => OSHA_OUTCOME_LABEL[o]),
-      series: [{ name: 'Cases', data: entries.map(([, c]) => c) }],
-    })
-  }
-
   return {
     groups,
     summary: [
@@ -1416,7 +1213,6 @@ export async function queryOsha300Log(
       { label: 'Days restricted', value: daysRestrictedTotal },
       { label: 'Fatalities', value: fatalities },
     ],
-    charts,
     rowCount: logRows.length,
   }
 }

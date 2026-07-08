@@ -34,7 +34,7 @@ export default async function NewCustomDefinitionPage({
         <DetailHeader
           back={{ href: '/reports/definitions', label: 'Back to library' }}
           title={cloneFrom ? `Edit a copy of "${cloneFrom.name}"` : 'New report'}
-          subtitle="Choose a data source, shape the data, and add an optional chart."
+          subtitle="Choose a data source, shape the data, and set up the printed page."
         />
       }
       className="h-full max-w-none p-0"

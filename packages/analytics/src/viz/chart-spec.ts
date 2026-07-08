@@ -1,4 +1,4 @@
-// A lib-agnostic chart description (superset of the reports ReportChartSpec).
+// A lib-agnostic chart description for Insights visualizations.
 // The engine/registry build this from a query result; the single client ECharts
 // component maps it to an ECharts option. Keeping it echarts-free means neither
 // the engine nor the viz registry ever drags echarts into a bundle.

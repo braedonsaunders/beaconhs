@@ -1,6 +1,5 @@
 // Server-renderable result blocks shared by the report viewer and the studio
-// preview: summary stat cards, the charts row (client ECharts inside), and a
-// table per group with a per-group row cap.
+// preview: summary stat cards and a table per group with a per-group row cap.
 
 import {
   Alert,
@@ -14,7 +13,6 @@ import {
 } from '@beaconhs/ui'
 import { Inbox } from 'lucide-react'
 import type { ReportRunResult } from '@beaconhs/reports'
-import { ReportChart } from './report-chart'
 import { PaginatedReportTable } from './paginated-report-table.client'
 
 export function ReportSummaryCards({ summary }: { summary: ReportRunResult['summary'] }) {
@@ -30,30 +28,6 @@ export function ReportSummaryCards({ summary }: { summary: ReportRunResult['summ
             <div className="mt-1 truncate text-2xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
               {s.value}
             </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  )
-}
-
-export function ReportCharts({
-  charts,
-  height,
-}: {
-  charts: ReportRunResult['charts']
-  height?: number
-}) {
-  if (!charts.length) return null
-  return (
-    <div className={charts.length > 1 ? 'grid gap-4 lg:grid-cols-2' : ''}>
-      {charts.map((c) => (
-        <Card key={c.id}>
-          <CardHeader>
-            <CardTitle className="text-sm">{c.title}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ReportChart spec={c} height={height ?? 280} />
           </CardContent>
         </Card>
       ))}

@@ -15,7 +15,6 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     columns: ['reference', 'title', 'severity', 'status', 'type', 'occurred_at'],
     groupBy: 'severity',
     sort: { column: 'occurred_at', direction: 'desc' },
-    chart: { type: 'donut', dimension: 'severity', metric: 'count' },
   },
   incidents_trend_12m: {
     entity: 'incidents',
@@ -23,7 +22,6 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     columns: [],
     breakouts: [{ column: 'occurred_at', bin: 'month' }, { column: 'severity' }],
     measures: [{ fn: 'count' }],
-    chart: { type: 'bar', dimension: 'occurred_at', metric: 'count' },
   },
   safety_kpi_summary: {
     entity: 'incidents',
@@ -31,7 +29,6 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     columns: [],
     breakouts: [{ column: 'severity' }],
     measures: [{ fn: 'count' }],
-    chart: { type: 'donut', dimension: 'severity', metric: 'count' },
   },
   site_scorecard: {
     entity: 'incidents',
@@ -90,7 +87,6 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     columns: [],
     breakouts: [{ column: 'status' }],
     measures: [{ fn: 'count' }],
-    chart: { type: 'bar', dimension: 'status', metric: 'count' },
   },
   inspections_completed: {
     entity: 'inspection_records',

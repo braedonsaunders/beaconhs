@@ -1,5 +1,5 @@
 // Report viewer — runs the definition in-app (same engine as scheduled PDFs)
-// and renders summary cards, charts, and the grouped result tables, with
+// and renders summary cards and the grouped result tables, with
 // range switching, CSV/XLSX export, subscribe, and manage actions.
 
 import Link from 'next/link'
@@ -39,7 +39,6 @@ import { loadDefinitionById } from '../../_definitions'
 import { runReportForViewer, VIEWER_RANGE_CHOICES } from '../../_run'
 import { formatCadence, formatDateTime, CategoryBadge, KindBadge, StatusBadge } from '../../_format'
 import {
-  ReportCharts,
   ReportGroupTables,
   ReportRunError,
   ReportSummaryCards,
@@ -204,7 +203,6 @@ export default async function ReportViewerPage({
         ) : (
           <>
             <ReportSummaryCards summary={run.result.summary} />
-            <ReportCharts charts={run.result.charts} />
             <ReportGroupTables groups={run.result.groups} />
           </>
         )}

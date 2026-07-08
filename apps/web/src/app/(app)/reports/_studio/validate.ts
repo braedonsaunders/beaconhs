@@ -10,11 +10,9 @@
 
 import {
   REPORT_AGG_FNS,
-  REPORT_CHART_TYPES,
   REPORT_FILTER_OPERATORS,
   REPORT_TEMPORAL_BINS,
   type ReportBreakout,
-  type ReportChartConfig,
   type ReportCustomQuery,
   type ReportMeasure,
   type ReportRule,
@@ -152,24 +150,6 @@ export function validateCustomQuery(
   const filtersV2 = q.filtersV2 ? sanitizeGroup(q.filtersV2, 1) : null
   const filtersV2Final = filtersV2 && filtersV2.rules.length ? filtersV2 : null
 
-  // Chart. In summarize mode the dimension must be one of the breakouts.
-  let chart: ReportChartConfig | null = null
-  if (q.chart && typeof q.chart === 'object') {
-    const c = q.chart as Record<string, unknown>
-    const type = String(c.type ?? '')
-    const dimOk =
-      mode === 'summarize'
-        ? breakouts.some((b) => b.column === c.dimension)
-        : validColumn(c.dimension)
-    if (REPORT_CHART_TYPES.includes(type as never) && dimOk) {
-      chart = {
-        type: type as ReportChartConfig['type'],
-        dimension: c.dimension as string,
-        metric: 'count',
-      }
-    }
-  }
-
   const groupBy = validColumn(q.groupBy) ? q.groupBy : null
   const sort =
     q.sort && typeof q.sort === 'object'
@@ -194,7 +174,6 @@ export function validateCustomQuery(
     measures,
     filters,
     filtersV2: filtersV2Final,
-    chart,
     groupBy,
     sort,
     limit,

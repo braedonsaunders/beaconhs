@@ -1,5 +1,5 @@
 // Manual smoke test for the shared report engine (@beaconhs/reports).
-// Runs a built-in report and a custom query (v2 nested filters + chart)
+// Runs a built-in report and a custom query (v2 nested filters)
 // against the first tenant in the database, printing result shapes.
 //
 //   pnpm --filter @beaconhs/worker exec tsx --env-file=../../.env src/lib/_reports-smoke.ts
@@ -41,7 +41,7 @@ async function main() {
       runReport(tx, { queryKind, filters: { days: 30 }, range }),
     )
     console.log(
-      `[built-in] ${queryKind}: rows=${result.rowCount} groups=${result.groups.length} charts=${result.charts.map((c) => `${c.id}:${c.type}(${c.xLabels.length})`).join(',') || '-'} summary=${result.summary.map((s) => `${s.label}=${s.value}`).join(' | ')}`,
+      `[built-in] ${queryKind}: rows=${result.rowCount} groups=${result.groups.length} summary=${result.summary.map((s) => `${s.label}=${s.value}`).join(' | ')}`,
     )
   }
 
@@ -67,7 +67,6 @@ async function main() {
             },
           ],
         },
-        chart: { type: 'donut', dimension: 'severity', metric: 'count' },
         groupBy: 'status',
         sort: { column: 'occurred_at', direction: 'desc' },
         limit: 100,
@@ -76,7 +75,7 @@ async function main() {
     }),
   )
   console.log(
-    `[custom]   incidents v2-filters: rows=${customResult.rowCount} groups=${customResult.groups.length} charts=${customResult.charts.map((c) => `${c.id}:${c.type}(${c.xLabels.length} slices)`).join(',') || '-'}`,
+    `[custom]   incidents v2-filters: rows=${customResult.rowCount} groups=${customResult.groups.length}`,
   )
   for (const g of customResult.groups.slice(0, 3)) {
     console.log(`           group "${g.title}" (${g.rows.length} rows)`)
@@ -99,7 +98,6 @@ async function main() {
         columns: [],
         breakouts: [{ column: 'severity' }],
         measures: [{ fn: 'count' }],
-        chart: { type: 'bar', dimension: 'severity', metric: 'count' },
         limit: 100,
       },
       maxRows: 100,

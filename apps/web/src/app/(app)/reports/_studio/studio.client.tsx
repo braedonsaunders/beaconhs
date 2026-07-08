@@ -2,9 +2,8 @@
 
 // The report studio — a 1/3 ▸ 2/3 split (BuilderShell) shared with the
 // inspection-type / app / document builders. LEFT rail = authoring (name → data
-// source → Rows|Summarize → columns/group-by+measures → filters → chart). RIGHT
-// surface = a debounced live preview (server action, RLS-scoped, row-capped)
-// rendered as a paginated table + chart.
+// source → Rows|Summarize → columns/group-by+measures → filters). RIGHT
+// surface = a debounced live preview (server action, RLS-scoped, row-capped).
 //
 // Data sources are the full DISCOVERED catalog (every tenant-scoped table),
 // passed in from the server page. Filters use react-querybuilder for the nested
@@ -26,7 +25,6 @@ import {
 } from 'lucide-react'
 import type {
   ReportAggFn,
-  ReportChartType,
   ReportCustomQuery,
   ReportMeasure,
   ReportRule,
@@ -45,7 +43,6 @@ import {
   BuilderShell,
   BuilderSurfaceHeader,
 } from '@/components/builder/builder-shell'
-import { ReportChart } from '../_components/report-chart'
 import { PaginatedReportTable } from '../_components/paginated-report-table.client'
 import { previewCustomReport, type StudioPreviewResult } from './actions'
 
@@ -58,15 +55,6 @@ type StudioTemplate = {
   description: string
   query: ReportCustomQuery
 }
-
-const CHART_CHOICES: { key: ReportChartType | 'none'; label: string }[] = [
-  { key: 'none', label: 'No chart' },
-  { key: 'bar', label: 'Bar' },
-  { key: 'line', label: 'Line' },
-  { key: 'area', label: 'Area' },
-  { key: 'pie', label: 'Pie' },
-  { key: 'donut', label: 'Donut' },
-]
 
 const AGG_FNS: { value: ReportAggFn; label: string; needsColumn: boolean }[] = [
   { value: 'count', label: 'Count of rows', needsColumn: false },
@@ -123,7 +111,6 @@ function defaultRowsQuery(entity: ReportEntity): ReportCustomQuery {
     measures: [],
     filters: [],
     filtersV2: null,
-    chart: null,
     groupBy: null,
     sort: entity.defaultSort ?? null,
     limit: 1000,
@@ -171,7 +158,6 @@ function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
         ]),
         groupBy: hasColumn(entity, 'asset_tag') ? 'asset_tag' : null,
         sort: hasColumn(entity, 'month') ? { column: 'month', direction: 'asc' } : null,
-        chart: null,
         limit: 10000,
       },
     })
@@ -192,7 +178,6 @@ function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
       query: {
         ...defaultRowsQuery(entity),
         groupBy: category.key,
-        chart: { type: 'donut', dimension: category.key, metric: 'count' },
       },
     })
   }
@@ -214,7 +199,6 @@ function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
           : [{ fn: 'count' }],
         filters: [],
         filtersV2: null,
-        chart: { type: 'bar', dimension: temporal.key, metric: 'count' },
         groupBy: null,
         sort: null,
         limit: 1000,
@@ -235,7 +219,6 @@ function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
         measures: [{ fn: 'sum', column: numberColumn.key }, { fn: 'count' }],
         filters: [],
         filtersV2: null,
-        chart: { type: 'bar', dimension: category.key, metric: 'count' },
         groupBy: null,
         sort: null,
         limit: 1000,
@@ -324,10 +307,6 @@ export function ReportStudio({
     initialQuery?.sort?.direction ?? entity.defaultSort?.direction ?? 'desc',
   )
   const [limit, setLimit] = useState<number>(initialQuery?.limit ?? 1000)
-  const [chartType, setChartType] = useState<ReportChartType | 'none'>(
-    initialQuery?.chart?.type ?? 'none',
-  )
-  const [chartDimension, setChartDimension] = useState<string>(initialQuery?.chart?.dimension ?? '')
   const [columnSearch, setColumnSearch] = useState('')
 
   // react-querybuilder assigns random ids, which never match between SSR and
@@ -345,8 +324,6 @@ export function ReportStudio({
     )
     const nextSort =
       query.sort?.column && hasColumn(nextEntity, query.sort.column) ? query.sort : null
-    const nextChart =
-      query.chart?.dimension && hasColumn(nextEntity, query.chart.dimension) ? query.chart : null
 
     setEntityKey(nextEntity.key)
     setQueryMode(query.mode === 'summarize' ? 'summarize' : 'rows')
@@ -358,8 +335,6 @@ export function ReportStudio({
     setSortCol(nextSort?.column ?? nextEntity.defaultSort?.column ?? '')
     setSortDir(nextSort?.direction ?? nextEntity.defaultSort?.direction ?? 'desc')
     setLimit(query.limit ?? 1000)
-    setChartType(nextChart?.type ?? 'none')
-    setChartDimension(nextChart?.dimension ?? '')
     setColumnSearch('')
   }
 
@@ -384,12 +359,6 @@ export function ReportStudio({
       const mss: ReportMeasure[] = measures
         .filter((m) => m.fn === 'count' || m.column)
         .map((m) => ({ fn: m.fn, ...(m.fn === 'count' ? {} : { column: m.column }) }))
-      const chartDim =
-        chartType !== 'none'
-          ? bks.some((b) => b.column === chartDimension)
-            ? chartDimension
-            : bks[0]?.column
-          : null
       return {
         entity: entityKey,
         mode: 'summarize',
@@ -398,10 +367,6 @@ export function ReportStudio({
         measures: mss.length ? mss : [{ fn: 'count' }],
         filters: [],
         filtersV2,
-        chart:
-          chartType !== 'none' && chartDim
-            ? { type: chartType, dimension: chartDim, metric: 'count' }
-            : null,
         groupBy: null,
         sort: null,
         limit,
@@ -415,10 +380,6 @@ export function ReportStudio({
       measures: [],
       filters: [],
       filtersV2,
-      chart:
-        chartType !== 'none' && chartDimension
-          ? { type: chartType, dimension: chartDimension, metric: 'count' }
-          : null,
       groupBy: groupBy || null,
       sort: sortCol ? { column: sortCol, direction: sortDir } : null,
       limit,
@@ -435,8 +396,6 @@ export function ReportStudio({
     sortCol,
     sortDir,
     limit,
-    chartType,
-    chartDimension,
   ])
 
   // --- Live preview ---------------------------------------------------------
@@ -507,7 +466,7 @@ export function ReportStudio({
               <BuilderRailHeader
                 icon={<FileText size={15} />}
                 title={intent === 'edit' ? 'Edit report' : 'New report'}
-                subtitle="Configure data, shape, and chart"
+                subtitle="Configure data and shape"
               />
               <BuilderScroll className="space-y-3">
                 {/* Name */}
@@ -832,60 +791,6 @@ export function ReportStudio({
                     List values are comma-separated.
                   </p>
                 </div>
-
-                {/* Chart */}
-                <div className={sectionCls}>
-                  <h3 className={headCls}>Chart</h3>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {CHART_CHOICES.map((c) => (
-                      <button
-                        key={c.key}
-                        type="button"
-                        onClick={() => {
-                          setChartType(c.key as ReportChartType | 'none')
-                          if (c.key !== 'none' && !chartDimension) {
-                            const preferred =
-                              queryMode === 'summarize'
-                                ? breakouts[0]?.column
-                                : (
-                                    entity.columns.find((col) => col.kind === 'enum') ??
-                                    entity.columns[0]
-                                  )?.key
-                            setChartDimension(preferred ?? '')
-                          }
-                        }}
-                        className={cn(
-                          'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
-                          chartType === c.key
-                            ? 'border-teal-700 bg-teal-700 text-white'
-                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200',
-                        )}
-                      >
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                  {chartType !== 'none' ? (
-                    <Select
-                      className="mt-2"
-                      value={chartDimension}
-                      onChange={(e) => setChartDimension(e.target.value)}
-                    >
-                      <option value="">Pick a column…</option>
-                      {(queryMode === 'summarize'
-                        ? breakouts
-                            .filter((b) => b.column)
-                            .map((b) => entity.columns.find((c) => c.key === b.column)!)
-                            .filter(Boolean)
-                        : entity.columns
-                      ).map((c) => (
-                        <option key={c.key} value={c.key}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : null}
-                </div>
               </BuilderScroll>
             </>
           }
@@ -923,11 +828,6 @@ export function ReportStudio({
                   </div>
                 ) : (
                   <>
-                    {preview.result.charts[0] ? (
-                      <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                        <ReportChart spec={preview.result.charts[0]} height={240} />
-                      </div>
-                    ) : null}
                     {preview.result.groups.map((g, i) => (
                       <div key={`${g.title}-${i}`} className="space-y-1.5">
                         {preview.result.groups.length > 1 || queryMode === 'rows' ? (

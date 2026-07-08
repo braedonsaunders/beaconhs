@@ -115,19 +115,6 @@ export type ReportRuleGroup = {
   rules: (ReportRule | ReportRuleGroup)[]
 }
 
-export const REPORT_CHART_TYPES = ['bar', 'line', 'area', 'pie', 'donut'] as const
-export type ReportChartType = (typeof REPORT_CHART_TYPES)[number]
-
-/** Optional chart rendered above the result table in the report viewer.
- *  In rows mode the metric is a row count per distinct `dimension` value; in
- *  summarize mode it plots the first measure against the `dimension` breakout. */
-export type ReportChartConfig = {
-  type: ReportChartType
-  /** Column whose distinct values form the category axis / slices. */
-  dimension: string
-  metric: 'count'
-}
-
 /** Aggregate functions a Summarize-mode measure can use. */
 export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
 export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
@@ -167,8 +154,6 @@ export type ReportCustomQuery = {
   filters?: ReportCustomFilter[]
   /** Nested and/or filter tree; takes precedence over `filters` when set. */
   filtersV2?: ReportRuleGroup | null
-  /** Chart to render above the results table. */
-  chart?: ReportChartConfig | null
   groupBy?: string | null
   /** Defaults to descending by primary date column. */
   sort?: { column: string; direction: 'asc' | 'desc' } | null

@@ -58,7 +58,7 @@ export async function runReportForViewer(
     return { result, rangeLabel: range.label, rangeMode: mode, days, error: null }
   } catch (err) {
     return {
-      result: { groups: [], summary: [], charts: [], rowCount: 0 },
+      result: { groups: [], summary: [], rowCount: 0 },
       rangeLabel: range.label,
       rangeMode: mode,
       days,
