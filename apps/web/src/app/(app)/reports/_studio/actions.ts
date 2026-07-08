@@ -28,6 +28,12 @@ import { loadDefinitionById } from '../_definitions'
 import { loadTenantBranding } from '../_run'
 import { validateCustomQuery, validateReportLayout } from './validate'
 
+/** Definition category for an entity key. Scoped per-app keys
+ *  (`form_responses:<templateId>`) fall back to their base table. */
+function entityCategory(entityKey: string): string {
+  return entityKey.split(':')[0] ?? entityKey
+}
+
 /** Build a stable, URL-safe slug for a custom definition. */
 function buildSlug(name: string): string {
   const base =
@@ -88,7 +94,9 @@ export async function createCustomDefinition(formData: FormData): Promise<void> 
 
   // If cloning, copy source category onto the new row. The lookup enforces
   // the built-in-or-own-tenant visibility rule; an invisible id is ignored.
-  let category: string | null = customQuery.entity
+  // Scoped per-app keys (form_responses:<templateId>) categorise under their
+  // base table, not the raw scoped key.
+  let category: string | null = entityCategory(customQuery.entity)
   if (cloneFromIdRaw) {
     const src = await loadDefinitionById(ctx.tenantId!, cloneFromIdRaw)
     if (src?.category) category = src.category
@@ -156,7 +164,7 @@ export async function updateCustomDefinition(
       .set({
         name,
         description,
-        category: customQuery.entity,
+        category: entityCategory(customQuery.entity),
         customQuery,
         layout,
         updatedAt: new Date(),

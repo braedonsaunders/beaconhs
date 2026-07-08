@@ -13,6 +13,7 @@ export { runBhql } from './execute'
 export { compileBhql, type CompiledBhql } from './compile'
 export { discoverEntities, discoverEntityMap, scopedFormAppEntity } from './discover'
 export {
+  discoverEntitiesWithApps,
   discoverEntitiesWithCustomFields,
   discoverEntityMapWithCustomFields,
 } from './custom-fields'

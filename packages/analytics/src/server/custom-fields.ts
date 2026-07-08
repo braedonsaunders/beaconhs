@@ -5,10 +5,12 @@
 // `metadata` column, so each column carries a server-generated `expr` that the
 // compiler resolves through `columnRef`.
 
+import { and, asc, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
+import { formTemplates } from '@beaconhs/db/schema'
 import { loadCustomFieldColumns, type ReportEntityColumn } from '@beaconhs/reports'
 import { deriveSemanticType, type AnalyticsColumn, type AnalyticsEntity } from '../semantic'
-import { discoverEntities } from './discover'
+import { discoverEntities, scopedFormAppEntity } from './discover'
 
 function decorate(col: ReportEntityColumn): AnalyticsColumn {
   const semanticType = deriveSemanticType(col)
@@ -48,4 +50,25 @@ export async function discoverEntityMapWithCustomFields(
 ): Promise<Record<string, AnalyticsEntity>> {
   const entities = await discoverEntitiesWithCustomFields(tx)
   return Object.fromEntries(entities.map((e) => [e.key, e]))
+}
+
+/** The full studio source catalog: schema-discovered entities (with custom
+ *  fields) PLUS one scoped entity per Builder app — the form_responses table
+ *  scoped to that template via a baked-in template_id baseFilter, labeled with
+ *  the app's own name. Shared by the Insights card studio and the Reports
+ *  studio so both pickers present Builder apps identically. Runs under the
+ *  caller's tenant-scoped tx (RLS bounds the template list). */
+export async function discoverEntitiesWithApps(tx: Database): Promise<AnalyticsEntity[]> {
+  const [base, apps] = await Promise.all([
+    discoverEntitiesWithCustomFields(tx),
+    tx
+      .select({ id: formTemplates.id, name: formTemplates.name })
+      .from(formTemplates)
+      .where(and(isNull(formTemplates.deletedAt)))
+      .orderBy(asc(formTemplates.name)),
+  ])
+  const appEntities = apps
+    .map((a) => scopedFormAppEntity(a.id, a.name))
+    .filter((e): e is AnalyticsEntity => e != null)
+  return [...base, ...appEntities]
 }

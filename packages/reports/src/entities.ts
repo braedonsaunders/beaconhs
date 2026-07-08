@@ -5,7 +5,7 @@
 // hand-synced copies (apps/web _builder-meta.ts + apps/worker
 // reports-shared.ts whitelists).
 
-import type { ReportFilterOperator } from '@beaconhs/db/schema'
+import type { ReportFilterOperator, ReportRuleGroup } from '@beaconhs/db/schema'
 
 export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number'
 
@@ -45,6 +45,14 @@ export type ReportEntity = {
    * Views bake the filter in themselves and leave this unset.
    */
   softDelete?: boolean
+  /**
+   * Implicit predicate ALWAYS AND-ed into every query against this entity.
+   * Used by scoped virtual entities — e.g. a per-Builder-app
+   * `form_responses:<templateId>` source is the real form_responses table
+   * with a baked-in template_id filter (see @beaconhs/analytics/server
+   * scopedFormAppEntity). Server-generated only, never from user input.
+   */
+  baseFilter?: ReportRuleGroup
 }
 
 export const REPORT_ENTITIES: ReportEntity[] = [

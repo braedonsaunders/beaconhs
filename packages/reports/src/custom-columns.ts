@@ -138,5 +138,17 @@ export async function augmentEntityMapWithCustomFields(
     if (!TABLE_TO_KIND[entity.table]) continue
     out[key] = await augmentReportEntityWithCustomFields(tx, entity)
   }
-  return out
+  // Delegate misses back to the source map. discoverEntityMap() is a Proxy
+  // that resolves scoped virtual keys (per-Builder-app
+  // `form_responses:<templateId>` sources) on demand — a plain spread copies
+  // only own keys and would drop that, breaking saved per-app reports.
+  return new Proxy(out, {
+    get(target, prop) {
+      if (typeof prop === 'string' && !(prop in target)) return map[prop]
+      return target[prop as string]
+    },
+    has(target, prop) {
+      return prop in target || prop in map
+    },
+  })
 }

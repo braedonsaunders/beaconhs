@@ -30,7 +30,7 @@ import {
   type ReportTemporalBin,
 } from '@beaconhs/db/schema'
 import { REPORT_ENTITY_MAP, columnRef, entityColumnSql, type ReportEntity } from './entities'
-import { compileCustomFilters } from './filters'
+import { compileCustomFilters, compileRuleGroup } from './filters'
 import { formatLabel, type ReportGroup, type ReportRunResult } from './types'
 
 const DEFAULT_LIMIT = 1000
@@ -43,14 +43,20 @@ export type RunCustomQueryOpts = {
   entityMap?: Record<string, ReportEntity>
 }
 
-/** AND the entity's implicit soft-delete predicate into a compiled WHERE so
- *  soft-deleted rows never surface in custom reports — the same convention the
- *  module list pages and the report_* views follow. */
-function withSoftDeleteFilter(entity: ReportEntity, where: SQL | null): SQL | null {
-  if (!entity.softDelete) return where
-  const notDeleted = sql.raw(`"${entity.table}"."deleted_at" IS NULL`)
-  if (!where) return notDeleted
-  return sql.join([notDeleted, sql.raw(' AND ('), where, sql.raw(')')], sql.raw(''))
+/** AND the entity's implicit predicates into a compiled WHERE: the soft-delete
+ *  filter (same convention the module list pages and report_* views follow)
+ *  and the entity's baseFilter (scoped virtual entities — e.g. a per-app
+ *  form_responses source carries a baked-in template_id predicate). */
+function withImplicitFilters(entity: ReportEntity, where: SQL | null): SQL | null {
+  const parts: SQL[] = []
+  if (entity.softDelete) parts.push(sql.raw(`"${entity.table}"."deleted_at" IS NULL`))
+  if (entity.baseFilter) {
+    const base = compileRuleGroup(entity, entity.baseFilter)
+    if (base) parts.push(base)
+  }
+  if (where) parts.push(sql.join([sql.raw('('), where, sql.raw(')')], sql.raw('')))
+  if (!parts.length) return null
+  return sql.join(parts, sql.raw(' AND '))
 }
 
 export async function runCustomQuery(
@@ -80,7 +86,7 @@ async function runRowQuery(
     throw new Error('Custom query requires at least one valid column')
   }
 
-  const where = withSoftDeleteFilter(entity, compileCustomFilters(entity, q))
+  const where = withImplicitFilters(entity, compileCustomFilters(entity, q))
   const sortCol = q.sort?.column ? entityColumnSql(entity, q.sort.column) : null
   const sortDir = q.sort?.direction === 'asc' ? 'ASC' : 'DESC'
   const limit = resolveLimit(q.limit, opts.maxRows)
@@ -181,7 +187,7 @@ async function runAggregateQuery(
   const dimSelect = breakouts.map((b, i) => `${dimExpr(entity, b)} AS "d${i}"`)
   const measSelect = measures.map((m, i) => `${measureExpr(entity, m)} AS "m${i}"`)
 
-  const where = withSoftDeleteFilter(entity, compileCustomFilters(entity, q))
+  const where = withImplicitFilters(entity, compileCustomFilters(entity, q))
   const whereSql = where ? sql.join([sql.raw('WHERE'), where], sql.raw(' ')) : sql.raw('')
 
   const groupBySql =

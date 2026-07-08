@@ -1,12 +1,12 @@
 import { notFound, redirect } from 'next/navigation'
 import { DetailHeader } from '@beaconhs/ui'
 import { REPORT_OPERATORS } from '@beaconhs/reports'
-import { discoverEntitiesWithCustomFields } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../../_definitions'
 import { ReportStudio } from '../../../_studio/studio.client'
 import { updateCustomDefinition } from '../../../_studio/actions'
+import { loadReportStudioEntities } from '../../../_studio/entities'
 
 export const metadata = { title: 'Edit report' }
 export const dynamic = 'force-dynamic'
@@ -27,7 +27,7 @@ export default async function EditCustomDefinitionPage({
   }
 
   const action = updateCustomDefinition.bind(null, id)
-  const entities = await ctx.db((tx) => discoverEntitiesWithCustomFields(tx))
+  const entities = await loadReportStudioEntities(ctx)
 
   return (
     <DetailPageLayout
