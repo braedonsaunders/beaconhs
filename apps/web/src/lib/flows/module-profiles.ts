@@ -391,6 +391,53 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       },
     ],
   },
+  // Training CLASSES (scheduled instructor-led sessions) — distinct from the
+  // 'training' subject above, which is one assessment attempt. There is no
+  // status column: the lifecycle is derived (scheduled → cancelled | completed)
+  // and the class actions fire status_change with the derived value.
+  // `attendee_emails` is a comma-separated address list so a send_email
+  // recipient `field` target reaches the whole roster.
+  'training-classes': {
+    subjectType: 'module',
+    subjectKey: 'training-classes',
+    label: 'Training classes',
+    triggers: ['on_create', 'status_change', 'manual'],
+    actions: ['send_email', 'notify_role', 'webhook', 'export_pdf'],
+    statusValues: ['scheduled', 'cancelled', 'completed'],
+    fields: [
+      { key: 'title', label: 'Class title', kind: 'text' },
+      { key: 'course_name', label: 'Course', kind: 'text' },
+      { key: 'course_code', label: 'Course code', kind: 'text' },
+      { key: 'course_description', label: 'Course description', kind: 'text' },
+      { key: 'status_label', label: 'Status', kind: 'text' },
+      { key: 'starts_at', label: 'Starts at', kind: 'date' },
+      { key: 'ends_at', label: 'Ends at', kind: 'date' },
+      { key: 'site_name', label: 'Location', kind: 'text' },
+      { key: 'instructor_name', label: 'Instructor', kind: 'text' },
+      { key: 'capacity', label: 'Capacity', kind: 'number' },
+      { key: 'notes', label: 'Notes', kind: 'text' },
+      { key: 'attendee_count', label: 'Attendee count', kind: 'number' },
+      { key: 'attended_count', label: 'Attended count', kind: 'number' },
+      { key: 'absent_count', label: 'Absent count', kind: 'number' },
+      { key: 'attendee_emails', label: 'Attendee emails', kind: 'text' },
+      // raw enum + FK ids for conditions / recipient `field` targets.
+      { key: 'status', label: 'Status (raw)', kind: 'enum' },
+      { key: 'course_id', label: 'Course (id)', kind: 'text' },
+      { key: 'site_org_unit_id', label: 'Location (id)', kind: 'org_unit' },
+      { key: 'instructor_tenant_user_id', label: 'Instructor (user id)', kind: 'person' },
+    ],
+    collections: [
+      {
+        key: 'attendees',
+        label: 'Attendees',
+        fields: [
+          { key: 'name', label: 'Name', kind: 'text' },
+          { key: 'email', label: 'Email', kind: 'text' },
+          { key: 'status', label: 'Status', kind: 'text' },
+        ],
+      },
+    ],
+  },
   // The 'equipment' subject is WORK ORDERS specifically (its adapter loads an
   // equipment_work_orders row). Assets themselves are the 'equipment-assets'
   // subject below; the vehicle log is 'vehicle-log'.
@@ -455,6 +502,95 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       // FK ids for conditions / recipient `field` targets.
       { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
       { key: 'site_org_unit_id', label: 'Location (id)', kind: 'org_unit' },
+    ],
+  },
+  // Equipment INSPECTIONS — one equipment_inspection_records row. Fires when
+  // the inspection is submitted (result written, work orders spawned); the
+  // legacy "Equipment Inspection — [name] (date)" email is an on_submit flow.
+  'equipment-inspections': {
+    subjectType: 'module',
+    subjectKey: 'equipment-inspections',
+    label: 'Equipment inspections',
+    triggers: ['on_submit', 'manual'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'webhook', 'export_pdf'],
+    fields: [
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'status_label', label: 'Status', kind: 'text' },
+      { key: 'result_label', label: 'Result', kind: 'text' },
+      { key: 'type_name', label: 'Inspection type', kind: 'text' },
+      { key: 'equipment_name', label: 'Equipment', kind: 'text' },
+      { key: 'asset_tag', label: 'Asset tag', kind: 'text' },
+      { key: 'serial', label: 'Serial number', kind: 'text' },
+      { key: 'interval_label', label: 'Interval', kind: 'text' },
+      { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
+      { key: 'next_due_on', label: 'Next due on', kind: 'date' },
+      { key: 'hours', label: 'Hours reading', kind: 'text' },
+      { key: 'is_rental', label: 'Rental', kind: 'text' },
+      { key: 'site_name', label: 'Site name', kind: 'text' },
+      { key: 'inspector_name', label: 'Inspector', kind: 'text' },
+      { key: 'notes', label: 'Notes', kind: 'text' },
+      // raw enums + FK ids for conditions / recipient `field` targets.
+      { key: 'status', label: 'Status (raw)', kind: 'enum' },
+      { key: 'result', label: 'Result (raw)', kind: 'enum' },
+      { key: 'equipment_item_id', label: 'Equipment (id)', kind: 'text' },
+      { key: 'inspection_type_id', label: 'Inspection type (id)', kind: 'text' },
+      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
+      { key: 'inspector_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
+      { key: 'inspector_person_id', label: 'Inspector (person id)', kind: 'person' },
+    ],
+    collections: [
+      {
+        key: 'criteria',
+        label: 'Inspection items',
+        fields: [
+          { key: 'group', label: 'Group', kind: 'text' },
+          { key: 'question', label: 'Item', kind: 'text' },
+          { key: 'answer', label: 'Answer', kind: 'text' },
+          { key: 'severity', label: 'Severity', kind: 'text' },
+          { key: 'comment', label: 'Comment', kind: 'text' },
+          { key: 'action_taken', label: 'Action taken', kind: 'text' },
+        ],
+      },
+      {
+        key: 'photos',
+        label: 'Photos',
+        fields: [
+          { key: 'url', label: 'Image URL', kind: 'text' },
+          { key: 'caption', label: 'Caption', kind: 'text' },
+        ],
+      },
+    ],
+  },
+  // PPE INSPECTIONS — one ppe_inspections row (pre-use or annual check on a
+  // PPE item). The legacy "PPE Inspection (date)" email is an on_submit flow.
+  // Per-criterion answers are not persisted by the PPE model, so this subject
+  // carries the derived result + notes, not a criteria collection.
+  ppe: {
+    subjectType: 'module',
+    subjectKey: 'ppe',
+    label: 'PPE inspections',
+    triggers: ['on_submit', 'manual'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'webhook', 'export_pdf'],
+    fields: [
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'kind_label', label: 'Inspection kind', kind: 'text' },
+      { key: 'result_label', label: 'Result', kind: 'text' },
+      { key: 'inspected_on', label: 'Inspected on', kind: 'date' },
+      { key: 'next_due_on', label: 'Next due on', kind: 'date' },
+      { key: 'notes', label: 'Notes', kind: 'text' },
+      { key: 'type_name', label: 'PPE type', kind: 'text' },
+      { key: 'type_category', label: 'PPE category', kind: 'text' },
+      { key: 'item_serial', label: 'Serial number', kind: 'text' },
+      { key: 'item_size', label: 'Size', kind: 'text' },
+      { key: 'holder_name', label: 'Issued to', kind: 'text' },
+      { key: 'inspector_name', label: 'Inspected by', kind: 'text' },
+      // raw enums + FK ids for conditions / recipient `field` targets.
+      { key: 'kind', label: 'Kind (raw)', kind: 'enum' },
+      { key: 'result', label: 'Result (raw)', kind: 'enum' },
+      { key: 'item_id', label: 'PPE item (id)', kind: 'text' },
+      { key: 'type_id', label: 'PPE type (id)', kind: 'text' },
+      { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
+      { key: 'inspected_by_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
     ],
   },
   // The subject row is one truck_log_entries record, but its value map carries

@@ -298,6 +298,13 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         desc: 'On work-order create or status change, send emails, notify roles or require approval.',
       },
       {
+        key: 'inspection-flows',
+        label: 'Inspection automations',
+        href: '/equipment/inspections/flows',
+        iconKey: 'workflow',
+        desc: 'When an inspection is submitted, email the result (with PDF), notify roles, raise CAPAs or call a webhook.',
+      },
+      {
         key: 'vehicle-log-settings',
         label: 'Vehicle log modes',
         href: '/equipment/vehicle-log/settings',
@@ -314,11 +321,11 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     ],
   },
   // GUARD-ONLY entries (no admin tiles of their own — sections: []). Vehicle
-  // log and the equipment register are their own FLOW/PDF subjects, and the
-  // guards (canManageModule, gate approvals, ModuleFlowsPage) resolve modules
-  // by subject key — but all their admin surfaces live under /equipment/manage
-  // above, so these contribute no tiles (the /admin rollup skips section-less
-  // modules).
+  // log, the equipment register, and equipment inspections are their own
+  // FLOW/PDF subjects, and the guards (canManageModule, gate approvals,
+  // ModuleFlowsPage) resolve modules by subject key — but all their admin
+  // surfaces live under /equipment/manage above, so these contribute no tiles
+  // (the /admin rollup skips section-less modules).
   {
     moduleKey: 'vehicle-log',
     label: 'Vehicle log',
@@ -337,6 +344,16 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     iconKey: 'wrench',
     permission: 'equipment.manage',
     tabs: [{ key: 'equipment', label: 'Equipment', href: '/equipment' }],
+    sections: [],
+  },
+  {
+    moduleKey: 'equipment-inspections',
+    label: 'Equipment inspections',
+    href: '/equipment/inspections',
+    managePath: '/equipment/manage',
+    iconKey: 'clipboard',
+    permission: 'equipment.manage',
+    tabs: [{ key: 'inspections', label: 'Inspections', href: '/equipment/inspections' }],
     sections: [],
   },
   {
@@ -369,6 +386,13 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         iconKey: 'settings',
         desc: 'Tenant-defined extra attributes captured on each PPE item, optionally scoped to a type.',
         permission: 'ppe.manage',
+      },
+      {
+        key: 'flows',
+        label: 'Automations',
+        href: '/ppe/flows',
+        iconKey: 'workflow',
+        desc: 'When a PPE inspection is recorded, email the result (with PDF), notify roles, raise CAPAs or call a webhook.',
       },
     ],
   },
@@ -476,7 +500,27 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         iconKey: 'workflow',
         desc: 'On assessment submit, send emails, notify roles or require approval.',
       },
+      {
+        key: 'class-flows',
+        label: 'Class automations',
+        href: '/training/classes/flows',
+        iconKey: 'workflow',
+        desc: 'When a class is scheduled, cancelled or completed, email the roster, notify roles or call a webhook.',
+      },
     ],
+  },
+  // GUARD-ONLY entry (sections: []) — training classes are their own FLOW
+  // subject ('training-classes'), but all their admin surfaces live under
+  // /training/manage above, so this contributes no tiles.
+  {
+    moduleKey: 'training-classes',
+    label: 'Training classes',
+    href: '/training/classes',
+    managePath: '/training/manage',
+    iconKey: 'grad',
+    permission: 'training.class.manage',
+    tabs: [{ key: 'classes', label: 'Classes', href: '/training/classes' }],
+    sections: [],
   },
   {
     moduleKey: 'people',
