@@ -51,9 +51,7 @@
 ;(function () {
   var TEAL_RGB = '13, 148, 136' /* app accent #0d9488 */
 
-  var style = document.createElement('style')
-  style.id = 'beaconhs-brand'
-  style.textContent = [
+  var css = [
     /* Accents (selected tab underline, selection handles, focus rings). */
     ':root, [data-doctype] {',
     '  --doc-type: ' + TEAL_RGB + ' !important;',
@@ -97,7 +95,22 @@
     '  box-shadow: inset 0 -1px 0 #1e293b;',
     '}',
   ].join('\n')
-  document.head.appendChild(style)
+
+  /* coolwsd serves cool.html with a CSP that blocks inline <style> elements
+   * (they attach with sheet === null and never apply). Constructable
+   * stylesheets are CSSOM, which CSP does not restrict — and adopted sheets
+   * cascade after every document stylesheet, so ties always go to us. Keep
+   * the <style> element as a fallback for engines without the API. */
+  try {
+    var sheet = new CSSStyleSheet()
+    sheet.replaceSync(css)
+    document.adoptedStyleSheets = document.adoptedStyleSheets.concat(sheet)
+  } catch (e) {
+    var style = document.createElement('style')
+    style.id = 'beaconhs-brand'
+    style.textContent = css
+    document.head.appendChild(style)
+  }
 
   // The tint variable is (re)declared on elements deeper than :root while the
   // UI boots, so stylesheet overrides alone lose the cascade. Inline

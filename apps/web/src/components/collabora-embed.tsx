@@ -71,14 +71,30 @@ export const CollaboraEmbed = forwardRef<
     setSession(null)
     setLoaded(false)
     fetchSession()
-      .then((s) => {
+      .then(async (s) => {
         if (cancelled) return
         if (s.ok) {
           // Follow the app theme exactly — branding.js inside the frame reads
           // this param and pins Collabora's theme to it.
           const dark = document.documentElement.classList.contains('dark')
           s = { ...s, actionUrl: `${s.actionUrl}&bhsTheme=${dark ? 'dark' : 'light'}` }
-          originRef.current = new URL(s.actionUrl).origin
+          const url = new URL(s.actionUrl)
+          originRef.current = url.origin
+          // Collabora serves branding.js with a months-long max-age keyed to
+          // its build hash, so our branding updates never reach an already
+          // visited browser on their own. When Collabora is routed
+          // same-origin, refresh that exact cache entry once per tab session
+          // before the frame requests it.
+          if (url.origin === window.location.origin && !sessionStorage.getItem('bhs-brand-fresh')) {
+            const brandingUrl = url.pathname.replace(/\/[^/]*$/, '/branding.js')
+            await fetch(brandingUrl, { cache: 'reload' }).catch(() => {})
+            try {
+              sessionStorage.setItem('bhs-brand-fresh', '1')
+            } catch {
+              /* storage unavailable — refetch next mount instead */
+            }
+          }
+          if (cancelled) return
         }
         setSession(s)
       })
