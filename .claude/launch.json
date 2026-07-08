@@ -9,6 +9,12 @@
       "autoPort": true
     },
     {
+      "name": "web-preview",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@beaconhs/web", "exec", "next", "dev", "-p", "3106"],
+      "port": 3106
+    },
+    {
       "name": "web-alt",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
