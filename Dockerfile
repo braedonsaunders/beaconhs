@@ -35,13 +35,14 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 FROM base AS runner
 ENV NODE_ENV=production
 
-# Puppeteer / Chromium deps for PDF rendering (worker), plus LibreOffice +
-# poppler for the LMS PowerPoint→slides import (soffice → pdf → pdftoppm).
+# Puppeteer / Chromium deps for PDF rendering (worker), plus LibreOffice
+# (Impress for the slides import, Writer for document version renders) +
+# poppler (pdftoppm page images, pdfunite book concatenation).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium fonts-liberation libnss3 libatk-bridge2.0-0 libcups2 \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
     libxrandr2 libgbm1 libasound2 ca-certificates curl \
-    libreoffice-impress poppler-utils \
+    libreoffice-impress libreoffice-writer poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
