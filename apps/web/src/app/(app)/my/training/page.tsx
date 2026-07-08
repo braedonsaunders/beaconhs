@@ -35,6 +35,7 @@ import {
 } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { parseListParams } from '@/lib/list-params'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
@@ -146,6 +147,9 @@ export default async function MyTrainingPage({
           isNull(trainingRecords.deletedAt),
           gte(trainingRecords.expiresOn, todayStr),
           lte(trainingRecords.expiresOn, ninetyDaysStr),
+          // Retraining supersedes older records for the same course — only
+          // the latest one can be "expiring".
+          latestTrainingRecordOnly(),
         ),
       )
     const expiringCount = Number(expCntRow?.c ?? 0)
@@ -208,7 +212,13 @@ export default async function MyTrainingPage({
               ]
 
       const records = await tx
-        .select({ rec: trainingRecords, course: trainingCourses })
+        .select({
+          rec: trainingRecords,
+          course: trainingCourses,
+          // Full history stays visible, but rows replaced by a newer record for
+          // the same course are labelled "superseded" instead of "expired".
+          isLatest: latestTrainingRecordOnly().mapWith(Boolean),
+        })
         .from(trainingRecords)
         .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
         .where(and(eq(trainingRecords.personId, personId), isNull(trainingRecords.deletedAt)))
@@ -228,6 +238,7 @@ export default async function MyTrainingPage({
             isNull(trainingRecords.deletedAt),
             gte(trainingRecords.expiresOn, todayStr),
             lte(trainingRecords.expiresOn, ninetyDaysStr),
+            latestTrainingRecordOnly(),
           ),
         )
         .orderBy(asc(trainingRecords.expiresOn))
@@ -402,8 +413,10 @@ export default async function MyTrainingPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.records.map(({ rec, course }: any) => {
+                {data.records.map(({ rec, course, isLatest }: any) => {
+                  const superseded = !isLatest
                   const expiringSoon =
+                    !superseded &&
                     rec.expiresOn &&
                     rec.expiresOn >= todayStr &&
                     rec.expiresOn <=
@@ -412,7 +425,7 @@ export default async function MyTrainingPage({
                         d.setDate(d.getDate() + 90)
                         return d.toISOString().slice(0, 10)
                       })()
-                  const expired = rec.expiresOn && rec.expiresOn < todayStr
+                  const expired = !superseded && rec.expiresOn && rec.expiresOn < todayStr
                   return (
                     <TableRow key={rec.id}>
                       <TableCell>
@@ -434,8 +447,16 @@ export default async function MyTrainingPage({
                             }
                           >
                             {rec.expiresOn}
-                            {expired ? ' (expired)' : expiringSoon ? ' (soon)' : ''}
+                            {expired
+                              ? ' (expired)'
+                              : expiringSoon
+                                ? ' (soon)'
+                                : superseded
+                                  ? ' (superseded)'
+                                  : ''}
                           </span>
+                        ) : superseded ? (
+                          <span className="text-slate-500">Superseded</span>
                         ) : (
                           <span className="text-slate-500">No expiry</span>
                         )}

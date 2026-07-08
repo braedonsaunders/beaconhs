@@ -56,7 +56,8 @@ export const REPORT_VIEWS_SQL: string[] = [
             r.tenant_id, r.person_id, r.course_id, r.completed_on, r.expires_on
      FROM training_records r
      WHERE r.deleted_at IS NULL
-     ORDER BY r.tenant_id, r.person_id, r.course_id, r.completed_on DESC
+     ORDER BY r.tenant_id, r.person_id, r.course_id,
+              r.completed_on DESC, r.created_at DESC, r.id DESC
    )
    SELECT
      (p.id::text || ':' || c.id::text) AS id,

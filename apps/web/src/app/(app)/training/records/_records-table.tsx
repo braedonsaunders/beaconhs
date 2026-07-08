@@ -23,6 +23,9 @@ export type TrainingRecordsTableRow = {
   expiresOn: string | null
   source: string
   daysToExpiry: number | null // negative = overdue, null = no expiry
+  // A newer record exists for the same person + course (retrained since), so
+  // this row is history — never flagged as expired/expiring.
+  superseded: boolean
 }
 
 export function TrainingRecordsTable({
@@ -82,7 +85,7 @@ export function TrainingRecordsTable({
       <MobileCardList>
         {rows.map((r) => {
           const expiryClass =
-            r.daysToExpiry === null
+            r.superseded || r.daysToExpiry === null
               ? 'text-slate-400'
               : r.daysToExpiry < 0
                 ? 'font-medium text-red-700 dark:text-red-400'
@@ -101,7 +104,9 @@ export function TrainingRecordsTable({
               person={`${r.personLastName}, ${r.personFirstName}`}
               reference={r.courseCode}
               status={
-                r.daysToExpiry !== null && r.daysToExpiry < 0 ? (
+                r.superseded ? (
+                  <Badge variant="secondary">Superseded</Badge>
+                ) : r.daysToExpiry !== null && r.daysToExpiry < 0 ? (
                   <Badge variant="destructive">Expired</Badge>
                 ) : undefined
               }
@@ -152,7 +157,7 @@ export function TrainingRecordsTable({
             {rows.map((r) => {
               const isSelected = selected.has(r.id)
               const expiryClass =
-                r.daysToExpiry === null
+                r.superseded || r.daysToExpiry === null
                   ? 'text-slate-400'
                   : r.daysToExpiry < 0
                     ? 'text-red-700 dark:text-red-400 font-medium'
@@ -199,7 +204,11 @@ export function TrainingRecordsTable({
                   </td>
                   <td className={`px-3 py-2 tabular-nums ${expiryClass}`}>
                     {r.expiresOn ?? 'Never'}
-                    {r.daysToExpiry !== null && r.daysToExpiry < 0 ? (
+                    {r.superseded ? (
+                      <Badge variant="secondary" className="ml-2">
+                        Superseded
+                      </Badge>
+                    ) : r.daysToExpiry !== null && r.daysToExpiry < 0 ? (
                       <Badge variant="destructive" className="ml-2">
                         Expired
                       </Badge>

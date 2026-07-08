@@ -20,6 +20,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { manualArticleForUser, searchManualArticles } from '@/lib/manual/registry'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { moduleScopeWhere, recordVisibilityWhere } from '@/lib/visibility'
 import { documentReadFilter } from './doc-access'
 import { getDocumentPdfBytes, getDocumentText } from './document-content'
@@ -676,7 +677,7 @@ const findPeople: AssistantToolDef = {
 const findTrainingRecords: AssistantToolDef = {
   name: 'find_training_records',
   description:
-    'List training records the user may see, optionally for one person or expiring within N days. Includes course name and expiry. Read-only.',
+    'List training records the user may see, optionally for one person or expiring within N days. Expiry queries only count the latest record per person and course (retraining supersedes older records). Includes course name and expiry. Read-only.',
   category: 'read',
   gate: { mode: 'anyOf', perms: ['training.read.all', 'training.read.self'] },
   inputSchema: z.object({
@@ -695,6 +696,9 @@ const findTrainingRecords: AssistantToolDef = {
           .toISOString()
           .slice(0, 10)
         conds.push(lt(trainingRecords.expiresOn, horizon))
+        // An expiry query is about CURRENT standing — superseded records
+        // (retrained since) must not be reported as expiring/expired.
+        conds.push(latestTrainingRecordOnly())
       }
       // Same tiered predicate as the /training/records list (moduleScopeWhere).
       const vis = await moduleScopeWhere(ctx, tx, {
@@ -797,6 +801,7 @@ const listMyOpenItems: AssistantToolDef = {
                 isNull(trainingRecords.deletedAt),
                 eq(trainingRecords.personId, myPersonId),
                 lt(trainingRecords.expiresOn, horizon),
+                latestTrainingRecordOnly(),
               ),
             )
             .orderBy(trainingRecords.expiresOn)

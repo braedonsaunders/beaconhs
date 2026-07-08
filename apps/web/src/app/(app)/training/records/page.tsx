@@ -29,6 +29,7 @@ import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people, tenants, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
@@ -119,8 +120,12 @@ export default async function TrainingRecordsPage({
       // navigates to an explicit `all` sentinel to show every record.
       const effectiveExpiry = expiryFilter ?? 'current'
       if (effectiveExpiry === 'expired') {
+        // "Expired" = the person's current standing for the course has lapsed.
+        // A record superseded by retraining isn't an outstanding expiry — it
+        // stays visible under "All" only.
         filters.push(isNotNull(trainingRecords.expiresOn))
         filters.push(lte(trainingRecords.expiresOn, today))
+        filters.push(latestTrainingRecordOnly())
       } else if (effectiveExpiry === 'current') {
         // "Current" = either no expiry at all, or expiry > today.
         const c = or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today))
@@ -161,6 +166,9 @@ export default async function TrainingRecordsPage({
           record: trainingRecords,
           person: people,
           course: trainingCourses,
+          // Rows replaced by a newer record for the same person + course render
+          // a "Superseded" badge instead of "Expired" (visible under "All").
+          isLatest: latestTrainingRecordOnly().mapWith(Boolean),
         })
         .from(trainingRecords)
         .innerJoin(people, eq(people.id, trainingRecords.personId))
@@ -184,6 +192,7 @@ export default async function TrainingRecordsPage({
             isNull(trainingRecords.deletedAt),
             isNotNull(trainingRecords.expiresOn),
             lte(trainingRecords.expiresOn, today),
+            latestTrainingRecordOnly(),
             vis,
           ),
         )
@@ -239,7 +248,7 @@ export default async function TrainingRecordsPage({
     })
   const credentialOutputs = enabledCredentialOutputs(tenantSettings)
 
-  const tableRows: TrainingRecordsTableRow[] = rows.map(({ record, person, course }) => {
+  const tableRows: TrainingRecordsTableRow[] = rows.map(({ record, person, course, isLatest }) => {
     let daysToExpiry: number | null = null
     if (record.expiresOn) {
       const exp = new Date(record.expiresOn).getTime()
@@ -258,6 +267,7 @@ export default async function TrainingRecordsPage({
       expiresOn: record.expiresOn,
       source: record.source,
       daysToExpiry,
+      superseded: !isLatest,
     }
   })
 

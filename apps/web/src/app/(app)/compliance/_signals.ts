@@ -39,6 +39,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 
 export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 
@@ -112,6 +113,8 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
       // Certs belong to a person, so only ACTIVE people count — a terminated
       // employee's expired tickets aren't outstanding compliance work (same
       // rule as the audience resolver, dashboards, and report_training_matrix).
+      // Only the person's LATEST record per course counts: retraining creates
+      // a new record, and the superseded ones must not surface as expired.
       const rows = await tx
         .select({
           id: trainingRecords.id,
@@ -132,6 +135,7 @@ export async function listDueSignals(ctx: RequestContext): Promise<ComplianceSig
             lte(trainingRecords.expiresOn, horizonIso),
             eq(people.status, 'active'),
             isNull(people.deletedAt),
+            latestTrainingRecordOnly(),
           ),
         )
         // Soonest expiry first so the cap keeps the most overdue rows when a

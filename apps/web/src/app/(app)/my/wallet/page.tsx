@@ -32,6 +32,7 @@ import {
   type CredentialDesignData,
 } from '@beaconhs/design-studio'
 import { requireRequestContext } from '@/lib/auth'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { ListPageLayout } from '@/components/page-layout'
 import { resolveCourseCredentialOutput, resolveCredentialOutput } from '@/lib/credential-designs'
 import { WorkspaceNoIdentity } from '../_no-identity'
@@ -91,7 +92,16 @@ export default async function MyWalletPage() {
       })
       .from(trainingRecords)
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .where(and(eq(trainingRecords.personId, person.id), isNull(trainingRecords.deletedAt)))
+      // The wallet is the person's CURRENT credentials: one card per course,
+      // from the latest record. Superseded records (retrained since) stay in
+      // /my/training history but never render an "expired" card here.
+      .where(
+        and(
+          eq(trainingRecords.personId, person.id),
+          isNull(trainingRecords.deletedAt),
+          latestTrainingRecordOnly(),
+        ),
+      )
       .orderBy(desc(trainingRecords.completedOn))
 
     const skills = await tx

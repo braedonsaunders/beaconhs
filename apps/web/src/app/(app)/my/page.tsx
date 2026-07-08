@@ -30,6 +30,7 @@ import {
   trainingSkillAssignments,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { PageContainer } from '@/components/page-layout'
 import { personCompliance } from '../compliance/_hub'
 import { loadInProgressEntries } from '../dashboard/_metrics'
@@ -183,6 +184,9 @@ export default async function MyLandingPage() {
               isNull(trainingRecords.deletedAt),
               gte(trainingRecords.expiresOn, today.toISOString().slice(0, 10)),
               lte(trainingRecords.expiresOn, ninetyDays.toISOString().slice(0, 10)),
+              // Retraining supersedes older records for the same course — only
+              // the latest one can be "expiring".
+              latestTrainingRecordOnly(),
             ),
           )
           .then((r) => Number(r[0]?.c ?? 0))

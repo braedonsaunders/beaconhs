@@ -30,6 +30,7 @@ import {
   trainingRecords,
   truckLogEntries,
 } from '@beaconhs/db/schema'
+import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
 import { moduleScope } from '../feed/_data'
 
@@ -405,6 +406,7 @@ export async function loadDashboardMetrics(
             lte(trainingRecords.expiresOn, ninetyIso),
             eq(people.status, 'active'),
             isNull(people.deletedAt),
+            latestTrainingRecordOnly(),
           ),
         )
         .then((r) => r[0]),
@@ -854,6 +856,7 @@ export async function loadDashboardMetrics(
           lte(trainingRecords.expiresOn, thirtyIso),
           eq(people.status, 'active'),
           isNull(people.deletedAt),
+          latestTrainingRecordOnly(),
         ),
       )
       .orderBy(asc(trainingRecords.expiresOn))

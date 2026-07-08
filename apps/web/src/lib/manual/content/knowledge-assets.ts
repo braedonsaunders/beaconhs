@@ -48,7 +48,7 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 
 1. Open **Training** in the left menu. It lands on the **Certificates** tab.
 2. Each row shows the **Course**, when it was **Completed**, and when it **Expires**.
-3. Expired tickets show a red **Expired** badge.
+3. Expired tickets show a red **Expired** badge. If you were retrained, the old certificate shows **Superseded** instead — only your newest certificate per course counts.
 4. In [My training](/my/training), the **Expiring (90d)** tab lists everything coming due, with a **Days left** count for each one.
 
 ## See your classes
