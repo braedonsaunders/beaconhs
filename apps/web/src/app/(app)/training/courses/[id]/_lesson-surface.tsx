@@ -23,6 +23,7 @@ import { Button, FileUploader, Input, Label, Select, cn } from '@beaconhs/ui'
 import type { PracticalCriterion } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import { RichEditor } from '../../_editor/rich-editor'
 import { LessonRibbon } from '../../_editor/ribbon'
 import { lessonProseCss } from '../../_editor/prose'
@@ -212,8 +213,8 @@ export function LessonSurface({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => {
-              if (!window.confirm('Delete this lesson?')) return
+            onClick={async () => {
+              if (!(await confirmDialog({ message: 'Delete this lesson?', tone: 'danger' }))) return
               void deleteLesson(lesson.id, courseId).then(() => {
                 router.refresh()
                 onClose()

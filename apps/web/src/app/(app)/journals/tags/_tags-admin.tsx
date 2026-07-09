@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, EmptyState, Input, SearchSelect, Textarea, cn } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { TAG_COLOR_KEYS, tagSwatch } from '../_tag-colors'
 import { mergeTag, removeTag, saveTag, type TagActionResult } from './_actions'
 import type { ManagedTag } from './_data'
@@ -66,11 +67,11 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
       apply(await mergeTag({ source, target }), `Merged into “${target}”`),
     )
   }
-  function onDelete(name: string, usage: number) {
+  async function onDelete(name: string, usage: number) {
     const msg = usage
       ? `Delete “${name}” and remove it from ${usage} ${usage === 1 ? 'entry' : 'entries'}? This can’t be undone.`
       : `Delete “${name}”?`
-    if (!window.confirm(msg)) return
+    if (!(await confirmDialog({ message: msg, tone: 'danger' }))) return
     startTransition(async () => apply(await removeTag(name), `Deleted “${name}”`))
   }
 

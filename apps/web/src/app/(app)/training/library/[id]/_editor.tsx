@@ -17,6 +17,7 @@ import {
 import type { LessonBlock, Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 // Shared bespoke editors (also used by the course Studio).
 import { BlockEditor } from '../../courses/[id]/studio/_block-editor'
 import { SlideDeckEditor } from '../../_editor/slide-deck-editor'
@@ -79,8 +80,13 @@ export function ContentItemEditor({
       toast.success('Saved')
     })
   }
-  function remove() {
-    if (!window.confirm('Delete this library item? It will be detached from any courses using it.'))
+  async function remove() {
+    if (
+      !(await confirmDialog({
+        message: 'Delete this library item? It will be detached from any courses using it.',
+        tone: 'danger',
+      }))
+    )
       return
     startTransition(async () => {
       await deleteContentItem(item.id)

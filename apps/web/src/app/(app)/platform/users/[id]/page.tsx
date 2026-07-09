@@ -16,7 +16,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { getCurrentUserId } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
-import { ConfirmButton } from '../_components/confirm-button'
+import { ConfirmButton } from '@/components/confirm-button'
 import { AddMembershipForm } from '../_components/add-membership-form'
 import {
   openMembershipInTenant,
@@ -216,7 +216,7 @@ export default async function PlatformUserDetailPage({
                     <ConfirmButton
                       type="submit"
                       variant={account.isSuperAdmin ? 'outline' : 'default'}
-                      confirmMessage={
+                      message={
                         account.isSuperAdmin
                           ? `Revoke super-admin from ${account.name}?`
                           : `Grant ${account.name} super-admin across the whole platform?`
@@ -349,7 +349,7 @@ export default async function PlatformUserDetailPage({
                                   size="sm"
                                   variant="ghost"
                                   className="text-red-600 hover:text-red-700 dark:text-red-400"
-                                  confirmMessage={`Remove ${account.name} from ${tenant.name}? Their roles and permission overrides there will be deleted.`}
+                                  message={`Remove ${account.name} from ${tenant.name}? Their roles and permission overrides there will be deleted.`}
                                 >
                                   Remove
                                 </ConfirmButton>

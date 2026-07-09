@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { Boxes, ListChecks, Package, Plus, Save, Settings2 } from 'lucide-react'
 import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -798,8 +799,14 @@ function SettingsPanel({
       }
     })
   }
-  function del() {
-    if (!window.confirm('Delete this assessment type? This cannot be undone.')) return
+  async function del() {
+    if (
+      !(await confirmDialog({
+        message: 'Delete this assessment type? This cannot be undone.',
+        tone: 'danger',
+      }))
+    )
+      return
     start(async () => {
       try {
         await deleteAssessmentType({ id: type.id })

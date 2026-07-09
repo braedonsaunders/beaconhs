@@ -23,6 +23,7 @@ import {
   type TriggerData,
 } from '@beaconhs/forms-core'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import { createFlow, deleteFlow, saveFlow, setFlowEnabled } from '@/lib/flows/flow-crud'
 import { slugify } from '@/app/(app)/apps/_lib/slug'
 import type { FlowSummary } from '../flows/_flows-canvas'
@@ -200,8 +201,9 @@ function ButtonList({
     })
   }
 
-  const remove = (id: string, label: string) => {
-    if (!window.confirm(`Delete the “${label}” button? Its flow is removed too.`)) return
+  const remove = async (id: string, label: string) => {
+    if (!(await confirmDialog({ message: `Delete the “${label}” button? Its flow is removed too.`, tone: 'danger' })))
+      return
     setBusyId(id)
     start(async () => {
       const res = await deleteFlow(id)

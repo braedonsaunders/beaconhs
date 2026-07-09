@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -851,12 +852,13 @@ function SettingsPanel({
       }
     })
   }
-  function del() {
+  async function del() {
     if (itemCount > 0) {
       toast.error(`Cannot delete — ${itemCount} item(s) reference this type`)
       return
     }
-    if (!window.confirm('Delete this PPE type? This cannot be undone.')) return
+    if (!(await confirmDialog({ message: 'Delete this PPE type? This cannot be undone.', tone: 'danger' })))
+      return
     start(async () => {
       try {
         await deleteType({ id: type.id })

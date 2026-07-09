@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, HandHelping, Square, Trash2, X } from 'lucide-react'
 import { Button, SearchSelect, Select } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { bulkDiscardPpe, bulkExportPpeCsv, bulkIssuePpeToPerson } from './_actions'
 
 export type PpeHolderOption = {
@@ -40,7 +41,7 @@ export function BulkPpeBar({
 
   if (selectedIds.length === 0 || !mounted) return null
 
-  function go() {
+  async function go() {
     setError(null)
     setInfo(null)
     if (action === 'issue') {
@@ -64,7 +65,13 @@ export function BulkPpeBar({
       return
     }
     if (action === 'discard') {
-      if (!confirm(`Discard ${selectedIds.length} PPE item(s)?`)) return
+      if (
+        !(await confirmDialog({
+          message: `Discard ${selectedIds.length} PPE item(s)?`,
+          tone: 'danger',
+        }))
+      )
+        return
       start(async () => {
         const res = await bulkDiscardPpe({
           ppeItemIds: selectedIds,

@@ -14,6 +14,7 @@ import { Button, FileUploader, cn } from '@beaconhs/ui'
 import type { Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import { SlidePlayer } from '../_components/slide-player'
 import { CollaboraEmbed } from '@/components/collabora-embed'
 import { createBlankDeckMaster, getPptxEditorSession } from '../pptx/_actions'
@@ -69,10 +70,10 @@ export function SlideDeckEditor({
     </span>
   ) : null
 
-  function startBlank() {
+  async function startBlank() {
     if (
       deck.length > 0 &&
-      !window.confirm('Start a blank PowerPoint deck? The current slides are replaced.')
+      !(await confirmDialog('Start a blank PowerPoint deck? The current slides are replaced.'))
     ) {
       return
     }

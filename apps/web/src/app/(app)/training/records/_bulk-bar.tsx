@@ -9,6 +9,7 @@ import {
   bulkRenewTrainingRecords,
   bulkRevokeTrainingRecords,
 } from './_actions'
+import { confirmDialog } from '@/lib/confirm'
 
 type BulkAction = 'renew' | 'revoke' | 'export'
 
@@ -54,12 +55,15 @@ export function BulkTrainingRecordsBar({
   // No actionable permission → no bar (the list also hides the row checkboxes).
   if (actionOptions.length === 0) return null
 
-  function go() {
+  async function go() {
     setError(null)
     setInfo(null)
     if (action === 'renew') {
       if (
-        !confirm(`Renew ${selectedIds.length} record(s)? Each creates a new record dated today.`)
+        !(await confirmDialog({
+          message: `Renew ${selectedIds.length} record(s)? Each creates a new record dated today.`,
+          tone: 'danger',
+        }))
       ) {
         return
       }
@@ -77,9 +81,10 @@ export function BulkTrainingRecordsBar({
     }
     if (action === 'revoke') {
       if (
-        !confirm(
-          `Revoke ${selectedIds.length} record(s)? They will no longer count toward the training matrix.`,
-        )
+        !(await confirmDialog({
+          message: `Revoke ${selectedIds.length} record(s)? They will no longer count toward the training matrix.`,
+          tone: 'danger',
+        }))
       ) {
         return
       }

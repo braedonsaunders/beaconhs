@@ -40,6 +40,7 @@ import { Badge, Button, FileUploader, Input, Label, RichTextEditor, Select } fro
 import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import { LessonSurface } from './_lesson-surface'
 import {
   CoursePresenter,
@@ -1123,13 +1124,19 @@ function ModuleCard({
               <button
                 type="button"
                 aria-label="Delete module"
-                onClick={() =>
+                onClick={async () => {
+                  if (
+                    !(await confirmDialog({
+                      message: 'Delete this module and all its lessons?',
+                      tone: 'danger',
+                    }))
+                  )
+                    return
                   startTransition(async () => {
-                    if (!window.confirm('Delete this module and all its lessons?')) return
                     await deleteModule(mod.id, courseId)
                     router.refresh()
                   })
-                }
+                }}
                 className="rounded p-1 text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400"
               >
                 <Trash2 size={13} />

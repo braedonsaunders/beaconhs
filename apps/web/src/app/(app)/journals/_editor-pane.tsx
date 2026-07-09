@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { deleteEntry, emailEntry, setEntryTags, submitEntry, updateEntry } from './_actions'
 import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
@@ -140,9 +141,9 @@ export function EditorPane({
     })
   }
 
-  function del() {
+  async function del() {
     setMenuOpen(false)
-    if (!window.confirm('Delete this journal entry? This cannot be undone.')) return
+    if (!(await confirmDialog({ message: 'Delete this journal entry? This cannot be undone.', tone: 'danger' }))) return
     startSubmit(async () => {
       const r = await deleteEntry(entry.id)
       if (!r.ok) {

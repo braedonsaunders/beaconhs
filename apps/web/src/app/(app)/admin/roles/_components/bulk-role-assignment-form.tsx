@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Search, UsersRound } from 'lucide-react'
 import { Badge, Button, Drawer, Input, Label, Select, cn } from '@beaconhs/ui'
 import { ScopePicker } from '../../users/_components/scope-picker'
 import type { ScopeOptions } from '../../users/_scope-data'
 import { bulkUpdateRoleAssignments } from '../_actions'
+import { confirmDialog } from '@/lib/confirm'
 
 type RoleOption = {
   id: string
@@ -109,27 +110,37 @@ export function BulkRoleAssignmentForm({
   const selectedRoleName = roles.find((role) => role.id === roleId)?.name ?? 'the selected role'
   const overLimit = selected.size > MAX_BULK_ROLE_MEMBERS
 
+  const confirmedRef = useRef(false)
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (selected.size === 0 || overLimit) {
       event.preventDefault()
       return
     }
-    if (operation === 'replace') {
-      const ok = confirm(
-        `Replace all roles for ${selected.size} selected member${
-          selected.size === 1 ? '' : 's'
-        } with "${selectedRoleName}"?`,
-      )
-      if (!ok) event.preventDefault()
+    // A resubmit fired after the confirm dialog resolved — let it through.
+    if (confirmedRef.current) {
+      confirmedRef.current = false
+      return
     }
-    if (operation === 'remove') {
-      const ok = confirm(
-        `Remove "${selectedRoleName}" from ${selected.size} selected member${
-          selected.size === 1 ? '' : 's'
-        }?`,
-      )
-      if (!ok) event.preventDefault()
-    }
+    const message =
+      operation === 'replace'
+        ? `Replace all roles for ${selected.size} selected member${
+            selected.size === 1 ? '' : 's'
+          } with "${selectedRoleName}"?`
+        : operation === 'remove'
+          ? `Remove "${selectedRoleName}" from ${selected.size} selected member${
+              selected.size === 1 ? '' : 's'
+            }?`
+          : null
+    if (!message) return
+    event.preventDefault()
+    const form = event.currentTarget
+    void confirmDialog(message).then((ok) => {
+      if (ok) {
+        confirmedRef.current = true
+        form.requestSubmit()
+      }
+    })
   }
 
   const footer = (

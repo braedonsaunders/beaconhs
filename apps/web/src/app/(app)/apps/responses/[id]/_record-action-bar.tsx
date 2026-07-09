@@ -20,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { runRecordAction } from './_record-action-actions'
 
 type RecordActionButton = {
@@ -61,8 +62,8 @@ function RecordActionButtonItem({
 
   const Icon = button.icon ? ICONS[button.icon] : undefined
 
-  function run() {
-    if (button.confirm && !window.confirm(button.confirm)) return
+  async function run() {
+    if (button.confirm && !(await confirmDialog(button.confirm))) return
     setStatus('idle')
     setMessage(null)
     startTransition(async () => {

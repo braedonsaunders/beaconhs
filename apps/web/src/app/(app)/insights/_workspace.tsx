@@ -29,6 +29,7 @@ import {
 } from './_actions'
 import type { CardRender, InsightDashboardRow } from './_data'
 import type { CardRow } from './cards/_data'
+import { confirmDialog } from '@/lib/confirm'
 
 type Board = {
   id: string
@@ -157,10 +158,10 @@ export function InsightsWorkspace({
     setBoards((bs) => bs.map((b) => (b.id === activeId ? { ...b, widgets } : b)))
   }
 
-  function switchTab(id: string) {
+  async function switchTab(id: string) {
     if (id === activeId) return
     if (editing && dirty && active) {
-      if (!window.confirm('Discard unsaved changes to this dashboard?')) return
+      if (!(await confirmDialog('Discard unsaved changes to this dashboard?'))) return
       const base = baselines.current[active.id]
       setBoards((bs) =>
         bs.map((b) => (b.id === active.id ? { ...b, widgets: base ? JSON.parse(base) : [] } : b)),
@@ -235,9 +236,10 @@ export function InsightsWorkspace({
     void renameDashboard(active.id, active.name)
   }
 
-  function del() {
+  async function del() {
     if (!active) return
-    if (!window.confirm(`Delete dashboard “${active.name}”? This cannot be undone.`)) return
+    if (!(await confirmDialog({ message: `Delete dashboard “${active.name}”? This cannot be undone.`, tone: 'danger' })))
+      return
     const id = active.id
     startBusy(async () => {
       const r = await deleteDashboard(id)
@@ -393,8 +395,8 @@ export function InsightsWorkspace({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  if (dirty && active && !window.confirm('Discard unsaved changes?')) return
+                onClick={async () => {
+                  if (dirty && active && !(await confirmDialog('Discard unsaved changes?'))) return
                   if (dirty && active) {
                     const base = baselines.current[active.id]
                     setActiveWidgets(base ? JSON.parse(base) : [])

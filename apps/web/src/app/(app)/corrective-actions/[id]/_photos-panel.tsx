@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react'
 import { Button, Input } from '@beaconhs/ui'
 import { PhotoGallery, type GalleryPhoto } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
+import { confirmDialog } from '@/lib/confirm'
 import { attachCaPhotos, deleteCaPhoto, updateCaPhotoCaption } from '../_actions'
 
 export type CaPhotoRow = GalleryPhoto
@@ -80,8 +81,8 @@ function PhotoRow({
     })
   }
 
-  function remove() {
-    if (!confirm('Remove this photo from the corrective action?')) return
+  async function remove() {
+    if (!(await confirmDialog({ message: 'Remove this photo from the corrective action?', tone: 'danger' }))) return
     setBusy('delete')
     start(async () => {
       await deleteCaPhoto(caId, photo.id)

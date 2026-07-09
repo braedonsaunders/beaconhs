@@ -21,6 +21,7 @@ import {
   type SelectOption,
 } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import type { AudienceOptions } from './_options'
 import { createGroup, deleteGroup, previewGroup, updateGroup } from './_actions'
 
@@ -248,9 +249,14 @@ function GroupEditor({
     })
   }
 
-  function del() {
+  async function del() {
     if (!group) return
-    if (!window.confirm(`Delete "${group.name}"? Alerts targeting it will fall back to defaults.`))
+    if (
+      !(await confirmDialog({
+        message: `Delete "${group.name}"? Alerts targeting it will fall back to defaults.`,
+        tone: 'danger',
+      }))
+    )
       return
     start(async () => {
       const res = await deleteGroup({ id: group.id })

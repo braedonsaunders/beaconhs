@@ -1,34 +1,39 @@
 'use client'
 
-// Confirm-before-submit button for destructive lifecycle actions (revoke,
-// delete). Keeps the page server-rendered: it sits inside a server-action
-// <form> and just gates submission on window.confirm. Shared so every module's
-// header actions look and behave identically.
+// Submit button that gates a server-action <form> behind an animated
+// confirmation modal (confirmDialog). Shared across every module plus the admin
+// and platform user surfaces so destructive lifecycle actions (remove, revoke,
+// delete, grant) look and behave identically.
+//
+// confirmDialog is async, so we can't gate the native submit inline. Instead we
+// always preventDefault, then re-submit the form via requestSubmit(button) once
+// the user confirms — which preserves the button's own formAction/name/value.
 
 import type { ReactNode } from 'react'
-import { Button } from '@beaconhs/ui'
+import { Button, type ButtonProps } from '@beaconhs/ui'
+import { confirmDialog, type ConfirmTone } from '@/lib/confirm'
 
 export function ConfirmButton({
   children,
   message,
+  tone,
+  type = 'submit',
   variant = 'outline',
-  size = 'sm',
-  className,
-}: {
-  children: ReactNode
-  message: string
-  variant?: 'outline' | 'destructive' | 'ghost' | 'secondary'
-  size?: 'sm' | 'md' | 'lg' | 'icon'
-  className?: string
-}) {
+  ...props
+}: ButtonProps & { children: ReactNode; message: string; tone?: ConfirmTone }) {
+  // Destructive-styled buttons get the red warning modal automatically.
+  const resolvedTone: ConfirmTone = tone ?? (variant === 'destructive' ? 'danger' : 'default')
   return (
     <Button
-      type="submit"
+      {...props}
+      type={type}
       variant={variant}
-      size={size}
-      className={className}
       onClick={(e) => {
-        if (!window.confirm(message)) e.preventDefault()
+        e.preventDefault()
+        const btn = e.currentTarget
+        void confirmDialog({ message, tone: resolvedTone }).then((ok) => {
+          if (ok) btn.form?.requestSubmit(btn)
+        })
       }}
     >
       {children}

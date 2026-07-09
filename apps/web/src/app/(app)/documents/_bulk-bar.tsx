@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Archive, BookOpen, CheckSquare, Send, Square, Trash2, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import {
   bulkAddDocumentsToBook,
   bulkArchiveDocuments,
@@ -37,7 +38,7 @@ export function BulkDocumentsBar({
 
   if (selectedIds.length === 0 || typeof document === 'undefined') return null
 
-  function go() {
+  async function go() {
     setError(null)
     // Success is surfaced via toast — clearing the selection unmounts the bar,
     // so any inline message would never be seen.
@@ -55,7 +56,7 @@ export function BulkDocumentsBar({
       return
     }
     if (action === 'archive') {
-      if (!confirm(`Archive ${selectedIds.length} document(s)?`)) return
+      if (!(await confirmDialog({ message: `Archive ${selectedIds.length} document(s)?`, tone: 'danger' }))) return
       start(async () => {
         const res = await bulkArchiveDocuments({ documentIds: selectedIds })
         if (!res.ok) {
@@ -70,9 +71,10 @@ export function BulkDocumentsBar({
     }
     if (action === 'delete') {
       if (
-        !confirm(
-          `Delete ${selectedIds.length} document(s)? Readers lose access and they disappear from every list. Version history is kept for audit.`,
-        )
+        !(await confirmDialog({
+          message: `Delete ${selectedIds.length} document(s)? Readers lose access and they disappear from every list. Version history is kept for audit.`,
+          tone: 'danger',
+        }))
       )
         return
       start(async () => {

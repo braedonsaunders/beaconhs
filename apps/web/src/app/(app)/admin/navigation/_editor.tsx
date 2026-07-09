@@ -42,6 +42,7 @@ import type { NavItemConfig, TenantNavConfig } from '@beaconhs/db/schema'
 import { ICON_KEYS, NavIcon } from '@/components/sidebar-nav'
 import { NAV_MODULES, PINNED_FORM_DEFAULT_ICON, moduleByKey } from '@/lib/nav/registry'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import { resetNavConfig, saveNavConfig } from './_actions'
 
 export type TemplateLite = {
@@ -220,8 +221,14 @@ export function NavEditor({
       router.refresh()
     })
   }
-  function reset() {
-    if (!window.confirm('Reset the sidebar to defaults? This removes all customisations.')) return
+  async function reset() {
+    if (
+      !(await confirmDialog({
+        message: 'Reset the sidebar to defaults? This removes all customisations.',
+        tone: 'danger',
+      }))
+    )
+      return
     start(async () => {
       // Rebuild client state from the returned defaults — `initialConfig` is
       // the stale pre-reset prop and router.refresh() does not remount us.

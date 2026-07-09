@@ -31,6 +31,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { Badge, Button, Popover, Select, cn } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import type {
   ApplyVehicleLogImportInput,
   ApplyVehicleLogImportResult,
@@ -558,9 +559,9 @@ export function VehicleLogWorkspaceClient({
     })
   }
 
-  function runFlowButton(action: VehicleLogRecordAction) {
+  async function runFlowButton(action: VehicleLogRecordAction) {
     if (!actionEntryId) return
-    if (action.confirm && !window.confirm(action.confirm)) return
+    if (action.confirm && !(await confirmDialog(action.confirm))) return
     setActionResult(null)
     startTransition(async () => {
       const res = await runAction({
@@ -581,10 +582,16 @@ export function VehicleLogWorkspaceClient({
     })
   }
 
-  function deleteMonth() {
+  async function deleteMonth() {
     if (!canEdit) return
     const label = `${activeDriver?.label ?? 'driver'} / ${activeVehicle?.hint ?? activeVehicle?.label}`
-    if (!window.confirm(`Delete ${workspace.month.label} entries for ${label}?`)) return
+    if (
+      !(await confirmDialog({
+        message: `Delete ${workspace.month.label} entries for ${label}?`,
+        tone: 'danger',
+      }))
+    )
+      return
     setActionResult(null)
     startTransition(async () => {
       const res = await deleteMonthAction({

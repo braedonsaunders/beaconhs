@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, Check, ChevronDown } from 'lucide-react'
 import { Popover } from '@beaconhs/ui'
+import { toast } from '@/lib/toast'
 import { setActiveTenant } from '@/lib/actions'
 
 type Tenant = { id: string; name: string; slug: string }
@@ -32,7 +33,7 @@ export function TenantSwitcher({
         setOpen(false)
         router.refresh()
       } else {
-        alert(res.error ?? 'Could not switch tenant')
+        toast.error(res.error ?? 'Could not switch tenant')
       }
     })
   }

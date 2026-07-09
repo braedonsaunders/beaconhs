@@ -32,7 +32,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { PERMISSION_GROUPS, permissionLabel } from '@/lib/permissions-meta'
 import { PersonSelectField } from '@/components/person-select-field'
 import { ScopePicker } from '../_components/scope-picker'
-import { ConfirmButton } from '../_components/confirm-button'
+import { ConfirmButton } from '@/components/confirm-button'
 import { SetPasswordForm } from '../_components/set-password-form'
 import { loadScopeOptions, describeScope } from '../_scope-data'
 import {
@@ -276,7 +276,7 @@ export default async function AdminUserDetailPage({
                       <ConfirmButton
                         type="submit"
                         variant="destructive"
-                        confirmMessage={`Remove ${displayName} from this tenant? Their roles and permission overrides here will be deleted.`}
+                        message={`Remove ${displayName} from this tenant? Their roles and permission overrides here will be deleted.`}
                       >
                         Remove from tenant
                       </ConfirmButton>
@@ -305,7 +305,7 @@ export default async function AdminUserDetailPage({
                           <ConfirmButton
                             type="submit"
                             variant={member.account.isSuperAdmin ? 'outline' : 'default'}
-                            confirmMessage={
+                            message={
                               member.account.isSuperAdmin
                                 ? `Revoke super-admin from ${displayName}?`
                                 : `Grant ${displayName} super-admin across the whole platform?`
@@ -339,7 +339,7 @@ export default async function AdminUserDetailPage({
                           <ConfirmButton
                             type="submit"
                             variant="outline"
-                            confirmMessage={`View the app as ${displayName}? You'll act on their behalf until you exit, and everything you do is audited.`}
+                            message={`View the app as ${displayName}? You'll act on their behalf until you exit, and everything you do is audited.`}
                           >
                             View as user
                           </ConfirmButton>
@@ -478,7 +478,7 @@ export default async function AdminUserDetailPage({
                       <ConfirmButton
                         type="submit"
                         variant="outline"
-                        confirmMessage={`Sign ${displayName} out of all ${sessionCount} session${sessionCount === 1 ? '' : 's'}?`}
+                        message={`Sign ${displayName} out of all ${sessionCount} session${sessionCount === 1 ? '' : 's'}?`}
                       >
                         Sign out everywhere
                       </ConfirmButton>

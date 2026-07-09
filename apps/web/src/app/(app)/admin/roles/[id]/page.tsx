@@ -41,7 +41,7 @@ import {
   canPermissionSetSeeWidget,
   canPermissionSetViewInsights,
 } from '@/app/(app)/dashboard/_widget-access'
-import { ConfirmButton } from '../../users/_components/confirm-button'
+import { ConfirmButton } from '@/components/confirm-button'
 import { describeScope, loadScopeOptions } from '../../users/_scope-data'
 import { PermissionMatrix } from '../_components/permission-matrix'
 import { RoleMembersManager, type RoleMember } from '../_components/role-members-manager'
@@ -241,7 +241,7 @@ export default async function AdminRoleEditPage({
                   <ConfirmButton
                     type="submit"
                     variant="destructive"
-                    confirmMessage={`Delete the role "${role.name}"? This can't be undone.`}
+                    message={`Delete the role "${role.name}"? This can't be undone.`}
                   >
                     Delete
                   </ConfirmButton>

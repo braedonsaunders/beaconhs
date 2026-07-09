@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import { IntervalPicker, type IntervalValue } from '@/components/equipment/interval-picker'
 import type { EquipmentIntervalUnit } from '@/lib/equipment/intervals'
 import {
@@ -739,8 +740,14 @@ function SettingsPanel({
       }
     })
   }
-  function del() {
-    if (!window.confirm('Delete this inspection type? Existing records are kept.')) return
+  async function del() {
+    if (
+      !(await confirmDialog({
+        message: 'Delete this inspection type? Existing records are kept.',
+        tone: 'danger',
+      }))
+    )
+      return
     start(async () => {
       try {
         await deleteEquipmentInspectionType({ id: type.id })

@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Archive, CheckSquare, Download, Square, Tag, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import {
   bulkArchiveIncidents,
   bulkExportIncidentsCsv,
@@ -53,14 +54,15 @@ export function BulkIncidentsBar({
   if (selectedIds.length === 0) return null
   if (!canUpdate && !canExport) return null
 
-  function go() {
+  async function go() {
     setError(null)
     setInfo(null)
     if (action === 'archive') {
       if (
-        !confirm(
-          `Archive ${selectedIds.length} incident(s)? Archived incidents are removed from the list.`,
-        )
+        !(await confirmDialog({
+          message: `Archive ${selectedIds.length} incident(s)? Archived incidents are removed from the list.`,
+          tone: 'danger',
+        }))
       ) {
         return
       }

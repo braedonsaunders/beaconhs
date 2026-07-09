@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@beaconhs/ui'
 import { PublishControl, type PublishRoleOption } from '../../_publish-control.client'
 import { deleteCard, publishCard, unpublishCard } from '../_actions'
+import { confirmDialog } from '@/lib/confirm'
 
 export function CardToolbar({
   id,
@@ -51,8 +52,9 @@ export function CardToolbar({
     })
   }
 
-  function remove() {
-    if (!window.confirm('Delete this card? It will be removed from any dashboards.')) return
+  async function remove() {
+    if (!(await confirmDialog({ message: 'Delete this card? It will be removed from any dashboards.', tone: 'danger' })))
+      return
     start(async () => {
       const r = await deleteCard(id)
       if (!r.ok) {

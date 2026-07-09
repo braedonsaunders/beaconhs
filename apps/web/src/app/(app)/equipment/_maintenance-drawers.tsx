@@ -9,6 +9,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { PersonSelectField } from '@/components/person-select-field'
 import { IntervalPicker, type IntervalValue } from '@/components/equipment/interval-picker'
 import type { EquipmentIntervalUnit } from '@/lib/equipment/intervals'
@@ -135,9 +136,15 @@ function ScheduleForm({
     })
   }
 
-  function remove() {
+  async function remove() {
     if (!editing) return
-    if (!window.confirm('Remove this schedule? Inspection history is kept.')) return
+    if (
+      !(await confirmDialog({
+        message: 'Remove this schedule? Inspection history is kept.',
+        tone: 'danger',
+      }))
+    )
+      return
     start(async () => {
       const res = await deleteEquipmentSchedule({ id: editing.id, equipmentItemId: itemId })
       if (res.ok) onDone()
@@ -346,9 +353,9 @@ function ReminderForm({
     })
   }
 
-  function remove() {
+  async function remove() {
     if (!editing) return
-    if (!window.confirm('Delete this reminder?')) return
+    if (!(await confirmDialog({ message: 'Delete this reminder?', tone: 'danger' }))) return
     start(async () => {
       const res = await deleteEquipmentReminder({
         id: editing.id,

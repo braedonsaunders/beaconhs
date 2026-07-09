@@ -355,6 +355,7 @@ export default async function TrainingRecordPage({
                   <form action={revokeRecord}>
                     <input type="hidden" name="id" value={id} />
                     <ConfirmButton
+                      size="sm"
                       message="Revoke this certificate? It will stop counting toward training and verification pages will show it as revoked."
                       className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
                     >

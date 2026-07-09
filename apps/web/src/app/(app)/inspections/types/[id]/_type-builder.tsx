@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -783,8 +784,14 @@ function SettingsPanel({ type, onDeleted }: { type: BuilderType; onDeleted: () =
       }
     })
   }
-  function del() {
-    if (!window.confirm('Delete this inspection type? This cannot be undone.')) return
+  async function del() {
+    if (
+      !(await confirmDialog({
+        message: 'Delete this inspection type? This cannot be undone.',
+        tone: 'danger',
+      }))
+    )
+      return
     start(async () => {
       try {
         await deleteInspectionType({ id: type.id })

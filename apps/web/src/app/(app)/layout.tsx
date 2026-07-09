@@ -18,6 +18,7 @@ import { NavigationProvider } from '@/components/navigation-provider'
 import { RiskMatrixProvider } from '@/components/risk-matrix'
 import { BackNavProviders } from '@/components/smart-back-link'
 import { ThemeProvider } from '@/components/theme-provider'
+import { ConfirmRoot } from '@/lib/confirm'
 import { WalkthroughProvider } from '@/components/walkthrough/provider.client'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
@@ -122,6 +123,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </BackNavProviders>
           </RiskMatrixProvider>
           <Toaster richColors position="top-right" />
+          <ConfirmRoot />
           {/* Suspense: the provider reads useSearchParams (tour launch links). */}
           <Suspense fallback={null}>
             <WalkthroughProvider

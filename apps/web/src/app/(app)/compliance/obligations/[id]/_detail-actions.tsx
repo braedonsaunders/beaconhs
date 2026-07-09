@@ -4,6 +4,7 @@ import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { deleteObligation, setObligationEnabled } from '../_actions'
 
 export function ObligationDetailActions({
@@ -48,13 +49,13 @@ export function ObligationDetailActions({
       <Button
         variant="destructive"
         disabled={pending}
-        onClick={() =>
+        onClick={async () => {
+          if (!(await confirmDialog({ message: 'Delete this obligation? This cannot be undone.', tone: 'danger' }))) return
           start(async () => {
-            if (!window.confirm('Delete this obligation? This cannot be undone.')) return
             const res = await deleteObligation(id)
             if (res.ok) router.push('/compliance/obligations')
           })
-        }
+        }}
       >
         Delete
       </Button>

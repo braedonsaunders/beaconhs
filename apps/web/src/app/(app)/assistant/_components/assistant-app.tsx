@@ -27,6 +27,7 @@ import {
   Users,
 } from 'lucide-react'
 import { Button, EmptyState, cn } from '@beaconhs/ui'
+import { confirmDialog } from '@/lib/confirm'
 import { deleteAssistantConversation, renameAssistantConversation } from '../_actions'
 import { MessageParts } from './message-parts'
 import { ShareDrawer } from './share-drawer'
@@ -195,7 +196,7 @@ export function AssistantApp({
 
   async function doDelete(id: string) {
     setMenuFor(null)
-    if (!window.confirm('Delete this conversation? This cannot be undone.')) return
+    if (!(await confirmDialog({ message: 'Delete this conversation? This cannot be undone.', tone: 'danger' }))) return
     await deleteAssistantConversation(id)
     if (id === currentId) router.push('/assistant')
     else startTransition(() => router.refresh())

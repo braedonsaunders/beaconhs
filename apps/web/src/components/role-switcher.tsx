@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronDown, UserCog } from 'lucide-react'
 import { Popover } from '@beaconhs/ui'
+import { toast } from '@/lib/toast'
 import { setActiveRole } from '@/lib/actions'
 
 type Role = { id: string; name: string; key: string }
@@ -39,7 +40,7 @@ export function RoleSwitcher({
         setOpen(false)
         router.refresh()
       } else {
-        alert(res.error ?? 'Could not switch role')
+        toast.error(res.error ?? 'Could not switch role')
       }
     })
   }

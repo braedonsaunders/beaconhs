@@ -43,6 +43,7 @@ import { QuickActions } from './_quick-actions'
 import type { SaveQuickActionsAction } from './_quick-actions-shared'
 import { resetDashboardLayout, saveDashboardLayout } from './actions'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 
 // react-grid-layout's ResponsiveGridLayout is purely client (DOM-measured).
 const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
@@ -231,7 +232,7 @@ export function DashboardGrid({
   }, [layout, router, saveLayoutAction, saveRedirectHref, saveSuccessMessage])
 
   const handleReset = useCallback(async () => {
-    if (!confirm(resetConfirmMessage)) return
+    if (!(await confirmDialog({ message: resetConfirmMessage, tone: 'danger' }))) return
     setResetting(true)
     try {
       const res = await resetLayoutAction()
