@@ -125,6 +125,19 @@ Online and external certificate courses do not show the content builder — thei
 3. Tap a lesson to edit it. Changes save automatically.
 4. Use **Preview as learner** to see the course as a worker sees it. **Play** presents the whole course full-screen.
 
+## Run a classroom (present the content)
+
+For instructor-led courses, BeaconHS is the screen you run the class from. Build the deck, quizzes, and practical once on the course, then present it to the room.
+
+1. Open the class from **Training → Classes** (or schedule a new one).
+2. Tap **Present content** in the top corner. The course opens full-screen, ready to project.
+3. Move through it with the arrow keys, the on-screen arrows, or by clicking the left/right edges. Slideshows advance one slide at a time, then flow straight into the next element.
+4. When you reach a **Quiz**, the screen shows an assessment title card — the question count and pass mark, with instructions for learners to complete it on their own device. It does not show the answers to the room. Tap **Show questions** if you want to review them together afterwards.
+5. A **Practical exam** shows the brief and the sign-off criteria so you can run and mark it.
+6. Press **Esc** or tap the **✕** to return to the class.
+
+Presenting never changes anyone's records. When the class is done, issue records on the **Completion** tab (below).
+
 ## Enroll learners for sign-off
 
 Classroom and on-the-job courses are not self-started — workers see them in [My training](/my/training) only once you enroll them.

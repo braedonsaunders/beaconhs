@@ -1,8 +1,17 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, isNull, notInArray } from 'drizzle-orm'
-import { Ban, Check, GraduationCap, Plus, RotateCcw, Trash2, UserCheck } from 'lucide-react'
+import { and, asc, count, eq, isNull, notInArray } from 'drizzle-orm'
+import {
+  Ban,
+  Check,
+  GraduationCap,
+  Plus,
+  Presentation,
+  RotateCcw,
+  Trash2,
+  UserCheck,
+} from 'lucide-react'
 import {
   Badge,
   Button,
@@ -22,6 +31,7 @@ import {
   trainingClasses,
   trainingClassAttendees,
   trainingCourses,
+  trainingLessons,
   trainingRecords,
   users,
 } from '@beaconhs/db/schema'
@@ -371,11 +381,26 @@ export default async function TrainingClassPage({
         .leftJoin(users, eq(users.id, tenantUsers.userId))
         .where(eq(tenantUsers.status, 'active')),
     ])
-    return { cls, course, attendees, availablePeople, courses, sites, instructors }
+    // Does the course have in-app content to present in the classroom?
+    const [lessonCount] = await tx
+      .select({ c: count() })
+      .from(trainingLessons)
+      .where(and(eq(trainingLessons.courseId, cls.courseId), isNull(trainingLessons.deletedAt)))
+
+    return {
+      cls,
+      course,
+      attendees,
+      availablePeople,
+      courses,
+      sites,
+      instructors,
+      hasContent: Number(lessonCount?.c ?? 0) > 0,
+    }
   })
 
   if (!data) notFound()
-  const { cls, course, attendees, availablePeople, courses, sites, instructors } = data
+  const { cls, course, attendees, availablePeople, courses, sites, instructors, hasContent } = data
   // Keep the class's current course selectable even if it was soft-deleted from
   // the catalogue after scheduling (the option list only carries live courses).
   const courseOptions =
@@ -415,24 +440,37 @@ export default async function TrainingClassPage({
             )
           }
           actions={
-            isCompleted || !canManageClasses ? null : (
+            !canManageClasses ? null : (
               <div className="flex items-center gap-2">
-                {isCancelled ? (
-                  <form action={reopenAction}>
-                    <Button type="submit" variant="outline" size="sm">
-                      <RotateCcw size={14} /> Reopen class
+                {hasContent ? (
+                  <Link
+                    href={`/training/courses/${cls.courseId}/present?from=${encodeURIComponent(basePath)}`}
+                  >
+                    <Button size="sm">
+                      <Presentation size={14} /> Present content
                     </Button>
-                  </form>
-                ) : (
-                  <form action={cancelAction}>
-                    <Button type="submit" variant="outline" size="sm">
-                      <Ban size={14} /> Cancel class
-                    </Button>
-                  </form>
+                  </Link>
+                ) : null}
+                {isCompleted ? null : (
+                  <>
+                    {isCancelled ? (
+                      <form action={reopenAction}>
+                        <Button type="submit" variant="outline" size="sm">
+                          <RotateCcw size={14} /> Reopen class
+                        </Button>
+                      </form>
+                    ) : (
+                      <form action={cancelAction}>
+                        <Button type="submit" variant="outline" size="sm">
+                          <Ban size={14} /> Cancel class
+                        </Button>
+                      </form>
+                    )}
+                    <form action={deleteAction}>
+                      <DeleteClassButton />
+                    </form>
+                  </>
                 )}
-                <form action={deleteAction}>
-                  <DeleteClassButton />
-                </form>
               </div>
             )
           }

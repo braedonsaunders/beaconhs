@@ -11,8 +11,12 @@ import {
   ChevronRight,
   ClipboardCheck,
   Download,
+  Eye,
+  EyeOff,
   GraduationCap,
+  ListChecks,
   UserCheck,
+  Users,
   X,
 } from 'lucide-react'
 import { isRichRegion, type Slide } from '@beaconhs/db/schema'
@@ -41,6 +45,11 @@ export type QuizQuestion = {
   kind: string
   options: { value: string; label: string }[] | null
 }
+export type AssessmentMeta = {
+  name: string
+  passingScore: number
+  questionCount: number
+}
 
 type Effective = {
   lesson: LessonLite
@@ -59,6 +68,7 @@ export function CoursePresenter({
   modules,
   items,
   quizQuestions,
+  assessmentMeta,
   attachmentMeta,
   onClose,
 }: {
@@ -66,6 +76,7 @@ export function CoursePresenter({
   modules: ModuleLite[]
   items: Record<string, ItemContent>
   quizQuestions: Record<string, QuizQuestion[]>
+  assessmentMeta: Record<string, AssessmentMeta>
   attachmentMeta: Record<string, AttachmentMeta>
   onClose: () => void
 }) {
@@ -165,11 +176,13 @@ export function CoursePresenter({
       {/* stage */}
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-14 pt-2 pb-14">
         <Stage
+          key={`${eff.lesson.id}:${slideIndex ?? ''}`}
           eff={eff}
           slideIndex={slideIndex}
           attachmentUrls={attachmentUrls}
           attachmentMeta={attachmentMeta}
           quizQuestions={quizQuestions}
+          assessmentMeta={assessmentMeta}
         />
 
         {/* click zones */}
@@ -245,12 +258,14 @@ function Stage({
   attachmentUrls,
   attachmentMeta,
   quizQuestions,
+  assessmentMeta,
 }: {
   eff: Effective
   slideIndex?: number
   attachmentUrls: Record<string, string | null>
   attachmentMeta: Record<string, AttachmentMeta>
   quizQuestions: Record<string, QuizQuestion[]>
+  assessmentMeta: Record<string, AssessmentMeta>
 }) {
   // Slides — one slide per step, PowerPoint-style.
   if (eff.kind === 'slides') {
@@ -267,16 +282,11 @@ function Stage({
     )
   }
 
-  // Rich text / practical brief — a readable page.
-  if (eff.kind === 'rich' || eff.kind === 'practical') {
+  // Rich text — a readable page.
+  if (eff.kind === 'rich') {
     const html = eff.contentHtml ?? blocksToHtml(eff.blocks)
     return (
       <div className="app-scroll max-h-full w-full max-w-4xl overflow-y-auto rounded-lg bg-white px-12 py-10 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100">
-        {eff.kind === 'practical' ? (
-          <div className="mb-5 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            <UserCheck size={15} /> Practical test — signed off by an evaluator
-          </div>
-        ) : null}
         {html ? (
           <div className="lesson-prose" dangerouslySetInnerHTML={{ __html: html }} />
         ) : eff.blocks.length > 0 ? (
@@ -284,10 +294,33 @@ function Stage({
         ) : (
           <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
         )}
-        {eff.kind === 'practical' && eff.lesson.practicalCriteria.length > 0 ? (
-          <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+      </div>
+    )
+  }
+
+  // Practical exam — a classroom activity guide. Shows the brief, then the
+  // sign-off criteria the evaluator marks hands-on. Not self-completed.
+  if (eff.kind === 'practical') {
+    const html = eff.contentHtml ?? blocksToHtml(eff.blocks)
+    return (
+      <ActivityGuide
+        tone="amber"
+        icon={<UserCheck size={26} />}
+        badge="Practical exam"
+        title={eff.lesson.title}
+        subtitle="Hands-on — an evaluator watches each learner and signs them off against the criteria below."
+      >
+        {html ? (
+          <div className="lesson-prose mt-5 text-left" dangerouslySetInnerHTML={{ __html: html }} />
+        ) : eff.blocks.length > 0 ? (
+          <div className="mt-5 text-left">
+            <LessonBlocksView blocks={eff.blocks} attachmentUrls={attachmentUrls} />
+          </div>
+        ) : null}
+        {eff.lesson.practicalCriteria.length > 0 ? (
+          <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left dark:border-slate-700 dark:bg-slate-800/50">
             <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              Sign-off criteria
+              Sign-off criteria ({eff.lesson.practicalCriteria.length})
             </p>
             <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700 dark:text-slate-300">
               {eff.lesson.practicalCriteria.map((c) => (
@@ -296,7 +329,10 @@ function Stage({
             </ol>
           </div>
         ) : null}
-      </div>
+        <p className="mt-5 text-xs text-slate-400 dark:text-slate-500">
+          Record each learner&apos;s result in the course&apos;s Evaluations grid.
+        </p>
+      </ActivityGuide>
     )
   }
 
@@ -374,75 +410,167 @@ function Stage({
     )
   }
 
-  // Quiz — read-only question walkthrough.
+  // Quiz — a classroom "assessment break" title card. Learners complete it
+  // individually on their own device; the room does not see the answers. The
+  // instructor can reveal the questions afterwards for review.
   if (eff.kind === 'quiz') {
-    const qs = eff.lesson.assessmentTypeId ? (quizQuestions[eff.lesson.assessmentTypeId] ?? []) : []
-    return (
-      <div className="app-scroll max-h-full w-full max-w-3xl overflow-y-auto rounded-lg bg-white px-10 py-8 shadow-2xl dark:bg-slate-900">
-        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-          <ClipboardCheck size={16} className="text-teal-700 dark:text-teal-300" />{' '}
-          {eff.lesson.title}
-          <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            {qs.length} question{qs.length === 1 ? '' : 's'} · learners take this interactively
-          </span>
-        </div>
-        {qs.length === 0 ? (
-          <p className="text-sm text-slate-400 dark:text-slate-500">
-            No assessment configured for this quiz.
-          </p>
-        ) : (
-          <ol className="space-y-4">
-            {qs.map((q, i) => (
-              <li
-                key={q.id}
-                className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
-              >
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {i + 1}. {q.prompt}
-                </p>
-                {q.options && q.options.length > 0 ? (
-                  <ul className="mt-2 space-y-1">
-                    {q.options.map((o, oi) => (
-                      <li
-                        key={o.value}
-                        className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
-                      >
-                        <span className="grid h-5 w-5 place-items-center rounded-full border border-slate-300 text-[10px] font-semibold dark:border-slate-700">
-                          {String.fromCharCode(65 + oi)}
-                        </span>
-                        {o.label}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                    {q.kind === 'true_false' ? 'True / False' : 'Free answer'}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-    )
+    const typeId = eff.lesson.assessmentTypeId
+    const qs = typeId ? (quizQuestions[typeId] ?? []) : []
+    const meta = typeId ? assessmentMeta[typeId] : undefined
+    return <QuizGuide title={eff.lesson.title} meta={meta} questions={qs} />
   }
 
-  // In-person session.
+  // In-person session — a classroom activity guide.
   if (eff.kind === 'session') {
     return (
-      <div className="rounded-lg bg-white px-10 py-8 text-center shadow-2xl dark:bg-slate-900">
-        <GraduationCap size={28} className="mx-auto text-teal-700 dark:text-teal-300" />
-        <p className="mt-2 font-semibold text-slate-900 dark:text-slate-100">{eff.lesson.title}</p>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          In-person session — completed by attending the scheduled class.
-        </p>
-      </div>
+      <ActivityGuide
+        tone="teal"
+        icon={<GraduationCap size={26} />}
+        badge="In-person session"
+        title={eff.lesson.title}
+        subtitle="Delivered in person as part of the scheduled class."
+      />
     )
   }
 
-  return <EmptyCard label="Nothing to preview for this element." />
+  // Every element kind is handled above; this is a defensive fallback only.
+  return (
+    <ActivityGuide
+      tone="slate"
+      icon={<GraduationCap size={26} />}
+      badge="Lesson"
+      title={eff.lesson.title}
+      subtitle="Discuss this item with the class."
+    />
+  )
 }
 
 function EmptyCard({ label }: { label: string }) {
   return <div className="rounded-lg bg-white/10 px-8 py-6 text-sm text-white/70">{label}</div>
+}
+
+// A full-screen classroom activity card: coloured badge, big title, subtitle,
+// and optional detail children. Used for practicals, quizzes, and sessions —
+// every non-content element gets a clear in-room representation.
+function ActivityGuide({
+  tone,
+  icon,
+  badge,
+  title,
+  subtitle,
+  children,
+}: {
+  tone: 'teal' | 'amber' | 'slate'
+  icon: React.ReactNode
+  badge: string
+  title: string
+  subtitle?: string
+  children?: React.ReactNode
+}) {
+  const toneCls = {
+    teal: 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300',
+    amber: 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
+    slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  }[tone]
+  return (
+    <div className="app-scroll max-h-full w-full max-w-3xl overflow-y-auto rounded-xl bg-white px-10 py-9 text-center shadow-2xl dark:bg-slate-900">
+      <span className={`mx-auto grid h-14 w-14 place-items-center rounded-full ${toneCls}`}>
+        {icon}
+      </span>
+      <p
+        className={`mt-4 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wide uppercase ${toneCls}`}
+      >
+        {badge}
+      </p>
+      <h2 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+      {subtitle ? (
+        <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+          {subtitle}
+        </p>
+      ) : null}
+      {children}
+    </div>
+  )
+}
+
+function QuizGuide({
+  title,
+  meta,
+  questions,
+}: {
+  title: string
+  meta: AssessmentMeta | undefined
+  questions: QuizQuestion[]
+}) {
+  const [revealed, setRevealed] = useState(false)
+  const count = meta?.questionCount ?? questions.length
+  return (
+    <ActivityGuide
+      tone="teal"
+      icon={<ClipboardCheck size={26} />}
+      badge="Assessment"
+      title={meta?.name || title}
+      subtitle="Everyone completes this individually now — open My Training on your own device, pick this course, and submit your answers."
+    >
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <ListChecks size={13} /> {count} question{count === 1 ? '' : 's'}
+        </span>
+        {meta ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <Users size={13} /> Pass mark {meta.passingScore}%
+          </span>
+        ) : null}
+      </div>
+      {questions.length > 0 ? (
+        <div className="mt-6 text-left">
+          <button
+            type="button"
+            onClick={() => setRevealed((v) => !v)}
+            className="mx-auto flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
+            {revealed ? 'Hide questions' : 'Show questions (instructor)'}
+          </button>
+          {revealed ? (
+            <ol className="mt-4 space-y-3">
+              {questions.map((q, i) => (
+                <li
+                  key={q.id}
+                  className="rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+                >
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {i + 1}. {q.prompt}
+                  </p>
+                  {q.options && q.options.length > 0 ? (
+                    <ul className="mt-2 space-y-1">
+                      {q.options.map((o, oi) => (
+                        <li
+                          key={o.value}
+                          className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
+                        >
+                          <span className="grid h-5 w-5 place-items-center rounded-full border border-slate-300 text-[10px] font-semibold dark:border-slate-700">
+                            {String.fromCharCode(65 + oi)}
+                          </span>
+                          {o.label}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                      {q.kind === 'true_false' ? 'True / False' : 'Free answer'}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-5 text-xs text-slate-400 dark:text-slate-500">
+          No assessment configured for this quiz yet.
+        </p>
+      )}
+    </ActivityGuide>
+  )
 }

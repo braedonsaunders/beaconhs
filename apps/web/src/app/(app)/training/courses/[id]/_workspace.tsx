@@ -43,6 +43,7 @@ import { toast } from '@/lib/toast'
 import { LessonSurface } from './_lesson-surface'
 import {
   CoursePresenter,
+  type AssessmentMeta,
   type AttachmentMeta,
   type ItemContent,
   type QuizQuestion,
@@ -209,6 +210,7 @@ export function CourseWorkspace({
   contentItems,
   itemContents,
   quizQuestions,
+  assessmentMeta,
   attachmentMeta,
   attachmentUrls,
   records,
@@ -223,6 +225,7 @@ export function CourseWorkspace({
   contentItems: { id: string; title: string; kind: string }[]
   itemContents: Record<string, ItemContent>
   quizQuestions: Record<string, QuizQuestion[]>
+  assessmentMeta: Record<string, AssessmentMeta>
   attachmentMeta: Record<string, AttachmentMeta>
   attachmentUrls: Record<string, string | null | undefined>
   records: RecordLite[]
@@ -358,6 +361,7 @@ export function CourseWorkspace({
           modules={tree}
           items={itemContents}
           quizQuestions={quizQuestions}
+          assessmentMeta={assessmentMeta}
           attachmentMeta={attachmentMeta}
           onClose={() => setPresenting(false)}
         />
