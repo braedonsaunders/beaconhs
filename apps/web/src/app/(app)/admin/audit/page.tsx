@@ -14,6 +14,7 @@ import {
 import { auditLog, user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
@@ -126,7 +127,7 @@ export default async function AuditLogPage({
                 {rows.map(({ log, actor }) => (
                   <TableRow key={log.id}>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {new Date(log.occurredAt).toLocaleString()}
+                      {formatDateTime(new Date(log.occurredAt), ctx.timezone)}
                     </TableCell>
                     <TableCell className="text-slate-700 dark:text-slate-200">
                       {actor?.name ?? '—'}

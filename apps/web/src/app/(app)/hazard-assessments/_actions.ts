@@ -41,7 +41,7 @@ import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitHazardAssessmentCreated } from '@beaconhs/integrations'
 import { nextReference } from '@/lib/reference'
-import { parseDatetimeLocal } from './_datetime'
+import { parseDatetimeLocal } from '@/lib/datetime'
 import { riskRating } from './_risk-scale'
 
 // All HazID server actions assume a tenant is active. requireRequestContext

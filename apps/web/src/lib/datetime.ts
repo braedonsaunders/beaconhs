@@ -1,10 +1,12 @@
-// Timezone-aware datetime helpers for the module's server components/actions.
+// Timezone-aware datetime helpers for server components/actions.
 //
-// Server components render on the deploy container's clock (UTC in prod), so
-// both directions of a `<input type="datetime-local">` round-trip must be
+// Server components render on the deploy container's clock (UTC in prod), so any
+// wall-clock display or `<input type="datetime-local">` round-trip must be
 // pinned to the viewer's IANA timezone (`ctx.timezone` on RequestContext):
-// format the stored instant into the user's wall-clock for display, and parse
-// the posted wall-clock string back into an instant in that same zone.
+// format the stored instant into the user's wall-clock for display, and parse a
+// posted wall-clock string back into an instant in that same zone. Never render
+// a stored instant with a naked `toLocaleString()` in a server component — that
+// silently uses UTC and shows times hours off for the viewer.
 
 /** Offset (ms) of `timeZone` from UTC at the given instant. */
 function tzOffsetMs(timeZone: string, at: Date): number {

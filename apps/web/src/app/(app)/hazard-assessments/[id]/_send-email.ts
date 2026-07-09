@@ -21,7 +21,7 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { recordAudit } from '@/lib/audit'
-import { formatDateTime } from '../_datetime'
+import { formatDateTime } from '@/lib/datetime'
 
 export async function sendHazidEmail(
   ctx: RequestContext,

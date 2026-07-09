@@ -21,7 +21,7 @@ import { PageContainer } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CriterionCard, type EqKind } from './_criteria'
 import { RecordMeta } from './_record-meta'
-import { datetimeLocalValue, formatDateTime } from '../_datetime'
+import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
 import {
   addCriterionPhotos,
   passAllEquipmentInspection,

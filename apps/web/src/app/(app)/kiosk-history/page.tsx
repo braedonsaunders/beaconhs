@@ -23,7 +23,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { parseDatetimeLocal } from '../equipment/inspections/_datetime'
+import { parseDatetimeLocal } from '@/lib/datetime'
 import { todayISO } from '../journals/_lib'
 import { DayPicker } from './day-picker'
 
