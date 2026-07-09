@@ -61,6 +61,7 @@ import {
 } from './studio/_actions'
 import { DELIVERY_OPTIONS, deliveryMeta } from '../../_lib/delivery'
 import { startTrainingRecord } from '../../records/_actions'
+import { startClass } from '../../classes/_actions'
 
 export type LessonKind =
   | 'rich'
@@ -932,12 +933,14 @@ function ClassesPanel({ classes }: { classes: ClassLite[] }) {
         <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
           Scheduled classes
         </p>
-        <Link
-          href="/training/classes/new"
-          className="text-[11px] text-teal-700 hover:underline dark:text-teal-300"
-        >
-          Schedule →
-        </Link>
+        <form action={startClass}>
+          <button
+            type="submit"
+            className="text-[11px] text-teal-700 hover:underline dark:text-teal-300"
+          >
+            Schedule →
+          </button>
+        </form>
       </div>
       {classes.length === 0 ? (
         <p className="px-1 text-xs text-slate-400 dark:text-slate-500">

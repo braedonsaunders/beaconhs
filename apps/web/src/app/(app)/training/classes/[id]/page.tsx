@@ -41,6 +41,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitTrainingClassCompleted } from '@beaconhs/integrations'
+import { isUuid } from '@/lib/list-params'
 import { PersonSelectField } from '@/components/person-select-field'
 import { addMonthsIso } from '../../_lib/dates'
 import { ClassDetailFields } from '../_class-fields'
@@ -314,6 +315,9 @@ export default async function TrainingClassPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  // Guard non-UUID segments (e.g. a stale /classes/new link) — the id column is
+  // a uuid, so a bad value would throw at the DB instead of a clean 404.
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'details')
   const ctx = await requireRequestContext()

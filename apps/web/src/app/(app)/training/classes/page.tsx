@@ -27,6 +27,7 @@ import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../_components/training-sub-nav'
+import { startClass } from './_actions'
 
 export const metadata = { title: 'Training classes' }
 export const dynamic = 'force-dynamic'
@@ -54,7 +55,7 @@ export default async function TrainingClassesPage({
   const whenFilter = pickString(sp.when) ?? 'upcoming'
   const ctx = await requireRequestContext()
   // Only class managers get the create affordances; viewing the schedule stays
-  // open. Scheduling itself is enforced server-side in createClassDraft.
+  // open. Scheduling itself is enforced server-side in startClass.
   const canManageClasses = can(ctx, 'training.class.manage')
 
   const now = new Date()
@@ -136,9 +137,9 @@ export default async function TrainingClassesPage({
                   </Button>
                 </Link>
                 {canManageClasses ? (
-                  <Link href="/training/classes/new">
-                    <Button>Schedule new class</Button>
-                  </Link>
+                  <form action={startClass}>
+                    <Button type="submit">Schedule new class</Button>
+                  </form>
                 ) : null}
               </div>
             }
@@ -164,9 +165,9 @@ export default async function TrainingClassesPage({
           description="Schedule a class for any course in the catalogue."
           action={
             canManageClasses ? (
-              <Link href="/training/classes/new">
-                <Button>Schedule a class</Button>
-              </Link>
+              <form action={startClass}>
+                <Button type="submit">Schedule a class</Button>
+              </form>
             ) : undefined
           }
         />

@@ -19,14 +19,13 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
-// Lazy draft create: called by the /training/classes/new page's
-// LazyRecordProvider on the user's FIRST field edit — so glancing at "new" and
-// leaving creates nothing. Returns the id; the provider then navigates to the
-// real record. The course defaults to the first in the catalogue and is then
-// adjusted in place via the auto-saving field.
-export async function createClassDraft(): Promise<
-  { ok: true; id: string } | { ok: false; error: string }
-> {
+// Create a draft class and jump straight into its unified record page — no
+// intermediate form. Course/date/instructor/roster are all filled in inline on
+// the detail page (auto-saving fields), and completion issues the records.
+// Mirrors startCourse / startTrainingRecord. courseId + title are NOT NULL, so a
+// draft defaults to the first catalogue course and "Untitled class"; both are
+// adjusted in place on the detail page.
+export async function startClass(): Promise<void> {
   const ctx = await requireRequestContext()
   // Scheduling a class is a class-management mutation. Server actions are POST
   // endpoints, so gate here — the page render gate alone is not protection.
@@ -56,7 +55,7 @@ export async function createClassDraft(): Promise<
   })
 
   if (!newId) {
-    return { ok: false, error: 'Add a course to the catalogue before scheduling a class.' }
+    throw new Error('Add a course to the catalogue before scheduling a class.')
   }
   await recordAudit(ctx, {
     entityType: 'training_class',
@@ -64,10 +63,10 @@ export async function createClassDraft(): Promise<
     action: 'create',
     summary: 'Created class draft',
   })
-  // Classes have no separate publish step — the lazy draft IS the creation.
+  // Classes have no separate publish step — the draft IS the creation.
   await runModuleFlows(ctx, { moduleKey: 'training-classes', event: 'on_create', subjectId: newId })
   revalidatePath('/training/classes')
-  return { ok: true, id: newId }
+  redirect(`/training/classes/${newId}`)
 }
 
 const CLASS_REQUIRED_IDS = new Set(['courseId'])

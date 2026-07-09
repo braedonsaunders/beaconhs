@@ -12,6 +12,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireModuleManage } from '@/lib/module-admin/guard'
+import { isUuid } from '@/lib/list-params'
 import { courseCredentialOutputIds, enabledCredentialOutputs } from '@/lib/credential-designs'
 import { CourseWorkspace } from './_workspace'
 import { loadCoursePresentation } from './_lib/presentation'
@@ -25,6 +26,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function CoursePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  // Guard non-UUID segments (e.g. a stale /courses/new link) — the id column is
+  // a uuid, so a bad value would throw at the DB instead of a clean 404.
+  if (!isUuid(id)) notFound()
   const ctx = await requireModuleManage('training')
 
   const data = await ctx.db(async (tx) => {
