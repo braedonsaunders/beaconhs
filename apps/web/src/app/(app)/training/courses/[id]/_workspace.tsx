@@ -241,11 +241,9 @@ export function CourseWorkspace({
   const [deliveryType, setDeliveryType] = useState(course.deliveryType)
   useEffect(() => setDeliveryType(course.deliveryType), [course.deliveryType])
   const delivery = deliveryMeta(deliveryType)
-  // Fresh drafts (no code yet) land on Overview to capture name/code first;
-  // established content courses land on the builder.
-  const [railTab, setRailTab] = useState<RailTab>(
-    delivery.hasContent && course.code ? 'build' : 'overview',
-  )
+  // The course page opens on Overview (settings); authors switch to Build to
+  // edit the curriculum.
+  const [railTab, setRailTab] = useState<RailTab>('overview')
   const [tree, setTree] = useState<ModuleLite[]>(modules)
   const [editingId, setEditingId] = useState<string | null>(search.get('lesson'))
   const [dropHover, setDropHover] = useState<string | null>(null)

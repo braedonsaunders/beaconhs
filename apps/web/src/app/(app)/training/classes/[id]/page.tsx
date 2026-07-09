@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, eq, isNull, notInArray } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull, notInArray } from 'drizzle-orm'
 import {
   Ban,
   Check,
@@ -28,6 +28,7 @@ import {
   orgUnits,
   people,
   tenantUsers,
+  trainingAssessments,
   trainingClasses,
   trainingClassAttendees,
   trainingCourses,
@@ -387,6 +388,54 @@ export default async function TrainingClassPage({
       .from(trainingLessons)
       .where(and(eq(trainingLessons.courseId, cls.courseId), isNull(trainingLessons.deletedAt)))
 
+    // Pre-fill the completion grades from each attendee's own quiz result: the
+    // assessment type(s) this course's quiz lessons point at, then each
+    // attendee's best submitted attempt. Instructors can still override.
+    const quizTypeIds = [
+      ...new Set(
+        (
+          await tx
+            .select({ typeId: trainingLessons.assessmentTypeId })
+            .from(trainingLessons)
+            .where(
+              and(
+                eq(trainingLessons.courseId, cls.courseId),
+                eq(trainingLessons.kind, 'quiz'),
+                isNull(trainingLessons.deletedAt),
+              ),
+            )
+        )
+          .map((r) => r.typeId)
+          .filter((x): x is string => !!x),
+      ),
+    ]
+    const quizByPerson = new Map<string, { score: number | null; passed: boolean }>()
+    if (quizTypeIds.length > 0 && memberIds.length > 0) {
+      const attempts = await tx
+        .select({
+          personId: trainingAssessments.personId,
+          score: trainingAssessments.score,
+          passed: trainingAssessments.passed,
+        })
+        .from(trainingAssessments)
+        .where(
+          and(
+            inArray(trainingAssessments.typeId, quizTypeIds),
+            inArray(trainingAssessments.personId, memberIds),
+            eq(trainingAssessments.status, 'submitted'),
+            isNull(trainingAssessments.deletedAt),
+          ),
+        )
+      // Keep each person's best-scoring attempt (its pass state travels with it).
+      for (const a of attempts) {
+        const prev = quizByPerson.get(a.personId)
+        const score = a.score ?? null
+        if (!prev || (score != null && (prev.score == null || score > prev.score))) {
+          quizByPerson.set(a.personId, { score, passed: !!a.passed })
+        }
+      }
+    }
+
     return {
       cls,
       course,
@@ -396,11 +445,24 @@ export default async function TrainingClassPage({
       sites,
       instructors,
       hasContent: Number(lessonCount?.c ?? 0) > 0,
+      hasQuiz: quizTypeIds.length > 0,
+      quizByPerson,
     }
   })
 
   if (!data) notFound()
-  const { cls, course, attendees, availablePeople, courses, sites, instructors, hasContent } = data
+  const {
+    cls,
+    course,
+    attendees,
+    availablePeople,
+    courses,
+    sites,
+    instructors,
+    hasContent,
+    hasQuiz,
+    quizByPerson,
+  } = data
   // Keep the class's current course selectable even if it was soft-deleted from
   // the catalogue after scheduling (the option list only carries live courses).
   const courseOptions =
@@ -647,44 +709,67 @@ export default async function TrainingClassPage({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
-                        {attendees.map((row) => (
-                          <tr key={row.att.id}>
-                            <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
-                              {row.person.lastName}, {row.person.firstName}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <input
-                                type="checkbox"
-                                name={`attended__${row.person.id}`}
-                                defaultChecked
-                                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <Input
-                                name={`grade__${row.person.id}`}
-                                type="number"
-                                min="0"
-                                max="100"
-                                placeholder="—"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <input
-                                type="checkbox"
-                                name={`passed__${row.person.id}`}
-                                defaultChecked
-                                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-                              />
-                            </td>
-                          </tr>
-                        ))}
+                        {attendees.map((row) => {
+                          const quiz = quizByPerson.get(row.person.id)
+                          return (
+                            <tr key={row.att.id}>
+                              <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
+                                {row.person.lastName}, {row.person.firstName}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  name={`attended__${row.person.id}`}
+                                  defaultChecked
+                                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  name={`grade__${row.person.id}`}
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  placeholder="—"
+                                  defaultValue={quiz?.score != null ? String(quiz.score) : ''}
+                                />
+                                {quiz ? (
+                                  <span
+                                    className={`mt-1 block text-[11px] ${
+                                      quiz.passed
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-amber-600 dark:text-amber-400'
+                                    }`}
+                                  >
+                                    Quiz {quiz.score != null ? `${quiz.score}%` : '—'} ·{' '}
+                                    {quiz.passed ? 'passed' : 'did not pass'}
+                                  </span>
+                                ) : hasQuiz ? (
+                                  <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">
+                                    No quiz attempt yet
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  name={`passed__${row.person.id}`}
+                                  defaultChecked={quiz ? quiz.passed : true}
+                                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+                                />
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Uncheck "Attended" for no-shows. Checking "Passed" creates a training record for
                     the person; grades are optional.
+                    {hasQuiz
+                      ? ' Grades and pass state are pre-filled from each person’s best quiz attempt — adjust any before completing.'
+                      : ''}
                   </p>
                   <div className="flex justify-end">
                     <Button type="submit">
