@@ -346,59 +346,6 @@ export const hazidAssessmentAppResponses = pgTable(
 // removed — confined space is now the hazid-confined-space-entry-plan Builder
 // App, which stores its readings/entries in its own form response.
 
-// ----------------------------------------------------------------------------
-// Signed report bundles — list of completed assessments combined into one PDF.
-//
-// Status lifecycle:
-//   pending    — row inserted by the builder, queue job not yet picked up
-//   rendering  — worker picked it up, puppeteer running
-//   completed  — PDF rendered + attached
-//   failed     — render threw (see audit log)
-//
-// `generating` + `ready` are legacy aliases kept in the enum for backward
-// compatibility with rows written by the original builder before the worker
-// existed; new writes always use the pending/rendering/completed/failed
-// vocabulary.
-// ----------------------------------------------------------------------------
-export const hazidSignedReportStatus = pgEnum('hazid_signed_report_status', [
-  'pending',
-  'generating',
-  'ready',
-  'rendering',
-  'completed',
-  'failed',
-])
-
-export const hazidSignedReports = pgTable(
-  'hazid_signed_reports',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    title: text('title').notNull(),
-    description: text('description'),
-    // Array of assessment ids included in the bundle.
-    assessmentIds: jsonb('assessment_ids').$type<string[]>().default([]).notNull(),
-    // Snapshot of recipients for audit.
-    recipientEmails: jsonb('recipient_emails').$type<string[]>().default([]).notNull(),
-    status: hazidSignedReportStatus('status').default('pending').notNull(),
-    pdfAttachmentId: uuid('pdf_attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
-    builtByTenantUserId: uuid('built_by_tenant_user_id').references(() => tenantUsers.id),
-    builtAt: timestamp('built_at', { withTimezone: true }),
-    // When the worker finished rendering (completed) or aborted (failed).
-    completedAt: timestamp('completed_at', { withTimezone: true }),
-    // Reason for failure when status='failed'. Empty otherwise.
-    errorMessage: text('error_message'),
-    ...timestamps,
-  },
-  (t) => ({
-    tenantIdx: index('hazid_signed_reports_tenant_idx').on(t.tenantId),
-    statusIdx: index('hazid_signed_reports_status_idx').on(t.tenantId, t.status),
-  }),
-)
 
 // ----------------------------------------------------------------------------
 // Relations
@@ -547,14 +494,3 @@ export const hazidAssessmentAppResponsesRelations = relations(
   }),
 )
 
-export const hazidSignedReportsRelations = relations(hazidSignedReports, ({ one }) => ({
-  tenant: one(tenants, { fields: [hazidSignedReports.tenantId], references: [tenants.id] }),
-  pdfAttachment: one(attachments, {
-    fields: [hazidSignedReports.pdfAttachmentId],
-    references: [attachments.id],
-  }),
-  builtBy: one(tenantUsers, {
-    fields: [hazidSignedReports.builtByTenantUserId],
-    references: [tenantUsers.id],
-  }),
-}))
