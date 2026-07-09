@@ -12,7 +12,18 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { storeSignatureValue } from '@/lib/signature-storage'
+import { enrollInCourse } from '../../../learn/_actions'
 import { recomputeEnrollmentCompletion } from '../../../learn/_lib/completion'
+
+// Staff enrollment for assigned delivery types (classroom, on-the-job): puts a
+// learner into the evaluations grid. Permission enforcement (training-write)
+// lives in enrollInCourse — enrolling someone else is the privileged path.
+export async function enrollLearner(courseId: string, formData: FormData) {
+  const personId = String(formData.get('personId') ?? '').trim()
+  if (!personId) throw new Error('Pick a person to enroll.')
+  await enrollInCourse(courseId, personId)
+  revalidatePath(`/training/courses/${courseId}/evaluations`)
+}
 
 export async function evaluatePractical(args: {
   courseId: string

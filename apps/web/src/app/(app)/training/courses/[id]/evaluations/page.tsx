@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import { DetailHeader, EmptyState } from '@beaconhs/ui'
-import { UserCheck } from 'lucide-react'
+import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm'
+import { Button, DetailHeader, EmptyState } from '@beaconhs/ui'
+import { UserCheck, UserPlus } from 'lucide-react'
 import {
   people,
   tenantUsers,
@@ -12,6 +12,8 @@ import {
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailPageLayout } from '@/components/page-layout'
+import { PersonSelectField } from '@/components/person-select-field'
+import { enrollLearner } from './_actions'
 import { EvaluationsGrid, type EvalLesson, type EvalRow } from './_evaluate'
 
 export const dynamic = 'force-dynamic'
@@ -73,11 +75,30 @@ export default async function CourseEvaluationsPage({
             )
         : []
 
-    return { course, practicals, enrollments, progress }
+    // Active people not yet enrolled — candidates for the staff enroll control.
+    const enrolledPersonIds = enrollments.map((e) => e.enrollment.personId)
+    const candidates = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
+      .from(people)
+      .where(
+        and(
+          isNull(people.deletedAt),
+          eq(people.status, 'active'),
+          ...(enrolledPersonIds.length ? [notInArray(people.id, enrolledPersonIds)] : []),
+        ),
+      )
+      .orderBy(asc(people.lastName), asc(people.firstName))
+
+    return { course, practicals, enrollments, progress, candidates }
   })
 
   if (!data) notFound()
-  const { course, practicals, enrollments, progress } = data
+  const { course, practicals, enrollments, progress, candidates } = data
 
   const lessons: EvalLesson[] = practicals.map((l) => ({
     id: l.id,
@@ -129,14 +150,39 @@ export default async function CourseEvaluationsPage({
           title="No practical tests in this course"
           description="Add a “Practical / physical test” lesson in the studio, then sign learners off here."
         />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<UserCheck size={32} />}
-          title="No enrolled learners"
-          description="Learners appear here for sign-off once they start the course."
-        />
       ) : (
-        <EvaluationsGrid courseId={id} lessons={lessons} rows={rows} />
+        <div className="space-y-4">
+          <form
+            action={enrollLearner.bind(null, id)}
+            className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+          >
+            <PersonSelectField
+              name="personId"
+              options={candidates.map((p) => ({
+                value: p.id,
+                label: `${p.lastName}, ${p.firstName}`,
+                hint: p.employeeNo ?? undefined,
+              }))}
+              placeholder="Enroll a learner…"
+              searchPlaceholder="Search people…"
+              sheetTitle="Enroll a learner"
+              clearable={false}
+              className="w-72 max-w-full"
+            />
+            <Button type="submit" size="sm">
+              <UserPlus size={14} /> Enroll
+            </Button>
+          </form>
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={<UserCheck size={32} />}
+              title="No enrolled learners"
+              description="Enroll a learner above to start signing off practicals."
+            />
+          ) : (
+            <EvaluationsGrid courseId={id} lessons={lessons} rows={rows} />
+          )}
+        </div>
       )}
     </DetailPageLayout>
   )

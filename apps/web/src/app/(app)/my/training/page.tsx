@@ -35,24 +35,13 @@ import {
 } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
+import { deliveryLabel, deliveryMeta } from '@/app/(app)/training/_lib/delivery'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { parseListParams } from '@/lib/list-params'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { WorkspaceNoIdentity } from '../_no-identity'
-
-// Delivery types a learner can self-launch from the catalog; instructor-led
-// and on-the-job courses are attended/evaluated, not "started".
-const SELF_LAUNCH = new Set(['self_paced', 'external_certificate', 'online'])
-
-const DELIVERY_LABELS: Record<string, string> = {
-  classroom: 'Classroom',
-  self_paced: 'Self-paced',
-  online: 'Online',
-  on_the_job: 'On the job',
-  external_certificate: 'External',
-}
 
 export const metadata = { title: 'My training' }
 export const dynamic = 'force-dynamic'
@@ -94,26 +83,9 @@ export default async function MyTrainingPage({
       .limit(1)
     const personId = person?.id ?? null
 
-    // Available courses = those with a published curriculum (>= 1 module), plus
-    // online courses (no modules — they self-launch into an external link).
-    const modCourses = await tx
-      .select({ courseId: trainingCourseModules.courseId })
-      .from(trainingCourseModules)
-      .where(isNull(trainingCourseModules.deletedAt))
-      .groupBy(trainingCourseModules.courseId)
-    const onlineCourses = await tx
-      .select({ id: trainingCourses.id })
-      .from(trainingCourses)
-      .where(and(eq(trainingCourses.deliveryType, 'online'), isNull(trainingCourses.deletedAt)))
-    const availableCourseIds = new Set([
-      ...modCourses.map((m) => m.courseId),
-      ...onlineCourses.map((c) => c.id),
-    ])
-    const coursesCount = availableCourseIds.size
-
     const base = {
       personId,
-      coursesCount,
+      coursesCount: 0,
       recordsCount: 0,
       expiringCount: 0,
       assignedCount: 0,
@@ -125,6 +97,40 @@ export default async function MyTrainingPage({
     }
 
     if (!personId) return base
+
+    // The learner catalog, by delivery type: self-paced courses appear once
+    // they have a published curriculum (>= 1 module); online courses always
+    // (they self-launch into an external link); classroom and on-the-job
+    // courses only once training staff has enrolled you (they are attended /
+    // evaluated, not "started"); external certificates never — those are
+    // records entered by the training team.
+    const modCourses = await tx
+      .select({ courseId: trainingCourseModules.courseId })
+      .from(trainingCourseModules)
+      .where(isNull(trainingCourseModules.deletedAt))
+      .groupBy(trainingCourseModules.courseId)
+    const withModules = new Set(modCourses.map((m) => m.courseId))
+    const courseTypes = await tx
+      .select({ id: trainingCourses.id, deliveryType: trainingCourses.deliveryType })
+      .from(trainingCourses)
+      .where(isNull(trainingCourses.deletedAt))
+    const enrollments = await tx
+      .select()
+      .from(trainingEnrollments)
+      .where(eq(trainingEnrollments.personId, personId))
+    const enrollBy = new Map(enrollments.map((e) => [e.courseId, e]))
+    const availableCourseIds = new Set(
+      courseTypes
+        .filter((c) => {
+          const meta = deliveryMeta(c.deliveryType)
+          if (meta.catalog === 'never') return false
+          if (meta.catalog === 'always') return true
+          if (!withModules.has(c.id)) return false
+          return meta.selfLaunch || enrollBy.has(c.id)
+        })
+        .map((c) => c.id),
+    )
+    const coursesCount = availableCourseIds.size
 
     const today = new Date()
     const todayStr = today.toISOString().slice(0, 10)
@@ -165,7 +171,7 @@ export default async function MyTrainingPage({
       .where(and(eq(trainingAudienceAssignmentRecords.personId, personId), assignedScope))
     const assignedCount = Number(assignedCntRow?.c ?? 0)
 
-    const counts = { ...base, recordsCount, expiringCount, assignedCount }
+    const counts = { ...base, coursesCount, recordsCount, expiringCount, assignedCount }
 
     if (tab === 'courses') {
       const all = await tx
@@ -173,11 +179,6 @@ export default async function MyTrainingPage({
         .from(trainingCourses)
         .where(isNull(trainingCourses.deletedAt))
         .orderBy(asc(trainingCourses.name))
-      const enrollments = await tx
-        .select()
-        .from(trainingEnrollments)
-        .where(eq(trainingEnrollments.personId, personId))
-      const enrollBy = new Map(enrollments.map((e) => [e.courseId, e]))
       const courses: CourseCard[] = all
         .filter((c) => availableCourseIds.has(c.id))
         .map((c) => {
@@ -333,7 +334,7 @@ export default async function MyTrainingPage({
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {data.courses.map((c) => {
-              const selfLaunch = SELF_LAUNCH.has(c.deliveryType)
+              const selfLaunch = deliveryMeta(c.deliveryType).selfLaunch
               const label =
                 c.status === 'completed'
                   ? 'Review'
@@ -350,7 +351,7 @@ export default async function MyTrainingPage({
                   <CardContent className="flex flex-1 flex-col gap-3 py-5">
                     <div className="flex items-start justify-between gap-2">
                       <Badge variant="outline" className="font-normal">
-                        {DELIVERY_LABELS[c.deliveryType] ?? c.deliveryType.replace(/_/g, ' ')}
+                        {deliveryLabel(c.deliveryType)}
                       </Badge>
                       {c.status === 'completed' ? (
                         <Badge variant="success">Completed</Badge>

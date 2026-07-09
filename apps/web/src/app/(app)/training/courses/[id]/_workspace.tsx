@@ -58,6 +58,8 @@ import {
   updateCourseSettings,
   updateModule,
 } from './studio/_actions'
+import { DELIVERY_OPTIONS, deliveryMeta } from '../../_lib/delivery'
+import { startTrainingRecord } from '../../records/_actions'
 
 export type LessonKind =
   | 'rich'
@@ -110,6 +112,7 @@ export type CourseLite = {
   instructions: string | null
   durationMinutes: number | null
   validForMonths: number | null
+  requiresEvaluator: boolean
   credentialOutputIds: string[]
 }
 export type CredentialOutputLite = { id: string; name: string; format: string }
@@ -228,7 +231,12 @@ export function CourseWorkspace({
 }) {
   const router = useRouter()
   const search = useSearchParams()
-  const [railTab, setRailTab] = useState<RailTab>('build')
+  const delivery = deliveryMeta(course.deliveryType)
+  // Fresh drafts (no code yet) land on Overview to capture name/code first;
+  // established content courses land on the builder.
+  const [railTab, setRailTab] = useState<RailTab>(
+    delivery.hasContent && course.code ? 'build' : 'overview',
+  )
   const [tree, setTree] = useState<ModuleLite[]>(modules)
   const [editingId, setEditingId] = useState<string | null>(search.get('lesson'))
   const [dropHover, setDropHover] = useState<string | null>(null)
@@ -242,6 +250,11 @@ export function CourseWorkspace({
   const allLessons = tree.flatMap((m) => m.lessons)
   const editing = allLessons.find((l) => l.id === editingId) ?? null
   const lessonCount = allLessons.length
+  // Non-content delivery types (online, external certificate) get a settings
+  // surface instead of the builder — but content authored before the type was
+  // switched stays reachable so it can be reviewed or removed.
+  const showBuilder = delivery.hasContent || tree.length > 0
+  const activeTab: RailTab = railTab === 'build' && !showBuilder ? 'overview' : railTab
 
   function openLesson(id: string) {
     setEditingId(id)
@@ -300,28 +313,36 @@ export function CourseWorkspace({
             <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
               {course.name}
             </span>
-            <Badge variant="secondary">{course.deliveryType.replace('_', ' ')}</Badge>
+            <Badge variant="secondary">{delivery.label}</Badge>
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            {course.code} · {tree.length} module{tree.length === 1 ? '' : 's'} · {lessonCount}{' '}
-            lesson{lessonCount === 1 ? '' : 's'} · {recordsTotal} record
-            {recordsTotal === 1 ? '' : 's'}
+            {course.code}
+            {showBuilder
+              ? ` · ${tree.length} module${tree.length === 1 ? '' : 's'} · ${lessonCount} lesson${lessonCount === 1 ? '' : 's'}`
+              : ''}{' '}
+            · {recordsTotal} record{recordsTotal === 1 ? '' : 's'}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/training/courses/${course.id}/evaluations`}>
-            <Button variant="outline" size="sm">
-              <UserCheck size={14} /> Evaluations
+          {showBuilder ? (
+            <Link href={`/training/courses/${course.id}/evaluations`}>
+              <Button variant="outline" size="sm">
+                <UserCheck size={14} /> Evaluations
+              </Button>
+            </Link>
+          ) : null}
+          {delivery.selfLaunch || delivery.hasContent ? (
+            <Link href={`/training/learn/${course.id}`}>
+              <Button variant="outline" size="sm">
+                <Eye size={14} /> Preview as learner
+              </Button>
+            </Link>
+          ) : null}
+          {showBuilder ? (
+            <Button size="sm" onClick={() => setPresenting(true)} disabled={lessonCount === 0}>
+              <Play size={14} /> Play
             </Button>
-          </Link>
-          <Link href={`/training/learn/${course.id}`}>
-            <Button variant="outline" size="sm">
-              <Eye size={14} /> Preview as learner
-            </Button>
-          </Link>
-          <Button size="sm" onClick={() => setPresenting(true)} disabled={lessonCount === 0}>
-            <Play size={14} /> Play
-          </Button>
+          ) : null}
         </div>
       </header>
 
@@ -342,48 +363,50 @@ export function CourseWorkspace({
         <aside className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
             <RailTabBtn
-              active={railTab === 'overview'}
+              active={activeTab === 'overview'}
               onClick={() => setRailTab('overview')}
               icon={<Settings2 size={15} />}
               label="Overview"
             />
+            {showBuilder ? (
+              <RailTabBtn
+                active={activeTab === 'build'}
+                onClick={() => setRailTab('build')}
+                icon={<Layers size={15} />}
+                label="Build"
+              />
+            ) : null}
             <RailTabBtn
-              active={railTab === 'build'}
-              onClick={() => setRailTab('build')}
-              icon={<Layers size={15} />}
-              label="Build"
-            />
-            <RailTabBtn
-              active={railTab === 'records'}
+              active={activeTab === 'records'}
               onClick={() => setRailTab('records')}
               icon={<Award size={15} />}
               label="Records"
             />
             <RailTabBtn
-              active={railTab === 'classes'}
+              active={activeTab === 'classes'}
               onClick={() => setRailTab('classes')}
               icon={<CalendarDays size={15} />}
               label="Classes"
             />
             <RailTabBtn
-              active={railTab === 'files'}
+              active={activeTab === 'files'}
               onClick={() => setRailTab('files')}
               icon={<FileText size={15} />}
               label="Files"
             />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
-            {railTab === 'overview' ? (
+            {activeTab === 'overview' ? (
               <OverviewPanel course={course} credentialOutputs={credentialOutputs} />
             ) : null}
-            {railTab === 'build' ? (
+            {activeTab === 'build' ? (
               <BuildPalette onAdd={(kind) => addElement(kind, tree[tree.length - 1]?.id ?? null)} />
             ) : null}
-            {railTab === 'records' ? (
+            {activeTab === 'records' ? (
               <RecordsPanel course={course} records={records} total={recordsTotal} />
             ) : null}
-            {railTab === 'classes' ? <ClassesPanel classes={classes} /> : null}
-            {railTab === 'files' ? <FilesPanel courseId={course.id} files={files} /> : null}
+            {activeTab === 'classes' ? <ClassesPanel classes={classes} /> : null}
+            {activeTab === 'files' ? <FilesPanel courseId={course.id} files={files} /> : null}
           </div>
         </aside>
 
@@ -401,6 +424,12 @@ export function CourseWorkspace({
               onClose={closeLesson}
             />
           </div>
+        ) : !showBuilder ? (
+          <DeliverySurface
+            course={course}
+            deliveryType={delivery.value}
+            onOpenOverview={() => setRailTab('overview')}
+          />
         ) : (
           <div className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
             <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5 dark:border-slate-800 dark:bg-slate-900">
@@ -431,6 +460,12 @@ export function CourseWorkspace({
 
             <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
               <div className="w-full space-y-4">
+                {!delivery.hasContent ? (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                    {delivery.label} courses have no in-app curriculum — learners never see these
+                    lessons. Remove them, or change the delivery type in Overview.
+                  </div>
+                ) : null}
                 {tree.length === 0 ? (
                   <div
                     onDragOver={(e) => {
@@ -564,13 +599,88 @@ function BuildPalette({ onAdd }: { onAdd: (kind: LessonKind) => void }) {
   )
 }
 
-const DELIVERY_OPTIONS: { value: string; label: string }[] = [
-  { value: 'classroom', label: 'Classroom' },
-  { value: 'self_paced', label: 'Self-paced' },
-  { value: 'online', label: 'Online' },
-  { value: 'on_the_job', label: 'On-the-job' },
-  { value: 'external_certificate', label: 'External certificate' },
-]
+// Settings-driven delivery types (online, external certificate) get a focused
+// surface in place of the curriculum builder.
+function DeliverySurface({
+  course,
+  deliveryType,
+  onOpenOverview,
+}: {
+  course: CourseLite
+  deliveryType: string
+  onOpenOverview: () => void
+}) {
+  const online = deliveryType === 'online'
+  return (
+    <div className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+        <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+          {online ? 'Online course' : 'External certification'}
+        </span>
+      </div>
+      <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+        <div className="mx-auto max-w-xl rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <span className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            {online ? <Link2 size={18} /> : <Award size={18} />}
+          </span>
+          {online ? (
+            <>
+              <h3 className="mt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Learners take this course at an external site
+              </h3>
+              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                The course appears in My training. Learners open the link, finish the course, and
+                confirm completion — a training record and certificate are issued automatically.
+              </p>
+              {course.onlineUrl ? (
+                <a
+                  href={course.onlineUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-block max-w-full truncate rounded-md border border-slate-200 px-3 py-1.5 text-sm text-teal-700 hover:border-teal-300 dark:border-slate-700 dark:text-teal-300 dark:hover:border-teal-700"
+                >
+                  {course.onlineUrl}
+                </a>
+              ) : (
+                <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                  No course link set — learners have nothing to open.
+                </p>
+              )}
+              <div className="mt-4">
+                <Button type="button" variant="outline" size="sm" onClick={onOpenOverview}>
+                  <Settings2 size={14} /> Edit link &amp; instructions
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="mt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Certificates are recorded, not taken in the app
+              </h3>
+              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                This course tracks credentials earned outside BeaconHS. It never appears in the
+                learner catalog — enter each person&apos;s certificate as a training record, or
+                import them in bulk.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <form action={startTrainingRecord}>
+                  <Button type="submit" size="sm">
+                    <Plus size={14} /> Add record
+                  </Button>
+                </form>
+                <Link href={`/training/records?q=${encodeURIComponent(course.code)}`}>
+                  <Button type="button" variant="outline" size="sm">
+                    <Award size={14} /> View records
+                  </Button>
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function OverviewPanel({
   course,
@@ -617,11 +727,9 @@ function OverviewPanel({
             </option>
           ))}
         </Select>
-        {delivery === 'online' ? (
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            Learners self-start, complete the linked course, then mark it done.
-          </p>
-        ) : null}
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+          {deliveryMeta(delivery).hint}
+        </p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="ov-desc">Description</Label>
@@ -686,6 +794,15 @@ function OverviewPanel({
           />
         </div>
       </div>
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+        <input
+          type="checkbox"
+          name="requiresEvaluator"
+          defaultChecked={course.requiresEvaluator}
+          className="h-4 w-4 accent-teal-700"
+        />
+        Requires evaluator sign-off
+      </label>
       <div className="space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
         <Label>Credential designs</Label>
         <p className="text-[11px] text-slate-500 dark:text-slate-400">

@@ -6,6 +6,7 @@
 // at an existing training_assessment_types row; session lessons at a class.
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import {
   trainingCourseFiles,
@@ -20,12 +21,42 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { purgeDeckAssets } from '../../../pptx/_lib'
+import { DELIVERY_TYPES, type DeliveryType } from '../../../_lib/delivery'
 
 type LessonKind = 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
 type CompletionRule = 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
 
 // The course page IS the builder now.
 const studioPath = (courseId: string) => `/training/courses/${courseId}`
+
+// Create a draft course and jump straight into its workspace — no intermediate
+// form. Name, code, delivery type and the rest are captured inline on the
+// Overview tab; the curriculum is built on the same page. Mirrors how training
+// records and hazard assessments start.
+export async function startCourse() {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  const tenantId = ctx.tenantId
+
+  const created = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .insert(trainingCourses)
+      .values({ tenantId, name: 'Untitled course', code: '', deliveryType: 'self_paced' })
+      .returning({ id: trainingCourses.id })
+    return row ?? null
+  })
+  if (!created) throw new Error('Could not create the course.')
+
+  await recordAudit(ctx, {
+    entityType: 'training_course',
+    entityId: created.id,
+    action: 'create',
+    summary: 'Created course draft',
+  })
+  revalidatePath('/training/courses')
+  redirect(`/training/courses/${created.id}`)
+}
 
 // --- Modules ---------------------------------------------------------------
 
@@ -352,15 +383,6 @@ export async function importLessonPptx(lessonId: string, courseId: string, attac
   revalidatePath(studioPath(courseId))
 }
 
-const DELIVERY_TYPES = [
-  'classroom',
-  'self_paced',
-  'on_the_job',
-  'external_certificate',
-  'online',
-] as const
-type DeliveryType = (typeof DELIVERY_TYPES)[number]
-
 export async function updateCourseSettings(courseId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
@@ -404,6 +426,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
         instructions,
         durationMinutes: durationRaw ? Math.max(0, Number(durationRaw) || 0) : null,
         validForMonths: validRaw ? Math.max(0, Number(validRaw) || 0) : null,
+        requiresEvaluator: formData.get('requiresEvaluator') === 'on',
         metadata,
       })
       .where(eq(trainingCourses.id, courseId))

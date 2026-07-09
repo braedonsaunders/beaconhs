@@ -294,6 +294,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         instructions: course.instructions,
         durationMinutes: course.durationMinutes,
         validForMonths: course.validForMonths,
+        requiresEvaluator: course.requiresEvaluator,
         credentialOutputIds: courseCredentialOutputIds(course.metadata),
       }}
       credentialOutputs={credentialOutputs}

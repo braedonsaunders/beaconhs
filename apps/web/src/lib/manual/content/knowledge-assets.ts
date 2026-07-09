@@ -78,6 +78,68 @@ If you manage training, class changes can send emails on their own — for examp
 - Lessons marked **opt** are optional. Everything else must be completed.`,
   },
   {
+    slug: 'training-courses',
+    title: 'Building training courses',
+    group: 'Knowledge & training',
+    iconKey: 'grad',
+    summary: 'Create courses, pick the right delivery type, and build the content workers take.',
+    keywords: [
+      'course builder',
+      'new course',
+      'delivery type',
+      'self-paced',
+      'classroom',
+      'online course',
+      'on-the-job',
+      'external certificate',
+      'lessons',
+      'modules',
+      'enroll',
+      'evaluations',
+    ],
+    requiredPermission: 'training.course.manage',
+    body: `Courses are built right on the course page — the same page that shows the course's records, classes, and files.
+
+## Create a course
+
+1. Open **Training** in the left menu, then **Courses**.
+2. Tap **New course**. A draft opens immediately — there is no form to fill in first.
+3. On the **Overview** tab, set the **Name**, **Code**, and **Delivery type**, then tap **Save settings**.
+
+## Pick the delivery type
+
+The delivery type decides what the course page shows and how workers complete the course:
+
+- **Self-paced** — workers take the course themselves from [My training](/my/training). Build lessons, quizzes, and practicals; finishing every required lesson issues a training record and certificate automatically.
+- **Classroom** — instructor-led. Schedule classes on the **Classes** tab. You can still build slides and handouts for instructors to present.
+- **Online** — an outside website runs the course. Set the **Course URL** and **Instructions** in Overview; workers open the link, finish the course, and confirm completion in the app.
+- **On-the-job** — hands-on training. Build **Practical test** lessons, then sign workers off under **Evaluations**.
+- **External certificate** — training earned outside the company, like First Aid from a provider. There is nothing to build or take in the app — record each person's certificate with **Add record** on the course page, or on the **Certificates** tab.
+
+Online and external certificate courses do not show the content builder — their course page shows the link or the record shortcuts instead.
+
+## Build the content
+
+1. Open the course and tap the **Build** tab.
+2. Drag an element onto a module: **Text lesson**, **Slideshow**, **Video**, **Quiz**, **Practical test**, **In-person session**, **File / handout**, or **Embedded page**. You can also just tap an element to add it.
+3. Tap a lesson to edit it. Changes save automatically.
+4. Use **Preview as learner** to see the course as a worker sees it. **Play** presents the whole course full-screen.
+
+## Enroll learners for sign-off
+
+Classroom and on-the-job courses are not self-started — workers see them in [My training](/my/training) only once you enroll them.
+
+1. Open the course and tap **Evaluations**.
+2. Pick a person under **Enroll a learner…** and tap **Enroll**.
+3. The learner appears in the sign-off grid. Tap a cell to evaluate them against the practical's criteria, with a signature.
+
+## Tips
+
+- A self-paced course only appears in workers' course lists once it has at least one module of content.
+- Pick which certificate designs a course issues under **Credential designs** in Overview.
+- Slideshow lessons can import PowerPoint files — see [Course slideshows & PowerPoint](/help/training-slideshows).`,
+  },
+  {
     slug: 'training-slideshows',
     title: 'Course slideshows & PowerPoint',
     group: 'Knowledge & training',

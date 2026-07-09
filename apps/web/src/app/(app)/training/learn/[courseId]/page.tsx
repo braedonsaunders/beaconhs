@@ -17,6 +17,7 @@ import { publicUrl } from '@beaconhs/storage'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
+import { deliveryMeta } from '../../_lib/delivery'
 import { lessonProseCss } from '../../_editor/prose'
 import { CoursePlayer, EnrollGate, OnlineCoursePlayer, type PlayerModule } from './_player'
 
@@ -214,6 +215,31 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
             Your account is not linked to a worker profile, so progress is not tracked. Ask an
             administrator to link your People record.
+          </CardContent>
+        </Card>
+      ) : course.deliveryType === 'external_certificate' ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+            This course tracks certifications earned outside the app — there is nothing to take
+            here. Your training team records them; completed certificates appear under{' '}
+            <a
+              href="/my/training?tab=records"
+              className="text-teal-700 underline dark:text-teal-300"
+            >
+              My training
+            </a>
+            .
+          </CardContent>
+        </Card>
+      ) : !enrollment && !deliveryMeta(course.deliveryType).selfLaunch ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+            This course is delivered by your training team — it can&apos;t be started from here.
+            Once you&apos;re enrolled, it appears under{' '}
+            <a href="/my/training" className="text-teal-700 underline dark:text-teal-300">
+              My training
+            </a>
+            .
           </CardContent>
         </Card>
       ) : !enrollment ? (

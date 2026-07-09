@@ -22,6 +22,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { deliveryMeta } from '../_lib/delivery'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { completeOnlineEnrollment, recomputeEnrollmentCompletion } from './_lib/completion'
 
@@ -86,6 +87,25 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
   }
 
   await ctx.db(async (tx) => {
+    // Enrollment only makes sense for courses a learner can take or attend.
+    // External certificates are records entered by training staff, and
+    // classroom / on-the-job courses are assigned by staff, not self-started.
+    const [course] = await tx
+      .select({ deliveryType: trainingCourses.deliveryType })
+      .from(trainingCourses)
+      .where(eq(trainingCourses.id, courseId))
+      .limit(1)
+    if (!course) throw new Error('Course not found')
+    const meta = deliveryMeta(course.deliveryType)
+    if (!meta.hasContent && !meta.selfLaunch) {
+      throw new Error(
+        'This course tracks external certificates — add a training record instead of enrolling.',
+      )
+    }
+    if (!assigning && !meta.selfLaunch) {
+      throw new Error('This course is assigned by your training team — it cannot be self-started.')
+    }
+
     const [existing] = await tx
       .select()
       .from(trainingEnrollments)

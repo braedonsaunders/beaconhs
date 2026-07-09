@@ -24,18 +24,12 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
+import { DELIVERY_OPTIONS, deliveryLabel } from '../_lib/delivery'
+import { startCourse } from './[id]/studio/_actions'
 
 export const metadata = { title: 'Training courses' }
 
 const SORTS = ['name', 'code', 'delivery_type', 'valid_for_months'] as const
-
-const DELIVERY_OPTIONS = [
-  { value: 'classroom', label: 'Classroom' },
-  { value: 'self_paced', label: 'Self-paced' },
-  { value: 'online', label: 'Online' },
-  { value: 'on_the_job', label: 'On-the-job' },
-  { value: 'external_certificate', label: 'External cert' },
-]
 
 export default async function TrainingCoursesPage({
   searchParams,
@@ -122,9 +116,9 @@ export default async function TrainingCoursesPage({
                   </Link>
                 ) : null}
                 {canManage ? (
-                  <Link href="/training/courses/new">
-                    <Button>New course</Button>
-                  </Link>
+                  <form action={startCourse}>
+                    <Button type="submit">New course</Button>
+                  </form>
                 ) : null}
               </div>
             }
@@ -150,9 +144,9 @@ export default async function TrainingCoursesPage({
           description="Add a course to start tracking competencies."
           action={
             canManage ? (
-              <Link href="/training/courses/new">
-                <Button>New course</Button>
-              </Link>
+              <form action={startCourse}>
+                <Button type="submit">New course</Button>
+              </form>
             ) : undefined
           }
         />
@@ -199,7 +193,7 @@ export default async function TrainingCoursesPage({
                     {c.code}
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {c.deliveryType.replace(/_/g, ' ')}
+                    {deliveryLabel(c.deliveryType)}
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
                     {c.validForMonths ? `${c.validForMonths} months` : 'No expiry'}
