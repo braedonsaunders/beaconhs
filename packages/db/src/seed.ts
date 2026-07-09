@@ -93,6 +93,7 @@ import type { FormSchemaV1 } from './schema'
 import { CANONICAL_TEMPLATES } from './canonical-templates'
 import { seedHazardAssessmentAppTemplates } from './seed/hazard-assessment-app-templates'
 import { seedLiftPlanTemplate } from './seed/lift-plan-template'
+import { seedFormPdfTemplates, seedPdfTemplates } from './seed/pdf-templates'
 import { seedToolboxTemplate } from './seed/toolbox-template'
 
 async function main() {
@@ -1987,6 +1988,18 @@ async function main() {
       .limit(1)
     if (!first) return
     await seedDocumentTypesAndCategories(tx as any, first.id)
+  })
+
+  // PDF document templates — refresh the seeded per-module print defaults and
+  // generate a default document per published Builder app that has none, for
+  // EVERY tenant on every run (upserts; tenant-authored templates and chosen
+  // defaults are never touched; deletions are respected).
+  await db.transaction(async (tx) => {
+    const all = await tx.select({ id: tenants.id }).from(tenants)
+    for (const t of all) {
+      await seedPdfTemplates(tx as any, t.id)
+      await seedFormPdfTemplates(tx as any, t.id)
+    }
   })
 
   await pg.end()

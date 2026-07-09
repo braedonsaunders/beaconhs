@@ -11,7 +11,8 @@
     "./client": "./src/client.ts",
     "./rls": "./src/rls.ts",
     "./canonical-templates": "./src/canonical-templates.ts",
-    "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts"
+    "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts",
+    "./seed/pdf-templates": "./src/seed/pdf-templates.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
