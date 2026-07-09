@@ -5,22 +5,37 @@ import 'server-only'
 
 import { desc, eq, isNull } from 'drizzle-orm'
 import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
-import type { FormSchemaV1, I18nString } from '@beaconhs/forms-core'
+import type { FormSchemaV1 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import { MODULE_FLOW_PROFILES } from './module-profiles'
+import {
+  SKIP_FIELD_TYPES,
+  hasImageCompanion,
+  hasPhotosCompanion,
+  hasTextCompanion,
+  isAttachmentArrayField,
+  labelText,
+} from './form-subject-values'
 
 export type SubjectFieldOption = { key: string; label: string }
 export type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
 /** A repeating child collection exposed for {{#each}} tables. */
 export type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
 
-// Content-only field types carry no mergeable value.
-const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
-
-function labelText(l: I18nString | undefined, fallback: string): string {
-  if (typeof l === 'string') return l || fallback
-  if (l && typeof l === 'object' && typeof l.en === 'string') return l.en || fallback
-  return fallback
+/** Latest schema version for a Builder app (palette source of truth). */
+async function loadLatestFormSchema(
+  ctx: RequestContext,
+  templateId: string,
+): Promise<FormSchemaV1 | null> {
+  const [ver] = await ctx.db((tx) =>
+    tx
+      .select({ schema: formTemplateVersions.schema })
+      .from(formTemplateVersions)
+      .where(eq(formTemplateVersions.templateId, templateId))
+      .orderBy(desc(formTemplateVersions.version))
+      .limit(1),
+  )
+  return (ver?.schema as FormSchemaV1 | undefined) ?? null
 }
 
 /** All mergeable fields for a subject — module profile fields OR an app's schema. */
@@ -36,23 +51,25 @@ export async function loadSubjectFields(
     )
   }
   if (subjectType === 'form_template') {
-    const [ver] = await ctx.db((tx) =>
-      tx
-        .select({ schema: formTemplateVersions.schema })
-        .from(formTemplateVersions)
-        .where(eq(formTemplateVersions.templateId, subjectKey))
-        .orderBy(desc(formTemplateVersions.version))
-        .limit(1),
-    )
-    const schema = ver?.schema as FormSchemaV1 | undefined
+    const schema = await loadLatestFormSchema(ctx, subjectKey)
     if (!schema) return []
     const out: SubjectFieldOption[] = []
     for (const sec of schema.sections ?? []) {
       for (const f of sec.fields ?? []) {
         if (SKIP_FIELD_TYPES.has(f.type)) continue
-        out.push({ key: f.id, label: labelText(f.label, f.id) })
+        const label = labelText(f.label, f.id)
+        out.push({ key: f.id, label })
+        // Companion keys mirror the form flow adapter's loadValues():
+        // repeating-section rows keep raw values only, so companions apply to
+        // top-level fields alone.
+        if (sec.repeating) continue
+        if (hasTextCompanion(f.type)) out.push({ key: `${f.id}_text`, label: `${label} (text)` })
+        if (hasImageCompanion(f.type))
+          out.push({ key: `${f.id}_image`, label: `${label} (image URL)` })
       }
     }
+    out.push({ key: 'compliance_score', label: 'Compliance score' })
+    out.push({ key: 'compliance_status', label: 'Compliance status' })
     return out
   }
   return []
@@ -72,7 +89,55 @@ export async function loadSubjectCollections(
       fields: c.fields.map((f) => ({ key: f.key, label: f.label })),
     }))
   }
-  // form_template: repeating sections / grid fields are a future pass.
+  if (subjectType === 'form_template') {
+    const schema = await loadLatestFormSchema(ctx, subjectKey)
+    if (!schema) return []
+    const out: SubjectCollection[] = []
+    const photoFields: SubjectFieldOption[] = [
+      { key: 'url', label: 'File URL' },
+      { key: 'filename', label: 'Filename' },
+    ]
+    for (const sec of schema.sections ?? []) {
+      // Repeating sections: the response stores the rows array at the section
+      // id, each row keyed by the section's field ids.
+      if (sec.repeating) {
+        const fields = (sec.fields ?? [])
+          .filter((f) => !SKIP_FIELD_TYPES.has(f.type))
+          .map((f) => ({ key: f.id, label: labelText(f.label, f.id) }))
+        if (fields.length > 0) {
+          out.push({ key: sec.id, label: labelText(sec.title, sec.id), fields })
+        }
+        continue
+      }
+      for (const f of sec.fields ?? []) {
+        const label = labelText(f.label, f.id)
+        // Photo/file fields: raw AttachedFile rows already carry {url, filename}.
+        if (isAttachmentArrayField(f.type)) {
+          out.push({ key: f.id, label, fields: photoFields })
+          continue
+        }
+        // photo_ai / photo_annotated: nested attachments flattened by the
+        // adapter into a `<id>_photos` companion collection.
+        if (hasPhotosCompanion(f.type)) {
+          out.push({ key: `${f.id}_photos`, label: `${label} (photos)`, fields: photoFields })
+          continue
+        }
+        // Table fields: rows keyed by column key.
+        if (f.type === 'table') {
+          const cfg = (f.config ?? {}) as { columns?: { key: string; label?: string }[] }
+          const columns = cfg.columns ?? []
+          if (columns.length > 0) {
+            out.push({
+              key: f.id,
+              label,
+              fields: columns.map((c) => ({ key: c.key, label: c.label || c.key })),
+            })
+          }
+        }
+      }
+    }
+    return out
+  }
   return []
 }
 
