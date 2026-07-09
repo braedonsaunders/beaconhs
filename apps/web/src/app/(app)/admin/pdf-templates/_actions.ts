@@ -13,6 +13,7 @@ import { recordAudit } from '@/lib/audit'
 import { compileBuilderHtml, slugifyTemplateKey } from '@/lib/email-templates'
 import { loadSubjectFields } from '@/lib/flows/subject-fields'
 import { isModulePdfTarget } from '@/lib/module-pdf'
+import { ensureFormPdfTemplate } from '@/lib/pdf-template-generate'
 import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
 import { buildFlowAdapter } from '@/lib/flows/registry'
 import { findSampleSubjectId } from '@/lib/flows/sample-record'
@@ -80,10 +81,8 @@ export async function createPdfTemplate(formData: FormData): Promise<void> {
   const compiled = compileBuilderHtml(STARTER_HTML)
 
   const newId = await ctx.db(async (tx) => {
-    const existing = await tx
-      .select({ key: pdfTemplates.key })
-      .from(pdfTemplates)
-      .where(isNull(pdfTemplates.deletedAt))
+    // The (tenant, key) unique index covers soft-deleted rows too — probe all.
+    const existing = await tx.select({ key: pdfTemplates.key }).from(pdfTemplates)
     const taken = new Set(existing.map((r) => r.key))
     let key = base
     let n = 2
@@ -239,6 +238,21 @@ export async function setModuleDefaultTemplate(input: {
   })
   revalidatePath('/admin/pdf-templates')
   return { ok: true }
+}
+
+// Generate the default response-PDF document for a Builder app that lacks one
+// — the same generated layout a first publish creates. Explicit admin intent,
+// so a previously deleted template does not block regeneration.
+export async function generateAppPdfTemplate(input: {
+  formTemplateId: string
+}): Promise<{ ok: boolean; templateId?: string; error?: string }> {
+  const ctx = await requireManage()
+  const res = await ensureFormPdfTemplate(ctx, input.formTemplateId, { respectDeleted: false })
+  if (!res.templateId) {
+    return { ok: false, error: 'This app has no published version to generate from.' }
+  }
+  revalidatePath('/admin/pdf-templates')
+  return { ok: true, templateId: res.templateId }
 }
 
 export async function deletePdfTemplate(formData: FormData): Promise<void> {

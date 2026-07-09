@@ -341,6 +341,8 @@ Open [Builder](/apps) from the sidebar. It lists your apps with a **published** 
 
 Publishing again later creates the next version. Old submissions keep the version they were filled on.
 
+The first publish also generates the app's **PDF template** — the document its record downloads and flow attachments use. Admins can restyle it (or generate one for an older app) under **Admin → PDF templates**.
+
 ## Assign the form to people
 
 Filling a form on a schedule is tracked by the compliance engine.
@@ -416,7 +418,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Navigation** — reorder the sidebar and pin forms as modules.
 - **Data sources** — reference lists and live data your apps bind to.
 - **Data export** — audited CSV exports across modules and Builder apps.
-- **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates also drive record downloads: assign one as a module's default (or build one for a Builder app) and every **PDF** button and flow attachment for those records uses it. Records without a template get a clean field-summary PDF.
+- **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
 
 ## Integrations
 

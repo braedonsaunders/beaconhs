@@ -10,7 +10,7 @@ import 'server-only'
 // The merge + render reuses the exact chain the flows engine already uses:
 // buildFlowAdapter(...).loadValues() → renderTemplate → template_pdf.
 
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { formResponses, formTemplates, pdfTemplates } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { renderTemplate } from '@beaconhs/email-render'
@@ -210,6 +210,53 @@ export async function listModulePdfDefaults(ctx: RequestContext): Promise<Module
       label: t.label,
       options: forModule.map((r) => ({ id: r.id, name: r.name })),
       selectedId: forModule.find((r) => r.isModuleDefault)?.id ?? null,
+    }
+  })
+}
+
+export type AppPdfTemplateRow = {
+  formTemplateId: string
+  appName: string
+  /** The app's active response-PDF template (default first), null = generic summary. */
+  template: { id: string; name: string } | null
+}
+
+// For the admin config UI: every published Builder app + whether it has its
+// own response-PDF template (the "Generate default template" affordance
+// targets the ones that don't).
+export async function listAppPdfTemplates(ctx: RequestContext): Promise<AppPdfTemplateRow[]> {
+  const [apps, tpls] = await Promise.all([
+    ctx.db((tx) =>
+      tx
+        .select({ id: formTemplates.id, name: formTemplates.name })
+        .from(formTemplates)
+        .where(and(eq(formTemplates.status, 'published'), isNull(formTemplates.deletedAt)))
+        .orderBy(asc(formTemplates.name)),
+    ),
+    ctx.db((tx) =>
+      tx
+        .select({
+          id: pdfTemplates.id,
+          name: pdfTemplates.name,
+          subjectKey: pdfTemplates.recordSubjectKey,
+        })
+        .from(pdfTemplates)
+        .where(
+          and(
+            isNull(pdfTemplates.deletedAt),
+            eq(pdfTemplates.isActive, true),
+            eq(pdfTemplates.recordSubjectType, 'form_template'),
+          ),
+        )
+        .orderBy(desc(pdfTemplates.isModuleDefault), asc(pdfTemplates.name)),
+    ),
+  ])
+  return apps.map((a) => {
+    const tpl = tpls.find((t) => t.subjectKey === a.id)
+    return {
+      formTemplateId: a.id,
+      appName: a.name,
+      template: tpl ? { id: tpl.id, name: tpl.name } : null,
     }
   })
 }

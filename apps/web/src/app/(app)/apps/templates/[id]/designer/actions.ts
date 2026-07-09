@@ -7,6 +7,7 @@ import { formAutomations, formTemplateVersions, formTemplates } from '@beaconhs/
 import { validateFormSchema, type AutomationGraph, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { ensureFormPdfTemplate } from '@/lib/pdf-template-generate'
 import type { RecordConfig } from './_record-behavior-panel'
 
 // Records-list configuration (recordConfig.list). The CONTRACT mirrors the
@@ -116,6 +117,15 @@ export async function publishNewVersion(args: {
       action: 'publish',
       summary: `Published version ${result}`,
     })
+
+    // First publish generates the app's default PDF document template (the
+    // response-PDF layout, editable at /admin/pdf-templates). Never overwrites
+    // an existing or tenant-deleted template, and never fails the publish.
+    try {
+      await ensureFormPdfTemplate(ctx, args.templateId)
+    } catch (err) {
+      console.error('publishNewVersion: PDF template generation failed', err)
+    }
 
     revalidatePath(`/apps/templates/${args.templateId}`)
     revalidatePath('/apps')
