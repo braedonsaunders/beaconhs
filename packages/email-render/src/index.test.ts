@@ -12,7 +12,11 @@ import {
 describe('renderEmail — inline', () => {
   it('interpolates tokens, keeps line breaks as <br/>, and wraps the shell', () => {
     const r = renderEmail(
-      { mode: 'inline', subject: 'Hello {{name}}', bodyTemplate: 'Hi {{name}},\nScore: {{score}}.' },
+      {
+        mode: 'inline',
+        subject: 'Hello {{name}}',
+        bodyTemplate: 'Hi {{name}},\nScore: {{score}}.',
+      },
       { name: 'Sam', score: 88 },
     )
     expect(r.subject).toBe('Hello Sam')
@@ -58,10 +62,7 @@ describe('renderEmail — inline', () => {
     expect(r.html).toContain('Acme HSE')
   })
   it('falls back to "Notification" for an empty subject and escapes body HTML', () => {
-    const r = renderEmail(
-      { mode: 'inline', subject: '{{missing}}', bodyTemplate: 'a "b" & c' },
-      {},
-    )
+    const r = renderEmail({ mode: 'inline', subject: '{{missing}}', bodyTemplate: 'a "b" & c' }, {})
     expect(r.subject).toBe('Notification')
     expect(r.html).toContain('a &quot;b&quot; &amp; c')
   })

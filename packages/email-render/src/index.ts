@@ -391,8 +391,7 @@ function inlineShellHtml(body: string, cta: EmailCta | undefined, brandName: str
 
 export function renderEmail(spec: RenderableEmail, values: Record<string, unknown>): RenderedEmail {
   if (spec.mode === 'inline') {
-    const subject =
-      interpolate(spec.subject, values).replace(/\s+/g, ' ').trim() || 'Notification'
+    const subject = interpolate(spec.subject, values).replace(/\s+/g, ' ').trim() || 'Notification'
     const body = dropEmptyLabelLines(interpolate(spec.bodyTemplate, values))
     const text = spec.cta ? `${body}\n\n${spec.cta.label}: ${spec.cta.url}` : body
     const html = inlineShellHtml(body, spec.cta, spec.brandName?.trim() || 'BeaconHS')

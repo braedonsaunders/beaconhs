@@ -97,9 +97,9 @@ export default async function PdfTemplatesPage({
           <div className="space-y-10">
             <section className="space-y-4">
               <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                Choose which template each module&apos;s print/PDF button renders. Leave a module
-                on <strong>Field summary</strong> to print a plain key/value document. Only
-                templates whose record type matches the module are listed.
+                Choose which template each module&apos;s print/PDF button renders. Leave a module on{' '}
+                <strong>Field summary</strong> to print a plain key/value document. Only templates
+                whose record type matches the module are listed.
               </p>
               <ModuleDefaultsPanel rows={moduleDefaults} />
             </section>
@@ -109,8 +109,8 @@ export default async function PdfTemplatesPage({
               </h2>
               <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
                 Each published app can print its records with its own template. Publishing an app
-                generates one automatically; use <strong>Generate default template</strong> for
-                apps published before this existed or after their template was deleted.
+                generates one automatically; use <strong>Generate default template</strong> for apps
+                published before this existed or after their template was deleted.
               </p>
               <AppTemplatesPanel rows={appTemplates} />
             </section>

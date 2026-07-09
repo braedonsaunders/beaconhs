@@ -590,7 +590,10 @@ const TRAINING_CLASS = wrap(
       p('Location', '{{site_name}}'),
       p('Instructor', '{{instructor_name}}'),
       p('Capacity', '{{capacity}}'),
-      p('Roster', '{{attendee_count}} enrolled · {{attended_count}} attended · {{absent_count}} absent'),
+      p(
+        'Roster',
+        '{{attendee_count}} enrolled · {{attended_count}} attended · {{absent_count}} absent',
+      ),
     ]) +
     narrative('About this course', '{{course_description}}') +
     narrative('Notes', '{{notes}}') +
@@ -615,7 +618,11 @@ const VEHICLE_LOG_TOTALS =
   `</tr>`
 
 const VEHICLE_LOG = wrap(
-  letterhead('Vehicle Log', '{{month_label}} · {{driver_name}} · {{vehicle_name}}', '{{month_key}}') +
+  letterhead(
+    'Vehicle Log',
+    '{{month_label}} · {{driver_name}} · {{vehicle_name}}',
+    '{{month_key}}',
+  ) +
     heading('Details') +
     grid([
       p('Driver', '{{driver_name}}'),
