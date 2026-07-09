@@ -55,6 +55,10 @@ export type FlowSubjectAdapter = {
     action: ActionData,
     helpers: ExtraActionHelpers,
   ): Promise<{ ran: string[]; failed: string[] }>
-  /** Build the PDF-render job for this subject (send_email attachPdf). Null ⇒ no PDF. */
+  /**
+   * The FALLBACK PDF job for this subject (a generic record summary built from
+   * the same values). Callers prefer the subject's assigned PDF document
+   * template and use this only when none is configured. Null ⇒ no PDF.
+   */
   pdfJob?(values: Record<string, unknown>): PdfEmailableJobData | null
 }

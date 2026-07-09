@@ -1579,7 +1579,6 @@ function NodeInspector({
       emailTemplates={emailTemplates}
       pdfTemplates={pdfTemplates}
       recipientOptions={recipientOptions}
-      richPdf={profile.richPdf ?? false}
       readOnly={readOnly}
       onChange={onChange}
     />
@@ -1593,7 +1592,6 @@ function ActionInspector({
   emailTemplates,
   pdfTemplates,
   recipientOptions,
-  richPdf,
   readOnly,
   onChange,
 }: {
@@ -1603,7 +1601,6 @@ function ActionInspector({
   emailTemplates: EmailTemplateOption[]
   pdfTemplates: PdfTemplateOption[]
   recipientOptions: RecipientOptions
-  richPdf: boolean
   readOnly: boolean
   onChange: (d: NData) => void
 }) {
@@ -1802,22 +1799,28 @@ function ActionInspector({
                 value={
                   a.pdfTemplateId
                     ? `tpl:${a.pdfTemplateId}`
-                    : `builtin:${a.pdfFormat ?? (richPdf ? 'full' : 'summary')}`
+                    : a.pdfFormat === 'summary'
+                      ? 'builtin:summary'
+                      : 'builtin:auto'
                 }
                 disabled={readOnly}
                 onChange={(e) => {
                   const v = e.target.value
                   if (v.startsWith('tpl:')) {
                     set({ ...a, pdfTemplateId: v.slice(4), pdfFormat: undefined })
+                  } else if (v === 'builtin:summary') {
+                    set({ ...a, pdfTemplateId: undefined, pdfFormat: 'summary' })
                   } else {
-                    set({
-                      ...a,
-                      pdfTemplateId: undefined,
-                      pdfFormat: v.slice(8) as 'full' | 'summary',
-                    })
+                    set({ ...a, pdfTemplateId: undefined, pdfFormat: undefined })
                   }
                 }}
               >
+                <optgroup label="Built-in">
+                  <option value="builtin:auto">
+                    Assigned PDF template (falls back to the field summary)
+                  </option>
+                  <option value="builtin:summary">Field summary (key / value table)</option>
+                </optgroup>
                 {pdfTemplates.length > 0 ? (
                   <optgroup label="PDF templates (paper-size documents)">
                     {pdfTemplates.map((t) => (
@@ -1827,10 +1830,6 @@ function ActionInspector({
                     ))}
                   </optgroup>
                 ) : null}
-                <optgroup label="Built-in">
-                  {richPdf ? <option value="builtin:full">Full record PDF</option> : null}
-                  <option value="builtin:summary">Field summary (key / value table)</option>
-                </optgroup>
               </Select>
             </Field>
           ) : null}

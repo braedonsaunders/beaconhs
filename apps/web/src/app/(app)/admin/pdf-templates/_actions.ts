@@ -193,7 +193,7 @@ export async function loadPdfPreviewData(
 }
 
 // Assign (or clear) the default print/PDF template for a native module. Clearing
-// reverts that module's print button to its built-in renderer. At most one
+// reverts that module's print button to the generic field-summary PDF. At most one
 // template is the default per (tenant, module) — the partial unique index backs
 // this; we also clear the prior default first so re-assigning is idempotent.
 export async function setModuleDefaultTemplate(input: {
@@ -235,7 +235,7 @@ export async function setModuleDefaultTemplate(input: {
     action: 'update',
     summary: input.templateId
       ? `Set default print template for ${input.moduleKey}`
-      : `Reverted ${input.moduleKey} print button to the built-in template`,
+      : `Reverted ${input.moduleKey} print button to the field-summary PDF`,
   })
   revalidatePath('/admin/pdf-templates')
   return { ok: true }

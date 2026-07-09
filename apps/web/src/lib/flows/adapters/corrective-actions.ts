@@ -17,6 +17,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, fmtDateTime, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
@@ -31,7 +32,16 @@ export function createCorrectiveActionFlowAdapter(
     notifyCategory: 'ca',
     auditEntityType: 'corrective_action',
     deepLink: () => `/corrective-actions/${caId}`,
-    pdfJob: () => ({ kind: 'ca', tenantId: ctx.tenantId, caId }),
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: caId,
+        entityType: 'corrective_action',
+        heading: 'Corrective action',
+        reference: values.reference,
+        subtitle: values.title,
+        values,
+      }),
 
     async loadValues() {
       const ownerTU = alias(tenantUsers, 'ca_owner_tu')

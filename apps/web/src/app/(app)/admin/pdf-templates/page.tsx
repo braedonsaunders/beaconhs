@@ -94,9 +94,9 @@ export default async function PdfTemplatesPage({
         {tab === 'defaults' ? (
           <section className="space-y-4">
             <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Choose which template each module&apos;s built-in print/PDF button renders. Leave a
-              module on <strong>Built-in default</strong> to keep its standard layout. Only
-              templates whose record type matches the module are listed.
+              Choose which template each module&apos;s print/PDF button renders. Leave a module on{' '}
+              <strong>Field summary</strong> to print a plain key/value document. Only templates
+              whose record type matches the module are listed.
             </p>
             <ModuleDefaultsPanel rows={moduleDefaults} />
           </section>

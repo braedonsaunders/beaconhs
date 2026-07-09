@@ -21,6 +21,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDate, fmtDateTime, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
@@ -36,7 +37,16 @@ export function createIncidentFlowAdapter(
     notifyCategory: 'incident',
     auditEntityType: 'incident',
     deepLink: () => `/incidents/${incidentId}`,
-    pdfJob: () => ({ kind: 'incident', tenantId: ctx.tenantId, incidentId }),
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: incidentId,
+        entityType: 'incident',
+        heading: 'Incident report',
+        reference: values.reference,
+        subtitle: values.title,
+        values,
+      }),
 
     async loadValues() {
       const [head] = await ctx.db((tx) =>

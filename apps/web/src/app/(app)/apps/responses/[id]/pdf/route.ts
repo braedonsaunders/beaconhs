@@ -7,7 +7,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { formResponses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
-import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
+import { renderFormResponsePdfResponse } from '@/lib/module-pdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,9 +50,5 @@ export async function GET(
     notFound()
   }
 
-  return renderOnDemandPdfResponse({
-    kind: 'form_response',
-    tenantId: ctx.tenantId,
-    responseId: id,
-  })
+  return renderFormResponsePdfResponse(ctx, id)
 }

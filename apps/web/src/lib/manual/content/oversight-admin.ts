@@ -416,7 +416,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Navigation** — reorder the sidebar and pin forms as modules.
 - **Data sources** — reference lists and live data your apps bind to.
 - **Data export** — audited CSV exports across modules and Builder apps.
-- **Email templates** and **PDF templates** — branded emails and paper documents that flows can send and attach.
+- **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates also drive record downloads: assign one as a module's default (or build one for a Builder app) and every **PDF** button and flow attachment for those records uses it. Records without a template get a clean field-summary PDF.
 
 ## Integrations
 

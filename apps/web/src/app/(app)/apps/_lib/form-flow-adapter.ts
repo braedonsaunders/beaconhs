@@ -38,6 +38,7 @@ import {
   sketchImageUrl,
 } from '@/lib/flows/form-subject-values'
 import { personName } from '@/lib/flows/format'
+import { buildRecordSummaryPdfJob } from '@/lib/flows/pdf-summary'
 import type { ExtraActionHelpers, FlowSubjectAdapter } from '@/lib/flows/types'
 
 const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
@@ -80,7 +81,18 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
     notifyCategory: 'forms',
     auditEntityType: 'form_response',
     deepLink: () => `/apps/responses/${responseId}`,
-    pdfJob: () => ({ kind: 'form_response', tenantId: ctx.tenantId, responseId }),
+    // FALLBACK only — the executor prefers the form template's own PDF
+    // document template and calls this when none is assigned.
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: responseId,
+        entityType: 'form_response',
+        heading: 'Form response',
+        reference: responseId.slice(0, 8),
+        subtitle: values.title,
+        values,
+      }),
 
     async loadValues() {
       const [resp] = await ctx.db((tx) =>
@@ -416,17 +428,51 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
       }
 
       // Render + store this record's PDF in the worker (manual PDF buttons
-      // navigate to the /pdf route directly; in a flow this stores one).
+      // navigate to the /pdf route directly; in a flow this stores one). Same
+      // resolution as the route: the form's own PDF document template when one
+      // is assigned, else the generic record summary.
       if (action.action === 'export_pdf') {
         try {
-          const jobs = (await import('@beaconhs/jobs')) as Record<string, unknown>
-          const enqueuePdf = jobs.enqueuePdf as ((j: unknown) => Promise<unknown>) | undefined
-          if (typeof enqueuePdf === 'function') {
-            await enqueuePdf({ kind: 'form_response', tenantId: ctx.tenantId, responseId })
-            ran.push('export_pdf')
+          const { enqueuePdf } = await import('@beaconhs/jobs')
+          const { resolveSubjectDefaultPdfTemplate } = await import('@/lib/pdf-templates')
+          const { renderTemplate } = await import('@beaconhs/email-render')
+          const tpl = await resolveSubjectDefaultPdfTemplate(ctx, {
+            subjectType: 'form_template',
+            subjectKey: null,
+            subjectId: responseId,
+          })
+          if (tpl) {
+            const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
+            await enqueuePdf({
+              kind: 'template_pdf',
+              tenantId: ctx.tenantId,
+              html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+              paperSize: tpl.paperSize,
+              orientation: tpl.orientation,
+              marginMm: tpl.marginMm,
+              headerHtml: tpl.headerHtml
+                ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
+                : null,
+              footerHtml: tpl.footerHtml
+                ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
+                : null,
+              entityType: 'form_response',
+              entityId: responseId,
+            })
           } else {
-            failed.push('export_pdf (queue unavailable)')
+            await enqueuePdf(
+              buildRecordSummaryPdfJob({
+                tenantId: ctx.tenantId,
+                subjectId: responseId,
+                entityType: 'form_response',
+                heading: 'Form response',
+                reference: responseId.slice(0, 8),
+                subtitle: values.title,
+                values,
+              }),
+            )
           }
+          ran.push('export_pdf')
         } catch {
           failed.push('export_pdf (error)')
         }

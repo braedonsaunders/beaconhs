@@ -123,11 +123,12 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     design: z.record(z.string(), z.unknown()).optional(),
     compiledHtml: z.string().optional(),
     subjectTemplate: z.string().optional(),
-    // Attach a PDF of the record. `pdfTemplateId` (preferred) attaches a tenant
-    // PDF DOCUMENT template (paper-size builder, /admin/pdf-templates). Else
-    // `pdfFormat` picks a built-in: 'full' = the subject's rich record PDF
-    // (incidents/hazid/CA/form responses); 'summary' = a generic field-summary
-    // table. Absent ⇒ the subject's best default.
+    // Attach a PDF of the record. `pdfTemplateId` pins a specific tenant PDF
+    // DOCUMENT template (paper-size builder, /admin/pdf-templates). Otherwise
+    // the record's assigned default template is used, falling back to the
+    // generic field-summary table. pdfFormat 'summary' forces the field
+    // summary; 'full' is accepted for stored plans and behaves like absent
+    // (the assigned template with summary fallback).
     attachPdf: z.boolean().optional(),
     pdfTemplateId: z.string().optional(),
     pdfFormat: z.enum(['full', 'summary']).optional(),
@@ -203,8 +204,8 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('change_status'), to: z.string(), lock: z.boolean().optional() }),
   // Clone the current record into a fresh draft.
   z.object({ action: z.literal('duplicate_record') }),
-  // Render a PDF of the record. 'full' = the subject's rich record PDF;
-  // 'summary' = a generic field-summary table. Absent ⇒ the subject's default.
+  // Render a PDF of the record: the record's assigned PDF document template,
+  // falling back to the generic field-summary table.
   z.object({ action: z.literal('export_pdf'), pdfFormat: z.enum(['full', 'summary']).optional() }),
 ])
 export type ActionData = z.infer<typeof actionDataSchema>

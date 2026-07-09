@@ -52,7 +52,6 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'hazid',
     label: 'Hazard Assessments',
-    richPdf: true,
     triggers: ['on_create', 'on_sign', 'on_lock', 'on_unlock', 'on_delete', 'manual'],
     actions: [
       'send_email',
@@ -161,7 +160,6 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'incidents',
     label: 'Incidents',
-    richPdf: true,
     triggers: ['on_create', 'status_change', 'on_lock', 'on_unlock', 'manual'],
     actions: [
       'send_email',
@@ -298,7 +296,6 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'corrective-actions',
     label: 'Corrective Actions',
-    richPdf: true,
     triggers: ['on_create', 'status_change', 'manual'],
     actions: [
       'send_email',

@@ -6,8 +6,7 @@ import 'server-only'
 // conditions, recipient `field` targets, and actions like analyze_photos all
 // read raw values. But raw values are often unreadable in a document (picker
 // ids, {answer, comment} objects, ISO datetimes), so the form flow adapter
-// derives COMPANION keys the same way the bespoke renderFormPdf renders each
-// field, and this module is the single source of truth for which companions
+// derives readable COMPANION keys per field, and this module is the single source of truth for which companions
 // exist so the palette (subject-fields.ts) always matches the value map:
 //
 //   {{<fieldId>}}          the raw stored value (unchanged, back-compat)
@@ -106,8 +105,7 @@ function fmtDateTimeText(raw: unknown): string {
 }
 
 /**
- * Human-readable text for one field value — the plain-text twin of the bespoke
- * renderFormPdf's renderValue(). `entityAttrs` is the picker's loaded attr map
+ * Human-readable text for one field value. `entityAttrs` is the picker's loaded attr map
  * (from loadEntitiesForFormPickers); `personNameById` resolves ids picked by a
  * multi_person_picker.
  */

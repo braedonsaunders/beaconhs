@@ -25,7 +25,11 @@ import {
   renderTemplate,
   type RenderableEmail,
 } from '@beaconhs/email-render'
-import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
+import {
+  loadTenantPdfTemplate,
+  resolveSubjectDefaultPdfTemplate,
+  type PdfTemplateRenderConfig,
+} from '@/lib/pdf-templates'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
 import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
@@ -361,16 +365,32 @@ export async function executeFlowPlan(
             failed.push('send_email (no recipients)')
             break
           }
-          const refForFile = values.reference
-          const fileBase =
-            typeof refForFile === 'string' && refForFile.trim() ? refForFile : 'document'
-          const pdfFilename = `${fileBase.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
-          // attachPdf with a chosen PDF DOCUMENT template: merge it here (cheap)
-          // and hand the worker pre-rendered HTML + page setup to print. Page
-          // tokens {{page}}/{{pages}} are preserved for the printer.
-          if (action.attachPdf && action.pdfTemplateId) {
-            const tpl = await loadTenantPdfTemplate(ctx, action.pdfTemplateId)
+          if (action.attachPdf) {
+            const refForFile = values.reference
+            const fileBase =
+              typeof refForFile === 'string' && refForFile.trim() ? refForFile : 'record'
+            const pdfFilename = `${fileBase.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
+            const emailPayload = {
+              to,
+              subject,
+              html,
+              text,
+              filename: pdfFilename,
+              category: adapter.notifyCategory,
+              tenantId: ctx.tenantId,
+            }
+            // Resolve the PDF DOCUMENT template: the flow's explicit pick, else
+            // (unless the flow forces the field summary) the subject's assigned
+            // default — the module default or the form's own template.
+            let tpl: PdfTemplateRenderConfig | null = action.pdfTemplateId
+              ? await loadTenantPdfTemplate(ctx, action.pdfTemplateId)
+              : null
+            if (!tpl && action.pdfFormat !== 'summary') {
+              tpl = await resolveSubjectDefaultPdfTemplate(ctx, adapter)
+            }
             if (tpl) {
+              // Merge here (cheap) and hand the worker pre-rendered HTML + page
+              // setup to print. {{page}}/{{pages}} are preserved for the printer.
               const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
               await enqueuePdfEmail(
                 {
@@ -390,55 +410,30 @@ export async function executeFlowPlan(
                   entityId: adapter.subjectId,
                   filename: pdfFilename,
                 },
-                {
-                  to,
-                  subject,
-                  html,
-                  text,
-                  filename: pdfFilename,
-                  category: adapter.notifyCategory,
-                  tenantId: ctx.tenantId,
-                },
+                emailPayload,
               )
               ran.push(`send_email+pdfdoc→${to.length}`)
               break
             }
-          }
-          // attachPdf: render the subject's PDF in the worker, then email it as
-          // an attachment (non-blocking — the submit never waits on Chromium).
-          if (action.attachPdf && adapter.pdfJob) {
-            // 'summary' → the generic field-summary PDF; otherwise the subject's
-            // rich/default PDF.
+            // No template ⇒ the generic field-summary PDF, rendered in the
+            // worker then emailed (non-blocking — the submit never waits on
+            // Chromium).
             const pdfJob =
-              action.pdfFormat === 'summary'
-                ? buildRecordSummaryPdfJob({
-                    tenantId: ctx.tenantId,
-                    subjectId: adapter.subjectId,
-                    entityType: adapter.auditEntityType,
-                    heading: adapter.auditEntityType
-                      .replace(/_/g, ' ')
-                      .replace(/\b\w/g, (c) => c.toUpperCase()),
-                    reference: values.reference,
-                    subtitle: values.title,
-                    values,
-                  })
-                : adapter.pdfJob(values)
-            if (pdfJob) {
-              const refRaw = values.reference
-              const base = typeof refRaw === 'string' && refRaw.trim() ? refRaw : 'record'
-              const filename = `${base.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
-              await enqueuePdfEmail(pdfJob, {
-                to,
-                subject,
-                html,
-                text,
-                filename,
-                category: adapter.notifyCategory,
+              adapter.pdfJob?.(values) ??
+              buildRecordSummaryPdfJob({
                 tenantId: ctx.tenantId,
+                subjectId: adapter.subjectId,
+                entityType: adapter.auditEntityType,
+                heading: adapter.auditEntityType
+                  .replace(/_/g, ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase()),
+                reference: values.reference,
+                subtitle: values.title,
+                values,
               })
-              ran.push(`send_email+pdf→${to.length}`)
-              break
-            }
+            await enqueuePdfEmail(pdfJob, emailPayload)
+            ran.push(`send_email+pdf→${to.length}`)
+            break
           }
           await enqueueEmail({
             to,

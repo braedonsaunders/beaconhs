@@ -1,8 +1,8 @@
 'use client'
 
 // Per-module "default print template" assignment. For each native module whose
-// PDF button can be templated, pick a tenant template (or keep the built-in
-// layout). Changing the Select fires the setModuleDefaultTemplate action.
+// PDF button can be templated, pick a tenant template (or keep the generic
+// field summary). Changing the Select fires the setModuleDefaultTemplate action.
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
@@ -37,7 +37,7 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
       })
       if (res.ok) {
         toast.success(
-          next ? 'Default print template updated.' : 'Reverted to the built-in template.',
+          next ? 'Default print template updated.' : 'Reverted to the field-summary PDF.',
         )
         router.refresh()
       } else {
@@ -58,7 +58,7 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
             ? 'No template built for this module yet — create one above with this module as its record type.'
             : value
               ? 'Print button renders this template.'
-              : 'Print button renders the built-in layout.'}
+              : 'Print button renders the generic field-summary PDF.'}
         </p>
       </div>
       <div className="sm:w-72 sm:shrink-0">
@@ -68,7 +68,7 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
           disabled={pending || noTemplates}
           aria-label={`Default print template for ${row.label}`}
         >
-          <option value="">Built-in default</option>
+          <option value="">Field summary (no template)</option>
           {row.options.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}

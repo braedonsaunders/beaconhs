@@ -1,10 +1,13 @@
 // GET /ppe/:id/issues/:issueId/pdf
 //
-// Render a fresh PPE issue-report PDF on demand and stream it back to the browser.
+// Render a fresh PPE issue-report PDF on demand and stream it back to the
+// browser. Uses the tenant's configured template for the ppe-issues module
+// when one is set, else the generic record summary.
 
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
+import { recordAudit } from '@/lib/audit'
+import { renderModulePdfResponse } from '@/lib/module-pdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,9 +22,13 @@ export async function GET(
   }
   assertCan(ctx, 'ppe.read.all')
 
-  return renderOnDemandPdfResponse({
-    kind: 'ppe_issue',
-    tenantId: ctx.tenantId,
-    issueReportId: issueId,
+  await recordAudit(ctx, {
+    entityType: 'ppe_issue_report',
+    entityId: issueId,
+    action: 'export',
+    summary: 'Exported PDF',
+    metadata: { format: 'pdf' },
   })
+
+  return renderModulePdfResponse(ctx, { moduleKey: 'ppe-issues', recordId: issueId })
 }

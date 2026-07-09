@@ -23,6 +23,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDateTime, personName, yesBlank, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
@@ -42,7 +43,16 @@ export function createHazidFlowAdapter(
     notifyCategory: 'hazid',
     auditEntityType: 'hazid_assessment',
     deepLink: () => `/hazard-assessments/${assessmentId}`,
-    pdfJob: () => ({ kind: 'hazid', tenantId: ctx.tenantId, assessmentId }),
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: assessmentId,
+        entityType: 'hazid_assessment',
+        heading: 'Hazard assessment',
+        reference: values.reference,
+        subtitle: values.type_name,
+        values,
+      }),
 
     async loadValues() {
       // Header + resolved joins (site / project / type / supervisor / reporter),

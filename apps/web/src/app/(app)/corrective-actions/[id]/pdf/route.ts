@@ -51,9 +51,5 @@ export async function GET(
     metadata: { format: 'pdf' },
   })
 
-  return renderModulePdfResponse(ctx, {
-    moduleKey: 'corrective-actions',
-    recordId: id,
-    builtin: { kind: 'ca', tenantId: ctx.tenantId, caId: id },
-  })
+  return renderModulePdfResponse(ctx, { moduleKey: 'corrective-actions', recordId: id })
 }

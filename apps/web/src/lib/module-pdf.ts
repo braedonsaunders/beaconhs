@@ -1,25 +1,31 @@
 import 'server-only'
 
-// Per-module default PDF templates. A native module's built-in print/PDF button
-// normally renders a hard-coded layout (renderIncident / renderHazid / …). A
-// tenant can instead author a PDF template (/admin/pdf-templates) tagged for that
-// module and flag it as the module default — the print button then renders that
-// template, merged with the record's values via the module's flow adapter.
+// Record PDFs — ONE resolution chain for every subject:
 //
-// Storage is a single `pdf_templates.is_module_default` flag (one per
-// tenant+module). The merge + render reuses the exact chain the flows engine
-// already uses: buildFlowAdapter(...).loadValues() → renderTemplate → template_pdf.
+//   1. The record's assigned PDF DOCUMENT template (/admin/pdf-templates):
+//      the per-module default (`pdf_templates.is_module_default`) for native
+//      modules, or the form template's OWN template for Builder apps.
+//   2. The generic record-summary PDF built from the same adapter values.
+//
+// The merge + render reuses the exact chain the flows engine already uses:
+// buildFlowAdapter(...).loadValues() → renderTemplate → template_pdf.
 
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { pdfTemplates } from '@beaconhs/db/schema'
+import { formResponses, formTemplates, pdfTemplates } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { renderTemplate } from '@beaconhs/email-render'
 import type { OnDemandPdfJobData } from '@beaconhs/jobs'
 import { buildFlowAdapter } from '@/lib/flows/registry'
+import { buildRecordSummaryPdfJob } from '@/lib/flows/pdf-summary'
+import {
+  getFormTemplateDefaultTemplate,
+  getModuleDefaultTemplate,
+  type PdfTemplateRenderConfig,
+} from '@/lib/pdf-templates'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 
-// Modules whose print/PDF button can be driven by a tenant template. Each has a
-// registered flow adapter (for loadValues + a built-in fallback PDF) AND a
+// Modules whose record PDFs can be driven by a tenant template. Each has a
+// registered flow adapter (loadValues + the record-summary fallback) AND a
 // /…/pdf route wired through renderModulePdfResponse below. Documents are
 // excluded — they're hand-authored, so the document *is* the content.
 export const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
@@ -27,6 +33,7 @@ export const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
   { moduleKey: 'hazid', label: 'Hazard assessments' },
   { moduleKey: 'corrective-actions', label: 'Corrective actions' },
   { moduleKey: 'equipment', label: 'Equipment work orders' },
+  { moduleKey: 'ppe-issues', label: 'PPE issue reports' },
   { moduleKey: 'journals', label: 'Journals' },
   { moduleKey: 'inspections', label: 'Inspections' },
   { moduleKey: 'vehicle-log', label: 'Vehicle log (monthly sheet)' },
@@ -36,75 +43,56 @@ export function isModulePdfTarget(moduleKey: string): boolean {
   return MODULE_PDF_TARGETS.some((t) => t.moduleKey === moduleKey)
 }
 
-type ModuleDefaultTemplate = {
-  id: string
-  compiledHtml: string
-  paperSize: 'letter' | 'a4' | 'legal'
-  orientation: 'portrait' | 'landscape'
-  marginMm: number
-  headerHtml: string | null
-  footerHtml: string | null
-}
-
-export async function getModuleDefaultTemplate(
+// Merge a template with a record's values and print it via template_pdf.
+function templatePdfResponse(
   ctx: RequestContext,
-  moduleKey: string,
-): Promise<ModuleDefaultTemplate | null> {
-  const [t] = await ctx.db((tx) =>
-    tx
-      .select({
-        id: pdfTemplates.id,
-        compiledHtml: pdfTemplates.compiledHtml,
-        paperSize: pdfTemplates.paperSize,
-        orientation: pdfTemplates.orientation,
-        marginMm: pdfTemplates.marginMm,
-        headerHtml: pdfTemplates.headerHtml,
-        footerHtml: pdfTemplates.footerHtml,
-      })
-      .from(pdfTemplates)
-      .where(
-        and(
-          isNull(pdfTemplates.deletedAt),
-          eq(pdfTemplates.isActive, true),
-          eq(pdfTemplates.isModuleDefault, true),
-          eq(pdfTemplates.recordSubjectType, 'module'),
-          eq(pdfTemplates.recordSubjectKey, moduleKey),
-        ),
-      )
-      .limit(1),
-  )
-  return t ?? null
+  tpl: PdfTemplateRenderConfig,
+  args: { values: Record<string, unknown>; entityType: string; entityId: string; filename: string },
+): Promise<Response> {
+  const headerVals = { ...args.values, page: '{{page}}', pages: '{{pages}}' }
+  return renderOnDemandPdfResponse({
+    kind: 'template_pdf',
+    tenantId: ctx.tenantId,
+    html: renderTemplate(tpl.compiledHtml, args.values, { escapeHtml: true }),
+    paperSize: tpl.paperSize,
+    orientation: tpl.orientation,
+    marginMm: tpl.marginMm,
+    headerHtml: tpl.headerHtml
+      ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
+      : null,
+    footerHtml: tpl.footerHtml
+      ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
+      : null,
+    entityType: args.entityType,
+    entityId: args.entityId,
+    filename: args.filename,
+  })
 }
 
 // Render a module record's PDF: the tenant's configured template (merged with
-// the record's values) when one is set, else the module's built-in PDF — the
-// route's bespoke renderer (`builtin`) when it has one, otherwise the adapter's
-// generic record-summary. Any failure merging the template falls back to the
-// built-in rather than producing a blank document.
+// the record's values) when one is set, else the adapter's generic
+// record-summary. `fallback` overrides the summary for callers whose fallback
+// isn't a per-record summary (the vehicle-log month sheet).
 export async function renderModulePdfResponse(
   ctx: RequestContext,
-  args: { moduleKey: string; recordId: string; builtin?: OnDemandPdfJobData },
+  args: { moduleKey: string; recordId: string; fallback?: OnDemandPdfJobData },
 ): Promise<Response> {
   if (!ctx.tenantId) return Response.json({ error: 'No active tenant' }, { status: 400 })
 
   const adapter = buildFlowAdapter(ctx, 'module', args.moduleKey, args.recordId)
   if (!adapter) {
-    return args.builtin
-      ? renderOnDemandPdfResponse(args.builtin)
+    return args.fallback
+      ? renderOnDemandPdfResponse(args.fallback)
       : Response.json({ error: 'Unknown module' }, { status: 400 })
   }
 
   const tpl = await getModuleDefaultTemplate(ctx, args.moduleKey)
 
-  // Load the record's values only when needed — to merge into a template, or to
-  // build the adapter's generic record-summary when there's no bespoke renderer.
   let values: Record<string, unknown> = {}
-  if (tpl || !args.builtin) {
-    try {
-      values = await adapter.loadValues()
-    } catch {
-      values = {}
-    }
+  try {
+    values = await adapter.loadValues()
+  } catch {
+    values = {}
   }
 
   if (tpl && Object.keys(values).length > 0) {
@@ -112,30 +100,79 @@ export async function renderModulePdfResponse(
       typeof values.reference === 'string' && values.reference
         ? values.reference
         : args.recordId.slice(0, 8)
-    return renderOnDemandPdfResponse({
-      kind: 'template_pdf',
-      tenantId: ctx.tenantId,
-      html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
-      paperSize: tpl.paperSize,
-      orientation: tpl.orientation,
-      marginMm: tpl.marginMm,
-      headerHtml: tpl.headerHtml
-        ? renderTemplate(tpl.headerHtml, values, { escapeHtml: false })
-        : null,
-      footerHtml: tpl.footerHtml
-        ? renderTemplate(tpl.footerHtml, values, { escapeHtml: false })
-        : null,
+    return templatePdfResponse(ctx, tpl, {
+      values,
       entityType: args.moduleKey,
       entityId: args.recordId,
       filename: `${args.moduleKey}-${ref}.pdf`,
     })
   }
 
-  const fallback: OnDemandPdfJobData | null = args.builtin ?? adapter.pdfJob?.(values) ?? null
-  if (!fallback) {
-    return Response.json({ error: 'No PDF is available for this record.' }, { status: 404 })
-  }
+  const fallback: OnDemandPdfJobData =
+    args.fallback ??
+    adapter.pdfJob?.(values) ??
+    buildRecordSummaryPdfJob({
+      tenantId: ctx.tenantId,
+      subjectId: adapter.subjectId,
+      entityType: adapter.auditEntityType,
+      heading: adapter.auditEntityType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      reference: values.reference,
+      subtitle: values.title,
+      values,
+    })
   return renderOnDemandPdfResponse(fallback)
+}
+
+// Render a Builder form response's PDF: the form template's OWN PDF template
+// when one exists, else the generic record-summary built from the form flow
+// adapter's values (raw fields + companion keys).
+export async function renderFormResponsePdfResponse(
+  ctx: RequestContext,
+  responseId: string,
+): Promise<Response> {
+  if (!ctx.tenantId) return Response.json({ error: 'No active tenant' }, { status: 400 })
+
+  const [head] = await ctx.db((tx) =>
+    tx
+      .select({ templateId: formResponses.templateId, templateName: formTemplates.name })
+      .from(formResponses)
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+      .where(eq(formResponses.id, responseId))
+      .limit(1),
+  )
+  if (!head) return Response.json({ error: 'Not found' }, { status: 404 })
+
+  const adapter = buildFlowAdapter(ctx, 'form_template', head.templateId, responseId)
+  if (!adapter) return Response.json({ error: 'Not found' }, { status: 404 })
+
+  let values: Record<string, unknown> = {}
+  try {
+    values = await adapter.loadValues()
+  } catch {
+    values = {}
+  }
+
+  const tpl = await getFormTemplateDefaultTemplate(ctx, head.templateId)
+  if (tpl && Object.keys(values).length > 0) {
+    return templatePdfResponse(ctx, tpl, {
+      values,
+      entityType: 'form_response',
+      entityId: responseId,
+      filename: `${head.templateName.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}-${responseId.slice(0, 8)}.pdf`,
+    })
+  }
+
+  return renderOnDemandPdfResponse(
+    buildRecordSummaryPdfJob({
+      tenantId: ctx.tenantId,
+      subjectId: responseId,
+      entityType: 'form_response',
+      heading: head.templateName,
+      reference: responseId.slice(0, 8),
+      subtitle: values.title,
+      values,
+    }),
+  )
 }
 
 export type ModulePdfDefaultRow = {
@@ -146,7 +183,7 @@ export type ModulePdfDefaultRow = {
 }
 
 // For the admin config UI: each target module + its assignable templates + the
-// currently-selected default (null = built-in).
+// currently-selected default (null = the generic record summary).
 export async function listModulePdfDefaults(ctx: RequestContext): Promise<ModulePdfDefaultRow[]> {
   const rows = await ctx.db((tx) =>
     tx
