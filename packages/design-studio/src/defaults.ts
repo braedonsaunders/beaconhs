@@ -1,6 +1,6 @@
 import type {
-  CredentialDataField,
   DesignArtboard,
+  DesignDataField,
   DesignDocument,
   DesignElement,
   PrintProfile,
@@ -11,6 +11,7 @@ export const DESIGN_STUDIO_DPI = 96
 export const LETTER_LANDSCAPE = { width: 11, height: 8.5 }
 export const LETTER_PORTRAIT = { width: 8.5, height: 11 }
 export const CR80 = { width: 3.375, height: 2.125 }
+export const LABEL_4X6 = { width: 4, height: 6 }
 
 const certificatePrintProfile: PrintProfile = {
   provider: 'browser-pdf',
@@ -351,6 +352,230 @@ function walletBack(theme: DesignStudioTheme): DesignArtboard {
   }
 }
 
+// --- Equipment QR label (4×6in thermal label) ------------------------------
+//
+// Faithful port of the legacy Blade label (equipmentqrcode.blade.php):
+// 101.6×152.4mm page, 1.5mm margin, 1px black outer border, header band
+// (uppercase 800-weight 6mm "EQUIPMENT" + 3.5mm 700-weight division, 1px
+// bottom rule), then a 58mm QR column (1px border, 2mm padding) beside the
+// info column (5.5mm 800 name + 21mm-key rows TAG/CLASS/SERIAL/INSPECT at
+// 3.6mm with uppercase 700 keys). All metrics below are the legacy mm values
+// converted to the studio's inch unit; fonts convert mm → pt (× 72 / 25.4).
+
+const MM_IN = 1 / 25.4 // mm → inches
+const PX_MM = 25.4 / 96 // 1 CSS px → mm (the legacy 1px borders)
+const PX_IN = 1 / 96 // 1 CSS px → inches
+const mmPt = (v: number) => Math.round(((v * 72) / 25.4) * 100) / 100 // mm font size → pt
+
+const LABEL_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+
+export function createEquipmentLabelDesignDocument(): DesignDocument {
+  // Page frame ---------------------------------------------------------------
+  const margin = 1.5 // @page margin
+  const frameW = 101.6 - margin * 2 // 98.6
+  const frameH = 152.4 - margin * 2 // 149.4
+  const innerL = margin + PX_MM // inside the 1px label border
+  const innerR = 101.6 - margin - PX_MM
+  const innerT = margin + PX_MM
+  const innerB = 152.4 - margin - PX_MM
+  // Header band ---------------------------------------------------------------
+  const headerRuleY = innerT + 3 + 6 + 2.5 // padding-top + 6mm brand + padding-bottom
+  // Content grid --------------------------------------------------------------
+  const contentT = headerRuleY + PX_MM
+  const contentPad = 4
+  const qrPanelX = innerL + contentPad
+  const qrPanelY = contentT + contentPad
+  const qrPanelW = 58
+  const qrPanelH = innerB - contentPad - qrPanelY
+  const qrInset = 2 + PX_MM // 2mm padding inside the 1px QR border
+  const qrSize = qrPanelW - qrInset * 2
+  const qrY = qrPanelY + (qrPanelH - qrSize) / 2 // legacy centers the QR vertically
+  const infoX = qrPanelX + qrPanelW + 3.5 // 3.5mm grid gap
+  const infoW = innerR - contentPad - infoX
+  const nameH = 5.5 * 1.05 * 3 // room for three lines at the legacy line-height
+  const keyW = 21
+  const valX = infoX + keyW + 2 // 2mm column gap
+  const valW = innerR - contentPad - valX
+  const rowFont = mmPt(3.6)
+  const keyStyle = {
+    fontFamily: LABEL_FONT,
+    fontWeight: '700' as const,
+    letterSpacing: 0.12 * MM_IN,
+    lineHeight: 1.18,
+  }
+  const valStyle = { fontFamily: LABEL_FONT, fontWeight: '600' as const, lineHeight: 1.18 }
+  // Wrapping values flow taller than the legacy auto-height rows, so each row
+  // gets a fixed slot: TAG two lines, the longer values three.
+  const rowY = { tag: qrPanelY + nameH + 2, class: 0, serial: 0, inspect: 0, inspectNext: 0 }
+  rowY.class = rowY.tag + 3.6 * 1.18 * 2 + 2
+  rowY.serial = rowY.class + 3.6 * 1.18 * 3 + 2
+  rowY.inspect = rowY.serial + 3.6 * 1.18 * 3 + 2
+  rowY.inspectNext = rowY.inspect + 3.6 * 1.18 * 3 + 2
+
+  const keyRow = (id: string, label: string, y: number): DesignElement =>
+    text(
+      `${id}-key`,
+      `${label} key`,
+      label.toUpperCase(), // legacy keys render text-transform: uppercase
+      infoX * MM_IN,
+      y * MM_IN,
+      keyW * MM_IN,
+      3.6 * 1.18 * MM_IN,
+      rowFont,
+      '#000000',
+      keyStyle,
+    )
+  const valueRow = (
+    id: string,
+    name: string,
+    value: DesignDataField,
+    y: number,
+    lines: number,
+    extra: Partial<Extract<DesignElement, { kind: 'field' }>> = {},
+  ): DesignElement =>
+    field(
+      `${id}-value`,
+      name,
+      value,
+      valX * MM_IN,
+      y * MM_IN,
+      valW * MM_IN,
+      3.6 * 1.18 * lines * MM_IN,
+      rowFont,
+      '#000000',
+      { ...valStyle, ...extra },
+    )
+
+  return {
+    version: 1,
+    engine: 'fabric',
+    kind: 'equipment-label',
+    name: 'Equipment QR label',
+    unit: 'in',
+    dpi: DESIGN_STUDIO_DPI,
+    artboards: [
+      {
+        id: 'label',
+        name: 'Label',
+        format: 'label-4x6',
+        width: LABEL_4X6.width,
+        height: LABEL_4X6.height,
+        background: '#ffffff',
+        bleed: 0,
+        printProfile: {
+          provider: 'browser-pdf',
+          media: 'custom',
+          edgeToEdge: true,
+          orientation: 'portrait',
+        },
+        elements: [
+          rect(
+            'label-border',
+            'Label border',
+            margin * MM_IN,
+            margin * MM_IN,
+            frameW * MM_IN,
+            frameH * MM_IN,
+            'transparent',
+            '#000000',
+            PX_IN,
+          ),
+          text(
+            'brand',
+            'Header — EQUIPMENT',
+            'EQUIPMENT',
+            (innerL + 4) * MM_IN,
+            (innerT + 3) * MM_IN,
+            55 * MM_IN,
+            6 * MM_IN,
+            mmPt(6),
+            '#000000',
+            {
+              fontFamily: LABEL_FONT,
+              fontWeight: '800',
+              letterSpacing: 0.25 * MM_IN,
+              lineHeight: 1,
+            },
+          ),
+          field(
+            'division',
+            'Division',
+            'equipment.division',
+            (innerL + 40) * MM_IN,
+            // Baseline-aligned with the 6mm brand text (legacy flex baseline).
+            (innerT + 3 + 6 * 0.8 - 3.5 * 0.8) * MM_IN,
+            (innerR - 4 - (innerL + 40)) * MM_IN,
+            3.5 * MM_IN,
+            mmPt(3.5),
+            '#000000',
+            { fontFamily: LABEL_FONT, fontWeight: '700', align: 'right', lineHeight: 1 },
+          ),
+          line(
+            'header-rule',
+            'Header rule',
+            innerL * MM_IN,
+            headerRuleY * MM_IN,
+            (innerR - innerL) * MM_IN,
+            0.05,
+            '#000000',
+            PX_IN,
+          ),
+          rect(
+            'qr-panel',
+            'QR panel',
+            qrPanelX * MM_IN,
+            qrPanelY * MM_IN,
+            qrPanelW * MM_IN,
+            qrPanelH * MM_IN,
+            '#ffffff',
+            '#000000',
+            PX_IN,
+          ),
+          qr(
+            'qr',
+            'Scan QR',
+            (qrPanelX + qrInset) * MM_IN,
+            qrY * MM_IN,
+            qrSize * MM_IN,
+            qrSize * MM_IN,
+          ),
+          field(
+            'name',
+            'Equipment name',
+            'equipment.name',
+            infoX * MM_IN,
+            qrPanelY * MM_IN,
+            infoW * MM_IN,
+            nameH * MM_IN,
+            mmPt(5.5),
+            '#000000',
+            { fontFamily: LABEL_FONT, fontWeight: '800', lineHeight: 1.05 },
+          ),
+          keyRow('tag', 'Tag', rowY.tag),
+          valueRow('tag', 'Asset tag', 'equipment.assetTag', rowY.tag, 2),
+          keyRow('class', 'Class', rowY.class),
+          valueRow('class', 'Class', 'equipment.class', rowY.class, 3),
+          keyRow('serial', 'Serial', rowY.serial),
+          valueRow('serial', 'Serial number', 'equipment.serial', rowY.serial, 3),
+          keyRow('inspect', 'Inspect', rowY.inspect),
+          valueRow('inspect-last', 'Last inspection', 'equipment.lastInspection', rowY.inspect, 3, {
+            prefix: 'Last: ',
+            transform: 'date-short',
+          }),
+          valueRow(
+            'inspect-next',
+            'Next inspection due',
+            'equipment.nextInspectionDue',
+            rowY.inspectNext,
+            3,
+            { prefix: 'Next: ', transform: 'date-short' },
+          ),
+        ],
+      },
+    ],
+  }
+}
+
 function fontFor(typeface: DesignStudioTheme['typeface']) {
   if (typeface === 'technical') {
     return {
@@ -408,7 +633,7 @@ function text(
 function field(
   id: string,
   name: string,
-  value: CredentialDataField,
+  value: DesignDataField,
   x: number,
   y: number,
   width: number,
@@ -442,7 +667,7 @@ function field(
 function meta(
   id: string,
   label: string,
-  value: CredentialDataField,
+  value: DesignDataField,
   x: number,
   y: number,
   color: string,

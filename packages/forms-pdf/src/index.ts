@@ -17,8 +17,11 @@ import {
 } from '@beaconhs/forms-core'
 import {
   renderDesignDocumentHtml,
+  renderDesignDocumentsHtml,
   type CredentialDesignData,
   type DesignDocument,
+  type DesignDocumentData,
+  type EquipmentLabelDesignData,
 } from '@beaconhs/design-studio'
 import {
   buildReportDocumentCss,
@@ -60,6 +63,8 @@ export type {
   CredentialDesignTypeface,
   CredentialDesignData,
   DesignDocument,
+  DesignDocumentData,
+  EquipmentLabelDesignData,
 }
 // Note: HazidSignedReportRenderInput is exported via the function declaration
 // below so that consumers can import it alongside renderHazidSignedReportPdf.
@@ -76,11 +81,31 @@ export {
 
 export async function renderDesignDocumentPdf(input: {
   document: DesignDocument
-  data: CredentialDesignData
+  data: DesignDocumentData
   title?: string
 }): Promise<Buffer> {
   const html = renderDesignDocumentHtml(input.document, input.data, { title: input.title })
-  const first = input.document.artboards[0]
+  return printDesignHtmlPdf(html, input.document.artboards[0])
+}
+
+/**
+ * N design documents printed back-to-back as ONE multi-page PDF — one page per
+ * artboard, each rendered against its own data (bulk label runs). All pages
+ * print at the FIRST artboard's physical size, so callers pass a uniform run.
+ */
+export async function renderDesignDocumentsPdf(
+  pages: { document: DesignDocument; data: DesignDocumentData }[],
+  options: { title?: string } = {},
+): Promise<Buffer> {
+  if (pages.length === 0) throw new Error('renderDesignDocumentsPdf: no pages to render')
+  const html = renderDesignDocumentsHtml(pages, { title: options.title })
+  return printDesignHtmlPdf(html, pages[0]?.document.artboards[0])
+}
+
+async function printDesignHtmlPdf(
+  html: string,
+  first: { width: number; height: number } | undefined,
+): Promise<Buffer> {
   const b = await browser()
   const page = await b.newPage()
   try {

@@ -5,9 +5,14 @@ export type ArtboardFormat =
   | 'letter-portrait'
   | 'cr80-front'
   | 'cr80-back'
+  | 'label-4x6'
   | 'custom'
 
-export type DesignDocumentKind = 'training-credential' | 'training-slides' | 'generic'
+export type DesignDocumentKind =
+  | 'training-credential'
+  | 'training-slides'
+  | 'equipment-label'
+  | 'generic'
 
 export type DesignDocument = {
   version: 1
@@ -59,6 +64,23 @@ export type CredentialDataField =
   | 'verify.qr'
   | 'issuedAt'
 
+// Equipment QR-label catalog. `tenant.name`, `verify.url`, and `verify.qr`
+// deliberately reuse the credential keys so shared elements (QR, issuer)
+// resolve identically from either data shape.
+export type EquipmentDataField =
+  | 'tenant.name'
+  | 'equipment.name'
+  | 'equipment.assetTag'
+  | 'equipment.serial'
+  | 'equipment.class'
+  | 'equipment.division'
+  | 'equipment.lastInspection'
+  | 'equipment.nextInspectionDue'
+  | 'verify.qr'
+  | 'verify.url'
+
+export type DesignDataField = CredentialDataField | EquipmentDataField
+
 export type BaseElement = {
   id: string
   name: string
@@ -99,7 +121,7 @@ export type TextElement = BaseElement &
 export type DataFieldElement = BaseElement &
   TextStyle & {
     kind: 'field'
-    field: CredentialDataField
+    field: DesignDataField
     fallback?: string
     prefix?: string
     suffix?: string
@@ -166,6 +188,26 @@ export type CredentialDesignData = {
   issuedAt?: string | Date | null
 }
 
+export type EquipmentLabelDesignData = {
+  tenantName: string
+  tenantLogoUrl?: string | null
+  equipmentName: string
+  equipmentAssetTag?: string | null
+  equipmentSerial?: string | null
+  /** "Category • Type" — pre-joined by the caller. */
+  equipmentClass?: string | null
+  /** Site / org-unit name shown in the header band. */
+  equipmentDivision?: string | null
+  /** ISO dates (YYYY-MM-DD) so field date transforms apply. */
+  lastInspection?: string | null
+  nextInspectionDue?: string | null
+  verifyUrl?: string | null
+  qrDataUrl?: string | null
+}
+
+/** Any data shape a design document can be rendered against. */
+export type DesignDocumentData = CredentialDesignData | EquipmentLabelDesignData
+
 export function isDesignDocument(value: unknown): value is DesignDocument {
   const doc = value as Partial<DesignDocument> | null
   return (
@@ -186,6 +228,8 @@ export function artboardSizeForFormat(format: ArtboardFormat): { width: number; 
     case 'cr80-front':
     case 'cr80-back':
       return { width: 3.375, height: 2.125 }
+    case 'label-4x6':
+      return { width: 4, height: 6 }
     case 'letter-landscape':
       return { width: 11, height: 8.5 }
     case 'custom':
@@ -222,6 +266,7 @@ function normalizeArtboard(
     'letter-portrait',
     'cr80-front',
     'cr80-back',
+    'label-4x6',
     'custom',
   ].includes(input.format)
     ? input.format

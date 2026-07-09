@@ -1,32 +1,65 @@
 import type {
-  CredentialDataField,
-  CredentialDesignData,
   DataFieldElement,
   DesignArtboard,
+  DesignDataField,
   DesignDocument,
+  DesignDocumentData,
   DesignElement,
   ImageElement,
   TextElement,
 } from './schema'
 
+// Internal: every field lookup goes through this widened bag so credential and
+// equipment data shapes resolve through one switch without unsafe casts at the
+// call sites.
+type AnyDesignData = Partial<
+  Extract<DesignDocumentData, { recipientFullName: string }> &
+    Extract<DesignDocumentData, { equipmentName: string }>
+> & { tenantName: string }
+
 export function renderDesignDocumentHtml(
   document: DesignDocument,
-  data: CredentialDesignData,
+  data: DesignDocumentData,
   options: { artboardId?: string | null; title?: string } = {},
 ): string {
   const artboards = options.artboardId
     ? document.artboards.filter((artboard) => artboard.id === options.artboardId)
     : document.artboards
-  const pages = (artboards.length ? artboards : document.artboards).map((artboard) =>
-    renderArtboard(artboard, data),
+  return renderPagesHtml(
+    (artboards.length ? artboards : document.artboards).map((artboard) => ({ artboard, data })),
+    options.title ?? document.name,
   )
-  const first = artboards[0] ?? document.artboards[0]
+}
+
+/**
+ * N documents printed back-to-back as one HTML document — every artboard of
+ * every page rendered against that page's own data. All artboards are assumed
+ * to share the first artboard's physical size (uniform label runs).
+ */
+export function renderDesignDocumentsHtml(
+  pages: { document: DesignDocument; data: DesignDocumentData }[],
+  options: { title?: string } = {},
+): string {
+  return renderPagesHtml(
+    pages.flatMap(({ document, data }) =>
+      document.artboards.map((artboard) => ({ artboard, data })),
+    ),
+    options.title ?? pages[0]?.document.name ?? 'Design document',
+  )
+}
+
+function renderPagesHtml(
+  sections: { artboard: DesignArtboard; data: DesignDocumentData }[],
+  title: string,
+): string {
+  const pages = sections.map(({ artboard, data }) => renderArtboard(artboard, data))
+  const first = sections[0]?.artboard
   const pageSize = first ? `${first.width}in ${first.height}in` : '11in 8.5in'
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>${esc(options.title ?? document.name)}</title>
+  <title>${esc(title)}</title>
   <style>
     @page { size: ${pageSize}; margin: 0; }
     * { box-sizing: border-box; }
@@ -55,7 +88,7 @@ export function renderDesignDocumentHtml(
 </html>`
 }
 
-function renderArtboard(artboard: DesignArtboard, data: CredentialDesignData): string {
+function renderArtboard(artboard: DesignArtboard, data: DesignDocumentData): string {
   const elements = artboard.elements
     .filter((element) => element.visible !== false)
     .map((element) => renderElement(element, data))
@@ -63,7 +96,7 @@ function renderArtboard(artboard: DesignArtboard, data: CredentialDesignData): s
   return `<section class="ds-page" data-artboard="${esc(artboard.id)}" style="width:${artboard.width}in;height:${artboard.height}in;background:${esc(artboard.background)};">${elements}</section>`
 }
 
-function renderElement(element: DesignElement, data: CredentialDesignData): string {
+function renderElement(element: DesignElement, data: DesignDocumentData): string {
   const style = baseStyle(element)
   switch (element.kind) {
     case 'text':
@@ -112,6 +145,9 @@ function textStyle(element: TextElement | DataFieldElement): string {
     `text-align:${element.align ?? 'left'}`,
     `letter-spacing:${element.letterSpacing ?? 0}in`,
     `line-height:${element.lineHeight ?? 1.15}`,
+    // Legacy templates rely on word-break for narrow columns (asset tags,
+    // tokens) — without this, unbroken strings clip at the box edge.
+    'overflow-wrap:anywhere',
     'display:flex',
     element.align === 'center'
       ? 'justify-content:center'
@@ -122,12 +158,13 @@ function textStyle(element: TextElement | DataFieldElement): string {
   ].join(';')
 }
 
-function renderImage(element: ImageElement, data: CredentialDesignData, style: string): string {
+function renderImage(element: ImageElement, data: DesignDocumentData, style: string): string {
+  const bag = data as AnyDesignData
   const src =
     element.source === 'tenant.logo'
-      ? data.tenantLogoUrl
+      ? bag.tenantLogoUrl
       : element.source === 'recipient.photo'
-        ? data.recipientPhotoUrl
+        ? bag.recipientPhotoUrl
         : element.url
   const radius = element.radius ?? 0
   if (!src) {
@@ -138,7 +175,7 @@ function renderImage(element: ImageElement, data: CredentialDesignData, style: s
 
 function renderQr(
   element: Extract<DesignElement, { kind: 'qr' }>,
-  data: CredentialDesignData,
+  data: DesignDocumentData,
   style: string,
 ): string {
   if (data.qrDataUrl) {
@@ -149,7 +186,7 @@ function renderQr(
 
 function renderSeal(
   element: Extract<DesignElement, { kind: 'seal' }>,
-  data: CredentialDesignData,
+  data: DesignDocumentData,
   style: string,
 ): string {
   const initials = (data.tenantName ?? '')
@@ -162,49 +199,67 @@ function renderSeal(
   return `<div class="ds-el" style="${style}border-radius:50%;background:${esc(element.fill ?? '#c2a05c')};border:0.025in solid ${esc(element.stroke ?? '#7a5f2b')};color:#fff;font-weight:800;font-size:14pt;display:flex;align-items:center;justify-content:center;text-align:center;">${esc(label)}</div>`
 }
 
-function resolveField(element: DataFieldElement, data: CredentialDesignData): string {
+function resolveField(element: DataFieldElement, data: DesignDocumentData): string {
   const raw = valueForField(element.field, data)
   let value = raw || element.fallback || ''
+  // No value and no explicit fallback → render nothing, including the
+  // prefix/suffix — a dangling "Last: " with no date reads as broken output.
+  if (!value) return ''
   if (element.transform === 'uppercase') value = value.toUpperCase()
   if (element.transform === 'date-long') value = formatDate(value, 'long')
   if (element.transform === 'date-short') value = formatDate(value, 'short')
   return `${element.prefix ?? ''}${value}${element.suffix ?? ''}`
 }
 
-export function valueForField(field: CredentialDataField, data: CredentialDesignData): string {
+export function valueForField(field: DesignDataField, data: DesignDocumentData): string {
+  const bag = data as AnyDesignData
   switch (field) {
     case 'tenant.name':
-      return data.tenantName
+      return bag.tenantName
     case 'tenant.logo':
-      return data.tenantLogoUrl ?? ''
+      return bag.tenantLogoUrl ?? ''
     case 'recipient.fullName':
-      return data.recipientFullName
+      return bag.recipientFullName ?? ''
     case 'recipient.employeeNo':
-      return data.recipientEmployeeNo ?? ''
+      return bag.recipientEmployeeNo ?? ''
     case 'recipient.photo':
-      return data.recipientPhotoUrl ?? ''
+      return bag.recipientPhotoUrl ?? ''
     case 'credential.name':
-      return data.credentialName
+      return bag.credentialName ?? ''
     case 'credential.code':
-      return data.credentialCode ?? ''
+      return bag.credentialCode ?? ''
     case 'authority.name':
-      return data.authorityName ?? ''
+      return bag.authorityName ?? ''
     case 'completedOn':
-      return data.completedOn ?? ''
+      return bag.completedOn ?? ''
     case 'expiresOn':
-      return data.expiresOn ?? ''
+      return bag.expiresOn ?? ''
     case 'instructor':
-      return data.instructor ?? ''
+      return bag.instructor ?? ''
     case 'grade':
-      return data.grade == null ? '' : `${data.grade}%`
+      return bag.grade == null ? '' : `${bag.grade}%`
     case 'verify.url':
-      return data.verifyUrl ?? ''
+      return bag.verifyUrl ?? ''
     case 'verify.token':
-      return data.verifyToken ?? ''
+      return bag.verifyToken ?? ''
     case 'verify.qr':
-      return data.qrDataUrl ?? ''
+      return bag.qrDataUrl ?? ''
     case 'issuedAt':
-      return data.issuedAt ? String(data.issuedAt) : ''
+      return bag.issuedAt ? String(bag.issuedAt) : ''
+    case 'equipment.name':
+      return bag.equipmentName ?? ''
+    case 'equipment.assetTag':
+      return bag.equipmentAssetTag ?? ''
+    case 'equipment.serial':
+      return bag.equipmentSerial ?? ''
+    case 'equipment.class':
+      return bag.equipmentClass ?? ''
+    case 'equipment.division':
+      return bag.equipmentDivision ?? ''
+    case 'equipment.lastInspection':
+      return bag.lastInspection ?? ''
+    case 'equipment.nextInspectionDue':
+      return bag.nextInspectionDue ?? ''
   }
 }
 
