@@ -24,6 +24,7 @@ import {
   syncRuns,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Sync run' }
@@ -117,7 +118,7 @@ export default async function SyncRunPage({
             {data.run.dryRun ? <Badge variant="outline">preview</Badge> : null}
           </div>
           <p className="text-sm text-slate-500">
-            {new Date(data.run.startedAt).toLocaleString()} · {data.run.trigger} ·{' '}
+            {formatDateTime(new Date(data.run.startedAt), ctx.timezone)} · {data.run.trigger} ·{' '}
             {data.run.durationMs != null
               ? `${(data.run.durationMs / 1000).toFixed(1)}s`
               : 'running'}

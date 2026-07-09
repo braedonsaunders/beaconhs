@@ -26,6 +26,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { assertCan } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -438,8 +439,8 @@ export default async function CorrectiveActionPage({
           <Alert variant="warning">
             <AlertTitle>This action is locked</AlertTitle>
             <AlertDescription>
-              Closed on {ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'}. Reopen
-              from the header to edit.
+              Closed on {ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone) : '—'}.
+              Reopen from the header to edit.
             </AlertDescription>
           </Alert>
         ) : ca.verificationRequired && !ca.verifiedAt ? (
@@ -737,7 +738,7 @@ export default async function CorrectiveActionPage({
                 description="Edits and status changes show up here."
               />
             ) : (
-              <ActivityFeed entries={activity} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
             )}
           </Section>
         </section>

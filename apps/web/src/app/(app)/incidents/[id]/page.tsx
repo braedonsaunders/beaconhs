@@ -75,6 +75,7 @@ import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { nextReference } from '@/lib/reference'
 import { assertCan, can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
@@ -1411,7 +1412,7 @@ export default async function IncidentDetailPage({
         <DetailHeader
           back={{ href: '/incidents', label: 'Back to incidents' }}
           title={incident.title}
-          subtitle={`${incident.reference} · reported ${formatRel(incident.reportedAt)}`}
+          subtitle={`${incident.reference} · reported ${formatRel(incident.reportedAt, ctx.timezone)}`}
           badge={
             <div className="flex items-center gap-2">
               <SeverityBadge severity={incident.severity} />
@@ -1448,7 +1449,7 @@ export default async function IncidentDetailPage({
               <AlertDescription className="flex items-center justify-between">
                 <span>
                   Closed on{' '}
-                  {incident.closedAt ? new Date(incident.closedAt).toLocaleDateString() : '—'}.
+                  {incident.closedAt ? formatDate(new Date(incident.closedAt), ctx.timezone) : '—'}.
                   Unlock to make edits.
                 </span>
                 <form action={toggleLock} className="inline">
@@ -2317,7 +2318,7 @@ export default async function IncidentDetailPage({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                          {new Date(e.occurredAt).toLocaleString()}
+                          {formatDateTime(new Date(e.occurredAt), ctx.timezone)}
                         </div>
                         <div className="mt-0.5 whitespace-pre-wrap text-slate-900 dark:text-slate-100">
                           {e.description}
@@ -2640,7 +2641,7 @@ export default async function IncidentDetailPage({
             tone="slate"
             defaultOpen={false}
           >
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </Section>
         </section>
       </div>
@@ -3020,12 +3021,12 @@ function toLocalDatetime(d: Date | string): string {
   )}:${pad(date.getMinutes())}`
 }
 
-function formatRel(d: Date | string): string {
+function formatRel(d: Date | string, timeZone: string): string {
   const date = typeof d === 'string' ? new Date(d) : d
   const ms = Date.now() - date.getTime()
   const days = Math.round(ms / 86_400_000)
   if (days < 1) return 'today'
   if (days < 2) return 'yesterday'
   if (days < 30) return `${days} days ago`
-  return date.toLocaleDateString()
+  return formatDate(date, timeZone)
 }

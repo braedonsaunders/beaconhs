@@ -29,6 +29,7 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
@@ -172,7 +173,10 @@ export default async function AuthorityDetailPage({
                 { label: 'Code', value: authority.code ?? '—' },
                 { label: 'Jurisdiction', value: authority.jurisdiction ?? '—' },
                 { label: 'Skill types', value: skillTypes.length },
-                { label: 'Created', value: new Date(authority.createdAt).toLocaleString() },
+                {
+                  label: 'Created',
+                  value: formatDateTime(new Date(authority.createdAt), ctx.timezone),
+                },
               ]}
             />
             {authority.notes ? (
@@ -306,7 +310,7 @@ export default async function AuthorityDetailPage({
             <CardTitle>Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </CardContent>
         </Card>
       ) : null}

@@ -22,6 +22,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
@@ -366,7 +367,7 @@ export default async function AssessmentsPage({
                 return (
                   <TableRow key={attempt.id}>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                      {when ? new Date(when).toLocaleString() : '—'}
+                      {when ? formatDateTime(new Date(when), ctx.timezone) : '—'}
                     </TableCell>
                     <TableCell>
                       <Link
@@ -399,7 +400,9 @@ export default async function AssessmentsPage({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                      {attempt.startedAt ? new Date(attempt.startedAt).toLocaleDateString() : '—'}
+                      {attempt.startedAt
+                        ? formatDate(new Date(attempt.startedAt), ctx.timezone)
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-xs tabular-nums">
                       {duration != null ? `${duration} min` : '—'}

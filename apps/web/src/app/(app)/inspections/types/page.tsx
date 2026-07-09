@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionTypeCriteria, inspectionTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -253,7 +254,7 @@ export default async function InspectionTypesPage({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {new Date(type.createdAt).toLocaleDateString()}
+                    {formatDate(new Date(type.createdAt), ctx.timezone)}
                   </TableCell>
                 </TableRow>
               ))}

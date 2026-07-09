@@ -22,7 +22,8 @@ import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
 import { ReportsSubNav } from '../_nav'
-import { formatCadence, formatDateTime } from '../_format'
+import { formatCadence } from '../_format'
+import { formatDateTime } from '@/lib/datetime'
 import { setActive } from './[id]/actions'
 
 export const metadata = { title: 'Report schedules' }
@@ -162,11 +163,13 @@ export default async function SchedulesListPage({
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-300">
                     {schedule.nextRunAt && schedule.active
-                      ? formatDateTime(schedule.nextRunAt)
+                      ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
                       : '—'}
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-300">
-                    {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
+                    {schedule.lastRunAt
+                      ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone)
+                      : 'never'}
                   </TableCell>
                   <TableCell>
                     {schedule.active ? (

@@ -23,6 +23,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { formatDate } from '@/lib/datetime'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -250,7 +251,7 @@ export default async function EquipmentInspectionsPage({
                       {r.typeName ?? '—'}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                      {r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : '—'}
+                      {r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone) : '—'}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
                       {inspector ?? '—'}

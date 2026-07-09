@@ -62,6 +62,7 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { PersonSelectField } from '@/components/person-select-field'
 import { LiveField, LiveSelect } from '@/components/live-field'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
@@ -1234,7 +1235,7 @@ export default async function PpeDetailPage({
                 <TableBody>
                   {issueReports.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{new Date(r.reportedAt).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatDate(new Date(r.reportedAt), ctx.timezone)}</TableCell>
                       <TableCell className="text-slate-700">{r.description}</TableCell>
                       <TableCell>
                         <Badge variant={r.status === 'open' ? 'destructive' : 'success'}>
@@ -1292,7 +1293,9 @@ export default async function PpeDetailPage({
                 <TableBody>
                   {issuesLog.map((row) => (
                     <TableRow key={row.issue.id}>
-                      <TableCell>{new Date(row.issue.occurredAt).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        {formatDate(new Date(row.issue.occurredAt), ctx.timezone)}
+                      </TableCell>
                       <TableCell>
                         <Badge
                           variant={

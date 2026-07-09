@@ -15,6 +15,7 @@ import {
 import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { StatusBadge } from '../../../../_format'
 
@@ -67,7 +68,7 @@ export default async function RunDetailPage({
             href: `/reports/schedules/${id}`,
             label: 'Back to schedule',
           }}
-          title={`Run · ${new Date(row.run.startedAt).toLocaleString()}`}
+          title={`Run · ${formatDateTime(new Date(row.run.startedAt), ctx.timezone)}`}
           subtitle={`${row.schedule.name} — ${definition?.name ?? 'Unknown report'}`}
           badge={<StatusBadge status={row.run.status} />}
           actions={
@@ -97,9 +98,13 @@ export default async function RunDetailPage({
               <Detail label="Status">
                 <Badge variant="outline">{row.run.status}</Badge>
               </Detail>
-              <Detail label="Started">{new Date(row.run.startedAt).toLocaleString()}</Detail>
+              <Detail label="Started">
+                {formatDateTime(new Date(row.run.startedAt), ctx.timezone)}
+              </Detail>
               <Detail label="Finished">
-                {row.run.finishedAt ? new Date(row.run.finishedAt).toLocaleString() : '—'}
+                {row.run.finishedAt
+                  ? formatDateTime(new Date(row.run.finishedAt), ctx.timezone)
+                  : '—'}
               </Detail>
               <Detail label="Duration">{duration !== null ? `${duration}s` : '—'}</Detail>
               <Detail label="Rows">{row.run.rowCount ?? '—'}</Detail>
@@ -126,7 +131,7 @@ export default async function RunDetailPage({
                 <Detail label="Size">{Math.round(row.attachment.sizeBytes / 1024)} KB</Detail>
                 <Detail label="Content type">{row.attachment.contentType}</Detail>
                 <Detail label="Uploaded">
-                  {new Date(row.attachment.createdAt).toLocaleString()}
+                  {formatDateTime(new Date(row.attachment.createdAt), ctx.timezone)}
                 </Detail>
               </dl>
               <div className="mt-4">

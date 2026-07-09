@@ -43,6 +43,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
+import { formatDate } from '@/lib/datetime'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
@@ -719,6 +720,7 @@ export default async function EquipmentMaintenancePage({
         unit={data.unit}
         today={today}
         manage={manage}
+        timeZone={ctx.timezone}
       />
 
       <ReminderDrawer
@@ -832,12 +834,14 @@ function UnitMaintenanceDrawer({
   unit,
   today,
   manage,
+  timeZone,
 }: {
   open: boolean
   closeHref: string
   unit: UnitDrawerData | null
   today: string
   manage: boolean
+  timeZone: string
 }) {
   return (
     <UrlDrawer
@@ -1009,7 +1013,7 @@ function UnitMaintenanceDrawer({
                       {r.reference}
                     </Link>
                     <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {new Date(r.occurredAt).toLocaleDateString()}
+                      {formatDate(new Date(r.occurredAt), timeZone)}
                     </span>
                     {r.result ? (
                       <Badge

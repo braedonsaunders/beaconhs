@@ -33,6 +33,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { createDraftResponse } from '@/app/(app)/apps/templates/[id]/fill/actions'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -398,7 +399,7 @@ export default async function AppRecordsPage({
                       return (
                         <span className="text-xs text-slate-600 tabular-nums">
                           {response.createdAt
-                            ? new Date(response.createdAt).toLocaleDateString()
+                            ? formatDate(new Date(response.createdAt), ctx.timezone)
                             : '—'}
                         </span>
                       )
@@ -406,7 +407,7 @@ export default async function AppRecordsPage({
                       return (
                         <span className="text-xs text-slate-600 tabular-nums">
                           {response.submittedAt
-                            ? new Date(response.submittedAt).toLocaleDateString()
+                            ? formatDate(new Date(response.submittedAt), ctx.timezone)
                             : '—'}
                         </span>
                       )

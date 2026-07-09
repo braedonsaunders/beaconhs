@@ -4,7 +4,8 @@ import { asc, eq } from 'drizzle-orm'
 import { Badge, DetailHeader, EmptyState, cn } from '@beaconhs/ui'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenantUsers, tenants, users } from '@beaconhs/db/schema'
-import { getCurrentUserId } from '@/lib/auth'
+import { getCurrentUserId, getRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
@@ -57,6 +58,7 @@ export default async function PlatformUsersPage({
   // The /platform layout already gates super-admin; this just needs a session.
   const userId = await getCurrentUserId()
   if (!userId) redirect('/login')
+  const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
 
   const sp = await searchParams
   const { sort, dir, q } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
@@ -243,7 +245,7 @@ export default async function PlatformUsersPage({
                         <TenantChips tenants={r.tenants} />
                       </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {new Date(r.createdAt).toLocaleDateString()}
+                        {formatDate(new Date(r.createdAt), timeZone)}
                       </td>
                     </tr>
                   ))}

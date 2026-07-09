@@ -294,6 +294,7 @@ export default async function TrainingClassesCalendarPage({
                           {c.start.toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
+                            timeZone: ctx.timezone,
                           })}
                         </span>{' '}
                         <span className="font-medium">{c.title}</span>

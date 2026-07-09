@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/ui'
 import { ppeCriteriaBankCriteria, ppeCriteriaBanks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -231,7 +232,7 @@ export default async function PpeBanksPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-400">
-                      {new Date(bank.createdAt).toLocaleDateString()}
+                      {formatDate(new Date(bank.createdAt), ctx.timezone)}
                     </TableCell>
                   </TableRow>
                 ))}

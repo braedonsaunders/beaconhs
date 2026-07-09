@@ -40,6 +40,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { storeSignatureValue } from '@/lib/signature-storage'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
@@ -781,7 +782,7 @@ export default async function InspectionRecordDetailPage({
         <DetailHeader
           back={{ href: '/inspections/records', label: 'Back to inspection records' }}
           title={`${type.name}`}
-          subtitle={`${record.reference} · ${new Date(record.occurredAt).toLocaleString()}`}
+          subtitle={`${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone)}`}
           badge={
             <div className="flex items-center gap-2">
               <Badge
@@ -842,7 +843,8 @@ export default async function InspectionRecordDetailPage({
             <Alert variant="warning">
               <AlertTitle>This inspection is locked</AlertTitle>
               <AlertDescription>
-                Closed on {record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}.
+                Closed on{' '}
+                {record.closedAt ? formatDate(new Date(record.closedAt), ctx.timezone) : '—'}.
                 Unlock from the header to make further edits.
               </AlertDescription>
             </Alert>
@@ -1005,11 +1007,13 @@ export default async function InspectionRecordDetailPage({
               />
               <Meta
                 label="Submitted"
-                value={record.submittedAt ? new Date(record.submittedAt).toLocaleDateString() : '—'}
+                value={
+                  record.submittedAt ? formatDate(new Date(record.submittedAt), ctx.timezone) : '—'
+                }
               />
               <Meta
                 label="Closed"
-                value={record.closedAt ? new Date(record.closedAt).toLocaleDateString() : '—'}
+                value={record.closedAt ? formatDate(new Date(record.closedAt), ctx.timezone) : '—'}
               />
             </dl>
           </Section>
@@ -1194,7 +1198,7 @@ export default async function InspectionRecordDetailPage({
             tone="slate"
             defaultOpen={false}
           >
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </Section>
         </section>
       </div>

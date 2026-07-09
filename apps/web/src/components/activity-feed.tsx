@@ -18,7 +18,13 @@ const ACTION_ICONS: Record<string, { icon: typeof Activity; tone: string }> = {
   publish: { icon: Check, tone: 'bg-teal-100 text-teal-700' },
 }
 
-export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
+export function ActivityFeed({
+  entries,
+  timeZone,
+}: {
+  entries: ActivityEntry[]
+  timeZone: string
+}) {
   if (entries.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
@@ -51,7 +57,7 @@ export function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {
                   {e.summary ?? humanise(e.action)}
                 </span>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {formatRel(e.occurredAt)}
+                  {formatRel(e.occurredAt, timeZone)}
                 </span>
               </div>
               {e.actor ? (
@@ -81,7 +87,7 @@ function humanise(action: string): string {
   return action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function formatRel(d: Date | string): string {
+function formatRel(d: Date | string, timeZone: string): string {
   const date = typeof d === 'string' ? new Date(d) : d
   const ms = Date.now() - date.getTime()
   const mins = Math.round(ms / 60_000)
@@ -91,5 +97,5 @@ function formatRel(d: Date | string): string {
   if (hrs < 24) return `${hrs}h ago`
   const days = Math.round(hrs / 24)
   if (days < 30) return `${days}d ago`
-  return date.toLocaleDateString()
+  return date.toLocaleDateString(undefined, { timeZone })
 }

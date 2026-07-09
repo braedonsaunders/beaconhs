@@ -182,7 +182,7 @@ export default async function SafeDistanceDetailPage({
             <CardTitle>Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </CardContent>
         </Card>
       ) : null}

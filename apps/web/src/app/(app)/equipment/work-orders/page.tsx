@@ -24,6 +24,7 @@ import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { formatDate } from '@/lib/datetime'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -484,11 +485,11 @@ export default async function WorkOrdersPage({
                       {assigneeUser?.name ?? assignee?.displayName ?? '—'}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                      {new Date(wo.openedAt).toLocaleDateString()}
+                      {formatDate(new Date(wo.openedAt), ctx.timezone)}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                       {wo.closedAt ? (
-                        new Date(wo.closedAt).toLocaleDateString()
+                        formatDate(new Date(wo.closedAt), ctx.timezone)
                       ) : (
                         <span className="text-slate-400 dark:text-slate-500">—</span>
                       )}

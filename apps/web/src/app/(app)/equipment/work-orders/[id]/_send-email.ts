@@ -6,6 +6,7 @@
 import { eq } from 'drizzle-orm'
 import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendWorkOrderEmail(
@@ -71,8 +72,8 @@ export async function sendWorkOrderEmail(
     `Equipment: ${equipmentLine}`,
     `Assignee: ${assigneeName}`,
     `Reported by: ${reporterName}`,
-    `Opened: ${data.wo.openedAt.toLocaleString()}`,
-    data.wo.closedAt ? `Closed: ${data.wo.closedAt.toLocaleString()}` : '',
+    `Opened: ${formatDateTime(new Date(data.wo.openedAt), ctx.timezone)}`,
+    data.wo.closedAt ? `Closed: ${formatDateTime(new Date(data.wo.closedAt), ctx.timezone)}` : '',
     data.wo.cost ? `Cost: $${Number(data.wo.cost).toLocaleString()}` : '',
     ``,
     options?.messageOverride ? `Note: ${options.messageOverride}\n` : '',
@@ -92,7 +93,7 @@ export async function sendWorkOrderEmail(
         <span style="font-family:monospace">${escapeHtml(data.wo.reference)}</span> ·
         priority ${escapeHtml(data.wo.priority)} ·
         status ${escapeHtml(data.wo.status)}
-        ${data.wo.closedAt ? ` · closed ${escapeHtml(data.wo.closedAt.toLocaleString())}` : ''}
+        ${data.wo.closedAt ? ` · closed ${escapeHtml(formatDateTime(new Date(data.wo.closedAt), ctx.timezone))}` : ''}
       </div>
       ${
         options?.messageOverride
@@ -107,7 +108,7 @@ export async function sendWorkOrderEmail(
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Reported by</td>
             <td style="padding:4px 0;">${escapeHtml(reporterName)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Opened</td>
-            <td style="padding:4px 0;">${escapeHtml(data.wo.openedAt.toLocaleString())}</td></tr>
+            <td style="padding:4px 0;">${escapeHtml(formatDateTime(new Date(data.wo.openedAt), ctx.timezone))}</td></tr>
         ${
           data.wo.cost
             ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">Cost</td>

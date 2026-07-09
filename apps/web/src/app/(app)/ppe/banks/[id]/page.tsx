@@ -70,7 +70,7 @@ export default async function PpeBankDetailPage({ params }: { params: Promise<{ 
           isPublished: bank.isPublished,
         }}
         criteria={criteria}
-        activitySlot={<ActivityFeed entries={activity} />}
+        activitySlot={<ActivityFeed entries={activity} timeZone={ctx.timezone} />}
       />
     </DetailPageLayout>
   )

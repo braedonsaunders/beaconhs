@@ -11,6 +11,7 @@ import { can } from '@beaconhs/tenant'
 import { tenantIntegrations } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTrigger, listDestinations, listTriggers } from '@beaconhs/integrations'
+import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { deleteOutbound } from '../_actions'
 import { DeleteIntegrationButton } from '../../_delete-integration-button'
@@ -93,7 +94,7 @@ export default async function OutboundIntegrationPage({
             <p className="text-xs text-red-600 dark:text-red-400">Last error: {row.lastError}</p>
           ) : row.lastRunAt ? (
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              Last run {new Date(row.lastRunAt).toLocaleString()}
+              Last run {formatDateTime(new Date(row.lastRunAt), ctx.timezone)}
             </p>
           ) : null}
         </header>

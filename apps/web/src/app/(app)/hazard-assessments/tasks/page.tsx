@@ -28,6 +28,7 @@ import {
   hazidTasks,
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
+import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -362,7 +363,7 @@ export default async function TaskLibraryPage({
                       <Badge variant="secondary">{Number(usageCount ?? 0)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {task.updatedAt ? new Date(task.updatedAt).toLocaleDateString() : '—'}
+                      {task.updatedAt ? formatDate(new Date(task.updatedAt), ctx.timezone) : '—'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link

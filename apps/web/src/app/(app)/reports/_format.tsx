@@ -19,16 +19,6 @@ export function formatCadence(
   return `Monthly · day ${dom ?? 1} @ ${time} ${tz}`
 }
 
-export function formatDateTime(d: Date): string {
-  return new Date(d).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 export function StatusBadge({ status }: { status: 'queued' | 'running' | 'succeeded' | 'failed' }) {
   const variant =
     status === 'succeeded'

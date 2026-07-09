@@ -63,6 +63,7 @@ import { can } from '@beaconhs/tenant'
 import { publicUrl } from '@beaconhs/storage'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { Section } from '@/components/section'
@@ -1221,7 +1222,7 @@ export default async function PersonDetailPage({
                           {ppeIssueLog.map((row) => (
                             <TableRow key={row.issue.id}>
                               <TableCell>
-                                {new Date(row.issue.occurredAt).toLocaleDateString()}
+                                {formatDate(new Date(row.issue.occurredAt), ctx.timezone)}
                               </TableCell>
                               <TableCell>
                                 <Badge variant="secondary">
@@ -1301,7 +1302,7 @@ export default async function PersonDetailPage({
                                 )}
                               </TableCell>
                               <TableCell className="text-xs text-slate-600">
-                                {new Date(file.uploadedAt).toLocaleDateString()}
+                                {formatDate(new Date(file.uploadedAt), ctx.timezone)}
                               </TableCell>
                               <TableCell>
                                 {canEditFiles ? (
@@ -1361,7 +1362,7 @@ export default async function PersonDetailPage({
                               </Link>
                             </TableCell>
                             <TableCell>
-                              {new Date(incident.occurredAt).toLocaleDateString()}
+                              {formatDate(new Date(incident.occurredAt), ctx.timezone)}
                             </TableCell>
                             <TableCell>{incident.title}</TableCell>
                             <TableCell>
@@ -1387,7 +1388,7 @@ export default async function PersonDetailPage({
                   <CardTitle>Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ActivityFeed entries={activity} />
+                  <ActivityFeed entries={activity} timeZone={ctx.timezone} />
                 </CardContent>
               </Card>
             ) : null}

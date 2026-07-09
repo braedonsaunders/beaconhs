@@ -8,6 +8,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { PrintButton } from './print-button'
 
@@ -85,7 +86,7 @@ export default async function AssessmentCertificatePage({
             {person?.firstName} {person?.lastName}
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            on {completed ? completed.toLocaleDateString() : '—'}
+            on {completed ? formatDate(completed, ctx.timezone) : '—'}
           </p>
         </div>
 

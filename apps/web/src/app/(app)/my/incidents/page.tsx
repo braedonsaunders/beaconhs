@@ -21,6 +21,7 @@ import {
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { SeverityBadge, StatusBadge } from '../../incidents/_badges'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -259,7 +260,7 @@ export default async function MyIncidentsPage({
                     </Link>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {new Date(incident.occurredAt).toLocaleDateString()}
+                    {formatDate(new Date(incident.occurredAt), ctx.timezone)}
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
                     {incident.type.replace('_', ' ')}

@@ -23,7 +23,8 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../_definitions'
-import { formatCadence, formatDateTime, StatusBadge } from '../../_format'
+import { formatCadence, StatusBadge } from '../../_format'
+import { formatDateTime } from '@/lib/datetime'
 import { loadScheduleFormData } from '../_data'
 import { ScheduleForm } from '../_schedule-form'
 import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions'
@@ -156,10 +157,16 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
                 extraFooter={
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Next run:{' '}
-                    <strong>{schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}</strong>{' '}
+                    <strong>
+                      {schedule.nextRunAt
+                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
+                        : '—'}
+                    </strong>{' '}
                     · Last run:{' '}
                     <strong>
-                      {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
+                      {schedule.lastRunAt
+                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone)
+                        : 'never'}
                     </strong>
                   </p>
                 }
@@ -184,10 +191,14 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
                 </ConfigItem>
                 <ConfigItem label="Timezone">{schedule.timezone}</ConfigItem>
                 <ConfigItem label="Next run">
-                  {schedule.nextRunAt ? formatDateTime(schedule.nextRunAt) : '—'}
+                  {schedule.nextRunAt
+                    ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
+                    : '—'}
                 </ConfigItem>
                 <ConfigItem label="Last run">
-                  {schedule.lastRunAt ? formatDateTime(schedule.lastRunAt) : 'never'}
+                  {schedule.lastRunAt
+                    ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone)
+                    : 'never'}
                 </ConfigItem>
               </dl>
             )}
@@ -224,11 +235,11 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
                           href={`/reports/schedules/${id}/runs/${r.id}`}
                           className="hover:underline"
                         >
-                          {formatDateTime(r.startedAt)}
+                          {formatDateTime(new Date(r.startedAt), ctx.timezone)}
                         </Link>
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
-                        {r.finishedAt ? formatDateTime(r.finishedAt) : '—'}
+                        {r.finishedAt ? formatDateTime(new Date(r.finishedAt), ctx.timezone) : '—'}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={r.status} />

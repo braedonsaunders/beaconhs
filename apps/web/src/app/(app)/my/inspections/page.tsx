@@ -19,6 +19,7 @@ import {
 } from '@beaconhs/ui'
 import { inspectionRecords, inspectionTypes, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -222,7 +223,7 @@ export default async function MyInspectionsPage({
                     </Link>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {new Date(rec.occurredAt).toLocaleDateString()}
+                    {formatDate(new Date(rec.occurredAt), ctx.timezone)}
                   </TableCell>
                   <TableCell>{type?.name ?? '—'}</TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">

@@ -46,6 +46,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
@@ -559,6 +560,7 @@ export default async function SkillAssignmentPage({
                       file={file}
                       attachment={attachment}
                       canManage={canManage}
+                      timeZone={ctx.timezone}
                     />
                   ))}
                 </div>
@@ -573,7 +575,7 @@ export default async function SkillAssignmentPage({
               <CardTitle>Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <ActivityFeed entries={activity} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
             </CardContent>
           </Card>
         ) : null}
@@ -634,6 +636,7 @@ function FileCard({
   file,
   attachment,
   canManage,
+  timeZone,
 }: {
   assignmentId: string
   file: { id: string; label: string; kind: string; uploadedAt: Date | string }
@@ -644,6 +647,7 @@ function FileCard({
     sizeBytes: number
   } | null
   canManage: boolean
+  timeZone: string
 }) {
   const isImage = attachment?.contentType.startsWith('image/') ?? false
   const href = attachment ? publicUrl(attachment.r2Key) : null
@@ -700,7 +704,7 @@ function FileCard({
           ) : null}
         </div>
         <div className="mt-auto pt-2 text-[11px] text-slate-400 dark:text-slate-500">
-          {new Date(file.uploadedAt).toLocaleDateString()}
+          {formatDate(new Date(file.uploadedAt), timeZone)}
           {href ? (
             <a
               href={href}

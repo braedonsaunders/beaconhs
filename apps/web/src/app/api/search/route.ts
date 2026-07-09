@@ -20,6 +20,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { getRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 
 export const dynamic = 'force-dynamic'
@@ -363,7 +364,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       items: data.incidentRows.map((r) => ({
         id: r.id,
         label: `${r.reference} — ${r.title}`,
-        sublabel: r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined,
+        sublabel: r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone) : undefined,
         href: `/incidents/${r.id}`,
       })),
     })
@@ -427,7 +428,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         label: r.reference,
         sublabel:
           htmlToSnippet(r.jobScope, 100) ||
-          (r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : undefined),
+          (r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone) : undefined),
         href: `/hazard-assessments/${r.id}`,
       })),
     })

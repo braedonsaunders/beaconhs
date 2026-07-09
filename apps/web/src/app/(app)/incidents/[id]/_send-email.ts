@@ -7,6 +7,7 @@
 import { eq } from 'drizzle-orm'
 import { departments, incidentInjuries, incidents, orgUnits, people } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendIncidentEmail(
@@ -66,8 +67,8 @@ export async function sendIncidentEmail(
     `INCIDENT REPORT`,
     `${data.i.reference} · ${data.i.title}`,
     ``,
-    `Occurred: ${data.i.occurredAt.toLocaleString()}`,
-    `Reported: ${data.i.reportedAt.toLocaleString()}`,
+    `Occurred: ${formatDateTime(data.i.occurredAt, ctx.timezone)}`,
+    `Reported: ${formatDateTime(data.i.reportedAt, ctx.timezone)}`,
     `Site: ${data.site?.name ?? '—'}`,
     `Department: ${data.department?.name ?? '—'}`,
     `Supervisor: ${supervisorName}`,
@@ -120,7 +121,7 @@ export async function sendIncidentEmail(
       }
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Occurred</td>
-            <td style="padding:4px 0;">${escapeHtml(data.i.occurredAt.toLocaleString())}</td></tr>
+            <td style="padding:4px 0;">${escapeHtml(formatDateTime(data.i.occurredAt, ctx.timezone))}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Site</td>
             <td style="padding:4px 0;">${escapeHtml(data.site?.name ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Supervisor</td>

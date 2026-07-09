@@ -44,6 +44,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -558,7 +559,7 @@ export default async function TrainingRecordPage({
                         <TableCell className="text-slate-600 dark:text-slate-400">
                           {humanSize(a.sizeBytes)}
                         </TableCell>
-                        <TableCell>{new Date(a.createdAt).toLocaleDateString()}</TableCell>
+                        <TableCell>{formatDate(new Date(a.createdAt), ctx.timezone)}</TableCell>
                         <TableCell>
                           <a
                             href={publicUrl(a.r2Key)}
@@ -584,7 +585,7 @@ export default async function TrainingRecordPage({
               <CardTitle>Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <ActivityFeed entries={activity} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
             </CardContent>
           </Card>
         ) : null}

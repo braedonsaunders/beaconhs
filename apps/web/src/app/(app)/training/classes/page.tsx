@@ -21,6 +21,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -199,9 +200,13 @@ export default async function TrainingClassesPage({
                 return (
                   <TableRow key={row.cls.id}>
                     <TableCell className="text-slate-600 dark:text-slate-400">
-                      <div className="text-sm">{startedAt.toLocaleDateString()}</div>
+                      <div className="text-sm">{formatDate(startedAt, ctx.timezone)}</div>
                       <div className="text-xs text-slate-400">
-                        {startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {startedAt.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZone: ctx.timezone,
+                        })}
                       </div>
                     </TableCell>
                     <TableCell>

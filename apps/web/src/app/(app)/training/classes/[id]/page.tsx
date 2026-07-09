@@ -38,6 +38,7 @@ import {
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitTrainingClassCompleted } from '@beaconhs/integrations'
@@ -493,7 +494,7 @@ export default async function TrainingClassPage({
         <DetailHeader
           back={{ href: '/training/classes', label: 'Back to classes' }}
           title={cls.title}
-          subtitle={`${course?.name ?? 'Course'} · ${startsAt.toLocaleString()}`}
+          subtitle={`${course?.name ?? 'Course'} · ${formatDateTime(startsAt, ctx.timezone)}`}
           badge={
             isCancelled ? (
               <Badge variant="destructive">Cancelled</Badge>
@@ -685,8 +686,9 @@ export default async function TrainingClassPage({
             <CardContent>
               {isCompleted ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Class was marked complete on {new Date(cls.completedAt!).toLocaleString()}.
-                  Training records have been created for everyone who passed.
+                  Class was marked complete on{' '}
+                  {formatDateTime(new Date(cls.completedAt!), ctx.timezone)}. Training records have
+                  been created for everyone who passed.
                 </p>
               ) : !canManageClasses ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">

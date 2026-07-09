@@ -24,6 +24,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -314,19 +315,21 @@ export default async function FormResponsesPage({
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 tabular-nums">
                         {response.createdAt
-                          ? new Date(response.createdAt).toLocaleDateString()
+                          ? formatDate(new Date(response.createdAt), ctx.timezone)
                           : '—'}
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 tabular-nums">
                         {response.submittedAt
-                          ? new Date(response.submittedAt).toLocaleDateString()
+                          ? formatDate(new Date(response.submittedAt), ctx.timezone)
                           : '—'}
                       </TableCell>
                       <TableCell className="text-xs text-slate-600">
                         {submittedByName ?? <span className="text-slate-400">—</span>}
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 tabular-nums">
-                        {response.closedAt ? new Date(response.closedAt).toLocaleDateString() : '—'}
+                        {response.closedAt
+                          ? formatDate(new Date(response.closedAt), ctx.timezone)
+                          : '—'}
                       </TableCell>
                       <TableCell>
                         {response.pdfAttachmentId ? (

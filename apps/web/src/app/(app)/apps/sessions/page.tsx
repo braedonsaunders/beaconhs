@@ -110,7 +110,8 @@ export default async function MonitoredSessionsPage({
   })
 
   const now = Date.now()
-  const fmt = (d: Date) => d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+  const fmt = (d: Date) =>
+    d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short', timeZone: ctx.timezone })
   const sortProps = { basePath: '/apps/sessions', currentParams: sp, dir: params.dir }
 
   return (

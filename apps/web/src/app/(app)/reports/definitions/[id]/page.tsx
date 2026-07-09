@@ -54,7 +54,8 @@ import {
   loadTenantBranding,
   runReportForViewer,
 } from '../../_run'
-import { formatCadence, formatDateTime, CategoryBadge, KindBadge, StatusBadge } from '../../_format'
+import { formatCadence, CategoryBadge, KindBadge, StatusBadge } from '../../_format'
+import { formatDateTime } from '@/lib/datetime'
 import { ReportPagedPreview } from '../../_components/report-paged-preview.client'
 import { runOnceFromDefinition, deleteDefinition } from './actions'
 
@@ -182,6 +183,7 @@ export default async function ReportViewerPage({
           isCustom={isCustom}
           editHref={editHref}
           deleteBound={deleteBound}
+          timeZone={ctx.timezone}
         />
       )}
     </div>
@@ -320,6 +322,7 @@ function ActivityTab({
   isCustom,
   editHref,
   deleteBound,
+  timeZone,
 }: {
   definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
   scheduleRows: readonly (typeof reportSchedules.$inferSelect)[]
@@ -329,6 +332,7 @@ function ActivityTab({
   isCustom: boolean
   editHref: string
   deleteBound: () => Promise<void>
+  timeZone: string
 }) {
   return (
     <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
@@ -386,7 +390,7 @@ function ActivityTab({
                           )}
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-300">
-                          {s.nextRunAt ? formatDateTime(s.nextRunAt) : '—'}
+                          {s.nextRunAt ? formatDateTime(new Date(s.nextRunAt), timeZone) : '—'}
                         </TableCell>
                         <TableCell>
                           {s.active ? (
@@ -428,7 +432,7 @@ function ActivityTab({
                             href={`/reports/schedules/${r.scheduleId}/runs/${r.id}`}
                             className="text-slate-700 hover:underline dark:text-slate-200"
                           >
-                            {formatDateTime(r.startedAt)}
+                            {formatDateTime(new Date(r.startedAt), timeZone)}
                           </Link>
                         </TableCell>
                         <TableCell>
@@ -470,8 +474,12 @@ function ActivityTab({
               <MetaItem label="Query kind">
                 <span className="font-mono text-xs">{definition.queryKind}</span>
               </MetaItem>
-              <MetaItem label="Created">{formatDateTime(definition.createdAt)}</MetaItem>
-              <MetaItem label="Updated">{formatDateTime(definition.updatedAt)}</MetaItem>
+              <MetaItem label="Created">
+                {formatDateTime(new Date(definition.createdAt), timeZone)}
+              </MetaItem>
+              <MetaItem label="Updated">
+                {formatDateTime(new Date(definition.updatedAt), timeZone)}
+              </MetaItem>
             </dl>
             {canBuild ? (
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">

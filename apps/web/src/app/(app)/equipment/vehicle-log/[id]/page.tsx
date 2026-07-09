@@ -445,7 +445,7 @@ export default async function TruckLogDetailPage({
 
         {active === 'activity' ? (
           <Section title={`Activity (${activity.length})`}>
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </Section>
         ) : null}
       </div>

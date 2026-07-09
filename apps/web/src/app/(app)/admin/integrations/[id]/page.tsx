@@ -22,6 +22,7 @@ import { can } from '@beaconhs/tenant'
 import { type SyncEntityStat, syncConnections, syncRuns } from '@beaconhs/db/schema'
 import { getConnector, toConnectorSummary } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { RunPill, StatusPill } from '../_pills'
 import { DbMapper } from './_db-mapper'
@@ -351,7 +352,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                           ) : null}
                         </div>
                         <div className="shrink-0 text-right text-[11px] text-slate-400">
-                          <div>{new Date(r.startedAt).toLocaleString()}</div>
+                          <div>{formatDateTime(new Date(r.startedAt), ctx.timezone)}</div>
                           {r.durationMs != null ? (
                             <div>{(r.durationMs / 1000).toFixed(1)}s</div>
                           ) : null}

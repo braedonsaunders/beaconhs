@@ -23,6 +23,7 @@ import { syncConnections, tenantIntegrations } from '@beaconhs/db/schema'
 import { listConnectors, toConnectorSummary } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { getDestination, getTrigger, listDestinations } from '@beaconhs/integrations'
+import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { AdminBackLink } from '../_back-link'
 import { deleteConnection } from './_actions'
@@ -116,7 +117,7 @@ export default async function IntegrationsPage() {
         href: `/admin/integrations/${c.id}`,
         badge: c.enabled && c.schedule ? `every ${c.schedule}` : undefined,
         meta: c.lastRunAt
-          ? `last run ${new Date(c.lastRunAt).toLocaleString()} · ${c.lastStatus ?? ''}`
+          ? `last run ${formatDateTime(new Date(c.lastRunAt), ctx.timezone)} · ${c.lastStatus ?? ''}`
           : 'never run',
         iconKey: iconFor(c.connectorKey),
         deleteAction: deleteConnection,
@@ -138,7 +139,7 @@ export default async function IntegrationsPage() {
         meta: o.lastError
           ? `error: ${o.lastError}`
           : o.lastRunAt
-            ? `last run ${new Date(o.lastRunAt).toLocaleString()}`
+            ? `last run ${formatDateTime(new Date(o.lastRunAt), ctx.timezone)}`
             : 'never run',
         iconKey: 'upload',
         deleteAction: deleteOutbound,

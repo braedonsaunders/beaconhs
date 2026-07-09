@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
 import { jobTitleTasks, people, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Job Description — Print view' }
@@ -33,7 +34,7 @@ export default async function TitlePdfPage({ params }: { params: Promise<{ id: s
   })
   if (!data) notFound()
   const { row, tasks, assigned } = data
-  const today = new Date().toLocaleDateString()
+  const today = formatDate(new Date(), ctx.timezone)
 
   return (
     <div className="mx-auto max-w-[210mm] bg-white p-8 text-sm text-slate-900 print:p-0">

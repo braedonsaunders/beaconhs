@@ -120,7 +120,7 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
         criteria={criteria}
         banks={banks}
         itemCount={itemCount}
-        activitySlot={<ActivityFeed entries={activity} />}
+        activitySlot={<ActivityFeed entries={activity} timeZone={ctx.timezone} />}
       />
     </DetailPageLayout>
   )

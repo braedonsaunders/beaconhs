@@ -11,6 +11,7 @@ import { Badge, EmptyState, cn } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { pdfTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { listSubjectOptions } from '@/lib/flows/subject-fields'
 import { listAppPdfTemplates, listModulePdfDefaults } from '@/lib/module-pdf'
 import { PageContainer } from '@/components/page-layout'
@@ -143,7 +144,7 @@ export default async function PdfTemplatesPage({
                       </code>
                     </div>
                     <p className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
-                      <span>Updated {new Date(t.updatedAt).toLocaleDateString()}</span>
+                      <span>Updated {formatDate(new Date(t.updatedAt), ctx.timezone)}</span>
                       <span className="inline-flex items-center gap-0.5 text-teal-600 opacity-0 transition group-hover:opacity-100">
                         Edit <ArrowUpRight size={12} />
                       </span>

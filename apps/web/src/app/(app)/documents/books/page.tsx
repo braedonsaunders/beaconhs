@@ -16,6 +16,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { documentBookItems, documentBooks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -236,7 +237,7 @@ export default async function DocumentBooksPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {new Date(b.updatedAt).toLocaleDateString()}
+                      {formatDate(new Date(b.updatedAt), ctx.timezone)}
                     </TableCell>
                   </TableRow>
                 )

@@ -13,6 +13,7 @@ import {
 } from '@beaconhs/ui'
 import { apiKeys } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
+import { formatDateTime } from '@/lib/datetime'
 import { PERMISSION_GROUPS } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../../roles/_components/permission-matrix'
 import { revokeApiKey, updateApiKey } from '../_actions'
@@ -162,7 +163,7 @@ export default async function ApiKeyEditPage({
                       Created
                     </div>
                     <div className="mt-1 text-slate-700 dark:text-slate-200">
-                      {new Date(key.createdAt).toLocaleString()}
+                      {formatDateTime(new Date(key.createdAt), ctx.timezone)}
                     </div>
                   </div>
                   <div>
@@ -170,7 +171,9 @@ export default async function ApiKeyEditPage({
                       Last used
                     </div>
                     <div className="mt-1 text-slate-700 dark:text-slate-200">
-                      {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : 'Never'}
+                      {key.lastUsedAt
+                        ? formatDateTime(new Date(key.lastUsedAt), ctx.timezone)
+                        : 'Never'}
                     </div>
                   </div>
                 </div>

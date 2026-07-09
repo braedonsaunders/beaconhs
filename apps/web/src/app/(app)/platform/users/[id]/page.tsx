@@ -14,7 +14,8 @@ import {
 } from '@beaconhs/ui'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
-import { getCurrentUserId } from '@/lib/auth'
+import { getCurrentUserId, getRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { ConfirmButton } from '@/components/confirm-button'
 import { AddMembershipForm } from '../_components/add-membership-form'
@@ -45,6 +46,7 @@ export default async function PlatformUserDetailPage({
 }) {
   const sessionUserId = await getCurrentUserId()
   if (!sessionUserId) redirect('/login')
+  const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
   const { id } = await params
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
@@ -192,7 +194,7 @@ export default async function PlatformUserDetailPage({
                 <dd className="col-span-2 text-slate-900 dark:text-slate-100">{account.email}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">Created</dt>
                 <dd className="col-span-2 text-slate-900 dark:text-slate-100">
-                  {new Date(account.createdAt).toLocaleDateString()}
+                  {formatDate(new Date(account.createdAt), timeZone)}
                 </dd>
               </dl>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -301,7 +303,7 @@ export default async function PlatformUserDetailPage({
                           </td>
                           <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                             {membership.joinedAt
-                              ? new Date(membership.joinedAt).toLocaleDateString()
+                              ? formatDate(new Date(membership.joinedAt), timeZone)
                               : '—'}
                           </td>
                           <td className="px-3 py-2">

@@ -39,6 +39,7 @@ import {
   user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
@@ -418,7 +419,7 @@ export default async function InspectionRecordsPage({
                       </Badge>
                     }
                     person={r.inspectorName}
-                    meta={`${new Date(r.record.occurredAt).toLocaleDateString()}${
+                    meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone)}${
                       r.site?.name ? ` · ${r.site.name}` : ''
                     }`}
                     footer={
@@ -504,7 +505,7 @@ export default async function InspectionRecordsPage({
                           </Link>
                         </TableCell>
                         <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                          {new Date(r.record.occurredAt).toLocaleDateString()}
+                          {formatDate(new Date(r.record.occurredAt), ctx.timezone)}
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-400">
                           {r.site?.name ?? '—'}

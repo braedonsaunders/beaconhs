@@ -25,6 +25,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
@@ -204,7 +205,7 @@ export default async function AdminUserDetailPage({
                     <dt className="text-slate-500 dark:text-slate-400">Joined</dt>
                     <dd className="col-span-2 text-slate-900 dark:text-slate-100">
                       {member.membership.joinedAt
-                        ? new Date(member.membership.joinedAt).toLocaleDateString()
+                        ? formatDate(new Date(member.membership.joinedAt), ctx.timezone)
                         : '—'}
                     </dd>
                   </dl>
@@ -735,7 +736,7 @@ export default async function AdminUserDetailPage({
           </div>
         ) : null}
 
-        {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+        {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       </div>
     </PageContainer>
   )

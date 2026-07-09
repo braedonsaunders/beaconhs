@@ -40,6 +40,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
 import { getTenantHierarchy, levelLabel, type TenantHierarchy } from '@/lib/org-hierarchy'
@@ -371,9 +372,9 @@ async function renderCustomer({
       {active === 'contacts' ? (
         <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
       ) : null}
-      {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
+      {active === 'incidents' ? <IncidentsTab rows={allIncidents} timeZone={ctx.timezone} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
-      {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+      {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
@@ -472,9 +473,9 @@ async function renderProject({
       {active === 'contacts' ? (
         <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
       ) : null}
-      {active === 'incidents' ? <IncidentsTab rows={allIncidents} /> : null}
+      {active === 'incidents' ? <IncidentsTab rows={allIncidents} timeZone={ctx.timezone} /> : null}
       {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
-      {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+      {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
@@ -564,9 +565,11 @@ async function renderSite({
       {active === 'contacts' ? (
         <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
       ) : null}
-      {active === 'incidents' ? <IncidentsTab rows={siteIncidents} /> : null}
+      {active === 'incidents' ? (
+        <IncidentsTab rows={siteIncidents} timeZone={ctx.timezone} />
+      ) : null}
       {active === 'equipment' ? <EquipmentTab equipment={siteEquipment} /> : null}
-      {active === 'activity' ? <ActivityFeed entries={activity} /> : null}
+      {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
@@ -1030,7 +1033,13 @@ function ContactsTab({
   )
 }
 
-function IncidentsTab({ rows }: { rows: (typeof incidents.$inferSelect)[] }) {
+function IncidentsTab({
+  rows,
+  timeZone,
+}: {
+  rows: (typeof incidents.$inferSelect)[]
+  timeZone: string
+}) {
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -1066,7 +1075,7 @@ function IncidentsTab({ rows }: { rows: (typeof incidents.$inferSelect)[] }) {
                 {i.reference}
               </Link>
             </TableCell>
-            <TableCell>{new Date(i.occurredAt).toLocaleDateString()}</TableCell>
+            <TableCell>{formatDate(new Date(i.occurredAt), timeZone)}</TableCell>
             <TableCell>{i.title}</TableCell>
             <TableCell>
               <Badge variant={severityVariant(i.severity)}>{i.severity}</Badge>

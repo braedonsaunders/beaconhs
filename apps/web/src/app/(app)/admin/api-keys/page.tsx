@@ -25,6 +25,7 @@ import {
 } from '@beaconhs/ui'
 import { apiKeys } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { permissionGroupLabel } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../roles/_components/permission-matrix'
 import { createApiKey, dismissReveal, REVEAL_COOKIE, revokeApiKey } from './_actions'
@@ -214,13 +215,13 @@ export default async function ApiKeysPage({
                     <TableCell>{permissionSummary(k.permissions ?? [])}</TableCell>
                     <TableCell className="font-mono text-xs">{k.prefix}…</TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {new Date(k.createdAt).toLocaleDateString()}
+                      {formatDate(new Date(k.createdAt), ctx.timezone)}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {k.expiresAt ? new Date(k.expiresAt).toLocaleDateString() : '—'}
+                      {k.expiresAt ? formatDate(new Date(k.expiresAt), ctx.timezone) : '—'}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : '—'}
+                      {k.lastUsedAt ? formatDateTime(new Date(k.lastUsedAt), ctx.timezone) : '—'}
                     </TableCell>
                     <TableCell>
                       {k.revokedAt ? (

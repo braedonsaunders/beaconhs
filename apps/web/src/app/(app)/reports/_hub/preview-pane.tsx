@@ -45,7 +45,8 @@ import {
 } from '@beaconhs/reports'
 import type { ReportDefinitionRow } from '../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../_run'
-import { formatCadence, formatDateTime, CategoryBadge, KindBadge, StatusBadge } from '../_format'
+import { formatCadence, CategoryBadge, KindBadge, StatusBadge } from '../_format'
+import { formatDateTime } from '@/lib/datetime'
 import { ReportPagedPreview } from '../_components/report-paged-preview.client'
 import { hubHref } from './definition-list'
 
@@ -302,7 +303,7 @@ async function OverviewPane({
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
                         {schedule.nextRunAt && schedule.active
-                          ? formatDateTime(schedule.nextRunAt)
+                          ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
                           : '—'}
                       </TableCell>
                       <TableCell>
@@ -354,7 +355,7 @@ async function OverviewPane({
                         <div className="text-xs text-slate-400">{schedule.name}</div>
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
-                        {formatDateTime(run.startedAt)}
+                        {formatDateTime(new Date(run.startedAt), ctx.timezone)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={run.status} />

@@ -283,7 +283,7 @@ export default async function EquipmentInspectionRecordPage({
           ) : null}
         </div>
 
-        <ActivityFeed entries={activity} />
+        <ActivityFeed entries={activity} timeZone={ctx.timezone} />
       </div>
     </PageContainer>
   )

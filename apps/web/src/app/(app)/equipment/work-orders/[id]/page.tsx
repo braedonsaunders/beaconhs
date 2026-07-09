@@ -11,6 +11,7 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -307,8 +308,8 @@ export default async function WorkOrderDetailPage({
         <DetailHeader
           back={{ href: '/equipment/work-orders', label: 'Back to work orders' }}
           title={wo.summary}
-          subtitle={`${wo.reference} · opened ${new Date(wo.openedAt).toLocaleDateString()}${
-            wo.closedAt ? ` · closed ${new Date(wo.closedAt).toLocaleDateString()}` : ''
+          subtitle={`${wo.reference} · opened ${formatDate(new Date(wo.openedAt), ctx.timezone)}${
+            wo.closedAt ? ` · closed ${formatDate(new Date(wo.closedAt), ctx.timezone)}` : ''
           }`}
           badge={
             <div className="flex items-center gap-2">
@@ -396,10 +397,13 @@ export default async function WorkOrderDetailPage({
                       '—'
                     ),
                   },
-                  { label: 'Reported at', value: new Date(wo.openedAt).toLocaleString() },
+                  {
+                    label: 'Reported at',
+                    value: formatDateTime(new Date(wo.openedAt), ctx.timezone),
+                  },
                   {
                     label: 'Completed at',
-                    value: wo.closedAt ? new Date(wo.closedAt).toLocaleString() : '—',
+                    value: wo.closedAt ? formatDateTime(new Date(wo.closedAt), ctx.timezone) : '—',
                   },
                   { label: 'Cost', value: wo.cost ? `$${wo.cost}` : '—' },
                 ]}
@@ -530,7 +534,7 @@ export default async function WorkOrderDetailPage({
 
         {active === 'activity' ? (
           <Section title={`Activity (${activity.length})`}>
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </Section>
         ) : null}
       </div>

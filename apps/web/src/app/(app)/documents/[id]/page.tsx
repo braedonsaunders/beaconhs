@@ -44,6 +44,7 @@ import {
 import { publicUrl } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -584,8 +585,8 @@ export default async function DocumentDetailPage({
                               </div>
                               <span className="text-xs text-slate-500 dark:text-slate-400">
                                 {v.publishedAt
-                                  ? `published ${new Date(v.publishedAt).toLocaleDateString()}`
-                                  : `created ${new Date(v.createdAt).toLocaleDateString()}`}
+                                  ? `published ${formatDate(new Date(v.publishedAt), ctx.timezone)}`
+                                  : `created ${formatDate(new Date(v.createdAt), ctx.timezone)}`}
                               </span>
                             </div>
                             {v.changelog ? (
@@ -694,7 +695,7 @@ export default async function DocumentDetailPage({
                               </Badge>
                             </div>
                             <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              {new Date(row.review.reviewedAt).toLocaleDateString()}
+                              {formatDate(new Date(row.review.reviewedAt), ctx.timezone)}
                               {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
                             </div>
                             {row.review.notes ? (
@@ -726,7 +727,7 @@ export default async function DocumentDetailPage({
                   <CardTitle>Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ActivityFeed entries={activity} />
+                  <ActivityFeed entries={activity} timeZone={ctx.timezone} />
                 </CardContent>
               </Card>
             ) : null}

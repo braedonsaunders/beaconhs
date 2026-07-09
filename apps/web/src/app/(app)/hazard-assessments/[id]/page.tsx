@@ -1351,7 +1351,7 @@ export default async function HazidAssessmentDetailPage({
             icon={<History size={20} />}
             tone="slate"
           >
-            <ActivityFeed entries={activity} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
           </Section>
         </section>
       </div>

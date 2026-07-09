@@ -7,6 +7,7 @@ import { Badge, Card, CardContent, CardHeader, CardTitle, DetailHeader } from '@
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { smsLog, tenants } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -66,7 +67,7 @@ export async function SmsLogDetailView({
         <DetailHeader
           back={back}
           title={log.recipient ?? 'SMS'}
-          subtitle={`Sent ${new Date(log.createdAt).toLocaleString()}${
+          subtitle={`Sent ${formatDateTime(new Date(log.createdAt), ctx.timezone)}${
             log.provider ? ` · via ${log.provider}` : ''
           }`}
           badge={
@@ -112,11 +113,11 @@ export async function SmsLogDetailView({
               },
               {
                 label: 'Created',
-                value: new Date(log.createdAt).toLocaleString(),
+                value: formatDateTime(new Date(log.createdAt), ctx.timezone),
               },
               {
                 label: 'Sent',
-                value: log.sentAt ? new Date(log.sentAt).toLocaleString() : '—',
+                value: log.sentAt ? formatDateTime(new Date(log.sentAt), ctx.timezone) : '—',
               },
               {
                 label: 'Provider message id',

@@ -8,6 +8,7 @@ import { Badge, Card, CardContent, CardHeader, CardTitle, DetailHeader } from '@
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { emailLog, tenants } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -73,8 +74,8 @@ export async function EmailLogDetailView({
         <DetailHeader
           back={back}
           title={log.subject}
-          subtitle={`Queued ${new Date(log.createdAt).toLocaleString()}${
-            log.sentAt ? ` · Sent ${new Date(log.sentAt).toLocaleString()}` : ''
+          subtitle={`Queued ${formatDateTime(new Date(log.createdAt), ctx.timezone)}${
+            log.sentAt ? ` · Sent ${formatDateTime(new Date(log.sentAt), ctx.timezone)}` : ''
           }`}
           badge={
             <div className="flex items-center gap-2">
@@ -159,19 +160,19 @@ export async function EmailLogDetailView({
             rows={[
               {
                 label: 'Created (queued)',
-                value: new Date(log.createdAt).toLocaleString(),
+                value: formatDateTime(new Date(log.createdAt), ctx.timezone),
               },
               {
                 label: 'Sent',
-                value: log.sentAt ? new Date(log.sentAt).toLocaleString() : '—',
+                value: log.sentAt ? formatDateTime(new Date(log.sentAt), ctx.timezone) : '—',
               },
               {
                 label: 'Opened',
-                value: log.openedAt ? new Date(log.openedAt).toLocaleString() : '—',
+                value: log.openedAt ? formatDateTime(new Date(log.openedAt), ctx.timezone) : '—',
               },
               {
                 label: 'Bounced',
-                value: log.bouncedAt ? new Date(log.bouncedAt).toLocaleString() : '—',
+                value: log.bouncedAt ? formatDateTime(new Date(log.bouncedAt), ctx.timezone) : '—',
               },
               {
                 label: 'Provider message id',

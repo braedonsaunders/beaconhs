@@ -117,7 +117,7 @@ export default async function InspectionTypeDetailPage({
         groups={groups}
         criteria={criteria}
         banks={banks}
-        activitySlot={<ActivityFeed entries={activity} />}
+        activitySlot={<ActivityFeed entries={activity} timeZone={ctx.timezone} />}
       />
     </DetailPageLayout>
   )

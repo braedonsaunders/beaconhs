@@ -23,6 +23,7 @@ import {
 import { emailLog, tenants } from '@beaconhs/db/schema'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
@@ -249,7 +250,7 @@ export async function EmailLogListView({
                 return (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                      {new Date(log.createdAt).toLocaleString()}
+                      {formatDateTime(new Date(log.createdAt), ctx.timezone)}
                     </TableCell>
                     <TableCell className="text-slate-900 dark:text-slate-100">
                       <div className="font-mono text-xs">{log.recipientPrimary ?? '—'}</div>

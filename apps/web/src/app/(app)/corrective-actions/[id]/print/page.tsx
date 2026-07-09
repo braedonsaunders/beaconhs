@@ -11,6 +11,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 
@@ -92,8 +93,8 @@ export default async function CorrectiveActionPrintPage({
   })
 
   const ownerLabel = ownerAccount?.name ?? owner?.displayName ?? '—'
-  const closed = ca.closedAt ? new Date(ca.closedAt).toLocaleDateString() : '—'
-  const verified = ca.verifiedAt ? new Date(ca.verifiedAt).toLocaleString() : null
+  const closed = ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone) : '—'
+  const verified = ca.verifiedAt ? formatDateTime(new Date(ca.verifiedAt), ctx.timezone) : null
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -234,7 +235,7 @@ export default async function CorrectiveActionPrintPage({
                   <div className="head">
                     <strong>{s.step.kind.replace('_', ' ')}</strong>
                     <span>
-                      {s.step.completedAt.toLocaleString()} · {name}
+                      {formatDateTime(new Date(s.step.completedAt), ctx.timezone)} · {name}
                     </span>
                   </div>
                   {s.step.description ? <div className="desc">{s.step.description}</div> : null}

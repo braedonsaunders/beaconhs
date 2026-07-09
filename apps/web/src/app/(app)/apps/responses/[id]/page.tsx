@@ -51,6 +51,7 @@ import { evaluateLogicRule } from '@beaconhs/forms-core'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -909,7 +910,7 @@ export default async function FormResponsePage({
                             {c.account?.name ?? c.author?.displayName ?? 'Someone'}
                           </span>
                           <span className="text-xs text-slate-500">
-                            {new Date(c.comment.createdAt).toLocaleString()}
+                            {formatDateTime(new Date(c.comment.createdAt), ctx.timezone)}
                           </span>
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-slate-800 dark:text-slate-200">
@@ -941,7 +942,7 @@ export default async function FormResponsePage({
               <CardTitle>Audit trail</CardTitle>
             </CardHeader>
             <CardContent>
-              <ActivityFeed entries={activity} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
             </CardContent>
           </Card>
         ) : null}

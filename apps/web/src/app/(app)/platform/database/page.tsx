@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, Database } from 'lucide-react'
 import { Button, Card, CardContent, DetailHeader, Input, cn } from '@beaconhs/ui'
 import { MAINTENANCE_TABLES, resolveRetentionDays } from '@beaconhs/db'
+import { getRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import {
   getDbMaintenanceSettings,
@@ -28,6 +30,7 @@ export default async function PlatformDatabasePage() {
     getMaintenanceTableSizes(),
   ])
   const sizeByTable = new Map<string, MaintenanceTableSize>(sizes.map((s) => [s.table, s]))
+  const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
   const lastRun = settings.lastRun
 
   return (
@@ -138,7 +141,7 @@ export default async function PlatformDatabasePage() {
                     {lastRun.ok ? 'Completed' : 'Completed with errors'}
                   </span>
                   <span className="text-slate-600 dark:text-slate-300">
-                    {new Date(lastRun.at).toLocaleString()}
+                    {formatDateTime(new Date(lastRun.at), timeZone)}
                   </span>
                   <span className="text-slate-400 dark:text-slate-500">
                     {lastRun.trigger === 'manual' ? 'Manual' : 'Scheduled'} ·{' '}

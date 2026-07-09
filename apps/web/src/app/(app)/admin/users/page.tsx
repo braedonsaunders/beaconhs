@@ -5,6 +5,7 @@ import { Badge, Button, DetailHeader, EmptyState, cn } from '@beaconhs/ui'
 import { roleAssignments, roles, tenantUsers, user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
@@ -247,7 +248,7 @@ export default async function AdminUsersPage({
                         </div>
                       </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {r.joinedAt ? new Date(r.joinedAt).toLocaleDateString() : '—'}
+                        {r.joinedAt ? formatDate(new Date(r.joinedAt), ctx.timezone) : '—'}
                       </td>
                     </tr>
                   ))}

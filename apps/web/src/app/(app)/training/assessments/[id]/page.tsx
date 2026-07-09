@@ -23,6 +23,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
@@ -142,11 +143,15 @@ export default async function AssessmentAttemptDetailPage({
             },
             {
               label: 'Started',
-              value: attempt.startedAt ? new Date(attempt.startedAt).toLocaleString() : '—',
+              value: attempt.startedAt
+                ? formatDateTime(new Date(attempt.startedAt), ctx.timezone)
+                : '—',
             },
             {
               label: 'Completed',
-              value: attempt.completedAt ? new Date(attempt.completedAt).toLocaleString() : '—',
+              value: attempt.completedAt
+                ? formatDateTime(new Date(attempt.completedAt), ctx.timezone)
+                : '—',
             },
           ]}
         />
@@ -260,7 +265,10 @@ export default async function AssessmentAttemptDetailPage({
                 ) : (
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     This attempt is locked. Submitted at{' '}
-                    {attempt.completedAt ? new Date(attempt.completedAt).toLocaleString() : '—'}.
+                    {attempt.completedAt
+                      ? formatDateTime(new Date(attempt.completedAt), ctx.timezone)
+                      : '—'}
+                    .
                   </div>
                 )}
               </form>

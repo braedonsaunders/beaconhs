@@ -21,6 +21,7 @@ import {
   trainingCourses,
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
+import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -310,7 +311,7 @@ export default async function AssessmentTypesPage({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
-                      {type.updatedAt ? new Date(type.updatedAt).toLocaleDateString() : '—'}
+                      {type.updatedAt ? formatDate(new Date(type.updatedAt), ctx.timezone) : '—'}
                     </TableCell>
                   </TableRow>
                 )

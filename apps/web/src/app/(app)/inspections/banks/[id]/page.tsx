@@ -74,7 +74,7 @@ export default async function InspectionBankDetailPage({
           isPublished: bank.isPublished,
         }}
         criteria={criteria}
-        activitySlot={<ActivityFeed entries={activity} />}
+        activitySlot={<ActivityFeed entries={activity} timeZone={ctx.timezone} />}
       />
     </DetailPageLayout>
   )

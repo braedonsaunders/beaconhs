@@ -31,6 +31,7 @@ import {
   personTitles,
 } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
+import { formatDate } from '@/lib/datetime'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import {
@@ -347,7 +348,7 @@ export default async function TitleTasksPage({
                                     <input type="hidden" name="personId" value={person.id} />
                                     <button
                                       type="submit"
-                                      title={`Acknowledged ${new Date(ack.acknowledgedAt).toLocaleDateString()} — click to revoke`}
+                                      title={`Acknowledged ${formatDate(new Date(ack.acknowledgedAt), ctx.timezone)} — click to revoke`}
                                       className="text-emerald-600 hover:text-emerald-800"
                                     >
                                       <CheckSquare size={14} />

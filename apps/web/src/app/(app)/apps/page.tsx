@@ -6,6 +6,7 @@ import { Badge, Button, EmptyState } from '@beaconhs/ui'
 import { formResponses, formTemplates } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { formatDate } from '@/lib/datetime'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { NavIcon } from '@/components/sidebar-nav'
@@ -212,7 +213,7 @@ export default async function FormsPage({
                   <span>
                     {responseCount} response{responseCount === 1 ? '' : 's'}
                   </span>
-                  {last ? <span>· last {new Date(last).toLocaleDateString()}</span> : null}
+                  {last ? <span>· last {formatDate(new Date(last), ctx.timezone)}</span> : null}
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
