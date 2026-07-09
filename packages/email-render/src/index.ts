@@ -302,6 +302,13 @@ export function htmlToPlainText(html: string): string {
  * legitimate emails need (full document, <style>, tables, bgcolor/align/…) while
  * keeping its safe-by-default stripping of <script>, event handlers, and
  * javascript: URIs. Idempotent — safe to run again on read.
+ *
+ * ORDER MATTERS: sanitize BEFORE expandRepeatMarkers. DOMPurify parses the
+ * document, and the HTML parser foster-parents loose text out of <table>
+ * content — an already-expanded `{{#each}}<tr>…</tr>{{/each}}` block gets its
+ * braces hoisted after the table (empty), silently breaking every repeat row.
+ * The builder's `data-each` / `data-if` row markers are attributes, which
+ * survive parsing — so they are allow-listed here and expanded afterwards.
  */
 export function sanitizeEmailHtml(html: string): string {
   return String(
@@ -324,6 +331,9 @@ export function sanitizeEmailHtml(html: string): string {
         'lang',
         'role',
         'target',
+        // The row-repeat / conditional-row markers (see expandRepeatMarkers).
+        'data-each',
+        'data-if',
       ],
       FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea'],
       ALLOW_DATA_ATTR: false,

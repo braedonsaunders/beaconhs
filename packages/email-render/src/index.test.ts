@@ -207,6 +207,24 @@ describe('expandRepeatMarkers', () => {
       '<table><tr><th>Name</th></tr><tr><td>Jane</td></tr><tr><td>Bob</td></tr></table>',
     )
   })
+
+  // REGRESSION: the compile pipeline must sanitize BEFORE expanding. DOMPurify
+  // foster-parents loose text out of <table> content, so sanitizing an
+  // already-expanded template hoists the {{#each}}/{{#if}} braces after the
+  // table and repeat rows never repeat. The markers are attributes (which
+  // survive parsing) and are allow-listed in sanitizeEmailHtml.
+  it('sanitize-then-expand keeps repeat blocks wrapping their <tr>', () => {
+    const source =
+      '<table><tr data-if="rows"><th>H</th></tr><tr data-each="rows"><td>{{name}}</td></tr></table>'
+    const sanitized = sanitizeEmailHtml(source)
+    expect(sanitized).toContain('data-each="rows"')
+    expect(sanitized).toContain('data-if="rows"')
+    const compiled = expandRepeatMarkers(sanitized)
+    expect(compiled).toMatch(/\{\{#each rows\}\}<tr[\s\S]*?<\/tr>\{\{\/each\}\}/)
+    const html = renderTemplate(compiled, { rows: [{ name: 'A' }, { name: 'B' }] })
+    expect(html).toContain('<td>A</td>')
+    expect(html).toContain('<td>B</td>')
+  })
 })
 
 describe('sanitizeEmailHtml', () => {
