@@ -231,7 +231,13 @@ export function CourseWorkspace({
 }) {
   const router = useRouter()
   const search = useSearchParams()
-  const delivery = deliveryMeta(course.deliveryType)
+  // Delivery type lives in parent state so the whole workspace (tabs, build
+  // surface, header, per-type surfaces) reshapes the instant the Overview
+  // dropdown changes — before the settings are even saved. The Overview form
+  // still posts this value on save.
+  const [deliveryType, setDeliveryType] = useState(course.deliveryType)
+  useEffect(() => setDeliveryType(course.deliveryType), [course.deliveryType])
+  const delivery = deliveryMeta(deliveryType)
   // Fresh drafts (no code yet) land on Overview to capture name/code first;
   // established content courses land on the builder.
   const [railTab, setRailTab] = useState<RailTab>(
@@ -397,7 +403,12 @@ export function CourseWorkspace({
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
             {activeTab === 'overview' ? (
-              <OverviewPanel course={course} credentialOutputs={credentialOutputs} />
+              <OverviewPanel
+                course={course}
+                credentialOutputs={credentialOutputs}
+                deliveryType={deliveryType}
+                onDeliveryChange={setDeliveryType}
+              />
             ) : null}
             {activeTab === 'build' ? (
               <BuildPalette onAdd={(kind) => addElement(kind, tree[tree.length - 1]?.id ?? null)} />
@@ -685,13 +696,17 @@ function DeliverySurface({
 function OverviewPanel({
   course,
   credentialOutputs,
+  deliveryType,
+  onDeliveryChange,
 }: {
   course: CourseLite
   credentialOutputs: CredentialOutputLite[]
+  deliveryType: string
+  onDeliveryChange: (value: string) => void
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [delivery, setDelivery] = useState(course.deliveryType)
+  const delivery = deliveryType
   const formatLabel = (format: string) =>
     format === 'wallet' ? 'Wallet card' : format === 'letter-portrait' ? 'Portrait' : 'Full size'
   return (
@@ -719,7 +734,7 @@ function OverviewPanel({
           id="ov-delivery"
           name="deliveryType"
           value={delivery}
-          onChange={(e) => setDelivery(e.target.value)}
+          onChange={(e) => onDeliveryChange(e.target.value)}
         >
           {DELIVERY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -729,6 +744,9 @@ function OverviewPanel({
         </Select>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">
           {deliveryMeta(delivery).hint}
+        </p>
+        <p className="rounded-md bg-slate-50 px-2 py-1.5 text-[11px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          Save settings to apply the delivery type.
         </p>
       </div>
       <div className="space-y-1.5">
@@ -794,15 +812,23 @@ function OverviewPanel({
           />
         </div>
       </div>
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+      {deliveryMeta(delivery).hasContent ? (
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+          <input
+            type="checkbox"
+            name="requiresEvaluator"
+            defaultChecked={course.requiresEvaluator}
+            className="h-4 w-4 accent-teal-700"
+          />
+          Requires evaluator sign-off
+        </label>
+      ) : (
         <input
-          type="checkbox"
+          type="hidden"
           name="requiresEvaluator"
-          defaultChecked={course.requiresEvaluator}
-          className="h-4 w-4 accent-teal-700"
+          value={course.requiresEvaluator ? 'on' : ''}
         />
-        Requires evaluator sign-off
-      </label>
+      )}
       <div className="space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
         <Label>Credential designs</Label>
         <p className="text-[11px] text-slate-500 dark:text-slate-400">
