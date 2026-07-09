@@ -76,6 +76,12 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'supervisor_name', label: 'Supervisor name', kind: 'text' },
       { key: 'reported_by_name', label: 'Reported by', kind: 'text' },
       { key: 'locked_at', label: 'Locked at', kind: 'date' },
+      // Section-visibility flags from the assessment type ({{#if …}} gates).
+      { key: 'show_job_scope', label: 'Show job scope section', kind: 'bool' },
+      { key: 'show_ppe', label: 'Show PPE section', kind: 'bool' },
+      { key: 'show_questions', label: 'Show questions section', kind: 'bool' },
+      { key: 'show_tasks', label: 'Show tasks section', kind: 'bool' },
+      { key: 'show_hazards', label: 'Show hazards section', kind: 'bool' },
       // FK ids kept for conditions / recipient `field` targets.
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'project_org_unit_id', label: 'Project (id)', kind: 'org_unit' },
@@ -137,6 +143,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
           { key: 'cs_attendant', label: 'CS attendant', kind: 'text' },
           { key: 'cs_rescue', label: 'CS rescue', kind: 'text' },
           { key: 'signed_at', label: 'Signed at', kind: 'text' },
+          { key: 'image', label: 'Signature image (data URL)', kind: 'text' },
         ],
       },
       {
