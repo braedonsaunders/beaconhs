@@ -15,7 +15,8 @@ import {
   type EmailTarget,
   type EvalContext,
 } from '@beaconhs/forms-core'
-import { people, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
+import { db, withSuperAdmin } from '@beaconhs/db'
+import { people, roleAssignments, roles, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
 import {
@@ -24,7 +25,11 @@ import {
   renderTemplate,
   type RenderableEmail,
 } from '@beaconhs/email-render'
-import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
+import {
+  loadTenantPdfTemplate,
+  resolveSubjectDefaultPdfTemplate,
+  type PdfTemplateRenderConfig,
+} from '@/lib/pdf-templates'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
 import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
@@ -86,7 +91,9 @@ export async function executeFlowPlan(
     return r?.id ?? null
   }
 
-  // person id → best email (people.email, else the linked user's email).
+  // person id → best email (people.email, else the linked user's email). Some
+  // subject fields of kind 'person' hold a tenant_users id instead (e.g. a
+  // record's owner/inspector), so miss falls through to that lookup.
   const personEmail = async (personId: string): Promise<string | null> => {
     const [p] = await ctx.db((tx) =>
       tx
@@ -95,15 +102,25 @@ export async function executeFlowPlan(
         .where(eq(people.id, personId))
         .limit(1),
     )
-    if (!p) return null
-    if (p.email && p.email.includes('@')) return p.email.trim()
-    if (p.userId) {
-      const [u] = await ctx.db((tx) =>
-        tx.select({ email: users.email }).from(users).where(eq(users.id, p.userId!)).limit(1),
-      )
-      return u?.email ?? null
+    if (p) {
+      if (p.email && p.email.includes('@')) return p.email.trim()
+      if (p.userId) {
+        const [u] = await ctx.db((tx) =>
+          tx.select({ email: users.email }).from(users).where(eq(users.id, p.userId!)).limit(1),
+        )
+        return u?.email ?? null
+      }
+      return null
     }
-    return null
+    const [tu] = await ctx.db((tx) =>
+      tx
+        .select({ email: users.email })
+        .from(tenantUsers)
+        .innerJoin(users, eq(users.id, tenantUsers.userId))
+        .where(and(eq(tenantUsers.id, personId), eq(tenantUsers.tenantId, ctx.tenantId)))
+        .limit(1),
+    )
+    return tu?.email ?? null
   }
 
   const resolveEmails = async (targets: EmailTarget[]): Promise<string[]> => {
@@ -122,7 +139,16 @@ export async function executeFlowPlan(
         for (const u of await getRoleUsers(t.role)) add(u.email)
       } else if (t.type === 'field') {
         const v = values[t.field]
-        if (typeof v === 'string') add(v.includes('@') ? v : await personEmail(v))
+        if (typeof v === 'string' && v.trim()) {
+          if (v.includes('@')) {
+            // One address OR a comma/semicolon/space-separated list (e.g. a
+            // subject's `attendee_emails` roster field).
+            for (const part of v.split(/[,;\s]+/)) add(part)
+          } else {
+            // Not an address — treat the value as a person id.
+            add(await personEmail(v))
+          }
+        }
       } else if (t.type === 'person') {
         add(await personEmail(t.personId))
       } else if (t.type === 'submitter_manager') {
@@ -223,6 +249,28 @@ export async function executeFlowPlan(
 
   const { enqueueEmail, enqueueNotification, enqueuePdfEmail } = await import('@beaconhs/jobs')
 
+  // Inline flow emails carry the tenant's name in the shell and a "View
+  // record" button to the subject's page. Both resolved once per run.
+  const appBase = (
+    process.env.PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    'http://localhost:3000'
+  ).replace(/\/$/, '')
+  let tenantNameCache: string | null | undefined
+  const tenantName = async (): Promise<string | null> => {
+    if (tenantNameCache !== undefined) return tenantNameCache
+    tenantNameCache = await withSuperAdmin(db, async (tx) => {
+      const [t] = await tx
+        .select({ name: tenants.name })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId))
+        .limit(1)
+      return t?.name ?? null
+    }).catch(() => null)
+    return tenantNameCache
+  }
+
   for (const action of plan.actions) {
     try {
       switch (action.action) {
@@ -283,6 +331,8 @@ export async function executeFlowPlan(
               mode: 'inline',
               subject: action.subject ?? 'Notification',
               bodyTemplate: action.bodyTemplate ?? '',
+              cta: { url: `${appBase}${adapter.deepLink()}`, label: 'View record' },
+              brandName: (await tenantName()) ?? undefined,
             }
           }
           const { subject, html, text } = renderEmail(spec, values)
@@ -315,16 +365,32 @@ export async function executeFlowPlan(
             failed.push('send_email (no recipients)')
             break
           }
-          const refForFile = values.reference
-          const fileBase =
-            typeof refForFile === 'string' && refForFile.trim() ? refForFile : 'document'
-          const pdfFilename = `${fileBase.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
-          // attachPdf with a chosen PDF DOCUMENT template: merge it here (cheap)
-          // and hand the worker pre-rendered HTML + page setup to print. Page
-          // tokens {{page}}/{{pages}} are preserved for the printer.
-          if (action.attachPdf && action.pdfTemplateId) {
-            const tpl = await loadTenantPdfTemplate(ctx, action.pdfTemplateId)
+          if (action.attachPdf) {
+            const refForFile = values.reference
+            const fileBase =
+              typeof refForFile === 'string' && refForFile.trim() ? refForFile : 'record'
+            const pdfFilename = `${fileBase.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
+            const emailPayload = {
+              to,
+              subject,
+              html,
+              text,
+              filename: pdfFilename,
+              category: adapter.notifyCategory,
+              tenantId: ctx.tenantId,
+            }
+            // Resolve the PDF DOCUMENT template: the flow's explicit pick, else
+            // (unless the flow forces the field summary) the subject's assigned
+            // default — the module default or the form's own template.
+            let tpl: PdfTemplateRenderConfig | null = action.pdfTemplateId
+              ? await loadTenantPdfTemplate(ctx, action.pdfTemplateId)
+              : null
+            if (!tpl && action.pdfFormat !== 'summary') {
+              tpl = await resolveSubjectDefaultPdfTemplate(ctx, adapter)
+            }
             if (tpl) {
+              // Merge here (cheap) and hand the worker pre-rendered HTML + page
+              // setup to print. {{page}}/{{pages}} are preserved for the printer.
               const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
               await enqueuePdfEmail(
                 {
@@ -344,55 +410,30 @@ export async function executeFlowPlan(
                   entityId: adapter.subjectId,
                   filename: pdfFilename,
                 },
-                {
-                  to,
-                  subject,
-                  html,
-                  text,
-                  filename: pdfFilename,
-                  category: adapter.notifyCategory,
-                  tenantId: ctx.tenantId,
-                },
+                emailPayload,
               )
               ran.push(`send_email+pdfdoc→${to.length}`)
               break
             }
-          }
-          // attachPdf: render the subject's PDF in the worker, then email it as
-          // an attachment (non-blocking — the submit never waits on Chromium).
-          if (action.attachPdf && adapter.pdfJob) {
-            // 'summary' → the generic field-summary PDF; otherwise the subject's
-            // rich/default PDF.
+            // No template ⇒ the generic field-summary PDF, rendered in the
+            // worker then emailed (non-blocking — the submit never waits on
+            // Chromium).
             const pdfJob =
-              action.pdfFormat === 'summary'
-                ? buildRecordSummaryPdfJob({
-                    tenantId: ctx.tenantId,
-                    subjectId: adapter.subjectId,
-                    entityType: adapter.auditEntityType,
-                    heading: adapter.auditEntityType
-                      .replace(/_/g, ' ')
-                      .replace(/\b\w/g, (c) => c.toUpperCase()),
-                    reference: values.reference,
-                    subtitle: values.title,
-                    values,
-                  })
-                : adapter.pdfJob(values)
-            if (pdfJob) {
-              const refRaw = values.reference
-              const base = typeof refRaw === 'string' && refRaw.trim() ? refRaw : 'record'
-              const filename = `${base.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60)}.pdf`
-              await enqueuePdfEmail(pdfJob, {
-                to,
-                subject,
-                html,
-                text,
-                filename,
-                category: adapter.notifyCategory,
+              adapter.pdfJob?.(values) ??
+              buildRecordSummaryPdfJob({
                 tenantId: ctx.tenantId,
+                subjectId: adapter.subjectId,
+                entityType: adapter.auditEntityType,
+                heading: adapter.auditEntityType
+                  .replace(/_/g, ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase()),
+                reference: values.reference,
+                subtitle: values.title,
+                values,
               })
-              ran.push(`send_email+pdf→${to.length}`)
-              break
-            }
+            await enqueuePdfEmail(pdfJob, emailPayload)
+            ran.push(`send_email+pdf→${to.length}`)
+            break
           }
           await enqueueEmail({
             to,

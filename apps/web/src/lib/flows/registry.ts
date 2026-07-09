@@ -13,8 +13,12 @@ import { createIncidentFlowAdapter } from './adapters/incidents'
 import { createCorrectiveActionFlowAdapter } from './adapters/corrective-actions'
 import { createInspectionFlowAdapter } from './adapters/inspections'
 import { createTrainingFlowAdapter } from './adapters/training'
+import { createTrainingClassFlowAdapter } from './adapters/training-classes'
 import { createEquipmentFlowAdapter } from './adapters/equipment'
 import { createEquipmentAssetFlowAdapter } from './adapters/equipment-assets'
+import { createEquipmentInspectionFlowAdapter } from './adapters/equipment-inspections'
+import { createPpeInspectionFlowAdapter } from './adapters/ppe'
+import { createPpeIssueReportFlowAdapter } from './adapters/ppe-issues'
 import { createVehicleLogFlowAdapter } from './adapters/vehicle-log'
 import { createDocumentFlowAdapter } from './adapters/documents'
 import type { FlowSubjectAdapter } from './types'
@@ -32,8 +36,12 @@ export const MODULE_FLOW_ADAPTERS: Record<string, ModuleFlowAdapterFactory> = {
   'corrective-actions': createCorrectiveActionFlowAdapter,
   inspections: createInspectionFlowAdapter,
   training: createTrainingFlowAdapter,
+  'training-classes': createTrainingClassFlowAdapter,
   equipment: createEquipmentFlowAdapter,
   'equipment-assets': createEquipmentAssetFlowAdapter,
+  'equipment-inspections': createEquipmentInspectionFlowAdapter,
+  ppe: createPpeInspectionFlowAdapter,
+  'ppe-issues': createPpeIssueReportFlowAdapter,
   'vehicle-log': createVehicleLogFlowAdapter,
   documents: createDocumentFlowAdapter,
 }

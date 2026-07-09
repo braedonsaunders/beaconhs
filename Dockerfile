@@ -35,17 +35,25 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 FROM base AS runner
 ENV NODE_ENV=production
 
-# Puppeteer / Chromium deps for PDF rendering (worker), plus LibreOffice
+# Headless-browser shared libs for PDF rendering (worker), plus LibreOffice
 # (Impress for the slides import, Writer for document version renders) +
 # poppler (pdftoppm page images, pdfunite book concatenation).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium fonts-liberation libnss3 libatk-bridge2.0-0 libcups2 \
+    fonts-liberation libnss3 libatk-bridge2.0-0 libcups2 \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
-    libxrandr2 libgbm1 libasound2 ca-certificates curl \
+    libxrandr2 libgbm1 libasound2 ca-certificates curl unzip \
     libreoffice-impress libreoffice-writer poppler-utils \
     && rm -rf /var/lib/apt/lists/*
+# PDF rendering uses a PINNED chrome-headless-shell (Chrome for Testing), not
+# the distro chromium package: Debian's chromium floats with security updates
+# and its 150.x build crashes (SIGTRAP) on headless launch in containers, which
+# silently broke every PDF render. The pinned shell build is version-locked,
+# print-oriented (no dbus/profile/signin subsystems), and puppeteer-tested.
+ARG HEADLESS_SHELL_VERSION=140.0.7339.207
+RUN npx --yes @puppeteer/browsers install chrome-headless-shell@${HEADLESS_SHELL_VERSION} --path /opt/chrome \
+    && ln -s "/opt/chrome/chrome-headless-shell/linux-${HEADLESS_SHELL_VERSION}/chrome-headless-shell-linux64/chrome-headless-shell" /usr/local/bin/chrome-headless-shell
 ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chrome-headless-shell
 
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static

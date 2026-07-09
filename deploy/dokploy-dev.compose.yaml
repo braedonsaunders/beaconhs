@@ -49,6 +49,10 @@ services:
     environment:
       APP_ROLE: worker
       NODE_ENV: production
+      # The worker unseals DB-stored provider secrets (email/SMS/AI keys,
+      # connector creds) with the same key web seals them with — without this
+      # every sealed transport silently falls back to the env provider.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       DATABASE_URL: ${DATABASE_URL}
       # Super-admin / cross-tenant pool; DIRECT (un-pooled) for DDL maintenance jobs.
       SUPERADMIN_DATABASE_URL: ${SUPERADMIN_DATABASE_URL}

@@ -63,6 +63,15 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 2. Each certificate is a card. Tap a card to flip it and see the details.
 3. You can download a print-ready pass for any card.
 
+## Automatic class emails (managers)
+
+If you manage training, class changes can send emails on their own — for example, a cancellation notice to everyone registered.
+
+1. Open the Manage hub at [Training manage](/training/manage) and tap **Class automations**.
+2. Pick a trigger: **A record is created** (a class is scheduled) or a status change to **Cancelled** or **Completed**.
+3. Connect actions like **Send email** or **Notify role**. To email everyone on the roster, set the recipient to the **Attendee emails** field.
+4. Turn the flow on.
+
 ## Tips
 
 - The **Assigned** tab in [My training](/my/training) shows training you still owe, with due dates. Anything marked overdue needs attention first.
@@ -438,6 +447,15 @@ Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspect
 2. Tap **Submit**.
 3. The result shows as **pass** or **fail** in the list. Failed items can spawn a work order automatically, so the shop sees the defect without a phone call. A small **Work order** tag appears on the failed item when that happens.
 
+## Automatic emails and alerts (managers)
+
+If you manage equipment, submitted inspections can send emails on their own — for example, the result (with a PDF copy) to the shop.
+
+1. Open the Manage hub at [Equipment manage](/equipment/manage) and tap **Inspection automations**.
+2. Add the **A record is submitted** trigger.
+3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
+4. Turn the flow on. It runs every time an inspection is submitted.
+
 ## Tips
 
 - Use the **Status** chips on the list — **All**, **Draft**, **In progress**, **Submitted** — to find an inspection you started earlier.
@@ -504,6 +522,15 @@ Frayed strap, cracked shell, missing buckle — report it as soon as you spot it
 ## Return an item
 
 When you leave a site or swap out gear, hand the item back to your supervisor or whoever issued it. They will mark it **Returned** in the system, and the **History** tab on the item keeps the record.
+
+## Automatic emails and alerts (managers)
+
+If you manage PPE, recorded inspections can send emails on their own — for example, a failed harness check straight to the safety manager.
+
+1. Open the Manage hub at [PPE manage](/ppe/manage) and tap **Automations**.
+2. Add the **A record is submitted** trigger.
+3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
+4. Turn the flow on. It runs every time an inspection is recorded on any item.
 
 ## Tips
 

@@ -12,7 +12,7 @@ import { and, eq } from 'drizzle-orm'
 import { planAutomation, type EmailTarget } from '@beaconhs/forms-core'
 import { formAutomations, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
-import { escapeHtml } from './escape-html'
+import { renderEmail } from '@beaconhs/email-render'
 
 export function interpolate(tpl: string, values: Record<string, unknown>): string {
   return tpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k: string) => {
@@ -123,13 +123,19 @@ export async function runSessionOverdueFlows(args: {
           if (to.length > 0) {
             // Worker handles inline email only; template/design modes (DB-backed)
             // are a web-side concern. Guard the now-optional inline fields.
-            const body = interpolate(action.bodyTemplate ?? '', data)
+            const rendered = renderEmail(
+              {
+                mode: 'inline',
+                subject: action.subject || 'Monitored session check-in overdue',
+                bodyTemplate: action.bodyTemplate ?? '',
+              },
+              data,
+            )
             await enqueueEmail({
               to,
-              subject:
-                interpolate(action.subject ?? '', data) || 'Monitored session check-in overdue',
-              text: body,
-              html: `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${escapeHtml(body)}</div>`,
+              subject: rendered.subject,
+              text: rendered.text,
+              html: rendered.html,
               meta: { tenantId, category: 'lone_worker' },
             })
             ran = true

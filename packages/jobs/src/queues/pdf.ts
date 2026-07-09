@@ -15,18 +15,14 @@ export type PdfEmailPayload = {
 }
 
 export type PdfJobData =
-  | { kind: 'form_response'; tenantId: string; responseId: string; email?: PdfEmailPayload }
-  | { kind: 'incident'; tenantId: string; incidentId: string; email?: PdfEmailPayload }
   | { kind: 'certificate'; tenantId: string; certificateId: string }
   // Skill credential (training_skill_certificates) — renders the same
   // certificate + wallet-card pair as 'certificate' but for an
   // externally-authorised skill assignment.
   | { kind: 'skill_certificate'; tenantId: string; skillCertificateId: string }
-  | { kind: 'hazid'; tenantId: string; assessmentId: string; email?: PdfEmailPayload }
-  | { kind: 'ca'; tenantId: string; caId: string; email?: PdfEmailPayload }
   // Generic branded "submission summary" PDF — a key-value table built from a
-  // flow's field-map. Fills the gap for modules without a bespoke renderer
-  // (journals, inspections). All data is inline (no DB load in the worker).
+  // flow's field-map. The ONLY fallback when a record has no assigned PDF
+  // document template. All data is inline (no DB load in the worker).
   | {
       kind: 'record_summary'
       tenantId: string
@@ -36,6 +32,17 @@ export type PdfJobData =
       reference?: string | null
       subtitle?: string | null
       fields: { label: string; value: string }[]
+      // Row collections (inspection criteria, log entries, attendees, …)
+      // rendered as sectioned tables after the field summary.
+      sections?: {
+        label: string
+        columns: { key: string; label: string }[]
+        rows: Record<string, string>[]
+        /** Rows dropped past the render cap — surfaced as a "+N more" note. */
+        moreRows?: number
+      }[]
+      // Photo attachments rendered as an image grid.
+      photos?: { url: string; caption?: string }[]
       filename?: string
       email?: PdfEmailPayload
     }
@@ -64,13 +71,26 @@ export type PdfJobData =
   // Write→PDF preview) — transient artifact, never persisted to the document.
   | { kind: 'document_master_pdf'; tenantId: string; documentId: string }
   | { kind: 'document_book'; tenantId: string; bookId: string }
-  | { kind: 'equipment_workorder'; tenantId: string; workOrderId: string }
-  | { kind: 'ppe_issue'; tenantId: string; issueReportId: string }
-  // Wave-7: bundle N hazid assessments into a single signed-report PDF.
-  // The builder inserts a `hazid_signed_reports` row with status='pending';
-  // the worker flips it to 'rendering', concatenates per-assessment HTML +
-  // a cover page, prints once, then stamps pdfAttachmentId/status='completed'.
-  | { kind: 'hazid_signed_report'; tenantId: string; reportId: string }
+  // Generic multi-part bundle: each part is pre-merged HTML + its own page
+  // setup; the worker prints each part and concatenates them (pdfunite) into
+  // one artifact. Used for bundled record exports (e.g. a cover page + one
+  // merged template per record).
+  | {
+      kind: 'document_bundle'
+      tenantId: string
+      parts: {
+        html: string
+        paperSize: 'letter' | 'a4' | 'legal'
+        orientation: 'portrait' | 'landscape'
+        marginMm: number
+        headerHtml?: string | null
+        footerHtml?: string | null
+      }[]
+      filename: string
+      entityType: string
+      entityId: string
+      email?: PdfEmailPayload
+    }
   // LMS: convert an uploaded PowerPoint into per-slide PNG images + notes and
   // write the resulting Slide[] onto a training lesson or library content item.
   | {
@@ -82,18 +102,13 @@ export type PdfJobData =
     }
 
 export type OnDemandPdfJobData =
-  | Extract<PdfJobData, { kind: 'form_response' }>
-  | Extract<PdfJobData, { kind: 'incident' }>
-  | Extract<PdfJobData, { kind: 'hazid' }>
-  | Extract<PdfJobData, { kind: 'ca' }>
   | Extract<PdfJobData, { kind: 'record_summary' }>
   // A tenant PDF template merged with a record's values (the configurable
-  // per-module default print template); the HTML is merged before enqueue.
+  // per-record print template); the HTML is merged before enqueue.
   | Extract<PdfJobData, { kind: 'template_pdf' }>
   | Extract<PdfJobData, { kind: 'document_master_pdf' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
-  | Extract<PdfJobData, { kind: 'equipment_workorder' }>
-  | Extract<PdfJobData, { kind: 'ppe_issue' }>
+  | Extract<PdfJobData, { kind: 'document_bundle' }>
 
 export type RenderedPdfArtifact = {
   attachmentId?: string | null
@@ -114,18 +129,10 @@ export const pdfQueue = new Queue<PdfJobData, unknown>('pdfs', {
 
 function pdfJobId(data: PdfJobData): string {
   switch (data.kind) {
-    case 'form_response':
-      return `pdf|${data.tenantId}|form_response|${data.responseId}`
-    case 'incident':
-      return `pdf|${data.tenantId}|incident|${data.incidentId}`
     case 'certificate':
       return `pdf|${data.tenantId}|certificate|${data.certificateId}`
     case 'skill_certificate':
       return `pdf|${data.tenantId}|skill_certificate|${data.skillCertificateId}`
-    case 'hazid':
-      return `pdf|${data.tenantId}|hazid|${data.assessmentId}`
-    case 'ca':
-      return `pdf|${data.tenantId}|ca|${data.caId}`
     case 'record_summary':
       return `pdf|${data.tenantId}|record_summary|${data.subjectId}`
     case 'template_pdf':
@@ -136,12 +143,8 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|document_master_pdf|${data.documentId}`
     case 'document_book':
       return `pdf|${data.tenantId}|document_book|${data.bookId}`
-    case 'equipment_workorder':
-      return `pdf|${data.tenantId}|equipment_workorder|${data.workOrderId}`
-    case 'ppe_issue':
-      return `pdf|${data.tenantId}|ppe_issue|${data.issueReportId}`
-    case 'hazid_signed_report':
-      return `pdf|${data.tenantId}|hazid_signed_report|${data.reportId}`
+    case 'document_bundle':
+      return `pdf|${data.tenantId}|document_bundle|${data.entityId}`
     case 'slides_import':
       return `pdf|${data.tenantId}|slides_import|${data.target}|${data.targetId}|${data.attachmentId}`
   }
@@ -209,7 +212,7 @@ export async function renderPdfOnDemand(
  */
 export type PdfEmailableJobData = Extract<
   PdfJobData,
-  { kind: 'form_response' | 'incident' | 'hazid' | 'ca' | 'record_summary' | 'template_pdf' }
+  { kind: 'record_summary' | 'template_pdf' | 'document_bundle' }
 >
 
 export async function enqueuePdfEmail(pdf: PdfEmailableJobData, email: PdfEmailPayload) {

@@ -19,6 +19,7 @@ import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { parseDatetimeLocal } from './_datetime'
 import {
@@ -368,6 +369,11 @@ export async function submitEquipmentInspection(formData: FormData) {
     summary: `Submitted — ${outcome.result}${
       outcome.workOrdersSpawned ? `, ${outcome.workOrdersSpawned} work order(s) opened` : ''
     }`,
+  })
+  await runModuleFlows(ctx, {
+    moduleKey: 'equipment-inspections',
+    event: 'on_submit',
+    subjectId: recordId,
   })
   revalidateRecord(recordId)
 }

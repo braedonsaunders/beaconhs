@@ -28,6 +28,7 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { emitTrainingClassCompleted } from '@beaconhs/integrations'
 import { PersonSelectField } from '@/components/person-select-field'
 import { addMonthsIso } from '../../_lib/dates'
@@ -279,6 +280,13 @@ async function markClassComplete(formData: FormData) {
       // Swallow — completion already succeeded.
     }
   }
+
+  await runModuleFlows(ctx, {
+    moduleKey: 'training-classes',
+    event: 'status_change',
+    subjectId: classId,
+    toStatus: 'completed',
+  })
 
   revalidatePath(`/training/classes/${classId}`)
   revalidatePath('/training/classes')

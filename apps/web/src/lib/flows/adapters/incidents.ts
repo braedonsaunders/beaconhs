@@ -10,6 +10,7 @@ import {
   incidentContributingFactors,
   incidentEvents,
   incidentInjuries,
+  incidentLostTimeEvents,
   incidentPeople,
   incidentPreventativeSteps,
   incidents,
@@ -20,6 +21,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDate, fmtDateTime, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
@@ -35,7 +37,16 @@ export function createIncidentFlowAdapter(
     notifyCategory: 'incident',
     auditEntityType: 'incident',
     deepLink: () => `/incidents/${incidentId}`,
-    pdfJob: () => ({ kind: 'incident', tenantId: ctx.tenantId, incidentId }),
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: incidentId,
+        entityType: 'incident',
+        heading: 'Incident report',
+        reference: values.reference,
+        subtitle: values.title,
+        values,
+      }),
 
     async loadValues() {
       const [head] = await ctx.db((tx) =>
@@ -61,76 +72,89 @@ export function createIncidentFlowAdapter(
       if (!head) return {}
       const i = head.i
 
-      const [peopleInvolved, injuries, events, factors, steps, photos] = await Promise.all([
-        ctx.db((tx) =>
-          tx
-            .select({
-              role: incidentPeople.role,
-              nameText: incidentPeople.personNameText,
-              pFirst: people.firstName,
-              pLast: people.lastName,
-              pFormal: people.formalName,
-            })
-            .from(incidentPeople)
-            .leftJoin(people, eq(people.id, incidentPeople.personId))
-            .where(eq(incidentPeople.incidentId, incidentId)),
-        ),
-        ctx.db((tx) =>
-          tx
-            .select({
-              row: incidentInjuries,
-              pFirst: people.firstName,
-              pLast: people.lastName,
-              pFormal: people.formalName,
-            })
-            .from(incidentInjuries)
-            .leftJoin(people, eq(people.id, incidentInjuries.personId))
-            .where(eq(incidentInjuries.incidentId, incidentId)),
-        ),
-        ctx.db((tx) =>
-          tx
-            .select({
-              occurredAt: incidentEvents.occurredAt,
-              description: incidentEvents.description,
-              byName: users.name,
-            })
-            .from(incidentEvents)
-            .leftJoin(tenantUsers, eq(tenantUsers.id, incidentEvents.recordedByTenantUserId))
-            .leftJoin(users, eq(users.id, tenantUsers.userId))
-            .where(eq(incidentEvents.incidentId, incidentId))
-            .orderBy(asc(incidentEvents.occurredAt)),
-        ),
-        ctx.db((tx) =>
-          tx
-            .select({
-              category: incidentContributingFactors.category,
-              description: incidentContributingFactors.description,
-            })
-            .from(incidentContributingFactors)
-            .where(eq(incidentContributingFactors.incidentId, incidentId)),
-        ),
-        ctx.db((tx) =>
-          tx
-            .select({
-              description: incidentPreventativeSteps.description,
-              targetDate: incidentPreventativeSteps.targetDate,
-              status: incidentPreventativeSteps.status,
-              pFirst: people.firstName,
-              pLast: people.lastName,
-              pFormal: people.formalName,
-            })
-            .from(incidentPreventativeSteps)
-            .leftJoin(people, eq(people.id, incidentPreventativeSteps.ownerPersonId))
-            .where(eq(incidentPreventativeSteps.incidentId, incidentId)),
-        ),
-        ctx.db((tx) =>
-          tx
-            .select({ caption: incidentAttachments.caption, r2Key: attachments.r2Key })
-            .from(incidentAttachments)
-            .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
-            .where(eq(incidentAttachments.incidentId, incidentId)),
-        ),
-      ])
+      const [peopleInvolved, injuries, lostTimeEvents, events, factors, steps, photos] =
+        await Promise.all([
+          ctx.db((tx) =>
+            tx
+              .select({
+                role: incidentPeople.role,
+                nameText: incidentPeople.personNameText,
+                pFirst: people.firstName,
+                pLast: people.lastName,
+                pFormal: people.formalName,
+              })
+              .from(incidentPeople)
+              .leftJoin(people, eq(people.id, incidentPeople.personId))
+              .where(eq(incidentPeople.incidentId, incidentId)),
+          ),
+          ctx.db((tx) =>
+            tx
+              .select({
+                row: incidentInjuries,
+                pFirst: people.firstName,
+                pLast: people.lastName,
+                pFormal: people.formalName,
+              })
+              .from(incidentInjuries)
+              .leftJoin(people, eq(people.id, incidentInjuries.personId))
+              .where(eq(incidentInjuries.incidentId, incidentId)),
+          ),
+          ctx.db((tx) =>
+            tx
+              .select({
+                status: incidentLostTimeEvents.status,
+                validFrom: incidentLostTimeEvents.validFrom,
+                validTo: incidentLostTimeEvents.validTo,
+                notes: incidentLostTimeEvents.notes,
+              })
+              .from(incidentLostTimeEvents)
+              .where(eq(incidentLostTimeEvents.incidentId, incidentId))
+              .orderBy(asc(incidentLostTimeEvents.validFrom)),
+          ),
+          ctx.db((tx) =>
+            tx
+              .select({
+                occurredAt: incidentEvents.occurredAt,
+                description: incidentEvents.description,
+                byName: users.name,
+              })
+              .from(incidentEvents)
+              .leftJoin(tenantUsers, eq(tenantUsers.id, incidentEvents.recordedByTenantUserId))
+              .leftJoin(users, eq(users.id, tenantUsers.userId))
+              .where(eq(incidentEvents.incidentId, incidentId))
+              .orderBy(asc(incidentEvents.occurredAt)),
+          ),
+          ctx.db((tx) =>
+            tx
+              .select({
+                category: incidentContributingFactors.category,
+                description: incidentContributingFactors.description,
+              })
+              .from(incidentContributingFactors)
+              .where(eq(incidentContributingFactors.incidentId, incidentId)),
+          ),
+          ctx.db((tx) =>
+            tx
+              .select({
+                description: incidentPreventativeSteps.description,
+                targetDate: incidentPreventativeSteps.targetDate,
+                status: incidentPreventativeSteps.status,
+                pFirst: people.firstName,
+                pLast: people.lastName,
+                pFormal: people.formalName,
+              })
+              .from(incidentPreventativeSteps)
+              .leftJoin(people, eq(people.id, incidentPreventativeSteps.ownerPersonId))
+              .where(eq(incidentPreventativeSteps.incidentId, incidentId)),
+          ),
+          ctx.db((tx) =>
+            tx
+              .select({ caption: incidentAttachments.caption, r2Key: attachments.r2Key })
+              .from(incidentAttachments)
+              .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
+              .where(eq(incidentAttachments.incidentId, incidentId)),
+          ),
+        ])
 
       return {
         status: i.status ?? null,
@@ -142,6 +166,8 @@ export function createIncidentFlowAdapter(
         severity: i.severity ?? null,
         severity_label: titleize(i.severity),
         occurred_at: fmtDateTime(i.occurredAt),
+        reported_at: fmtDateTime(i.reportedAt),
+        closed_at: fmtDateTime(i.closedAt),
         location: i.location ?? '',
         weather: i.weather ?? '',
         description: i.description ?? '',
@@ -149,6 +175,38 @@ export function createIncidentFlowAdapter(
         immediate_action_taken: i.immediateActionTaken ?? '',
         ppe_worn: i.ppeWorn ?? '',
         root_cause: i.rootCause ?? '',
+        foreman_text: i.foremanText ?? '',
+        external_people_involved: i.externalPeopleInvolved ?? '',
+        witnesses: i.witnesses ?? '',
+        // Tenant classification chips ("Kind: Value; …") — same set the bespoke
+        // incident PDF prints from the classification JSON.
+        classification_labels: Object.entries(i.classification ?? {})
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; '),
+        // Medical / regulatory flags — raw booleans so templates can gate
+        // sections with {{#if …}} (falsy = false, per the block engine).
+        critical_injury: i.criticalInjury ?? false,
+        ministry_of_labour_notified: i.ministryOfLabourNotified ?? false,
+        ems_notified: i.emsNotified ?? false,
+        first_aid_received: i.firstAidReceived ?? false,
+        first_aid_provider: i.firstAidProvider ?? '',
+        medical_attention_received: i.medicalAttentionReceived ?? false,
+        treated_at_hospital: i.treatedAtHospital ?? '',
+        treated_in_city: i.treatedInCity ?? '',
+        transportation: i.transportation ?? '',
+        lost_time: i.lostTime ?? false,
+        lost_time_first_day: fmtDate(i.lostTimeFirstDay),
+        lost_time_last_day: fmtDate(i.lostTimeLastDay),
+        lost_time_days: i.lostTimeDays ?? null,
+        modified_duty: i.modifiedDuty ?? false,
+        modified_duty_first_day: fmtDate(i.modifiedDutyFirstDay),
+        modified_duty_last_day: fmtDate(i.modifiedDutyLastDay),
+        modified_duty_days: i.modifiedDutyDays ?? null,
+        externally_reportable: i.externallyReportable ?? false,
+        // Key metrics (1–5 scales).
+        actual_severity: i.actualSeverity ?? null,
+        potential_severity: i.potentialSeverity ?? null,
         site_name: head.siteName ?? '',
         department_name: head.deptName ?? '',
         supervisor_name: personName({
@@ -178,6 +236,13 @@ export function createIncidentFlowAdapter(
           injury_types: (r.row.injuryTypes ?? []).join(', '),
           treatment: r.row.treatment ?? '',
           treated_at_facility: r.row.treatedAtFacility ?? '',
+          worked_hours_prior_to: r.row.workedHoursPriorTo ?? '',
+        })),
+        lost_time_events: lostTimeEvents.map((e) => ({
+          status: titleize(e.status),
+          valid_from: fmtDate(e.validFrom),
+          valid_to: fmtDate(e.validTo),
+          notes: e.notes ?? '',
         })),
         events: events.map((e) => ({
           occurred_at: fmtDateTime(e.occurredAt),

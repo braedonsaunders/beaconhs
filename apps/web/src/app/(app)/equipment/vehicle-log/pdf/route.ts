@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
     return renderModulePdfResponse(ctx, {
       moduleKey: 'vehicle-log',
       recordId: anchorEntryId,
-      builtin,
+      fallback: builtin,
     })
   }
   return renderOnDemandPdfResponse(builtin)

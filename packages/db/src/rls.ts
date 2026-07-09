@@ -212,7 +212,6 @@ export const TENANT_SCOPED_TABLES = [
   'hazid_assessment_questions',
   'hazid_assessment_photos',
   'hazid_assessment_app_responses',
-  'hazid_signed_reports',
   // Daily Journals (individual field-safety log)
   'journal_entries',
   'journal_entry_photos',

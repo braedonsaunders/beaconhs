@@ -9,64 +9,74 @@ import {
   sanitizeEmailHtml,
 } from './index'
 
-// Reproduce the EXACT legacy inline behaviour from
-// apps/web/.../apps/_lib/run-automations.ts so we can assert byte parity.
-function legacyInline(subjectTpl: string, bodyTpl: string, values: Record<string, unknown>) {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  const intp = (tpl: string) =>
-    tpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, k: string) => {
-      const v = values[k]
-      return v == null ? '' : String(v)
-    })
-  const subject = intp(subjectTpl) || 'Notification'
-  const body = intp(bodyTpl)
-  return {
-    subject,
-    text: body,
-    html: `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:680px;white-space:pre-wrap;">${esc(
-      body,
-    )}</div>`,
-  }
-}
-
-describe('renderEmail — inline parity', () => {
-  const cases: Array<{ subject: string; body: string; values: Record<string, unknown> }> = [
-    {
-      subject: 'Hello {{name}}',
-      body: 'Hi {{name}},\nYour score is {{score}}.',
-      values: { name: 'Sam', score: 88 },
-    },
-    { subject: '', body: 'No subject case', values: {} },
-    {
-      subject: 'Site {{site}}',
-      body: 'Danger: <b>{{hazard}}</b> & "stuff"',
-      values: { site: 'Tower', hazard: '<script>' },
-    },
-    { subject: '{{missing}}', body: 'token {{missing}} gone', values: {} },
-  ]
-  for (const c of cases) {
-    it(`matches legacy for subject="${c.subject}"`, () => {
-      const got = renderEmail(
-        { mode: 'inline', subject: c.subject, bodyTemplate: c.body },
-        c.values,
-      )
-      expect(got).toEqual(legacyInline(c.subject, c.body, c.values))
-    })
-  }
+describe('renderEmail — inline', () => {
+  it('interpolates tokens, keeps line breaks as <br/>, and wraps the shell', () => {
+    const r = renderEmail(
+      {
+        mode: 'inline',
+        subject: 'Hello {{name}}',
+        bodyTemplate: 'Hi {{name}},\nScore: {{score}}.',
+      },
+      { name: 'Sam', score: 88 },
+    )
+    expect(r.subject).toBe('Hello Sam')
+    expect(r.text).toBe('Hi Sam,\nScore: 88.')
+    expect(r.html).toContain('Hi Sam,<br/>Score: 88.')
+    expect(r.html).toContain('BeaconHS')
+  })
+  it('reduces HTML-bearing values to plain text (no literal tags in emails)', () => {
+    const r = renderEmail(
+      { mode: 'inline', subject: 'Job {{scope}}', bodyTemplate: 'Scope: {{scope}}' },
+      { scope: '<ul><li>lock out breaker</li><li>install cable</li></ul>' },
+    )
+    expect(r.subject).toBe('Job lock out breaker install cable')
+    expect(r.text).toContain('lock out breaker')
+    expect(r.text).not.toContain('<li>')
+    expect(r.html).not.toContain('&lt;li&gt;')
+  })
+  it('drops "Label:" lines whose token resolved empty', () => {
+    const r = renderEmail(
+      {
+        mode: 'inline',
+        subject: 's',
+        bodyTemplate: 'Summary: {{summary}}\nLocation: {{location}}\nNotes: {{notes}}',
+      },
+      { location: 'Bay 4' },
+    )
+    expect(r.text).toBe('Location: Bay 4')
+  })
+  it('appends the CTA to text and renders a button in html', () => {
+    const r = renderEmail(
+      {
+        mode: 'inline',
+        subject: 's',
+        bodyTemplate: 'Body',
+        cta: { url: 'https://app.example/incidents/1', label: 'View record' },
+        brandName: 'Acme HSE',
+      },
+      {},
+    )
+    expect(r.text).toBe('Body\n\nView record: https://app.example/incidents/1')
+    expect(r.html).toContain('href="https://app.example/incidents/1"')
+    expect(r.html).toContain('View record')
+    expect(r.html).toContain('Acme HSE')
+  })
+  it('falls back to "Notification" for an empty subject and escapes body HTML', () => {
+    const r = renderEmail({ mode: 'inline', subject: '{{missing}}', bodyTemplate: 'a "b" & c' }, {})
+    expect(r.subject).toBe('Notification')
+    expect(r.html).toContain('a &quot;b&quot; &amp; c')
+  })
 })
 
 describe('interpolate', () => {
   it('escapes substituted values when escapeHtml is set, not the template', () => {
-    const out = interpolate(
-      '<p>{{x}}</p>',
-      { x: '<script>alert(1)</script>' },
-      { escapeHtml: true },
-    )
-    expect(out).toBe('<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>')
+    const out = interpolate('<p>{{x}}</p>', { x: 'A & "B"' }, { escapeHtml: true })
+    expect(out).toBe('<p>A &amp; &quot;B&quot;</p>')
   })
-  it('leaves template + value raw without escapeHtml', () => {
-    expect(interpolate('{{x}}', { x: '<b>' })).toBe('<b>')
+  it('reduces HTML values to plain text before substitution', () => {
+    expect(interpolate('{{x}}', { x: '<p>hi<br/>there</p>' })).toBe('hi\nthere')
+    // script/style CONTENT is dropped, not rendered
+    expect(interpolate('{{x}}', { x: '<script>alert(1)</script>' }, { escapeHtml: true })).toBe('')
   })
 })
 
@@ -78,12 +88,12 @@ describe('renderEmail — template/design', () => {
         subjectTemplate: 'Re: {{ref}}',
         compiledHtml: '<h1>Hi {{name}}</h1><p>{{note}}</p>',
       },
-      { ref: 'INC-1', name: 'Sam', note: 'A & B <ok>' },
+      { ref: 'INC-1', name: 'Sam', note: 'A & B "ok"' },
     )
     expect(r.subject).toBe('Re: INC-1')
-    expect(r.html).toBe('<h1>Hi Sam</h1><p>A &amp; B &lt;ok&gt;</p>')
+    expect(r.html).toBe('<h1>Hi Sam</h1><p>A &amp; B &quot;ok&quot;</p>')
     expect(r.text).toContain('Hi Sam')
-    expect(r.text).toContain('A & B <ok>')
+    expect(r.text).toContain('A & B "ok"')
   })
   it('falls back to "Notification" for an empty subject', () => {
     const r = renderEmail({ mode: 'design', subjectTemplate: '', compiledHtml: '<p>x</p>' }, {})
@@ -107,15 +117,15 @@ describe('renderTemplate — blocks', () => {
       tpl,
       {
         hazards: [
-          { name: 'Fall <ht>', controls: 'Harness & line' },
-          { name: 'Noise', controls: 'Plugs' },
+          { name: 'Fall from height', controls: 'Harness & line' },
+          { name: 'Noise', controls: '<p>Plugs</p>' },
         ],
       },
       { escapeHtml: true },
     )
     expect(out).toBe(
       '<table>' +
-        '<tr><td>1</td><td>Fall &lt;ht&gt;</td><td>Harness &amp; line</td></tr>' +
+        '<tr><td>1</td><td>Fall from height</td><td>Harness &amp; line</td></tr>' +
         '<tr><td>2</td><td>Noise</td><td>Plugs</td></tr>' +
         '</table>',
     )
@@ -138,9 +148,8 @@ describe('renderTemplate — blocks', () => {
     expect(renderTemplate('{{{body}}}', { body: '<b>hi</b>' }, { escapeHtml: true })).toBe(
       '<b>hi</b>',
     )
-    expect(renderTemplate('{{body}}', { body: '<b>hi</b>' }, { escapeHtml: true })).toBe(
-      '&lt;b&gt;hi&lt;/b&gt;',
-    )
+    // plain {{body}} reduces the HTML value to text — no literal tags leak
+    expect(renderTemplate('{{body}}', { body: '<b>hi</b>' }, { escapeHtml: true })).toBe('hi')
   })
 
   it('resolves nested #each, outer-scope tokens (via the scope chain) + dotted paths', () => {
@@ -198,6 +207,24 @@ describe('expandRepeatMarkers', () => {
     expect(html).toBe(
       '<table><tr><th>Name</th></tr><tr><td>Jane</td></tr><tr><td>Bob</td></tr></table>',
     )
+  })
+
+  // REGRESSION: the compile pipeline must sanitize BEFORE expanding. DOMPurify
+  // foster-parents loose text out of <table> content, so sanitizing an
+  // already-expanded template hoists the {{#each}}/{{#if}} braces after the
+  // table and repeat rows never repeat. The markers are attributes (which
+  // survive parsing) and are allow-listed in sanitizeEmailHtml.
+  it('sanitize-then-expand keeps repeat blocks wrapping their <tr>', () => {
+    const source =
+      '<table><tr data-if="rows"><th>H</th></tr><tr data-each="rows"><td>{{name}}</td></tr></table>'
+    const sanitized = sanitizeEmailHtml(source)
+    expect(sanitized).toContain('data-each="rows"')
+    expect(sanitized).toContain('data-if="rows"')
+    const compiled = expandRepeatMarkers(sanitized)
+    expect(compiled).toMatch(/\{\{#each rows\}\}<tr[\s\S]*?<\/tr>\{\{\/each\}\}/)
+    const html = renderTemplate(compiled, { rows: [{ name: 'A' }, { name: 'B' }] })
+    expect(html).toContain('<td>A</td>')
+    expect(html).toContain('<td>B</td>')
   })
 })
 

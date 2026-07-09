@@ -12,6 +12,7 @@ import {
   inspectionRecords,
   inspectionTypes,
   orgUnits,
+  people,
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
@@ -19,7 +20,7 @@ import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
-import { fmtDateTime, titleize } from '../format'
+import { fmtDateTime, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 export function createInspectionFlowAdapter(
@@ -49,6 +50,8 @@ export function createInspectionFlowAdapter(
       const inspU = alias(users, 'insp_inspector_u')
       const supTU = alias(tenantUsers, 'insp_supervisor_tu')
       const supU = alias(users, 'insp_supervisor_u')
+      const customerOU = alias(orgUnits, 'insp_customer_ou')
+      const contact = alias(people, 'insp_contact')
       const [head] = await ctx.db((tx) =>
         tx
           .select({
@@ -57,6 +60,10 @@ export function createInspectionFlowAdapter(
             siteName: orgUnits.name,
             inspectorName: inspU.name,
             supervisorName: supU.name,
+            customerName: customerOU.name,
+            contactFirst: contact.firstName,
+            contactLast: contact.lastName,
+            contactFormal: contact.formalName,
           })
           .from(inspectionRecords)
           .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
@@ -65,6 +72,8 @@ export function createInspectionFlowAdapter(
           .leftJoin(inspU, eq(inspU.id, inspTU.userId))
           .leftJoin(supTU, eq(supTU.id, inspectionRecords.supervisorTenantUserId))
           .leftJoin(supU, eq(supU.id, supTU.userId))
+          .leftJoin(customerOU, eq(customerOU.id, inspectionRecords.customerOrgUnitId))
+          .leftJoin(contact, eq(contact.id, inspectionRecords.customerContactPersonId))
           .where(eq(inspectionRecords.id, recordId))
           .limit(1),
       )
@@ -104,7 +113,24 @@ export function createInspectionFlowAdapter(
         site_name: head.siteName ?? '',
         inspector_name: head.inspectorName ?? '',
         supervisor_name: head.supervisorName ?? '',
+        foreman_text: r.foremanText ?? '',
         notes: r.notes ?? '',
+        submitted_at: fmtDateTime(r.submittedAt),
+        closed_at: fmtDateTime(r.closedAt),
+        // Customer sign-off block (record-page parity): who the inspection was
+        // for, who signed, and the drawn signature as a PNG data URL.
+        customer_name: head.customerName ?? '',
+        customer_contact_name:
+          personName({
+            firstName: head.contactFirst,
+            lastName: head.contactLast,
+            formalName: head.contactFormal,
+          }) ||
+          r.customerContactName ||
+          '',
+        customer_signer_name: r.customerSignerName ?? '',
+        customer_signed_at: fmtDateTime(r.customerSignedAt),
+        customer_signature_image: r.customerSignatureDataUrl ?? '',
         // FK ids for conditions / recipient `field` targets.
         type_id: r.typeId ?? null,
         site_org_unit_id: r.siteOrgUnitId ?? null,

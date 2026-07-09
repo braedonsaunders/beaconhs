@@ -12,10 +12,11 @@ import { can } from '@beaconhs/tenant'
 import { pdfTemplates } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { listSubjectOptions } from '@/lib/flows/subject-fields'
-import { listModulePdfDefaults } from '@/lib/module-pdf'
+import { listAppPdfTemplates, listModulePdfDefaults } from '@/lib/module-pdf'
 import { PageContainer } from '@/components/page-layout'
 import { AdminBackLink } from '../_back-link'
 import { deletePdfTemplate } from './_actions'
+import { AppTemplatesPanel } from './_app-templates.client'
 import { DeletePdfTemplateButton } from './_delete-button'
 import { ModuleDefaultsPanel } from './_module-defaults.client'
 import { NewPdfTemplateFlyout } from './_new-template-flyout.client'
@@ -33,7 +34,7 @@ export default async function PdfTemplatesPage({
 
   const tab = (await searchParams).tab === 'defaults' ? 'defaults' : 'templates'
 
-  const [templates, subjects, moduleDefaults] = await Promise.all([
+  const [templates, subjects, moduleDefaults, appTemplates] = await Promise.all([
     ctx.db((tx) =>
       tx
         .select({
@@ -51,6 +52,7 @@ export default async function PdfTemplatesPage({
     ),
     listSubjectOptions(ctx),
     listModulePdfDefaults(ctx),
+    listAppPdfTemplates(ctx),
   ])
 
   // Documents are hand-authored in the editor, so a PDF template makes no sense
@@ -92,14 +94,27 @@ export default async function PdfTemplatesPage({
         </nav>
 
         {tab === 'defaults' ? (
-          <section className="space-y-4">
-            <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Choose which template each module&apos;s built-in print/PDF button renders. Leave a
-              module on <strong>Built-in default</strong> to keep its standard layout. Only
-              templates whose record type matches the module are listed.
-            </p>
-            <ModuleDefaultsPanel rows={moduleDefaults} />
-          </section>
+          <div className="space-y-10">
+            <section className="space-y-4">
+              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+                Choose which template each module&apos;s print/PDF button renders. Leave a module on{' '}
+                <strong>Field summary</strong> to print a plain key/value document. Only templates
+                whose record type matches the module are listed.
+              </p>
+              <ModuleDefaultsPanel rows={moduleDefaults} />
+            </section>
+            <section className="space-y-4">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Builder apps
+              </h2>
+              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+                Each published app can print its records with its own template. Publishing an app
+                generates one automatically; use <strong>Generate default template</strong> for apps
+                published before this existed or after their template was deleted.
+              </p>
+              <AppTemplatesPanel rows={appTemplates} />
+            </section>
+          </div>
         ) : templates.length === 0 ? (
           <EmptyState
             icon={<FileText size={32} />}

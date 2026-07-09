@@ -75,14 +75,17 @@ export async function listActiveEmailTemplatesForSubject(
 
 /**
  * Compile the plain-HTML email builder's output → send-ready HTML. The builder
- * runs in HTML mode (not MJML) so its tables stay editable; here we expand the
- * `data-each` / `data-if` row markers into `{{#each}}` / `{{#if}}` blocks, then
- * sanitize. No MJML — the builder emits inline-styled, email-ready HTML.
+ * runs in HTML mode (not MJML) so its tables stay editable; here we sanitize
+ * FIRST (the marker attributes are allow-listed and survive DOMPurify's parse),
+ * THEN expand the `data-each` / `data-if` row markers into `{{#each}}` /
+ * `{{#if}}` blocks. The reverse order is broken: the HTML parser foster-parents
+ * the expanded block text out of <table> content, so repeat rows never repeat.
+ * No MJML — the builder emits inline-styled, email-ready HTML.
  */
 export function compileBuilderHtml(sourceHtml: string): { html: string; errors: string[] } {
   if (!sourceHtml.trim()) return { html: '', errors: [] }
   try {
-    return { html: sanitizeEmailHtml(expandRepeatMarkers(sourceHtml)), errors: [] }
+    return { html: expandRepeatMarkers(sanitizeEmailHtml(sourceHtml)), errors: [] }
   } catch (e) {
     return { html: '', errors: [e instanceof Error ? e.message : String(e)] }
   }

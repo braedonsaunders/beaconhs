@@ -90,6 +90,13 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
           formalName: e.supFormal,
         }),
         site_name: e.siteName ?? '',
+        // Captured weather snapshot, printable ("21°C — Overcast").
+        weather: [
+          r.weather?.tempC != null ? `${r.weather.tempC}°C` : null,
+          r.weather?.conditions || null,
+        ]
+          .filter(Boolean)
+          .join(' — '),
         tags: (r.tagsCache ?? []).join(', '),
         person_id: r.personId ?? null,
         supervisor_person_id: r.supervisorPersonId ?? null,

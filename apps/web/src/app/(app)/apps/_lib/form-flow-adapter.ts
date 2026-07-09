@@ -8,13 +8,37 @@ import 'server-only'
 // flow_gates store (via the executor); the three forms-only actions
 // (create_response / analyze_photos / start_monitored_session) run here.
 
-import { desc, eq } from 'drizzle-orm'
-import { resolveDefaultValue, type ActionData } from '@beaconhs/forms-core'
-import { formResponses, formTemplateVersions, tenantUsers, users } from '@beaconhs/db/schema'
+import { desc, eq, inArray } from 'drizzle-orm'
+import {
+  SKIP_FIELD_TYPES,
+  evaluateFormulaTree,
+  hasImageCompanion,
+  hasPhotosCompanion,
+  hasTextCompanion,
+  resolveDefaultValue,
+  type ActionData,
+  type EvalContext,
+  type FormSchemaV1,
+} from '@beaconhs/forms-core'
+import { loadEntitiesForFormPickers } from '@beaconhs/db'
+import {
+  formResponses,
+  formTemplateVersions,
+  people,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { interpolate } from '@beaconhs/email-render'
 import { spawnCorrectiveActionCore, spawnIncidentCore } from '@/app/(app)/apps/_lib/spawn-core'
 import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
+import {
+  nestedPhotoRows,
+  renderFormFieldText,
+  sketchImageUrl,
+} from '@/lib/flows/form-subject-values'
+import { personName } from '@/lib/flows/format'
+import { buildRecordSummaryPdfJob } from '@/lib/flows/pdf-summary'
 import type { ExtraActionHelpers, FlowSubjectAdapter } from '@/lib/flows/types'
 
 const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
@@ -57,7 +81,18 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
     notifyCategory: 'forms',
     auditEntityType: 'form_response',
     deepLink: () => `/apps/responses/${responseId}`,
-    pdfJob: () => ({ kind: 'form_response', tenantId: ctx.tenantId, responseId }),
+    // FALLBACK only — the executor prefers the form template's own PDF
+    // document template and calls this when none is assigned.
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: responseId,
+        entityType: 'form_response',
+        heading: 'Form response',
+        reference: responseId.slice(0, 8),
+        subtitle: values.title,
+        values,
+      }),
 
     async loadValues() {
       const [resp] = await ctx.db((tx) =>
@@ -66,16 +101,96 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             data: formResponses.data,
             score: formResponses.complianceScore,
             status: formResponses.complianceStatus,
+            templateVersionId: formResponses.templateVersionId,
           })
           .from(formResponses)
           .where(eq(formResponses.id, responseId))
           .limit(1),
       )
-      return {
-        ...((resp?.data as Record<string, unknown> | null) ?? {}),
+      const data = (resp?.data as Record<string, unknown> | null) ?? {}
+      // Raw field values stay byte-identical (conditions, recipient `field`
+      // targets, and analyze_photos all read them). Human-readable COMPANION
+      // keys (<id>_text / <id>_image / <id>_photos) are ADDED below so PDF /
+      // email templates render fields the way the bespoke form PDF did.
+      const out: Record<string, unknown> = {
+        ...data,
         compliance_score: resp?.score != null ? Number(resp.score) : null,
         compliance_status: resp?.status ?? null,
       }
+      if (!resp) return out
+
+      const [ver] = await ctx.db((tx) =>
+        tx
+          .select({ schema: formTemplateVersions.schema })
+          .from(formTemplateVersions)
+          .where(eq(formTemplateVersions.id, resp.templateVersionId))
+          .limit(1),
+      )
+      const schema = ver?.schema as FormSchemaV1 | undefined
+      if (!schema) return out
+
+      // Picker-bound entity attrs — the same loader the bespoke PDF render
+      // uses, so `<picker>_text` shows the identical resolved display name.
+      const entities = await ctx.db((tx) => loadEntitiesForFormPickers(tx, schema, data))
+
+      // Resolve multi_person_picker selections to names in one batched query.
+      const multiPersonIds = new Set<string>()
+      for (const sec of schema.sections ?? []) {
+        if (sec.repeating) continue
+        for (const f of sec.fields ?? []) {
+          if (f.type !== 'multi_person_picker') continue
+          const raw = data[f.id]
+          if (Array.isArray(raw)) {
+            for (const id of raw) if (typeof id === 'string' && id) multiPersonIds.add(id)
+          }
+        }
+      }
+      const personNames = new Map<string, string>()
+      if (multiPersonIds.size > 0) {
+        const rows = await ctx.db((tx) =>
+          tx
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+              formalName: people.formalName,
+            })
+            .from(people)
+            .where(inArray(people.id, [...multiPersonIds])),
+        )
+        for (const p of rows) personNames.set(p.id, personName(p))
+      }
+
+      // Formula/calc fields are computed, never stored — evaluate them here so
+      // templates print the same fresh values the bespoke PDF recomputed.
+      const rowsMap: Record<string, Array<Record<string, unknown>>> = {}
+      for (const sec of schema.sections ?? []) {
+        if (!sec.repeating) continue
+        const v = data[sec.id]
+        rowsMap[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
+      }
+      const evalCtx: EvalContext = { values: data, rows: rowsMap, entities }
+
+      for (const sec of schema.sections ?? []) {
+        if (sec.repeating) continue
+        for (const f of sec.fields ?? []) {
+          if (SKIP_FIELD_TYPES.has(f.type)) continue
+          let raw = data[f.id]
+          if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
+            raw = evaluateFormulaTree(f.formula, evalCtx)
+            out[f.id] = raw ?? null
+          }
+          if (hasTextCompanion(f.type)) {
+            out[`${f.id}_text`] = renderFormFieldText(f, raw, {
+              entityAttrs: entities[f.id] ?? null,
+              personNameById: (id) => personNames.get(id),
+            })
+          }
+          if (hasImageCompanion(f.type)) out[`${f.id}_image`] = sketchImageUrl(raw)
+          if (hasPhotosCompanion(f.type)) out[`${f.id}_photos`] = nestedPhotoRows(raw)
+        }
+      }
+      return out
     },
 
     async resolveSubmitter() {
@@ -313,17 +428,51 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
       }
 
       // Render + store this record's PDF in the worker (manual PDF buttons
-      // navigate to the /pdf route directly; in a flow this stores one).
+      // navigate to the /pdf route directly; in a flow this stores one). Same
+      // resolution as the route: the form's own PDF document template when one
+      // is assigned, else the generic record summary.
       if (action.action === 'export_pdf') {
         try {
-          const jobs = (await import('@beaconhs/jobs')) as Record<string, unknown>
-          const enqueuePdf = jobs.enqueuePdf as ((j: unknown) => Promise<unknown>) | undefined
-          if (typeof enqueuePdf === 'function') {
-            await enqueuePdf({ kind: 'form_response', tenantId: ctx.tenantId, responseId })
-            ran.push('export_pdf')
+          const { enqueuePdf } = await import('@beaconhs/jobs')
+          const { resolveSubjectDefaultPdfTemplate } = await import('@/lib/pdf-templates')
+          const { renderTemplate } = await import('@beaconhs/email-render')
+          const tpl = await resolveSubjectDefaultPdfTemplate(ctx, {
+            subjectType: 'form_template',
+            subjectKey: null,
+            subjectId: responseId,
+          })
+          if (tpl) {
+            const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
+            await enqueuePdf({
+              kind: 'template_pdf',
+              tenantId: ctx.tenantId,
+              html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+              paperSize: tpl.paperSize,
+              orientation: tpl.orientation,
+              marginMm: tpl.marginMm,
+              headerHtml: tpl.headerHtml
+                ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
+                : null,
+              footerHtml: tpl.footerHtml
+                ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
+                : null,
+              entityType: 'form_response',
+              entityId: responseId,
+            })
           } else {
-            failed.push('export_pdf (queue unavailable)')
+            await enqueuePdf(
+              buildRecordSummaryPdfJob({
+                tenantId: ctx.tenantId,
+                subjectId: responseId,
+                entityType: 'form_response',
+                heading: 'Form response',
+                reference: responseId.slice(0, 8),
+                subtitle: values.title,
+                values,
+              }),
+            )
           }
+          ran.push('export_pdf')
         } catch {
           failed.push('export_pdf (error)')
         }

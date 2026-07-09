@@ -2,14 +2,12 @@
 //
 // Used by:
 //   - the filler RSC (apps/web) — first-render preload + per-picker fetch
-//   - the PDF worker (apps/worker) — resolves entity_attr fields before
-//     handing the response to renderFormPdf
+//   - the form flow adapter (apps/web) — resolves entity_attr fields so PDF
+//     and email templates print the same live values the filler showed
 //
-// The web app passes a `RequestContext.db(...)` tx; the worker passes a
-// raw `withTenant(...)` tx. Both ultimately hand us a Database / PgTx with
-// the tenant RLS context applied, so the queries are identical regardless
-// of caller. Keeping this logic in one place avoids divergence between the
-// filler's preview and the rendered PDF.
+// Callers pass a `RequestContext.db(...)` tx (or any tenant-scoped tx), so
+// the queries are identical regardless of caller. Keeping this logic in one
+// place avoids divergence between the filler's preview and rendered output.
 //
 // Allowlist contract: the SELECT lists below are the ONLY columns that can
 // land on an entity-attr map. Designers cannot widen them — adding a new

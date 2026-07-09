@@ -1,7 +1,6 @@
 // Shared puppeteer browser instance. We launch lazily and keep it around for
 // the lifetime of the worker process so successive renders don't pay the
-// Chromium startup tax. Workers should call `closeBrowser()` on shutdown if
-// they want to be polite.
+// Chromium startup tax.
 
 import { existsSync } from 'node:fs'
 import puppeteer, { type Browser } from 'puppeteer-core'
@@ -13,6 +12,8 @@ let browserPromise: Promise<Browser> | null = null
 function resolveExecutablePath(): string {
   const candidates = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
+    // The Docker image's pinned Chrome-for-Testing shell (see Dockerfile).
+    '/usr/local/bin/chrome-headless-shell',
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -37,14 +38,6 @@ export function getBrowser(): Promise<Browser> {
     })
   }
   return browserPromise
-}
-
-export async function closeBrowser(): Promise<void> {
-  if (browserPromise) {
-    const b = await browserPromise
-    await b.close()
-    browserPromise = null
-  }
 }
 
 export function escapeHtml(s: string): string {

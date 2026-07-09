@@ -58,10 +58,10 @@ export const pdfTemplates = pgTable(
     sourceHtml: text('source_html'),
     mergeFields: jsonb('merge_fields').$type<PdfMergeField[]>().notNull().default([]),
     isActive: boolean('is_active').notNull().default(true),
-    // When true, this template is the tenant's default for its module's built-in
-    // print/PDF button (so the formatted record PDF uses the tenant's layout
-    // instead of the hard-coded one). Only meaningful for recordSubjectType='module'.
-    // At most one per (tenant, module) — enforced by moduleDefaultUx below.
+    // When true, this template is the tenant's default for its record subject:
+    // a native module's print/PDF button (recordSubjectType='module') or a
+    // Builder app's response PDF (recordSubjectType='form_template'). At most
+    // one per (tenant, subject) — enforced by subjectDefaultUx below.
     isModuleDefault: boolean('is_module_default').notNull().default(false),
     createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
     ...timestamps,
@@ -75,11 +75,12 @@ export const pdfTemplates = pgTable(
       t.recordSubjectType,
       t.recordSubjectKey,
     ),
-    // At most one default print template per (tenant, module).
-    moduleDefaultUx: uniqueIndex('pdf_templates_module_default_ux')
-      .on(t.tenantId, t.recordSubjectKey)
+    // At most one default print template per (tenant, subject) — covers both
+    // module subjects and form_template subjects.
+    subjectDefaultUx: uniqueIndex('pdf_templates_subject_default_ux')
+      .on(t.tenantId, t.recordSubjectType, t.recordSubjectKey)
       .where(
-        sql`${t.isModuleDefault} and ${t.recordSubjectType} = 'module' and ${t.deletedAt} is null`,
+        sql`${t.isModuleDefault} and ${t.recordSubjectType} is not null and ${t.deletedAt} is null`,
       ),
   }),
 )

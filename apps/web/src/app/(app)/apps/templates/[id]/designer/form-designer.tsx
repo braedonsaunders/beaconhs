@@ -393,7 +393,6 @@ export function FormDesigner({
       triggers: FORM_TEMPLATE_TRIGGERS,
       actions: FORM_TEMPLATE_ACTIONS,
       statusValues: FORM_STATUS_VALUES,
-      richPdf: true,
       fields: liveFieldIds.map((id) => ({ key: id, label: id })),
     }),
     [templateId, appName, liveFieldIds],

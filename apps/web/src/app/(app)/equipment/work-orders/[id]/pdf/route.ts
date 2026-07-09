@@ -28,9 +28,5 @@ export async function GET(
     metadata: { format: 'pdf' },
   })
 
-  return renderModulePdfResponse(ctx, {
-    moduleKey: 'equipment',
-    recordId: id,
-    builtin: { kind: 'equipment_workorder', tenantId: ctx.tenantId, workOrderId: id },
-  })
+  return renderModulePdfResponse(ctx, { moduleKey: 'equipment', recordId: id })
 }

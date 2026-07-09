@@ -23,6 +23,7 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDateTime, personName, yesBlank, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
@@ -42,7 +43,16 @@ export function createHazidFlowAdapter(
     notifyCategory: 'hazid',
     auditEntityType: 'hazid_assessment',
     deepLink: () => `/hazard-assessments/${assessmentId}`,
-    pdfJob: () => ({ kind: 'hazid', tenantId: ctx.tenantId, assessmentId }),
+    pdfJob: (values) =>
+      buildRecordSummaryPdfJob({
+        tenantId: ctx.tenantId,
+        subjectId: assessmentId,
+        entityType: 'hazid_assessment',
+        heading: 'Hazard assessment',
+        reference: values.reference,
+        subtitle: values.type_name,
+        values,
+      }),
 
     async loadValues() {
       // Header + resolved joins (site / project / type / supervisor / reporter),
@@ -52,6 +62,9 @@ export function createHazidFlowAdapter(
           .select({
             a: hazidAssessments,
             typeName: hazidAssessmentTypes.name,
+            typeStyle: hazidAssessmentTypes.style,
+            typeHasPPE: hazidAssessmentTypes.hasPPE,
+            typeHasQuestions: hazidAssessmentTypes.hasQuestions,
             siteName: orgUnits.name,
             supFirst: people.firstName,
             supLast: people.lastName,
@@ -172,6 +185,15 @@ export function createHazidFlowAdapter(
         site_name: head.siteName ?? '',
         project_name: proj?.name ?? '',
         type_name: head.typeName ?? '',
+        // Section-visibility flags derived from the assessment type, matching
+        // the bespoke PDF's sections logic (style + hasPPE/hasQuestions,
+        // defaulting to a task-based layout when no type is set). Templates
+        // gate the matching blocks with {{#if show_…}}.
+        show_job_scope: (head.typeStyle ?? 'task_based') === 'hazard_based',
+        show_ppe: head.typeHasPPE ?? true,
+        show_questions: head.typeHasQuestions ?? true,
+        show_tasks: (head.typeStyle ?? 'task_based') === 'task_based',
+        show_hazards: (head.typeStyle ?? 'task_based') === 'hazard_based',
         supervisor_name: personName({
           firstName: head.supFirst,
           lastName: head.supLast,
@@ -229,6 +251,9 @@ export function createHazidFlowAdapter(
           cs_attendant: yesBlank(s.row.csAttendant),
           cs_rescue: yesBlank(s.row.csRescue),
           signed_at: fmtDateTime(s.row.signedAt),
+          // Drawn signature as a PNG data URL (same source the bespoke PDF
+          // embeds) — templates render it with <img src="{{image}}">.
+          image: s.row.signatureDataUrl ?? '',
         })),
         photos: photos.map((p) => ({
           url: publicUrl(p.r2Key),
