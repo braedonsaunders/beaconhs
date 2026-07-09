@@ -346,7 +346,6 @@ export const hazidAssessmentAppResponses = pgTable(
 // removed — confined space is now the hazid-confined-space-entry-plan Builder
 // App, which stores its readings/entries in its own form response.
 
-
 // ----------------------------------------------------------------------------
 // Relations
 // ----------------------------------------------------------------------------
@@ -493,4 +492,3 @@ export const hazidAssessmentAppResponsesRelations = relations(
     }),
   }),
 )
-

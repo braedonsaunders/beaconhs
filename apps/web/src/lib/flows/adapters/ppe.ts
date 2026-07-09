@@ -9,14 +9,7 @@ import 'server-only'
 // no `criteria` collection — the record carries the kind, result, and notes.
 
 import { eq } from 'drizzle-orm'
-import {
-  people,
-  ppeInspections,
-  ppeItems,
-  ppeTypes,
-  tenantUsers,
-  users,
-} from '@beaconhs/db/schema'
+import { people, ppeInspections, ppeItems, ppeTypes, tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'

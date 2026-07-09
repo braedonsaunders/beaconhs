@@ -74,7 +74,10 @@ export function createEquipmentInspectionFlowAdapter(
             equipmentInspectionTypes,
             eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
           )
-          .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId))
+          .leftJoin(
+            equipmentItems,
+            eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+          )
           .leftJoin(orgUnits, eq(orgUnits.id, equipmentInspectionRecords.siteOrgUnitId))
           .leftJoin(inspTU, eq(inspTU.id, equipmentInspectionRecords.inspectorTenantUserId))
           .leftJoin(inspU, eq(inspU.id, inspTU.userId))

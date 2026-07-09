@@ -52,7 +52,9 @@ const MAX_SECTION_ROWS = 200
 const MAX_SECTION_COLUMNS = 8
 
 const isRowArray = (v: unknown): v is Record<string, unknown>[] =>
-  Array.isArray(v) && v.length > 0 && v.every((r) => r != null && typeof r === 'object' && !Array.isArray(r))
+  Array.isArray(v) &&
+  v.length > 0 &&
+  v.every((r) => r != null && typeof r === 'object' && !Array.isArray(r))
 
 /**
  * Turn a value map's row collections (inspection criteria, month log entries,
