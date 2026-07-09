@@ -396,6 +396,19 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       },
     ],
   },
+  // GUARD-ONLY entry (no admin tiles — sections: []). PPE issue reports are
+  // their own flow/PDF subject ('ppe-issues'); all admin surfaces live under
+  // /ppe/manage above.
+  {
+    moduleKey: 'ppe-issues',
+    label: 'PPE issue reports',
+    href: '/ppe',
+    managePath: '/ppe/manage',
+    iconKey: 'hard-hat',
+    permission: 'ppe.read.all',
+    tabs: [{ key: 'records', label: 'Records', href: '/ppe' }],
+    sections: [],
+  },
   {
     moduleKey: 'documents',
     label: 'Documents',

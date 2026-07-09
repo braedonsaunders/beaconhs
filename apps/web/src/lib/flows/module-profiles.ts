@@ -672,6 +672,42 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'inspected_by_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
     ],
   },
+  // PPE ISSUE REPORTS — one ppe_issue_reports row (a damage/defect report
+  // against a PPE item), distinct from 'ppe' (inspections). Exists so userland
+  // PDF templates can replace the bespoke issue-report PDF; manual-only.
+  'ppe-issues': {
+    subjectType: 'module',
+    subjectKey: 'ppe-issues',
+    label: 'PPE issue reports',
+    triggers: ['manual'],
+    actions: ['send_email', 'export_pdf'],
+    statusValues: ['open', 'resolved', 'replaced'],
+    fields: [
+      { key: 'reference', label: 'Reference', kind: 'text' },
+      { key: 'description', label: 'Description', kind: 'text' },
+      { key: 'status_label', label: 'Status', kind: 'text' },
+      { key: 'resolution', label: 'Resolution', kind: 'text' },
+      { key: 'reported_at', label: 'Reported at', kind: 'date' },
+      { key: 'resolved_at', label: 'Resolved at', kind: 'date' },
+      { key: 'reported_by_name', label: 'Reported by', kind: 'text' },
+      // Linked PPE item.
+      { key: 'type_name', label: 'PPE type', kind: 'text' },
+      { key: 'type_category', label: 'PPE category', kind: 'text' },
+      { key: 'item_serial', label: 'Serial number', kind: 'text' },
+      { key: 'item_size', label: 'Size', kind: 'text' },
+      { key: 'item_status_label', label: 'Item status', kind: 'text' },
+      { key: 'holder_name', label: 'Current holder', kind: 'text' },
+      { key: 'purchase_date', label: 'Purchase date', kind: 'date' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date' },
+      // raw enums + FK ids for conditions / recipient `field` targets.
+      { key: 'status', label: 'Status (raw)', kind: 'enum' },
+      { key: 'item_status', label: 'Item status (raw)', kind: 'enum' },
+      { key: 'item_id', label: 'PPE item (id)', kind: 'text' },
+      { key: 'type_id', label: 'PPE type (id)', kind: 'text' },
+      { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
+      { key: 'reported_by_tenant_user_id', label: 'Reported by (user id)', kind: 'person' },
+    ],
+  },
   // The subject row is one truck_log_entries record, but its value map carries
   // the whole driver+vehicle month (totals + the `entries` collection) — so a
   // PDF/email template renders the legacy monthly sheet. `on_submit` fires on
