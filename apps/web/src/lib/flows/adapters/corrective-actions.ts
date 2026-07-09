@@ -38,6 +38,8 @@ export function createCorrectiveActionFlowAdapter(
       const ownerU = alias(users, 'ca_owner_u')
       const abTU = alias(tenantUsers, 'ca_ab_tu')
       const abU = alias(users, 'ca_ab_u')
+      const verTU = alias(tenantUsers, 'ca_ver_tu')
+      const verU = alias(users, 'ca_ver_u')
       const [head] = await ctx.db((tx) =>
         tx
           .select({
@@ -45,6 +47,7 @@ export function createCorrectiveActionFlowAdapter(
             siteName: orgUnits.name,
             ownerName: ownerU.name,
             assignedByName: abU.name,
+            verifierName: verU.name,
           })
           .from(correctiveActions)
           .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
@@ -52,6 +55,8 @@ export function createCorrectiveActionFlowAdapter(
           .leftJoin(ownerU, eq(ownerU.id, ownerTU.userId))
           .leftJoin(abTU, eq(abTU.id, correctiveActions.assignedByTenantUserId))
           .leftJoin(abU, eq(abU.id, abTU.userId))
+          .leftJoin(verTU, eq(verTU.id, correctiveActions.verifiedByTenantUserId))
+          .leftJoin(verU, eq(verU.id, verTU.userId))
           .where(eq(correctiveActions.id, caId))
           .limit(1),
       )
@@ -65,6 +70,7 @@ export function createCorrectiveActionFlowAdapter(
               kind: caCompleteSteps.kind,
               description: caCompleteSteps.description,
               completedAt: caCompleteSteps.completedAt,
+              signatureDataUrl: caCompleteSteps.signatureDataUrl,
               byName: users.name,
             })
             .from(caCompleteSteps)
@@ -90,11 +96,22 @@ export function createCorrectiveActionFlowAdapter(
         description: r.description ?? '',
         severity: r.severity ?? null,
         severity_label: titleize(r.severity),
+        source: r.source ?? null,
         source_label: titleize(r.source),
+        source_entity_type: r.sourceEntityType ?? '',
         root_cause: r.rootCause ?? '',
         action_taken: r.actionTaken ?? '',
         assigned_on: fmtDate(r.assignedOn),
         due_on: fmtDate(r.dueOn),
+        closed_at: fmtDateTime(r.closedAt),
+        cost_impact: r.costImpact ?? '',
+        // Verification panel — the bespoke CA PDF prints this block whenever
+        // verification is required; verification_required is a raw boolean so
+        // templates can gate it with {{#if …}}.
+        verification_required: r.verificationRequired ?? false,
+        verification_notes: r.verificationNotes ?? '',
+        verifier_name: head.verifierName ?? '',
+        verified_at: fmtDateTime(r.verifiedAt),
         site_name: head.siteName ?? '',
         owner_name: head.ownerName ?? '',
         assigned_by_name: head.assignedByName ?? '',
@@ -107,6 +124,8 @@ export function createCorrectiveActionFlowAdapter(
           description: s.description ?? '',
           completed_by_name: s.byName ?? '',
           completed_at: fmtDateTime(s.completedAt),
+          // Step sign-off signature (PNG data URL) — <img src="{{signature_image}}">.
+          signature_image: s.signatureDataUrl ?? '',
         })),
         photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
       }
