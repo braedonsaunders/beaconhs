@@ -10,7 +10,11 @@ import 'server-only'
 
 import { desc, eq, inArray } from 'drizzle-orm'
 import {
+  SKIP_FIELD_TYPES,
   evaluateFormulaTree,
+  hasImageCompanion,
+  hasPhotosCompanion,
+  hasTextCompanion,
   resolveDefaultValue,
   type ActionData,
   type EvalContext,
@@ -29,10 +33,6 @@ import { interpolate } from '@beaconhs/email-render'
 import { spawnCorrectiveActionCore, spawnIncidentCore } from '@/app/(app)/apps/_lib/spawn-core'
 import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
 import {
-  SKIP_FIELD_TYPES,
-  hasImageCompanion,
-  hasPhotosCompanion,
-  hasTextCompanion,
   nestedPhotoRows,
   renderFormFieldText,
   sketchImageUrl,

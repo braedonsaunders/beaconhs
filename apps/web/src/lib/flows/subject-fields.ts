@@ -5,9 +5,6 @@ import 'server-only'
 
 import { desc, eq, isNull } from 'drizzle-orm'
 import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
-import type { FormSchemaV1 } from '@beaconhs/forms-core'
-import type { RequestContext } from '@beaconhs/tenant'
-import { MODULE_FLOW_PROFILES } from './module-profiles'
 import {
   SKIP_FIELD_TYPES,
   hasImageCompanion,
@@ -15,7 +12,10 @@ import {
   hasTextCompanion,
   isAttachmentArrayField,
   labelText,
-} from './form-subject-values'
+  type FormSchemaV1,
+} from '@beaconhs/forms-core'
+import type { RequestContext } from '@beaconhs/tenant'
+import { MODULE_FLOW_PROFILES } from './module-profiles'
 
 export type SubjectFieldOption = { key: string; label: string }
 export type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }

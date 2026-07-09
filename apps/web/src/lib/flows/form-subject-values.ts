@@ -6,77 +6,12 @@ import 'server-only'
 // conditions, recipient `field` targets, and actions like analyze_photos all
 // read raw values. But raw values are often unreadable in a document (picker
 // ids, {answer, comment} objects, ISO datetimes), so the form flow adapter
-// derives readable COMPANION keys per field, and this module is the single source of truth for which companions
-// exist so the palette (subject-fields.ts) always matches the value map:
-//
-//   {{<fieldId>}}          the raw stored value (unchanged, back-compat)
-//   {{<fieldId>_text}}     human-readable text (pickers → entity names,
-//                          multi-selects joined, objects flattened, …)
-//   {{<fieldId>_image}}    an embeddable image URL (sketch fields; signature
-//                          fields need no companion — their raw value IS the
-//                          PNG data URL, usable directly in <img src="…">)
-//   {{#each <fieldId>}}    photo/file fields — the raw AttachedFile rows
-//                          already carry {url, filename}
-//   {{#each <fieldId>_photos}}  photo_ai / photo_annotated — their nested
-//                          attachments flattened to {url, filename} rows
-//   {{#each <sectionId>}}  repeating sections — raw row objects keyed by the
-//                          section's field ids
-//   {{#each <fieldId>}}    table fields — raw row objects keyed by column key
+// derives readable COMPANION keys per field. WHICH companions exist per field
+// type is declared in @beaconhs/forms-core's form-companions.ts (shared with
+// the palette in subject-fields.ts and the PDF template generator); this
+// module renders the companion VALUES.
 
-import {
-  entityDisplayName,
-  entityKindForPicker,
-  type FormField,
-  type I18nString,
-} from '@beaconhs/forms-core'
-
-/** Content-only field types that carry no mergeable value. */
-export const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
-
-/** Resolve an i18n label to plain text (en-first), falling back to the id. */
-export function labelText(l: I18nString | undefined, fallback: string): string {
-  if (typeof l === 'string') return l || fallback
-  if (l && typeof l === 'object' && typeof l.en === 'string') return l.en || fallback
-  return fallback
-}
-
-// Field types whose raw stored value is unreadable in a document — these get a
-// `<id>_text` companion in loadValues() and in the palette.
-const TEXT_COMPANION_TYPES = new Set([
-  'multi_person_picker',
-  'multi_select',
-  'checkbox_group',
-  'ranking',
-  'yes_no_comment',
-  'gps',
-  'matrix',
-  'address',
-  'risk_matrix',
-  'typed_attestation',
-  'data_table',
-  'photo_ai',
-  'photo_annotated',
-  'datetime',
-])
-
-export function hasTextCompanion(type: string): boolean {
-  return TEXT_COMPANION_TYPES.has(type) || entityKindForPicker(type) !== null
-}
-
-/** Sketch stores `{url}` — expose the URL as `<id>_image`. */
-export function hasImageCompanion(type: string): boolean {
-  return type === 'sketch'
-}
-
-/** Object-valued photo fields whose attachments nest under `.attachments`. */
-export function hasPhotosCompanion(type: string): boolean {
-  return type === 'photo_ai' || type === 'photo_annotated'
-}
-
-/** Array-of-AttachedFile fields — raw rows already carry {url, filename}. */
-export function isAttachmentArrayField(type: string): boolean {
-  return ['photo', 'photo_upload', 'file', 'video', 'audio'].includes(type)
-}
+import { entityDisplayName, entityKindForPicker, type FormField } from '@beaconhs/forms-core'
 
 type AttachedFileRow = { attachmentId?: string; filename?: string; url?: string }
 

@@ -1,0 +1,65 @@
+// Which merge keys a form response's value map carries per field type — the
+// SINGLE source of truth for the companion-key conventions shared by:
+//   • the web form flow adapter (WRITES the companions into loadValues()),
+//   • the merge-field palette (subject-fields.ts in the web app),
+//   • the PDF template generator (pdf-template-html.ts — REFERENCES them).
+// Conventions:
+//   {{<fieldId>}}          the raw stored value
+//   {{<fieldId>_text}}     human-readable text (pickers → names, joins, …)
+//   {{<fieldId>_image}}    an embeddable image URL (sketch; signature raw
+//                          values are already PNG data URLs)
+//   {{#each <fieldId>}}    photo/file fields — AttachedFile {url, filename}
+//   {{#each <fieldId>_photos}}  photo_ai / photo_annotated attachments
+//   {{#each <sectionId>}}  repeating-section rows keyed by field id
+//   {{#each <fieldId>}}    table-field rows keyed by column key
+
+import { entityKindForPicker } from './entity-attrs'
+import type { I18nString } from './schema'
+
+/** Content-only field types that carry no mergeable value. */
+export const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
+
+/** Resolve an i18n label to plain text (en-first), falling back to the id. */
+export function labelText(l: I18nString | undefined, fallback: string): string {
+  if (typeof l === 'string') return l || fallback
+  if (l && typeof l === 'object' && typeof l.en === 'string') return l.en || fallback
+  return fallback
+}
+
+// Field types whose raw stored value is unreadable in a document — these get a
+// `<id>_text` companion in the value map and the palette.
+const TEXT_COMPANION_TYPES = new Set([
+  'multi_person_picker',
+  'multi_select',
+  'checkbox_group',
+  'ranking',
+  'yes_no_comment',
+  'gps',
+  'matrix',
+  'address',
+  'risk_matrix',
+  'typed_attestation',
+  'data_table',
+  'photo_ai',
+  'photo_annotated',
+  'datetime',
+])
+
+export function hasTextCompanion(type: string): boolean {
+  return TEXT_COMPANION_TYPES.has(type) || entityKindForPicker(type) !== null
+}
+
+/** Sketch stores `{url}` — the URL is exposed as `<id>_image`. */
+export function hasImageCompanion(type: string): boolean {
+  return type === 'sketch'
+}
+
+/** Object-valued photo fields whose attachments nest under `.attachments`. */
+export function hasPhotosCompanion(type: string): boolean {
+  return type === 'photo_ai' || type === 'photo_annotated'
+}
+
+/** Array-of-AttachedFile fields — raw rows already carry {url, filename}. */
+export function isAttachmentArrayField(type: string): boolean {
+  return ['photo', 'photo_upload', 'file', 'video', 'audio'].includes(type)
+}
