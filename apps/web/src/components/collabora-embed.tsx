@@ -56,6 +56,12 @@ export const CollaboraEmbed = forwardRef<
   // 'darkTheme' key (which beats every default) and live-updates on the
   // storage event — writing it here pins the editor to the app theme,
   // including live toggles, with no Collabora-side caching in the way.
+  //
+  // The storage event only re-themes COOL's CHROME in browsers — the core
+  // (document canvas) activation is gated to the desktop apps, so a live
+  // toggle would leave the document body on the boot theme. Send the same
+  // UNO commands the in-editor dark-mode toggle uses so the canvas follows.
+  const appliedThemeRef = useRef<string | null>(null)
   useEffect(() => {
     if (!session?.ok || !originRef.current) return
     if (originRef.current !== window.location.origin) return
@@ -64,7 +70,25 @@ export const CollaboraEmbed = forwardRef<
     } catch {
       /* storage unavailable — branding.js enforcement still applies */
     }
-  }, [session, resolvedTheme])
+    const value = resolvedTheme === 'dark' ? 'Dark' : 'Light'
+    if (!loaded) {
+      // Boot picks the right theme up from localStorage — just record it.
+      appliedThemeRef.current = value
+      return
+    }
+    if (appliedThemeRef.current === value) return
+    appliedThemeRef.current = value
+    for (const command of ['.uno:ChangeTheme', '.uno:InvertBackground']) {
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({
+          MessageId: 'Send_UNO_Command',
+          SendTime: Date.now(),
+          Values: { Command: command, Args: { NewTheme: { type: 'string', value } } },
+        }),
+        originRef.current,
+      )
+    }
+  }, [session, resolvedTheme, loaded])
 
   useEffect(() => {
     let cancelled = false
