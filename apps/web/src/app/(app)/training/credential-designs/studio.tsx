@@ -50,6 +50,7 @@ import {
   type ArtboardFormat,
   type CredentialDataField,
   type DesignArtboard,
+  type DesignDataField,
   type DesignDocument,
   type DesignElement,
   type PrintProvider,
@@ -95,7 +96,10 @@ const FIELD_OPTIONS: { value: CredentialDataField; label: string }[] = [
   { value: 'verify.qr', label: 'Verify QR' },
 ]
 
-const SAMPLE_VALUES: Record<CredentialDataField, string> = {
+// Keyed as a partial over the shared union: design elements carry
+// DesignDataField (credential | equipment), and this studio only samples the
+// credential half — the `??` fallbacks at each lookup cover the rest.
+const SAMPLE_VALUES: Partial<Record<DesignDataField, string>> = {
   'tenant.name': 'Beacon Health & Safety',
   'tenant.logo': 'Logo',
   'recipient.fullName': 'Avery Chen',
