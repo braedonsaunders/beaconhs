@@ -50,7 +50,13 @@ export function ObligationDetailActions({
         variant="destructive"
         disabled={pending}
         onClick={async () => {
-          if (!(await confirmDialog({ message: 'Delete this obligation? This cannot be undone.', tone: 'danger' }))) return
+          if (
+            !(await confirmDialog({
+              message: 'Delete this obligation? This cannot be undone.',
+              tone: 'danger',
+            }))
+          )
+            return
           start(async () => {
             const res = await deleteObligation(id)
             if (res.ok) router.push('/compliance/obligations')

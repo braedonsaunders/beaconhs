@@ -202,7 +202,12 @@ function ButtonList({
   }
 
   const remove = async (id: string, label: string) => {
-    if (!(await confirmDialog({ message: `Delete the “${label}” button? Its flow is removed too.`, tone: 'danger' })))
+    if (
+      !(await confirmDialog({
+        message: `Delete the “${label}” button? Its flow is removed too.`,
+        tone: 'danger',
+      }))
+    )
       return
     setBusyId(id)
     start(async () => {

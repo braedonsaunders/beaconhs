@@ -56,7 +56,13 @@ export function BulkDocumentsBar({
       return
     }
     if (action === 'archive') {
-      if (!(await confirmDialog({ message: `Archive ${selectedIds.length} document(s)?`, tone: 'danger' }))) return
+      if (
+        !(await confirmDialog({
+          message: `Archive ${selectedIds.length} document(s)?`,
+          tone: 'danger',
+        }))
+      )
+        return
       start(async () => {
         const res = await bulkArchiveDocuments({ documentIds: selectedIds })
         if (!res.ok) {

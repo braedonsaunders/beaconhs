@@ -196,7 +196,13 @@ export function AssistantApp({
 
   async function doDelete(id: string) {
     setMenuFor(null)
-    if (!(await confirmDialog({ message: 'Delete this conversation? This cannot be undone.', tone: 'danger' }))) return
+    if (
+      !(await confirmDialog({
+        message: 'Delete this conversation? This cannot be undone.',
+        tone: 'danger',
+      }))
+    )
+      return
     await deleteAssistantConversation(id)
     if (id === currentId) router.push('/assistant')
     else startTransition(() => router.refresh())

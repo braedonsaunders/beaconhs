@@ -143,7 +143,13 @@ export function EditorPane({
 
   async function del() {
     setMenuOpen(false)
-    if (!(await confirmDialog({ message: 'Delete this journal entry? This cannot be undone.', tone: 'danger' }))) return
+    if (
+      !(await confirmDialog({
+        message: 'Delete this journal entry? This cannot be undone.',
+        tone: 'danger',
+      }))
+    )
+      return
     startSubmit(async () => {
       const r = await deleteEntry(entry.id)
       if (!r.ok) {

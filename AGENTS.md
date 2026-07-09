@@ -16,6 +16,7 @@ coherent than they found it.
 5. Always unify existing systems and abstract shared behavior when it reduces real duplication or reconciles competing implementations.
 6. No dead code, duplicate implementations, abandoned files, unused exports, stale routes, or shadow systems. Always immediately flag and clean up dead or duplicate code.
 7. Keep the in-app user guide truthful. Whenever you add, change, remove, or rename a user-facing feature, route, button, or flow, update the matching manual article(s) in `apps/web/src/lib/manual/content/*` (and add a new article for a new module) in the same change. If the change moves or renames anything a guided tour points at, update the walkthrough steps in `apps/web/src/lib/walkthroughs/registry.ts` too. See "In-app user guide & walkthroughs" below.
+8. ALWAYS ensure CI is green before you consider work done — never push code that fails a gate. Before committing/pushing, run the full CI gate set locally and make every one pass: `pnpm format:check`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm build`. Formatting (`prettier`), linting, typecheck, and tests are non-negotiable — a red pipeline blocks the hard cutover. If you push and CI goes red, drop everything and fix it immediately in a follow-up commit. Do not disable, `--no-verify`, skip, or `eslint-disable`/`ts-ignore` your way around a failing gate to make it pass; fix the underlying issue. Capture each gate's own exit code (don't pipe to `tail` and read `$?`).
 
 ## Quick Start
 
@@ -43,6 +44,13 @@ Useful launchers also live in `scripts/launchers/`.
 
 Run the narrowest meaningful checks while iterating, then broaden when touching
 shared packages, database schema, auth, tenant scoping, workers, or UI primitives.
+
+CI runs `format:check`, `typecheck`, `lint`, `test`, and `build` on every push to
+`main`. Before you commit and push, run all of them locally and confirm each
+passes — CI must stay green (see Non-Negotiable rule 8). A common miss is
+formatting: always run `pnpm format:check` (or `pnpm exec prettier --write` on the
+files you touched) before pushing, since editors and codegen frequently leave
+Prettier violations that fail CI.
 
 ## Repo Map
 

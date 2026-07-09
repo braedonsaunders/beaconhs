@@ -857,7 +857,12 @@ function SettingsPanel({
       toast.error(`Cannot delete — ${itemCount} item(s) reference this type`)
       return
     }
-    if (!(await confirmDialog({ message: 'Delete this PPE type? This cannot be undone.', tone: 'danger' })))
+    if (
+      !(await confirmDialog({
+        message: 'Delete this PPE type? This cannot be undone.',
+        tone: 'danger',
+      }))
+    )
       return
     start(async () => {
       try {

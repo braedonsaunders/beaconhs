@@ -238,7 +238,12 @@ export function InsightsWorkspace({
 
   async function del() {
     if (!active) return
-    if (!(await confirmDialog({ message: `Delete dashboard “${active.name}”? This cannot be undone.`, tone: 'danger' })))
+    if (
+      !(await confirmDialog({
+        message: `Delete dashboard “${active.name}”? This cannot be undone.`,
+        tone: 'danger',
+      }))
+    )
       return
     const id = active.id
     startBusy(async () => {

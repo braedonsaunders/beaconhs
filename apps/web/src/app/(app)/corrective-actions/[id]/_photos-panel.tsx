@@ -82,7 +82,13 @@ function PhotoRow({
   }
 
   async function remove() {
-    if (!(await confirmDialog({ message: 'Remove this photo from the corrective action?', tone: 'danger' }))) return
+    if (
+      !(await confirmDialog({
+        message: 'Remove this photo from the corrective action?',
+        tone: 'danger',
+      }))
+    )
+      return
     setBusy('delete')
     start(async () => {
       await deleteCaPhoto(caId, photo.id)
