@@ -29,6 +29,18 @@ export type DeliveryMeta = {
    * - never        — records are entered by training staff, nothing to open
    */
   catalog: 'with_content' | 'always' | 'never'
+  /**
+   * Whether finishing the course through the enrollment path (a learner
+   * completing every required lesson, or an evaluator signing off the last
+   * practical) mints the training record + certificate automatically.
+   *
+   * True for the learner/evaluator-driven types (self-paced, online,
+   * on-the-job). FALSE for classroom — an instructor issues those records at
+   * class completion with attendance/grade/pass per person — and for external
+   * certificates, which are recorded manually. This prevents a stray
+   * enrollment on a classroom course from auto-issuing a second record.
+   */
+  autoIssuesRecord: boolean
 }
 
 export const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
@@ -39,6 +51,7 @@ export const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
     hasContent: true,
     selfLaunch: false,
     catalog: 'with_content',
+    autoIssuesRecord: false,
   },
   self_paced: {
     value: 'self_paced',
@@ -47,6 +60,7 @@ export const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
     hasContent: true,
     selfLaunch: true,
     catalog: 'with_content',
+    autoIssuesRecord: true,
   },
   online: {
     value: 'online',
@@ -55,14 +69,16 @@ export const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
     hasContent: false,
     selfLaunch: true,
     catalog: 'always',
+    autoIssuesRecord: true,
   },
   on_the_job: {
     value: 'on_the_job',
     label: 'On-the-job',
-    hint: 'Hands-on training signed off by an evaluator against practical criteria.',
+    hint: 'Hands-on training signed off by an evaluator against practical criteria. The evaluator sign-off issues the record.',
     hasContent: true,
     selfLaunch: false,
     catalog: 'with_content',
+    autoIssuesRecord: true,
   },
   external_certificate: {
     value: 'external_certificate',
@@ -71,6 +87,7 @@ export const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
     hasContent: false,
     selfLaunch: false,
     catalog: 'never',
+    autoIssuesRecord: false,
   },
 }
 
@@ -89,6 +106,7 @@ export function deliveryMeta(value: string): DeliveryMeta {
       hasContent: true,
       selfLaunch: false,
       catalog: 'with_content',
+      autoIssuesRecord: false,
     }
   )
 }

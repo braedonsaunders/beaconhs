@@ -276,7 +276,9 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
       entityType: 'training_enrollment',
       entityId: enrollmentId,
       action: 'sign',
-      summary: `Completed course — issued record ${result.recordId}`,
+      summary: result.recordId
+        ? `Completed course — issued record ${result.recordId}`
+        : 'Completed course content — record issued separately at class completion',
       after: { recordId: result.recordId, certificateId: result.certificateId },
     })
   }

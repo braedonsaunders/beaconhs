@@ -16,6 +16,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { addMonthsIso } from '../../_lib/dates'
+import { deliveryMeta } from '../../_lib/delivery'
 
 export type CompletionResult = {
   completed: boolean
@@ -129,6 +130,16 @@ export async function recomputeEnrollmentCompletion(
     .limit(1)
   if (!enr) throw new Error('Enrollment not found')
 
+  const [course] = await tx
+    .select({ deliveryType: trainingCourses.deliveryType })
+    .from(trainingCourses)
+    .where(eq(trainingCourses.id, courseId))
+    .limit(1)
+  // Classroom (instructor issues records at class completion) and external
+  // certificate (manual entry) never mint a record from the enrollment path —
+  // finishing the content just marks the enrollment complete.
+  const autoIssues = course ? deliveryMeta(course.deliveryType).autoIssuesRecord : false
+
   const lessons = await tx
     .select()
     .from(trainingLessons)
@@ -148,16 +159,30 @@ export async function recomputeEnrollmentCompletion(
   const allRequiredDone = required.length > 0 && required.every((l) => completedIds.has(l.id))
 
   if (allRequiredDone && enr.status !== 'completed') {
-    const { recordId, certificateId } = await issueCourseRecordAndComplete(tx, {
-      tenantId,
-      enrollmentId,
-      courseId,
-      personId,
-      instructor: 'Self-paced course',
-      details: `Completed via the learning player (enrollment ${enrollmentId})`,
-      currentLessonId,
-    })
-    return { completed: true, percent: 100, recordId, certificateId }
+    if (autoIssues) {
+      const { recordId, certificateId } = await issueCourseRecordAndComplete(tx, {
+        tenantId,
+        enrollmentId,
+        courseId,
+        personId,
+        instructor: 'Self-paced course',
+        details: `Completed via the learning player (enrollment ${enrollmentId})`,
+        currentLessonId,
+      })
+      return { completed: true, percent: 100, recordId, certificateId }
+    }
+    // Content finished, but the record is issued elsewhere (instructor at class
+    // completion). Mark the enrollment complete without a record/certificate.
+    await tx
+      .update(trainingEnrollments)
+      .set({
+        status: 'completed',
+        completedAt: new Date(),
+        progressPercent: 100,
+        ...(currentLessonId ? { currentLessonId } : {}),
+      })
+      .where(eq(trainingEnrollments.id, enrollmentId))
+    return { completed: true, percent: 100, recordId: null, certificateId: null }
   }
 
   await tx

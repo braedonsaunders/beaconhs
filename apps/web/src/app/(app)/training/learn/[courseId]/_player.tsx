@@ -88,6 +88,7 @@ export function CoursePlayer({
   attachmentUrls,
   completed,
   certificateRecordId,
+  issuesRecord,
 }: {
   courseName: string
   modules: PlayerModule[]
@@ -95,6 +96,8 @@ export function CoursePlayer({
   attachmentUrls: Record<string, string | null | undefined>
   completed: boolean
   certificateRecordId: string | null
+  /** Whether finishing here issues the record, or the instructor issues it later. */
+  issuesRecord: boolean
 }) {
   const router = useRouter()
   const all = modules.flatMap((m) => m.lessons)
@@ -217,8 +220,9 @@ export function CoursePlayer({
                   Course complete 🎉
                 </h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Your training record has been logged
-                  {certificateRecordId ? ' and a certificate issued' : ''}.
+                  {issuesRecord
+                    ? `Your training record has been logged${certificateRecordId ? ' and a certificate issued' : ''}.`
+                    : 'You have finished the course content. Your instructor issues your training record when the class is completed.'}
                 </p>
               </div>
               {certificateRecordId ? (

@@ -264,6 +264,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           attachmentUrls={attachmentUrls}
           completed={enrollment.status === 'completed'}
           certificateRecordId={enrollment.recordId ?? null}
+          issuesRecord={deliveryMeta(course.deliveryType).autoIssuesRecord}
         />
       )}
     </DetailPageLayout>
