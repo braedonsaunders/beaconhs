@@ -370,58 +370,31 @@ const mmPt = (v: number) => Math.round(((v * 72) / 25.4) * 100) / 100 // mm font
 const LABEL_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
 
 export function createEquipmentLabelDesignDocument(): DesignDocument {
-  // Page frame ---------------------------------------------------------------
-  const margin = 1.5 // @page margin
-  const frameW = 101.6 - margin * 2 // 98.6
-  const frameH = 152.4 - margin * 2 // 149.4
-  const innerL = margin + PX_MM // inside the 1px label border
-  const innerR = 101.6 - margin - PX_MM
-  const innerT = margin + PX_MM
-  const innerB = 152.4 - margin - PX_MM
-  // Header band ---------------------------------------------------------------
-  const headerRuleY = innerT + 3 + 6 + 2.5 // padding-top + 6mm brand + padding-bottom
-  // Content grid --------------------------------------------------------------
-  const contentT = headerRuleY + PX_MM
-  const contentPad = 4
-  const qrPanelX = innerL + contentPad
-  const qrPanelY = contentT + contentPad
-  const qrPanelW = 58
-  const qrPanelH = innerB - contentPad - qrPanelY
-  const qrInset = 2 + PX_MM // 2mm padding inside the 1px QR border
-  const qrSize = qrPanelW - qrInset * 2
-  const qrY = qrPanelY + (qrPanelH - qrSize) / 2 // legacy centers the QR vertically
-  const infoX = qrPanelX + qrPanelW + 3.5 // 3.5mm grid gap
-  const infoW = innerR - contentPad - infoX
-  const nameH = 5.5 * 1.05 * 3 // room for three lines at the legacy line-height
-  const keyW = 21
-  const valX = infoX + keyW + 2 // 2mm column gap
-  const valW = innerR - contentPad - valX
-  const rowFont = mmPt(3.6)
+  // A print-first 4×6in tag in the spirit of the legacy thermal label —
+  // black-bordered frame, EQUIPMENT header band, a large centred QR, and
+  // full-width spec rows underneath (the legacy side-by-side columns squeezed
+  // values into ~8mm on absolute layout, so the rows moved below the QR).
+  const m = 0.06 // frame inset
+  const pad = 0.16 // content padding inside the frame
+  const rightEdge = 4 - pad
   const keyStyle = {
     fontFamily: LABEL_FONT,
     fontWeight: '700' as const,
-    letterSpacing: 0.12 * MM_IN,
-    lineHeight: 1.18,
+    letterSpacing: 0.005,
+    lineHeight: 1.15,
   }
-  const valStyle = { fontFamily: LABEL_FONT, fontWeight: '600' as const, lineHeight: 1.18 }
-  // Wrapping values flow taller than the legacy auto-height rows, so each row
-  // gets a fixed slot: TAG two lines, the longer values three.
-  const rowY = { tag: qrPanelY + nameH + 2, class: 0, serial: 0, inspect: 0, inspectNext: 0 }
-  rowY.class = rowY.tag + 3.6 * 1.18 * 2 + 2
-  rowY.serial = rowY.class + 3.6 * 1.18 * 3 + 2
-  rowY.inspect = rowY.serial + 3.6 * 1.18 * 3 + 2
-  rowY.inspectNext = rowY.inspect + 3.6 * 1.18 * 3 + 2
-
+  const valStyle = { fontFamily: LABEL_FONT, fontWeight: '600' as const, lineHeight: 1.15 }
+  const rowYs = { tag: 4.28, class: 4.585, serial: 4.89, inspected: 5.195, nextDue: 5.5 }
   const keyRow = (id: string, label: string, y: number): DesignElement =>
     text(
       `${id}-key`,
       `${label} key`,
-      label.toUpperCase(), // legacy keys render text-transform: uppercase
-      infoX * MM_IN,
-      y * MM_IN,
-      keyW * MM_IN,
-      3.6 * 1.18 * MM_IN,
-      rowFont,
+      label.toUpperCase(),
+      pad,
+      y,
+      0.95,
+      0.2,
+      10,
       '#000000',
       keyStyle,
     )
@@ -430,21 +403,12 @@ export function createEquipmentLabelDesignDocument(): DesignDocument {
     name: string,
     value: DesignDataField,
     y: number,
-    lines: number,
     extra: Partial<Extract<DesignElement, { kind: 'field' }>> = {},
   ): DesignElement =>
-    field(
-      `${id}-value`,
-      name,
-      value,
-      valX * MM_IN,
-      y * MM_IN,
-      valW * MM_IN,
-      3.6 * 1.18 * lines * MM_IN,
-      rowFont,
-      '#000000',
-      { ...valStyle, ...extra },
-    )
+    field(`${id}-value`, name, value, 1.16, y, rightEdge - 1.16, 0.2, 10, '#000000', {
+      ...valStyle,
+      ...extra,
+    })
 
   return {
     version: 1,
@@ -472,103 +436,70 @@ export function createEquipmentLabelDesignDocument(): DesignDocument {
           rect(
             'label-border',
             'Label border',
-            margin * MM_IN,
-            margin * MM_IN,
-            frameW * MM_IN,
-            frameH * MM_IN,
+            m,
+            m,
+            4 - m * 2,
+            6 - m * 2,
             'transparent',
             '#000000',
             PX_IN,
           ),
-          text(
-            'brand',
-            'Header — EQUIPMENT',
-            'EQUIPMENT',
-            (innerL + 4) * MM_IN,
-            (innerT + 3) * MM_IN,
-            55 * MM_IN,
-            6 * MM_IN,
-            mmPt(6),
-            '#000000',
-            {
-              fontFamily: LABEL_FONT,
-              fontWeight: '800',
-              letterSpacing: 0.25 * MM_IN,
-              lineHeight: 1,
-            },
-          ),
+          text('brand', 'Header — EQUIPMENT', 'EQUIPMENT', pad, 0.17, 2.0, 0.28, 17, '#000000', {
+            fontFamily: LABEL_FONT,
+            fontWeight: '800',
+            letterSpacing: 0.01,
+            lineHeight: 1,
+          }),
           field(
             'division',
-            'Division',
+            'Site / division',
             'equipment.division',
-            (innerL + 40) * MM_IN,
-            // Baseline-aligned with the 6mm brand text (legacy flex baseline).
-            (innerT + 3 + 6 * 0.8 - 3.5 * 0.8) * MM_IN,
-            (innerR - 4 - (innerL + 40)) * MM_IN,
-            3.5 * MM_IN,
-            mmPt(3.5),
+            1.9,
+            0.235,
+            rightEdge - 1.9,
+            0.18,
+            10,
             '#000000',
             { fontFamily: LABEL_FONT, fontWeight: '700', align: 'right', lineHeight: 1 },
           ),
-          line(
-            'header-rule',
-            'Header rule',
-            innerL * MM_IN,
-            headerRuleY * MM_IN,
-            (innerR - innerL) * MM_IN,
-            0.05,
-            '#000000',
-            PX_IN,
-          ),
-          rect(
-            'qr-panel',
-            'QR panel',
-            qrPanelX * MM_IN,
-            qrPanelY * MM_IN,
-            qrPanelW * MM_IN,
-            qrPanelH * MM_IN,
-            '#ffffff',
-            '#000000',
-            PX_IN,
-          ),
-          qr(
-            'qr',
-            'Scan QR',
-            (qrPanelX + qrInset) * MM_IN,
-            qrY * MM_IN,
-            qrSize * MM_IN,
-            qrSize * MM_IN,
-          ),
+          line('header-rule', 'Header rule', m, 0.55, 4 - m * 2, 0.05, '#000000', PX_IN),
           field(
             'name',
             'Equipment name',
             'equipment.name',
-            infoX * MM_IN,
-            qrPanelY * MM_IN,
-            infoW * MM_IN,
-            nameH * MM_IN,
-            mmPt(5.5),
+            pad,
+            0.68,
+            4 - pad * 2,
+            0.6,
+            16,
             '#000000',
-            { fontFamily: LABEL_FONT, fontWeight: '800', lineHeight: 1.05 },
+            {
+              fontFamily: LABEL_FONT,
+              fontWeight: '800',
+              lineHeight: 1.1,
+            },
           ),
-          keyRow('tag', 'Tag', rowY.tag),
-          valueRow('tag', 'Asset tag', 'equipment.assetTag', rowY.tag, 2),
-          keyRow('class', 'Class', rowY.class),
-          valueRow('class', 'Class', 'equipment.class', rowY.class, 3),
-          keyRow('serial', 'Serial', rowY.serial),
-          valueRow('serial', 'Serial number', 'equipment.serial', rowY.serial, 3),
-          keyRow('inspect', 'Inspect', rowY.inspect),
-          valueRow('inspect-last', 'Last inspection', 'equipment.lastInspection', rowY.inspect, 3, {
-            prefix: 'Last: ',
+          rect('qr-panel', 'QR panel', 0.64, 1.38, 2.72, 2.72, '#ffffff', '#000000', PX_IN),
+          qr('qr', 'Scan QR', 0.72, 1.46, 2.56, 2.56),
+          keyRow('tag', 'Tag', rowYs.tag),
+          valueRow('tag', 'Asset tag', 'equipment.assetTag', rowYs.tag),
+          keyRow('class', 'Class', rowYs.class),
+          valueRow('class', 'Class', 'equipment.class', rowYs.class),
+          keyRow('serial', 'Serial', rowYs.serial),
+          valueRow('serial', 'Serial number', 'equipment.serial', rowYs.serial),
+          keyRow('inspected', 'Inspected', rowYs.inspected),
+          valueRow('inspect-last', 'Last inspection', 'equipment.lastInspection', rowYs.inspected, {
             transform: 'date-short',
           }),
+          keyRow('next-due', 'Next due', rowYs.nextDue),
           valueRow(
             'inspect-next',
             'Next inspection due',
             'equipment.nextInspectionDue',
-            rowY.inspectNext,
-            3,
-            { prefix: 'Next: ', transform: 'date-short' },
+            rowYs.nextDue,
+            {
+              transform: 'date-short',
+            },
           ),
         ],
       },

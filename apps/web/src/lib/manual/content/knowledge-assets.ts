@@ -380,6 +380,14 @@ Open **Equipment** in the left menu, then go to the **Check-in / out station** a
 
 The **Scan does** setting controls what a scan means: **Toggle** flips each unit (out if it was in, in if it was out), or lock it to **Out** or **In** when you are moving a big batch one way.
 
+## Print QR tag labels (managers)
+
+Each unit's QR page has a **Download label PDF** button — a print-ready tag at your company's label size, made for shipping-label printers.
+
+1. To tag many units at once, open **Equipment** → **Manage** → **Bulk QR labels**.
+2. Pick the equipment and tap the generate button. One PDF opens with one tag per page.
+3. To change what the tag looks like — size, layout, fields — open **Equipment** → **Manage** → **QR label design** and edit it like a document. Tap **Save label design** when done.
+
 ## Scan a QR label with your phone
 
 1. Every tagged unit has a QR label. Scan it with your phone camera.

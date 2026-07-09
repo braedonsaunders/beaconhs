@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ChevronRight, Gauge, QrCode, Wrench } from 'lucide-react'
+import { ChevronRight, Gauge, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
@@ -40,13 +40,6 @@ const NATIVE_TOOLS: ToolCard[] = [
     title: 'Safe Distance',
     description:
       'Pneumatic pressure-test stand-off calculator — NASA-Glenn, ASME PCC-2, and Lloyd’s Register stored-energy distances for a piping system under test. Records each assessment for sign-off and PDF export.',
-  },
-  {
-    href: '/equipment/qr/bulk',
-    icon: QrCode,
-    title: 'Bulk QR Generator',
-    description:
-      'Generate a printable sheet of QR codes for a selected set of equipment items — perfect for tagging a yard before audit season.',
   },
 ]
 

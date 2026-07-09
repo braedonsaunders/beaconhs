@@ -585,10 +585,6 @@ Open **Tools** in the left menu, or go to [Tools](/tools). Each tool is a card �
 
 Past assessments stay in the list on the Safe Distance page, so you can pull up the numbers used on an earlier test.
 
-## Bulk QR Generator
-
-**Bulk QR Generator** prints a sheet of QR code labels for a set of equipment — useful when tagging a yard. Pick the equipment, generate the sheet, and print it.
-
 ## Company-published tools
 
 Your company can build its own tools and publish them here. Those appear as extra cards on the same page — tap one and fill it in like a form. What you see depends on what your company has published.

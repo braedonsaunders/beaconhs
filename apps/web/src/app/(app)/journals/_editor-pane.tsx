@@ -14,7 +14,6 @@ import {
   Mail,
   MoreHorizontal,
   NotebookPen,
-  Printer,
   Send,
   Sparkles,
   Trash2,
@@ -218,15 +217,6 @@ export function EditorPane({
             </button>
             {menuOpen ? (
               <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                <a
-                  href={`/journals/${entry.id}/print`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
-                >
-                  <Printer size={14} /> Print
-                </a>
                 <a
                   href={`/journals/${entry.id}/pdf`}
                   target="_blank"

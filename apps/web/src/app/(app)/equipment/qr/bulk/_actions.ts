@@ -70,5 +70,5 @@ export async function generateBulkQrSheet(formData: FormData) {
     metadata: { bulkToken, itemIds: stampedIds },
   })
 
-  redirect(`/equipment/qr/bulk/print?ids=${stampedIds.join(',')}&token=${bulkToken}`)
+  redirect(`/equipment/qr/labels?ids=${stampedIds.join(',')}&token=${bulkToken}`)
 }

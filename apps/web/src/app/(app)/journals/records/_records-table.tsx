@@ -10,7 +10,7 @@
 // flyout embedding the full editable workspace scoped to that author's journals.
 
 import { useMemo, useRef, useState } from 'react'
-import { Image as ImageIcon, Loader2, PenLine, Printer } from 'lucide-react'
+import { FileDown, Image as ImageIcon, Loader2, PenLine } from 'lucide-react'
 import { Badge, Button, Drawer, cn } from '@beaconhs/ui'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
@@ -212,9 +212,9 @@ export function JournalRecordsTable({
         footer={
           readEntry ? (
             <div className="flex w-full items-center justify-end gap-2">
-              <a href={`/journals/${readEntry.id}/print`} target="_blank" rel="noopener noreferrer">
+              <a href={`/journals/${readEntry.id}/pdf`} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline">
-                  <Printer size={14} /> Print
+                  <FileDown size={14} /> PDF
                 </Button>
               </a>
               <Button onClick={() => openWorkspace(readEntry.id)}>

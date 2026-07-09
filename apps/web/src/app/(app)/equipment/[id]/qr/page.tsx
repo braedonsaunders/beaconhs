@@ -7,7 +7,6 @@ import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
-import { generateBulkQrSheet } from '../../qr/bulk/_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,12 +54,15 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
           title={`QR label — ${row.item.name}`}
           subtitle={`${row.item.assetTag}${row.type ? ` · ${row.type.name}` : ''}`}
           actions={
-            <form action={generateBulkQrSheet}>
-              <input type="hidden" name="ids" value={id} />
-              <Button type="submit" variant="outline" title="Open the print sheet">
-                Print sheet
-              </Button>
-            </form>
+            <Button
+              asChild
+              variant="outline"
+              title="Print-ready label PDF at the designed tag size"
+            >
+              <a href={`/equipment/${id}/qr/pdf`} target="_blank" rel="noopener noreferrer">
+                Download label PDF
+              </a>
+            </Button>
           }
         />
 
@@ -69,7 +71,7 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
             <div className="flex items-center justify-center">
               {/* The QR tile stays on white so scanners read it in dark mode too. */}
               <div
-                className="w-72 rounded-md bg-white p-2"
+                className="w-full max-w-72 rounded-md bg-white p-2 [&_svg]:h-auto [&_svg]:w-full"
                 aria-label={`QR code for ${row.item.name}`}
                 dangerouslySetInnerHTML={{ __html: svg }}
               />
