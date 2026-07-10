@@ -15,7 +15,7 @@
 //   • Collapse/expand is pure HTML <details> — no JS, no client component.
 
 import Link from 'next/link'
-import { isNull, asc } from 'drizzle-orm'
+import { and, eq, isNull, asc } from 'drizzle-orm'
 import { Users } from 'lucide-react'
 import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people } from '@beaconhs/db/schema'
@@ -46,7 +46,7 @@ export default async function OrgChartPage({
         managerPersonId: people.managerPersonId,
       })
       .from(people)
-      .where(isNull(people.deletedAt))
+      .where(and(isNull(people.deletedAt), eq(people.status, 'active')))
       .orderBy(asc(people.lastName), asc(people.firstName)),
   )
 
