@@ -1,20 +1,22 @@
 import type {
+  CredentialDesignData,
   DataFieldElement,
   DesignArtboard,
   DesignDataField,
   DesignDocument,
   DesignDocumentData,
   DesignElement,
+  EquipmentLabelDesignData,
   ImageElement,
+  PersonBadgeDesignData,
   TextElement,
 } from './schema'
 
-// Internal: every field lookup goes through this widened bag so credential and
-// equipment data shapes resolve through one switch without unsafe casts at the
-// call sites.
+// Internal: every field lookup goes through this widened bag so credential,
+// equipment, and person-badge data shapes resolve through one switch without
+// unsafe casts at the call sites.
 type AnyDesignData = Partial<
-  Extract<DesignDocumentData, { recipientFullName: string }> &
-    Extract<DesignDocumentData, { equipmentName: string }>
+  CredentialDesignData & EquipmentLabelDesignData & PersonBadgeDesignData
 > & { tenantName: string }
 
 export function renderDesignDocumentHtml(
@@ -246,6 +248,10 @@ export function valueForField(field: DesignDataField, data: DesignDocumentData):
       return bag.qrDataUrl ?? ''
     case 'issuedAt':
       return bag.issuedAt ? String(bag.issuedAt) : ''
+    case 'person.title':
+      return bag.personTitle ?? ''
+    case 'person.department':
+      return bag.personDepartment ?? ''
     case 'equipment.name':
       return bag.equipmentName ?? ''
     case 'equipment.assetTag':

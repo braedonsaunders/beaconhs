@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   FileText,
   HardHat,
+  IdCard,
   Mail,
   Paperclip,
   Phone,
@@ -589,6 +590,15 @@ export default async function PersonDetailPage({
             <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
               {person.status}
             </Badge>
+          }
+          actions={
+            canEdit ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={`${basePath}/badge`} target="_blank" rel="noreferrer">
+                  <IdCard size={14} /> ID badge
+                </a>
+              </Button>
+            ) : undefined
           }
         />
 

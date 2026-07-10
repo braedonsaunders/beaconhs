@@ -151,6 +151,11 @@ export const people = pgTable(
     signatureAttachmentId: uuid('signature_attachment_id'),
     emergencyContactName: text('emergency_contact_name'),
     emergencyContactPhone: text('emergency_contact_phone'),
+    // Unguessable token behind the printed ID badge QR — opens the person's
+    // PUBLIC live training transcript (/verify/person/<token>). Generated
+    // lazily the first time a badge is printed; same model as the training
+    // certificate verifyToken (randomBytes(20) hex).
+    badgeToken: text('badge_token'),
     notes: text('notes'),
     status: peopleStatus('status').default('active').notNull(),
     // Denormalised caches synced by the people-groups / people-titles server
@@ -177,6 +182,11 @@ export const people = pgTable(
     tenantUserUx: uniqueIndex('people_tenant_user_ux')
       .on(t.tenantId, t.userId)
       .where(sql`${t.userId} is not null and ${t.deletedAt} is null`),
+    // Badge tokens resolve people on a PUBLIC page, so they must be globally
+    // unique (cross-tenant). Partial: most workers never have a badge printed.
+    badgeTokenUx: uniqueIndex('people_badge_token_ux')
+      .on(t.badgeToken)
+      .where(sql`${t.badgeToken} is not null`),
   }),
 )
 

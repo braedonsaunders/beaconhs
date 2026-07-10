@@ -12,6 +12,7 @@ export type DesignDocumentKind =
   | 'training-credential'
   | 'training-slides'
   | 'equipment-label'
+  | 'person-badge'
   | 'generic'
 
 export type DesignDocument = {
@@ -79,7 +80,23 @@ export type EquipmentDataField =
   | 'verify.qr'
   | 'verify.url'
 
-export type DesignDataField = CredentialDataField | EquipmentDataField
+// Person ID-badge catalog. Deliberately reuses the credential `tenant.*`,
+// `recipient.*`, and `verify.*` keys so shared elements (logo, photo, QR)
+// resolve identically from either data shape; only the person's job title and
+// department are badge-specific.
+export type PersonDataField =
+  | 'tenant.name'
+  | 'tenant.logo'
+  | 'recipient.fullName'
+  | 'recipient.employeeNo'
+  | 'recipient.photo'
+  | 'person.title'
+  | 'person.department'
+  | 'verify.url'
+  | 'verify.qr'
+  | 'issuedAt'
+
+export type DesignDataField = CredentialDataField | EquipmentDataField | PersonDataField
 
 export type BaseElement = {
   id: string
@@ -205,8 +222,25 @@ export type EquipmentLabelDesignData = {
   qrDataUrl?: string | null
 }
 
+export type PersonBadgeDesignData = {
+  tenantName: string
+  tenantLogoUrl?: string | null
+  recipientFullName: string
+  recipientEmployeeNo?: string | null
+  recipientPhotoUrl?: string | null
+  personTitle?: string | null
+  personDepartment?: string | null
+  /** Public live-transcript URL the badge QR points at. */
+  verifyUrl?: string | null
+  qrDataUrl?: string | null
+  issuedAt?: string | Date | null
+}
+
 /** Any data shape a design document can be rendered against. */
-export type DesignDocumentData = CredentialDesignData | EquipmentLabelDesignData
+export type DesignDocumentData =
+  | CredentialDesignData
+  | EquipmentLabelDesignData
+  | PersonBadgeDesignData
 
 export function isDesignDocument(value: unknown): value is DesignDocument {
   const doc = value as Partial<DesignDocument> | null

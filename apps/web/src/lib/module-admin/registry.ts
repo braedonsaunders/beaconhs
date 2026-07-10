@@ -602,6 +602,13 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         desc: 'Reporting lines across the organisation, built from each person’s manager.',
       },
       {
+        key: 'badge-design',
+        label: 'ID badge design',
+        href: '/people/badges/design',
+        iconKey: 'label',
+        desc: 'The printed employee ID badge — photo, details, and the live-transcript QR.',
+      },
+      {
         key: 'custom-fields',
         label: 'Custom fields',
         href: '/people/custom-fields',

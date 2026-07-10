@@ -141,6 +141,13 @@
       "when": 1783436401000,
       "tag": "0019_drop_orphaned_hazid_signed_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783436402000,
+      "tag": "0020_people_badge_token",
+      "breakpoints": true
     }
   ]
 }

@@ -20,6 +20,9 @@ export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
       'reporting structure',
       'crew',
       'hire date',
+      'id badge',
+      'badge',
+      'transcript qr',
     ],
     body: `The People directory lists everyone in your company — workers, contractors, and supervisors.
 
@@ -59,6 +62,21 @@ The org chart shows who reports to whom. It is built from the manager set on eac
 1. Open [Org chart](/people/org-chart).
 2. Click a person to focus on their part of the tree.
 3. To change the chart, edit the person and change who they report to.
+
+## ID badges
+
+Every person can have a printed ID badge — a wallet-size card with their photo, name, and a QR code. Scanning the QR opens a public page with their live training record: what is valid, what is expiring, and what has expired. The page always shows current information, so a printed badge never goes stale.
+
+To print a badge:
+
+1. Open the person's page.
+2. Click **ID badge** at the top. A print-ready PDF opens with the front and back of the card.
+
+To change how badges look:
+
+1. Open [ID badge design](/people/badges/design) from **Manage people**.
+2. Move, restyle, or add elements on the front and back. Click **Save badge design**.
+3. New prints use the new design right away.
 
 ## Tips
 

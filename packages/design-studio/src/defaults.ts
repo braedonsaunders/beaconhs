@@ -507,6 +507,154 @@ export function createEquipmentLabelDesignDocument(): DesignDocument {
   }
 }
 
+// --- Person ID badge (two-sided CR80) ---------------------------------------
+//
+// Front: brand band with the company name + logo, the person's photo, name,
+// employee number, title, and department. Back: a QR panel that opens the
+// person's PUBLIC live training transcript (verify.url), plus a return notice.
+// Tenants restyle every element in the badge studio; this default is a clean,
+// neutral starting point.
+
+export function createPersonBadgeDesignDocument(
+  theme: DesignStudioTheme = DEFAULT_DESIGN_STUDIO_THEME,
+): DesignDocument {
+  return {
+    version: 1,
+    engine: 'fabric',
+    kind: 'person-badge',
+    name: 'ID badge',
+    unit: 'in',
+    dpi: DESIGN_STUDIO_DPI,
+    artboards: [personBadgeFront(theme), personBadgeBack(theme)],
+  }
+}
+
+function personBadgeFront(theme: DesignStudioTheme): DesignArtboard {
+  return {
+    id: 'badge-front',
+    name: 'Front',
+    format: 'cr80-front',
+    width: CR80.width,
+    height: CR80.height,
+    background: '#ffffff',
+    bleed: 0,
+    printProfile: cardPrintProfile,
+    elements: [
+      rect('brand-band', 'Brand band', 0, 0, 3.375, 0.52, theme.primary, theme.primary, 0),
+      rect('accent-rule', 'Accent rule', 0, 0.52, 3.375, 0.035, theme.accent, theme.accent, 0),
+      field('tenant', 'Company', 'tenant.name', 0.14, 0.14, 2.4, 0.16, 7.2, '#ffffff', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '800',
+        letterSpacing: 0.02,
+        transform: 'uppercase',
+      }),
+      text('tag', 'Card label', 'EMPLOYEE ID', 0.14, 0.32, 2.2, 0.12, 4.6, '#dbeafe', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '700',
+        letterSpacing: 0.04,
+      }),
+      image('logo', 'Logo', 'tenant.logo', 2.62, 0.12, 0.58, 0.28, 'contain'),
+      image('photo', 'Photo', 'recipient.photo', 0.16, 0.72, 0.92, 1.15, 'cover', 0.08),
+      field('name', 'Name', 'recipient.fullName', 1.22, 0.78, 2.0, 0.36, 11, '#0f172a', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '800',
+        lineHeight: 1.05,
+      }),
+      field(
+        'employee',
+        'Employee number',
+        'recipient.employeeNo',
+        1.22,
+        1.18,
+        1.9,
+        0.13,
+        5.6,
+        '#64748b',
+        { fontFamily: "ui-monospace, 'SF Mono', monospace", prefix: '#' },
+      ),
+      field('title', 'Job title', 'person.title', 1.22, 1.38, 1.95, 0.15, 6.4, '#1e293b', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '700',
+      }),
+      field(
+        'department',
+        'Department',
+        'person.department',
+        1.22,
+        1.56,
+        1.95,
+        0.14,
+        5.6,
+        '#64748b',
+        { fontFamily: "'Archivo', Arial, sans-serif", fontWeight: '600' },
+      ),
+      qr('qr-mini', 'Transcript QR', 2.78, 1.54, 0.44, 0.44),
+      field('issued', 'Issued', 'issuedAt', 0.16, 1.95, 1.4, 0.12, 4.8, '#94a3b8', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '600',
+        prefix: 'Issued ',
+        transform: 'date-short',
+      }),
+    ],
+  }
+}
+
+function personBadgeBack(theme: DesignStudioTheme): DesignArtboard {
+  return {
+    id: 'badge-back',
+    name: 'Back',
+    format: 'cr80-back',
+    width: CR80.width,
+    height: CR80.height,
+    background: theme.primary,
+    bleed: 0,
+    printProfile: cardPrintProfile,
+    elements: [
+      rect('qr-panel', 'QR panel', 0.16, 0.16, 1.02, 1.02, '#ffffff', '#ffffff', 0),
+      qr('qr', 'Transcript QR', 0.24, 0.24, 0.86, 0.86),
+      text(
+        'scan-label',
+        'Scan label',
+        'SCAN FOR LIVE TRAINING RECORD',
+        1.34,
+        0.24,
+        1.86,
+        0.28,
+        6.2,
+        '#ffffff',
+        {
+          fontFamily: "'Archivo', Arial, sans-serif",
+          fontWeight: '800',
+          letterSpacing: 0.03,
+          lineHeight: 1.2,
+        },
+      ),
+      rect('scan-rule', 'Scan rule', 1.34, 0.6, 0.46, 0.026, theme.accent, theme.accent, 0),
+      field('verify-url', 'Transcript URL', 'verify.url', 1.34, 0.7, 1.82, 0.3, 5, '#e2e8f0', {
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+        lineHeight: 1.2,
+      }),
+      field('issuer', 'Company', 'tenant.name', 0.24, 1.34, 2.9, 0.16, 6.4, '#ffffff', {
+        fontFamily: "'Archivo', Arial, sans-serif",
+        fontWeight: '700',
+        align: 'center',
+      }),
+      text(
+        'notice',
+        'Notice',
+        'This badge remains property of the employer. If found, please return it to the address above.',
+        0.34,
+        1.56,
+        2.7,
+        0.3,
+        5,
+        '#cbd5e1',
+        { align: 'center', lineHeight: 1.25, fontFamily: "'Archivo', Arial, sans-serif" },
+      ),
+    ],
+  }
+}
+
 function fontFor(typeface: DesignStudioTheme['typeface']) {
   if (typeface === 'technical') {
     return {
