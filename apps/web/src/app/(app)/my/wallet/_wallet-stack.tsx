@@ -9,10 +9,10 @@
 // status) makes the stack scannable, and each card downloads its print-ready
 // pass. One column on phones, a wider multi-column gallery on desktop.
 
-import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Award, CreditCard, Download, GraduationCap, RotateCw, ShieldCheck } from 'lucide-react'
+import { Award, CreditCard, Download, GraduationCap, ShieldCheck } from 'lucide-react'
 import { cn, EmptyState } from '@beaconhs/ui'
+import { CredentialFlipCard } from '@/components/credential-flip-card'
 
 export type WalletCard = {
   id: string
@@ -29,8 +29,6 @@ export type WalletDesign = {
   widthIn: number
   heightIn: number
 }
-
-const DPI = 96
 
 const STATUS: Record<WalletCard['status'], { label: string; cls: string }> = {
   valid: {
@@ -75,31 +73,16 @@ export function WalletStack({ cards, design }: { cards: WalletCard[]; design: Wa
     )
   }
 
-  const naturalW = design.widthIn * DPI
-  const naturalH = design.heightIn * DPI
-  const ratio = design.widthIn / design.heightIn
-
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => (
-        <FlipCard key={card.id} card={card} naturalW={naturalW} naturalH={naturalH} ratio={ratio} />
+        <FlipCard key={card.id} card={card} design={design} />
       ))}
     </div>
   )
 }
 
-function FlipCard({
-  card,
-  naturalW,
-  naturalH,
-  ratio,
-}: {
-  card: WalletCard
-  naturalW: number
-  naturalH: number
-  ratio: number
-}) {
-  const [flipped, setFlipped] = useState(false)
+function FlipCard({ card, design }: { card: WalletCard; design: WalletDesign }) {
   const status = STATUS[card.status]
   const kind = KIND[card.kind]
 
@@ -130,41 +113,12 @@ function FlipCard({
         </span>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setFlipped((f) => !f)}
-        aria-label={flipped ? 'Show card front' : 'Show card back'}
-        className="group relative w-full rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
-        style={{ perspective: 1200 }}
-      >
-        <div
-          className="relative w-full transition-transform duration-500 ease-out"
-          style={{
-            transformStyle: 'preserve-3d',
-            transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-            aspectRatio: String(ratio),
-          }}
-        >
-          <CardFace
-            html={card.frontHtml}
-            naturalW={naturalW}
-            naturalH={naturalH}
-            className="absolute inset-0"
-            style={{ backfaceVisibility: 'hidden' }}
-          />
-          <CardFace
-            html={card.backHtml}
-            naturalW={naturalW}
-            naturalH={naturalH}
-            className="absolute inset-0"
-            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-          />
-        </div>
-        <span className="pointer-events-none absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[10px] font-medium text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-          <RotateCw size={11} />
-          Flip
-        </span>
-      </button>
+      <CredentialFlipCard
+        frontHtml={card.frontHtml}
+        backHtml={card.backHtml}
+        widthIn={design.widthIn}
+        heightIn={design.heightIn}
+      />
 
       <div className="mt-3 flex items-center gap-2">
         <Link
@@ -188,65 +142,6 @@ function FlipCard({
           </Link>
         ) : null}
       </div>
-    </div>
-  )
-}
-
-// Embed a single rendered artboard, scaled to its container width. The iframe
-// isolates the design's CSS (units in inches/points) so it never collides with
-// app styles; pointer-events are off so taps reach the flip button.
-function CardFace({
-  html,
-  naturalW,
-  naturalH,
-  className,
-  style,
-}: {
-  html: string
-  naturalW: number
-  naturalH: number
-  className?: string
-  style?: React.CSSProperties
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(0)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const update = (w: number) => {
-      if (w) setScale(w / naturalW)
-    }
-    update(el.clientWidth)
-    const ro = new ResizeObserver((entries) => update(entries[0]?.contentRect.width ?? 0))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [naturalW])
-
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        'overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/10',
-        className,
-      )}
-      style={style}
-    >
-      <iframe
-        title=""
-        srcDoc={html}
-        scrolling="no"
-        sandbox=""
-        tabIndex={-1}
-        style={{
-          width: naturalW,
-          height: naturalH,
-          border: 0,
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          pointerEvents: 'none',
-        }}
-      />
     </div>
   )
 }

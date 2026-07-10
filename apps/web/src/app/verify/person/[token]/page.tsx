@@ -1,6 +1,7 @@
 // Public person-badge verification page — the live training transcript behind
 // the QR on a printed ID badge. Resolved purely from the badge token; no auth.
 // Mobile-first: the common reader is a supervisor scanning a card at the gate.
+// Every row opens the rendered wallet card for that credential.
 
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
@@ -16,23 +17,10 @@ import {
 } from '@beaconhs/db/schema'
 import { publicUrl } from '@beaconhs/storage'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
+import { EXPIRING_DAYS, formatDay, isoDaysFromNow, standingFor, todayIsoDate } from './_format'
+import { TranscriptList, type TranscriptItem } from './_transcript-list'
 
 export const dynamic = 'force-dynamic'
-
-const EXPIRING_DAYS = 60
-
-type CredentialRow = {
-  name: string
-  code: string | null
-  completedOn: string
-  expiresOn: string | null
-}
-
-type SkillRow = {
-  name: string
-  grantedOn: string
-  expiresOn: string | null
-}
 
 type Resolved = {
   personName: string
@@ -43,8 +31,14 @@ type Resolved = {
   photoUrl: string | null
   tenantName: string
   tenantLogoUrl: string | null
-  credentials: CredentialRow[]
-  skills: SkillRow[]
+  credentials: {
+    id: string
+    name: string
+    code: string | null
+    completedOn: string
+    expiresOn: string | null
+  }[]
+  skills: { id: string; name: string; grantedOn: string; expiresOn: string | null }[]
 }
 
 async function resolveToken(token: string): Promise<Resolved | null> {
@@ -71,6 +65,7 @@ async function resolveToken(token: string): Promise<Resolved | null> {
     // supersedes older records — same rule as the compliance matrix).
     const records = await tx
       .select({
+        id: trainingRecords.id,
         name: trainingCourses.name,
         code: trainingCourses.code,
         completedOn: trainingRecords.completedOn,
@@ -89,6 +84,7 @@ async function resolveToken(token: string): Promise<Resolved | null> {
 
     const skills = await tx
       .select({
+        id: trainingSkillAssignments.id,
         name: trainingSkillTypes.name,
         grantedOn: trainingSkillAssignments.grantedOn,
         expiresOn: trainingSkillAssignments.expiresOn,
@@ -121,90 +117,6 @@ async function resolveToken(token: string): Promise<Resolved | null> {
   })
 }
 
-// Date-only strings compare correctly as strings; parsing yyyy-mm-dd as a Date
-// would flip status at UTC midnight on the final valid day.
-type Standing = 'valid' | 'expiring' | 'expired'
-
-function standingFor(expiresOn: string | null, todayIso: string, soonIso: string): Standing {
-  if (!expiresOn) return 'valid'
-  if (expiresOn < todayIso) return 'expired'
-  if (expiresOn <= soonIso) return 'expiring'
-  return 'valid'
-}
-
-function isoDaysFromNow(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-function formatDay(value: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
-  if (!m) return value
-  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`
-}
-
-const STANDING_STYLE: Record<Standing, { chip: string; label: string }> = {
-  valid: { chip: 'bg-emerald-100 text-emerald-800', label: 'Valid' },
-  expiring: { chip: 'bg-amber-100 text-amber-800', label: 'Expiring soon' },
-  expired: { chip: 'bg-red-100 text-red-700', label: 'Expired' },
-}
-
-function StandingChip({ standing }: { standing: Standing }) {
-  const s = STANDING_STYLE[standing]
-  return (
-    <span
-      className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${s.chip}`}
-    >
-      {s.label}
-    </span>
-  )
-}
-
-function CredentialCard({
-  title,
-  code,
-  completedOn,
-  expiresOn,
-  standing,
-}: {
-  title: string
-  code?: string | null
-  completedOn?: string
-  expiresOn: string | null
-  standing: Standing
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{title}</div>
-          {code ? <div className="mt-0.5 font-mono text-[11px] text-slate-400">{code}</div> : null}
-        </div>
-        <StandingChip standing={standing} />
-      </div>
-      <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
-        {completedOn ? (
-          <span>
-            Completed <span className="font-medium text-slate-700">{formatDay(completedOn)}</span>
-          </span>
-        ) : null}
-        <span>
-          {expiresOn ? (
-            <>
-              Expires <span className="font-medium text-slate-700">{formatDay(expiresOn)}</span>
-            </>
-          ) : (
-            'Does not expire'
-          )}
-        </span>
-      </div>
-    </div>
-  )
-}
-
 export default async function VerifyPersonPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const result = await resolveToken(token)
@@ -223,21 +135,33 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
     )
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = todayIsoDate()
   const soonIso = isoDaysFromNow(EXPIRING_DAYS)
-  const credentials = result.credentials.map((c) => ({
-    ...c,
-    standing: standingFor(c.expiresOn, todayIso, soonIso),
-  }))
-  const skills = result.skills.map((s) => ({
-    ...s,
-    standing: standingFor(s.expiresOn, todayIso, soonIso),
-  }))
-  const current = credentials.filter((c) => c.standing !== 'expired')
-  const expired = credentials.filter((c) => c.standing === 'expired')
-  const validCount = [...credentials, ...skills].filter((c) => c.standing === 'valid').length
-  const expiringCount = [...credentials, ...skills].filter((c) => c.standing === 'expiring').length
-  const expiredCount = [...credentials, ...skills].filter((c) => c.standing === 'expired').length
+  const items: TranscriptItem[] = [
+    ...result.credentials.map((c) => ({
+      key: `t-${c.id}`,
+      kind: 'training' as const,
+      name: c.name,
+      code: c.code,
+      completedOn: c.completedOn,
+      expiresOn: c.expiresOn,
+      standing: standingFor(c.expiresOn, todayIso, soonIso),
+      href: `/verify/person/${token}/record/${c.id}`,
+    })),
+    ...result.skills.map((s) => ({
+      key: `s-${s.id}`,
+      kind: 'skill' as const,
+      name: s.name,
+      code: null,
+      completedOn: s.grantedOn,
+      expiresOn: s.expiresOn,
+      standing: standingFor(s.expiresOn, todayIso, soonIso),
+      href: `/verify/person/${token}/skill/${s.id}`,
+    })),
+  ]
+  const validCount = items.filter((i) => i.standing === 'valid').length
+  const expiringCount = items.filter((i) => i.standing === 'expiring').length
+  const expiredCount = items.filter((i) => i.standing === 'expired').length
 
   return (
     <main className="min-h-screen bg-slate-100 pb-10">
@@ -317,65 +241,7 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
           </div>
         </div>
 
-        {/* Current training */}
-        <section className="space-y-2">
-          <h2 className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-            Current training
-          </h2>
-          {current.length ? (
-            current.map((c, i) => (
-              <CredentialCard
-                key={`${c.name}-${i}`}
-                title={c.name}
-                code={c.code}
-                completedOn={c.completedOn}
-                expiresOn={c.expiresOn}
-                standing={c.standing}
-              />
-            ))
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
-              No current training on record.
-            </div>
-          )}
-        </section>
-
-        {/* Skills */}
-        {skills.length ? (
-          <section className="space-y-2">
-            <h2 className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-              Skills &amp; qualifications
-            </h2>
-            {skills.map((s, i) => (
-              <CredentialCard
-                key={`${s.name}-${i}`}
-                title={s.name}
-                completedOn={s.grantedOn}
-                expiresOn={s.expiresOn}
-                standing={s.standing}
-              />
-            ))}
-          </section>
-        ) : null}
-
-        {/* Expired */}
-        {expired.length ? (
-          <section className="space-y-2">
-            <h2 className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-              Expired
-            </h2>
-            {expired.map((c, i) => (
-              <CredentialCard
-                key={`${c.name}-${i}`}
-                title={c.name}
-                code={c.code}
-                completedOn={c.completedOn}
-                expiresOn={c.expiresOn}
-                standing={c.standing}
-              />
-            ))}
-          </section>
-        ) : null}
+        <TranscriptList items={items} />
 
         <p className="px-1 text-center text-[11px] leading-relaxed text-slate-400">
           This page shows the live training standing for the badge holder as recorded by{' '}
