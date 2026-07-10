@@ -58,6 +58,7 @@ import {
 import { loadFabric } from '@beaconhs/design-studio/fabric'
 import { Badge, Button, Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import {
   DEFAULT_CREDENTIAL_OUTPUT,
   DEFAULT_CREDENTIAL_OUTPUTS,
@@ -368,8 +369,14 @@ export function CredentialDesignStudio({
     openDesign(output.id)
   }
 
-  function removeActive() {
+  async function removeActive() {
     if (!activeOutput || outputs.length <= 1) return
+    const ok = await confirmDialog({
+      message: `Remove the "${activeOutput.name}" design? Records and courses using it fall back to the remaining designs once you save.`,
+      confirmLabel: 'Remove design',
+      tone: 'danger',
+    })
+    if (!ok) return
     setOutputs(outputs.filter((output) => output.id !== activeOutput.id))
     setActiveId(null) // back to the design list
   }
