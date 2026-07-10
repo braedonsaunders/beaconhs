@@ -6,6 +6,7 @@
 // wallet card for that credential.
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { ChevronRight, Search } from 'lucide-react'
 import { formatDay, type Standing } from './_format'
 
@@ -46,7 +47,7 @@ export function StandingChip({ standing }: { standing: Standing }) {
 
 function ItemCard({ item }: { item: TranscriptItem }) {
   return (
-    <a
+    <Link
       href={item.href}
       className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors active:bg-slate-50"
     >
@@ -78,7 +79,7 @@ function ItemCard({ item }: { item: TranscriptItem }) {
           )}
         </span>
       </div>
-    </a>
+    </Link>
   )
 }
 

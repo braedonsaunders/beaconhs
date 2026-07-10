@@ -3,6 +3,7 @@
 // plus the credential's facts. Server component; data comes from the
 // record/skill routes.
 
+import Link from 'next/link'
 import { ChevronLeft, ShieldCheck } from 'lucide-react'
 import QRCode from 'qrcode'
 import { CredentialFlipCard } from '@/components/credential-flip-card'
@@ -26,9 +27,9 @@ export function PublicCardNotFound({ backHref }: { backHref: string }) {
         <p className="mt-1 text-sm text-slate-600">
           This credential does not exist on the badge holder&apos;s record.
         </p>
-        <a href={backHref} className="mt-3 inline-block text-sm font-semibold text-teal-700">
+        <Link href={backHref} className="mt-3 inline-block text-sm font-semibold text-teal-700">
           Back to the live record
-        </a>
+        </Link>
       </div>
     </main>
   )
@@ -61,12 +62,12 @@ export function PublicCardPage({
     <main className="min-h-screen bg-slate-100 pb-10">
       <header className="bg-slate-900 px-4 pt-6 pb-12 text-white">
         <div className="mx-auto max-w-md">
-          <a
+          <Link
             href={backHref}
             className="inline-flex items-center gap-1 text-sm font-medium text-slate-300"
           >
             <ChevronLeft size={16} /> Live training record
-          </a>
+          </Link>
           <div className="mt-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-lg leading-snug font-bold">{credentialName}</h1>
@@ -106,13 +107,13 @@ export function PublicCardPage({
         </div>
 
         {verifyHref ? (
-          <a
+          <Link
             href={verifyHref}
             className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
           >
             <ShieldCheck size={16} />
             Verify this certificate
-          </a>
+          </Link>
         ) : null}
       </div>
     </main>
