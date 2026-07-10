@@ -65,7 +65,13 @@ export function workerEventCtx(tenantId: string, userId = 'system'): EventCtx {
 // --- App URL helper -------------------------------------------------------
 
 function appUrl(linkPath: string): string {
-  const base = process.env.APP_URL ?? ''
+  // Same resolution order as the apps/web + apps/worker app-base-url helpers.
+  const base = (
+    process.env.PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    ''
+  ).replace(/\/$/, '')
   return `${base}${linkPath}`
 }
 

@@ -23,7 +23,13 @@ function s(v: unknown): Scalar {
 }
 
 function baseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? '').replace(/\/$/, '')
+  // Same resolution order as apps/web + apps/worker app-base-url helpers.
+  return (
+    process.env.PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    ''
+  ).replace(/\/$/, '')
 }
 function link(path: string): string {
   const b = baseUrl()

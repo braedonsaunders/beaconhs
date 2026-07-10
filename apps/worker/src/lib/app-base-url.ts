@@ -1,9 +1,14 @@
 // Canonical web-app base URL for worker-generated links (emails, digests,
-// certificate verify QR codes, report links). One resolution order everywhere:
-// PUBLIC_APP_URL wins (external deployments that split the public hostname),
-// then APP_URL (the variable documented in .env.example), then the local dev
+// certificate verify QR codes, report links). One resolution order everywhere
+// (mirrors apps/web/src/lib/app-base-url.ts): PUBLIC_APP_URL wins (external
+// deployments that split the public hostname), then NEXT_PUBLIC_APP_URL, then
+// APP_URL (the variable documented in .env.example), then the local dev
 // default. Never returns a trailing slash.
 export function appBaseUrl(): string {
-  const raw = process.env.PUBLIC_APP_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
+  const raw =
+    process.env.PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    'http://localhost:3000'
   return raw.replace(/\/+$/, '')
 }

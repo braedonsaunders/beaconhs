@@ -19,6 +19,7 @@ import {
 } from '@beaconhs/forms-pdf'
 import { publicUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { appBaseUrl } from '@/lib/app-base-url'
 import {
   credentialOutputPdfFormat,
   resolveCourseCredentialOutput,
@@ -31,10 +32,6 @@ export type CredentialPdfFormat = 'cert' | 'wallet'
 export type RenderedCredentialPdf = {
   bytes: Buffer
   filename: string
-}
-
-function appBaseUrl(): string {
-  return process.env.PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 }
 
 async function makeVerifyQr(verifyUrl: string): Promise<string> {

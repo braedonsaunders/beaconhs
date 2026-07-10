@@ -4,6 +4,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { Button, DetailHeader } from '@beaconhs/ui'
 import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
@@ -37,8 +38,7 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
   })
   if (!row) notFound()
 
-  const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
-  const scanUrl = `${appUrl}/equipment/scan/${row.item.qrToken}`
+  const scanUrl = `${appBaseUrl()}/equipment/scan/${row.item.qrToken}`
   const svg = await QRCode.toString(scanUrl, {
     type: 'svg',
     margin: 1,

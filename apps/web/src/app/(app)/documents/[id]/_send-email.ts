@@ -9,6 +9,7 @@ import { attachments, documentVersions, documents, tenantUsers, users } from '@b
 import { publicUrl } from '@beaconhs/storage'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { recordAudit } from '@/lib/audit'
 
 export async function sendDocumentEmail(
@@ -47,7 +48,7 @@ export async function sendDocumentEmail(
   if (to.length === 0) return null
   const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
 
-  const appUrl = process.env.APP_URL ?? ''
+  const appUrl = appBaseUrl()
   const docUrl = `${appUrl}/documents/${documentId}`
   const attachmentUrl = data.publishedVersion?.attachment
     ? publicUrl(data.publishedVersion.attachment.r2Key)

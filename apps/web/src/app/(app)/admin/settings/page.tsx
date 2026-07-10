@@ -20,6 +20,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { levelLabel } from '@/lib/org-hierarchy'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { PageContainer } from '@/components/page-layout'
 
 export const metadata = { title: 'Tenant settings' }
@@ -134,7 +135,7 @@ export default async function AdminSettingsPage() {
 
   const enabled = new Set(tenant.enabledLanguages)
   const hierarchy = tenant.hierarchy
-  const kioskUrl = tenant.kioskPin ? `${process.env.APP_URL ?? ''}/kiosk?t=${tenant.slug}` : null
+  const kioskUrl = tenant.kioskPin ? `${appBaseUrl()}/kiosk?t=${tenant.slug}` : null
 
   return (
     <PageContainer>

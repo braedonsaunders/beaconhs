@@ -1,6 +1,7 @@
 import { asc, desc, eq, isNull } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { equipmentStationSettings, orgUnits, tenants } from '@beaconhs/db/schema'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
@@ -42,7 +43,7 @@ export default async function StationSettingsPage() {
     }
   })
 
-  const appUrl = process.env.APP_URL ?? ''
+  const appUrl = appBaseUrl()
   const stationPinConfigured = Boolean(settings?.stationPin)
   const kioskUrl = stationPinConfigured && slug ? `${appUrl}/equipment-kiosk?t=${slug}` : null
 

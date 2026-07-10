@@ -32,6 +32,7 @@ import {
   type CredentialDesignData,
 } from '@beaconhs/design-studio'
 import { requireRequestContext } from '@/lib/auth'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { ListPageLayout } from '@/components/page-layout'
 import { resolveCourseCredentialOutput, resolveCredentialOutput } from '@/lib/credential-designs'
@@ -40,10 +41,6 @@ import { WalletStack, type WalletCard, type WalletDesign } from './_wallet-stack
 
 export const metadata = { title: 'My wallet' }
 export const dynamic = 'force-dynamic'
-
-function appBaseUrl(): string {
-  return process.env.PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-}
 
 const EXPIRING_DAYS = 60
 

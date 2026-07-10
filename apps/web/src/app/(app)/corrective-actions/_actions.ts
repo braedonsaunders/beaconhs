@@ -25,6 +25,7 @@ import { emitCorrectiveActionAssigned, emitCorrectiveActionCompleted } from '@be
 import { emitCorrectiveActionClosed } from '@beaconhs/integrations'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { recordAudit } from '@/lib/audit'
 import { storeSignatureValue } from '@/lib/signature-storage'
 import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
@@ -458,7 +459,7 @@ export async function sendCorrectiveActionEmail(args: {
     }
   })
 
-  const appUrl = process.env.APP_URL ?? ''
+  const appUrl = appBaseUrl()
   const caUrl = `${appUrl}/corrective-actions/${args.caId}`
   const subject = `Corrective action ${ca.reference} · ${ca.title}`
   const message = args.message?.trim() || null

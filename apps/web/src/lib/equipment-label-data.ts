@@ -14,10 +14,10 @@ import {
 } from '@beaconhs/db/schema'
 import type { EquipmentLabelDesignData } from '@beaconhs/design-studio'
 import type { SQL } from 'drizzle-orm'
+import { appBaseUrl } from '@/lib/app-base-url'
 
 export function equipmentScanUrl(qrToken: string): string {
-  const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
-  return `${appUrl}/equipment/scan/${qrToken}`
+  return `${appBaseUrl()}/equipment/scan/${qrToken}`
 }
 
 export async function equipmentQrDataUrl(scanUrl: string): Promise<string> {

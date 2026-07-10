@@ -31,6 +31,7 @@ import {
   type PdfTemplateRenderConfig,
 } from '@/lib/pdf-templates'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
+import { appBaseUrl } from '@/lib/app-base-url'
 import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
 import type { FlowActorRef, FlowSubjectAdapter } from './types'
@@ -251,12 +252,7 @@ export async function executeFlowPlan(
 
   // Inline flow emails carry the tenant's name in the shell and a "View
   // record" button to the subject's page. Both resolved once per run.
-  const appBase = (
-    process.env.PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.APP_URL ??
-    'http://localhost:3000'
-  ).replace(/\/$/, '')
+  const appBase = appBaseUrl()
   let tenantNameCache: string | null | undefined
   const tenantName = async (): Promise<string | null> => {
     if (tenantNameCache !== undefined) return tenantNameCache
