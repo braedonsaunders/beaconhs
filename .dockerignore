@@ -17,6 +17,16 @@
 .DS_Store
 # Large local-only migration dumps (gitignored anyway, but be explicit).
 docs/migration/*.json
+# Private company migration tooling, backups, and operational notes are
+# intentionally available only in this working tree. Git ignores them, but
+# Docker build contexts do not inherit .gitignore and the builder copies the
+# entire context.
+packages/etl
+.local
+private
+# Local Dokploy helpers embed cluster credentials and must never enter an image
+# layer, cache, or remote BuildKit context.
+packages/db/src/scripts/dokploy-*.ts
 coverage
 playwright-report
 test-results
