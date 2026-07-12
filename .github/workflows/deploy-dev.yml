@@ -1,13 +1,20 @@
 name: Deploy (dev)
 
-# Builds the BeaconHS image on GitHub-hosted runners, then asks the
-# self-hosted Dokploy runner to migrate and redeploy the dev stack. All
-# deployment-specific values live in repository secrets.
+# Reusable deployment called only after the CI job for the same main-branch
+# commit succeeds. It builds the BeaconHS image on GitHub-hosted runners, then
+# asks the self-hosted Dokploy runner to migrate and redeploy the dev stack.
+# All deployment-specific values live in repository secrets.
 
 on:
-  push:
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Maintenance operation to run without deploying
+        required: true
+        type: choice
+        options:
+          - rotate-compose-refresh-token
 
 concurrency:
   group: deploy-dev
@@ -21,8 +28,58 @@ env:
   IMAGE_NAME: ghcr.io/braedonsaunders/beaconhs
 
 jobs:
+  rotate-compose-refresh-token:
+    name: Rotate Dokploy compose refresh token
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'rotate-compose-refresh-token'
+    runs-on: [self-hosted, dokploy]
+    timeout-minutes: 5
+    steps:
+      - name: Rotate and verify without logging either token
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          before="$(mktemp)"
+          after="$(mktemp)"
+          trap 'rm -f "$before" "$after"' EXIT
+          base="${DOKPLOY_URL%/}"
+
+          curl -sS --fail -G -o "$before" "$base/api/compose.one" \
+            -H "x-api-key: $DOKPLOY_TOKEN" \
+            --data-urlencode "composeId=$COMPOSE_ID"
+          old_token="$(jq -er '.refreshToken | select(type == "string" and length > 0)' "$before")"
+          echo "::add-mask::$old_token"
+
+          rotate_status="$(
+            jq -n --arg id "$COMPOSE_ID" '{composeId:$id}' \
+              | curl -sS -o /dev/null -w "%{http_code}" \
+                  -X POST "$base/api/compose.refreshToken" \
+                  -H "x-api-key: $DOKPLOY_TOKEN" \
+                  -H "content-type: application/json" --data @-
+          )" || { echo "::error::Dokploy compose.refreshToken request failed"; exit 1; }
+          if [ "$rotate_status" -lt 200 ] || [ "$rotate_status" -ge 300 ]; then
+            echo "::error::Dokploy compose.refreshToken returned HTTP ${rotate_status}"
+            exit 1
+          fi
+
+          curl -sS --fail -G -o "$after" "$base/api/compose.one" \
+            -H "x-api-key: $DOKPLOY_TOKEN" \
+            --data-urlencode "composeId=$COMPOSE_ID"
+          new_token="$(jq -er '.refreshToken | select(type == "string" and length > 0)' "$after")"
+          echo "::add-mask::$new_token"
+          if [ "$old_token" = "$new_token" ]; then
+            echo "::error::Dokploy returned the same compose refresh token"
+            exit 1
+          fi
+          echo "Dokploy compose refresh token rotated and verified"
+
   build:
+    if: github.event_name == 'workflow_call'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -47,13 +104,14 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, dokploy]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       # No version here — package.json's packageManager field pins pnpm, and
       # passing both errors with "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version: 24.18.0 }
       - run: pnpm install --frozen-lockfile
 
       - name: Migrate (schema + RLS + views)
@@ -91,20 +149,17 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          response="$(mktemp)"
           status="$(
             jq -n --arg id "$REGISTRY_ID" --arg u "$GHCR_USER" --arg p "$GHCR_TOKEN" \
               '{registryId:$id, registryName:"ghcr-beaconhs", username:$u, password:$p,
                 registryUrl:"ghcr.io", imagePrefix:"braedonsaunders", registryType:"cloud"}' \
-              | curl -sS -o "$response" -w "%{http_code}" -X POST "$DOKPLOY_URL/api/registry.update" \
+              | curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/registry.update" \
                   -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @- || true
           )"
           if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
             echo "GHCR credential refreshed"
           else
             echo "::warning::Dokploy registry.update returned HTTP ${status}; continuing because the image was pre-pulled on the deployment host."
-            head -c 500 "$response" || true
-            echo
           fi
 
       # The collabora service bind-mounts this file over its stock branding.js
@@ -182,13 +237,25 @@ jobs:
           VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
           VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
           VAPID_SUBJECT=${VAPID_SUBJECT}"
-          jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" --arg reg "$REGISTRY_ID" \
-            '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env, registryId:$reg}' \
-            | curl -sf -X POST "$DOKPLOY_URL/api/compose.update" \
-                -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-
-          curl -sf -X POST "$DOKPLOY_URL/api/compose.deploy" \
-            -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" \
-            -d "{\"composeId\":\"$COMPOSE_ID\"}"
+          update_status="$(
+            jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" --arg reg "$REGISTRY_ID" \
+              '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env, registryId:$reg}' \
+              | curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/compose.update" \
+                  -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-
+          )" || { echo "::error::Dokploy compose.update request failed"; exit 1; }
+          if [ "$update_status" -lt 200 ] || [ "$update_status" -ge 300 ]; then
+            echo "::error::Dokploy compose.update returned HTTP ${update_status}"
+            exit 1
+          fi
+          deploy_status="$(
+            curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/compose.deploy" \
+              -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" \
+              -d "{\"composeId\":\"$COMPOSE_ID\"}"
+          )" || { echo "::error::Dokploy compose.deploy request failed"; exit 1; }
+          if [ "$deploy_status" -lt 200 ] || [ "$deploy_status" -ge 300 ]; then
+            echo "::error::Dokploy compose.deploy returned HTTP ${deploy_status}"
+            exit 1
+          fi
           echo "Redeployed $IMAGE"
 
       # Same-origin Traefik routes for the Collabora editor: /browser, /cool
@@ -208,7 +275,8 @@ jobs:
           existing="$(curl -sS "$DOKPLOY_URL/api/domain.byComposeId?composeId=$COMPOSE_ID" \
             -H "x-api-key: $DOKPLOY_TOKEN")" || { echo "::warning::domain.byComposeId failed"; exit 0; }
           if ! echo "$existing" | jq -e 'type=="array"' >/dev/null 2>&1; then
-            echo "::warning::unexpected domain list shape: $(echo "$existing" | head -c 300)"; exit 0
+            response_type="$(echo "$existing" | jq -r 'type' 2>/dev/null || echo invalid-json)"
+            echo "::warning::unexpected domain list response type: ${response_type}"; exit 0
           fi
           webdom="$(echo "$existing" | jq -c --arg h "$host" '[.[] | select(.host==$h)][0] // empty')"
           https="$(echo "$webdom" | jq -r 'if .https == false then "false" else "true" end' 2>/dev/null || echo true)"
@@ -222,11 +290,11 @@ jobs:
                 --argjson https "$https" --arg cert "$cert" \
                 '{composeId:$cid, host:$h, path:$p, port:9980, https:$https,
                   certificateType:$cert, serviceName:"collabora", domainType:"compose"}' \
-              | curl -sS -o /tmp/dom.out -w "%{http_code}" -X POST "$DOKPLOY_URL/api/domain.create" \
+              | curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/domain.create" \
                   -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-)"
             if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
               echo "created route $path -> collabora:9980"
             else
-              echo "::warning::domain.create $path returned HTTP $status: $(head -c 300 /tmp/dom.out)"
+              echo "::warning::domain.create $path returned HTTP $status"
             fi
           done

@@ -53,3 +53,13 @@ jobs:
       - run: pnpm db:push:ci
       - run: pnpm test
       - run: pnpm build
+
+  deploy-dev:
+    name: Deploy tested commit to dev
+    if: github.event_name == 'push'
+    needs: ci
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy-dev.yml
+    secrets: inherit
