@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
 import { authenticateApiKey } from '@/lib/api/auth'
+import { readApiJsonBody } from '@/lib/api/body'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { getEntityRecord } from '@/lib/api/query'
 import { isRecordable, isUuid } from '@/lib/api/records'
@@ -17,6 +18,7 @@ import {
   patchEntity,
   patchPermissionForEntity,
 } from '@/lib/api/write'
+import { runIdempotentMutation } from '@/lib/api/idempotency'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -42,7 +44,10 @@ export async function GET(
 
     const record = await getEntityRecord(ctx, entity, id)
     if (!record) throw ApiError.notFound(`No ${entityKey} with id ${id}`)
-    return NextResponse.json({ entity: entityKey, data: record }, { headers: noStore() })
+    return NextResponse.json(
+      { entity: entityKey, data: record },
+      { headers: noStore(key.rateLimitHeaders) },
+    )
   } catch (err) {
     if (!(err instanceof ApiError)) console.error('[api/v1] unhandled error', err)
     return errorResponse(err)
@@ -54,7 +59,8 @@ export async function PATCH(
   { params }: { params: Promise<{ entity: string; id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { ctx, key } = await authenticateApiKey(req)
+    const auth = await authenticateApiKey(req)
+    const { ctx, key } = auth
     const { entity: entityKey, id } = await params
     const entity = REPORT_ENTITY_MAP[entityKey]
     if (!entity || !isRecordable(entityKey)) {
@@ -74,15 +80,18 @@ export async function PATCH(
       )
     }
 
-    let body: unknown
-    try {
-      body = await req.json()
-    } catch {
-      throw ApiError.invalid('Request body must be valid JSON')
-    }
-
-    const updated = await patchEntity(ctx, entityKey, id, body)
-    return NextResponse.json({ entity: entityKey, data: updated }, { headers: noStore() })
+    const body = await readApiJsonBody(req)
+    const result = await runIdempotentMutation(auth, req, body, async () => ({
+      body: { entity: entityKey, data: await patchEntity(ctx, entityKey, id, body) },
+      status: 200,
+    }))
+    return NextResponse.json(result.body, {
+      status: result.status,
+      headers: noStore({
+        ...key.rateLimitHeaders,
+        'Idempotency-Replayed': String(result.replayed),
+      }),
+    })
   } catch (err) {
     if (!(err instanceof ApiError)) console.error('[api/v1] unhandled error', err)
     return errorResponse(err)
@@ -94,7 +103,8 @@ export async function DELETE(
   { params }: { params: Promise<{ entity: string; id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { ctx, key } = await authenticateApiKey(req)
+    const auth = await authenticateApiKey(req)
+    const { ctx, key } = auth
     const { entity: entityKey, id } = await params
     const entity = REPORT_ENTITY_MAP[entityKey]
     if (!entity || !isRecordable(entityKey)) {
@@ -114,8 +124,17 @@ export async function DELETE(
       )
     }
 
-    const deleted = await deleteEntity(ctx, entityKey, id)
-    return NextResponse.json({ entity: entityKey, data: deleted }, { headers: noStore() })
+    const result = await runIdempotentMutation(auth, req, null, async () => ({
+      body: { entity: entityKey, data: await deleteEntity(ctx, entityKey, id) },
+      status: 200,
+    }))
+    return NextResponse.json(result.body, {
+      status: result.status,
+      headers: noStore({
+        ...key.rateLimitHeaders,
+        'Idempotency-Replayed': String(result.replayed),
+      }),
+    })
   } catch (err) {
     if (!(err instanceof ApiError)) console.error('[api/v1] unhandled error', err)
     return errorResponse(err)

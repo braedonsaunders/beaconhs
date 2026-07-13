@@ -4,8 +4,7 @@
 // the tenant's timezone; these helpers only translate friendly presets <-> cron
 // and validate the subset of cron syntax the worker's parser accepts.
 
-export const DEFAULT_SCAN_CRON = '0 6 * * *'
-export const DEFAULT_SCAN_TZ = 'UTC'
+const DEFAULT_SCAN_CRON = '0 6 * * *'
 
 export type SchedulePreset = 'hourly' | 'every_6h' | 'twice_daily' | 'daily' | 'weekly' | 'custom'
 

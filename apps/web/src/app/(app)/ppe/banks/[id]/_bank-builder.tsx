@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { Boxes, Camera, ListChecks, Plus, Save } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -52,14 +53,14 @@ const CATEGORIES = [
   { value: 'other', label: 'Other' },
 ]
 
-export type BuilderBank = {
+type BuilderBank = {
   id: string
   name: string
   description: string | null
   category: string | null
   isPublished: boolean
 }
-export type BuilderBankCriterion = {
+type BuilderBankCriterion = {
   id: string
   sequence: number
   question: string
@@ -81,13 +82,11 @@ export function PpeBankBuilder({
 }) {
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  const [criteria, setCriteria] = React.useState(initialCriteria)
+  const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
   const [published, setPublished] = React.useState(bank.isPublished)
   const [editor, setEditor] = React.useState<EditorState | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  React.useEffect(() => setCriteria(initialCriteria), [initialCriteria])
 
   const run = React.useCallback(
     (fn: () => Promise<unknown>) => {
@@ -300,19 +299,17 @@ function BankCriterionEditorDrawer({
     requiresPhoto: boolean
   }) => void
 }) {
-  const [question, setQuestion] = React.useState('')
-  const [description, setDescription] = React.useState('')
-  const [severity, setSeverity] = React.useState<Severity>('medium')
-  const [requiresPhoto, setRequiresPhoto] = React.useState(false)
-
-  React.useEffect(() => {
-    if (!editor) return
-    const c = editor.criterion
-    setQuestion(c?.question ?? '')
-    setDescription(c?.description ?? '')
-    setSeverity(c?.severity ?? 'medium')
-    setRequiresPhoto(c?.requiresPhoto ?? false)
-  }, [editor])
+  const criterion = editor?.criterion
+  const [question, setQuestion] = useReseededState(editor, criterion?.question ?? '')
+  const [description, setDescription] = useReseededState(editor, criterion?.description ?? '')
+  const [severity, setSeverity] = useReseededState<Severity>(
+    editor,
+    criterion?.severity ?? 'medium',
+  )
+  const [requiresPhoto, setRequiresPhoto] = useReseededState(
+    editor,
+    criterion?.requiresPhoto ?? false,
+  )
 
   return (
     <Drawer

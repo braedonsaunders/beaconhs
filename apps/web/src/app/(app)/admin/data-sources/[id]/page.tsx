@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -33,11 +33,19 @@ import type { FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { deriveColumnsFromSchema, slugify } from '../_shared'
 import { collectDataSourceUsage } from '../_usage'
 
 export const metadata = { title: 'Data source' }
 export const dynamic = 'force-dynamic'
+
+const ROW_SORTS = ['position', 'created'] as const
+const USAGE_SORTS = ['app', 'fields'] as const
 
 async function guard() {
   const ctx = await requireRequestContext()
@@ -311,21 +319,53 @@ export default async function DataSourceDetailPage({
 }) {
   const { id } = await params
   const sp = await searchParams
-  const editingRow = typeof sp.editRow === 'string' ? sp.editRow : undefined
+  const editingRow = pickString(sp.editRow)
+  const rowParams = parseListParams(
+    { q: sp.rowQ, sort: sp.rowSort, dir: sp.rowDir, page: sp.rowPage, perPage: sp.rowPerPage },
+    { sort: 'position', dir: 'asc', perPage: 25, allowedSorts: ROW_SORTS },
+  )
+  const usageParams = parseListParams(
+    {
+      q: sp.usageQ,
+      sort: sp.usageSort,
+      dir: sp.usageDir,
+      page: sp.usagePage,
+      perPage: sp.usagePerPage,
+    },
+    { sort: 'app', dir: 'asc', perPage: 10, allowedSorts: USAGE_SORTS },
+  )
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
   const data = await ctx.db(async (tx) => {
     const [src] = await tx.select().from(dataSources).where(eq(dataSources.id, id)).limit(1)
     if (!src || src.deletedAt) return null
-    const rows =
+    const rowSearch: SQL<unknown> | undefined = rowParams.q
+      ? sql`${dataSourceRows.data}::text ilike ${`%${rowParams.q}%`}`
+      : undefined
+    const rowWhere = and(
+      eq(dataSourceRows.dataSourceId, id),
+      isNull(dataSourceRows.deletedAt),
+      rowSearch,
+    )
+    const rowDirFn = rowParams.dir === 'asc' ? asc : desc
+    const rowOrderBy =
+      rowParams.sort === 'created'
+        ? [rowDirFn(dataSourceRows.createdAt)]
+        : [rowDirFn(dataSourceRows.position), asc(dataSourceRows.createdAt)]
+    const [rows, rowTotalRow] =
       src.kind === 'reference'
-        ? await tx
-            .select({ id: dataSourceRows.id, data: dataSourceRows.data })
-            .from(dataSourceRows)
-            .where(and(eq(dataSourceRows.dataSourceId, id), isNull(dataSourceRows.deletedAt)))
-            .orderBy(asc(dataSourceRows.position))
-        : []
+        ? await Promise.all([
+            tx
+              .select({ id: dataSourceRows.id, data: dataSourceRows.data })
+              .from(dataSourceRows)
+              .where(rowWhere)
+              .orderBy(...rowOrderBy)
+              .limit(rowParams.perPage)
+              .offset((rowParams.page - 1) * rowParams.perPage),
+            tx.select({ c: count() }).from(dataSourceRows).where(rowWhere),
+          ])
+        : [[], []]
     let templateName: string | null = null
     if (src.kind === 'responses' && src.config?.templateId) {
       const [t] = await tx
@@ -346,12 +386,42 @@ export default async function DataSourceDetailPage({
       .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
       .where(isNull(formTemplates.deletedAt))
       .orderBy(asc(formTemplates.name), desc(formTemplateVersions.version))
-    const usage = collectDataSourceUsage(versionRows).get(src.key) ?? []
-    return { src, rows, templateName, usage }
+    const allUsage = collectDataSourceUsage(versionRows).get(src.key) ?? []
+    const matchingUsage = allUsage.filter((entry) => {
+      if (!usageParams.q) return true
+      const query = usageParams.q.toLowerCase()
+      return [entry.templateName, ...entry.fields.map((field) => field.fieldLabel)]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    })
+    const usageDir = usageParams.dir === 'asc' ? 1 : -1
+    matchingUsage.sort((a, b) => {
+      if (usageParams.sort === 'fields') {
+        return (
+          (a.fields.length - b.fields.length || a.templateName.localeCompare(b.templateName)) *
+          usageDir
+        )
+      }
+      return a.templateName.localeCompare(b.templateName) * usageDir
+    })
+    const usage = matchingUsage.slice(
+      (usageParams.page - 1) * usageParams.perPage,
+      usageParams.page * usageParams.perPage,
+    )
+    return {
+      src,
+      rows,
+      rowTotal: Number(rowTotalRow[0]?.c ?? 0),
+      templateName,
+      usage,
+      usageTotal: matchingUsage.length,
+      usageAllTotal: allUsage.length,
+    }
   })
 
   if (!data) notFound()
-  const { src, rows, templateName, usage } = data
+  const { src, rows, rowTotal, templateName, usage, usageTotal, usageAllTotal } = data
   const cols = (src.columns as DataSourceColumn[]) ?? []
   const isReference = src.kind === 'reference'
 
@@ -399,7 +469,7 @@ export default async function DataSourceDetailPage({
               <Card>
                 <CardHeader className="flex-row items-center justify-between">
                   <CardTitle>Rows</CardTitle>
-                  <span className="text-xs text-slate-400">{rows.length} total</span>
+                  <span className="text-xs text-slate-400">{rowTotal} total</span>
                 </CardHeader>
                 <CardContent>
                   {cols.length === 0 ? (
@@ -436,11 +506,36 @@ export default async function DataSourceDetailPage({
                         </Button>
                       </form>
 
+                      <TableToolbar>
+                        <SearchInput
+                          placeholder="Search row values…"
+                          paramKey="rowQ"
+                          pageParamKey="rowPage"
+                        />
+                        <FilterChips
+                          basePath={`/admin/data-sources/${src.id}`}
+                          currentParams={sp}
+                          paramKey="rowSort"
+                          pageParamKey="rowPage"
+                          label="Sort"
+                          defaultValue="position"
+                          hideAll
+                          options={[
+                            { value: 'position', label: 'Manual order' },
+                            { value: 'created', label: 'Created date' },
+                          ]}
+                        />
+                      </TableToolbar>
+
                       {rows.length === 0 ? (
                         <EmptyState
                           icon={<Plus size={28} />}
-                          title="No rows"
-                          description="Use the form above to add a row."
+                          title={rowParams.q ? 'No matching rows' : 'No rows'}
+                          description={
+                            rowParams.q
+                              ? 'Adjust the row search.'
+                              : 'Use the form above to add a row.'
+                          }
                         />
                       ) : (
                         <div className="overflow-x-auto">
@@ -500,7 +595,9 @@ export default async function DataSourceDetailPage({
                                             Save
                                           </Button>
                                           <Link
-                                            href={`/admin/data-sources/${src.id}`}
+                                            href={mergeHref(`/admin/data-sources/${src.id}`, sp, {
+                                              editRow: undefined,
+                                            })}
                                             className="px-1 text-sm text-slate-500 hover:underline dark:text-slate-400"
                                           >
                                             Cancel
@@ -531,7 +628,9 @@ export default async function DataSourceDetailPage({
                                     ))}
                                     <td className="px-2 py-1.5 text-right whitespace-nowrap">
                                       <Link
-                                        href={`/admin/data-sources/${src.id}?editRow=${r.id}`}
+                                        href={mergeHref(`/admin/data-sources/${src.id}`, sp, {
+                                          editRow: r.id,
+                                        })}
                                         className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                                       >
                                         Edit
@@ -555,6 +654,14 @@ export default async function DataSourceDetailPage({
                           </table>
                         </div>
                       )}
+                      <Pagination
+                        basePath={`/admin/data-sources/${src.id}`}
+                        currentParams={sp}
+                        total={rowTotal}
+                        page={rowParams.page}
+                        perPage={rowParams.perPage}
+                        pageParamKey="rowPage"
+                      />
                     </div>
                   )}
                 </CardContent>
@@ -586,13 +693,34 @@ export default async function DataSourceDetailPage({
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Builder references</CardTitle>
+                <CardTitle>Builder references ({usageAllTotal})</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
+                <TableToolbar>
+                  <SearchInput
+                    placeholder="Search app or field…"
+                    paramKey="usageQ"
+                    pageParamKey="usagePage"
+                  />
+                  <FilterChips
+                    basePath={`/admin/data-sources/${src.id}`}
+                    currentParams={sp}
+                    paramKey="usageSort"
+                    pageParamKey="usagePage"
+                    label="Sort"
+                    defaultValue="app"
+                    hideAll
+                    options={[
+                      { value: 'app', label: 'App name' },
+                      { value: 'fields', label: 'Field count' },
+                    ]}
+                  />
+                </TableToolbar>
                 {usage.length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    No Builder apps reference this source yet. Add a Lookup, Data table or KPI /
-                    chart element in the Builder and bind it to this key.
+                    {usageAllTotal === 0
+                      ? 'No Builder apps reference this source yet. Add a Lookup, Data table or KPI / chart element in the Builder and bind it to this key.'
+                      : 'No Builder references match the search.'}
                   </p>
                 ) : (
                   <ul className="space-y-2">
@@ -618,6 +746,14 @@ export default async function DataSourceDetailPage({
                     ))}
                   </ul>
                 )}
+                <Pagination
+                  basePath={`/admin/data-sources/${src.id}`}
+                  currentParams={sp}
+                  total={usageTotal}
+                  page={usageParams.page}
+                  perPage={usageParams.perPage}
+                  pageParamKey="usagePage"
+                />
               </CardContent>
             </Card>
 

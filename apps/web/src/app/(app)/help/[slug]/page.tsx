@@ -25,6 +25,7 @@ const ARTICLE_TOURS: Record<string, string> = {
   'vehicle-log': 'vehicle-log',
   ppe: 'ppe-inspection',
   training: 'my-training',
+  'user-access': 'manage-user-access',
 }
 
 export default async function HelpArticlePage({ params }: { params: Promise<{ slug: string }> }) {

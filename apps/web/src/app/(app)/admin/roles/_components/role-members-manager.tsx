@@ -13,7 +13,7 @@
 
 import { useMemo, useState, type FormEvent } from 'react'
 import { Plus, UserPlus, X } from 'lucide-react'
-import { Badge, Button, Label, SearchSelect, cn } from '@beaconhs/ui'
+import { Badge, Button, Label, SearchSelect } from '@beaconhs/ui'
 import type { RoleScope } from '@beaconhs/db/schema'
 import { ScopePicker } from '../../users/_components/scope-picker'
 import type { ScopeOptions } from '../../users/_scope-data'

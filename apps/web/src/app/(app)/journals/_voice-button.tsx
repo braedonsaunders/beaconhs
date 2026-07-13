@@ -3,7 +3,7 @@
 // Voice dictation via the browser SpeechRecognition API (no data leaves the
 // device). Renders nothing on unsupported browsers.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Mic, Square } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 
@@ -33,6 +33,8 @@ function getSR(): (new () => SR) | null {
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as (new () => SR) | null
 }
 
+const subscribe = () => () => undefined
+
 export function VoiceButton({
   onText,
   disabled,
@@ -43,11 +45,14 @@ export function VoiceButton({
   className?: string
 }) {
   const [listening, setListening] = useState(false)
-  const [supported, setSupported] = useState(false)
+  const supported = useSyncExternalStore(
+    subscribe,
+    () => getSR() !== null,
+    () => false,
+  )
   const recRef = useRef<SR | null>(null)
 
   useEffect(() => {
-    setSupported(getSR() !== null)
     return () => {
       try {
         recRef.current?.stop()

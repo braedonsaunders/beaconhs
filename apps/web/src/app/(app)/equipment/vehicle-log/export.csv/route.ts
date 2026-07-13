@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { asc, eq, sql } from 'drizzle-orm'
 import { extractRows } from '@beaconhs/reports'
-import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -35,11 +35,12 @@ export async function GET(req: NextRequest) {
         id: equipmentItems.id,
         assetTag: equipmentItems.assetTag,
         name: equipmentItems.name,
-        category: equipmentTypes.category,
+        category: equipmentCategories.name,
         typeName: equipmentTypes.name,
       })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
       .orderBy(asc(equipmentItems.assetTag))
       .limit(1000)
     const result = await tx.execute(sql`

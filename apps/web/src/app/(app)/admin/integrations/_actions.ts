@@ -21,6 +21,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { getDestination } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
+import { isUuid } from '@/lib/list-params'
 
 const PERM = 'admin.integrations.manage'
 const noop = () => {}
@@ -34,6 +35,7 @@ async function guard() {
 }
 
 async function loadConn(ctx: RequestContext, id: string) {
+  if (!isUuid(id)) return null
   return ctx.db(async (tx) => {
     const [c] = await tx
       .select()
@@ -89,7 +91,6 @@ export async function createConnection(formData: FormData): Promise<void> {
         .values({
           tenantId: ctx.tenantId,
           destinationKey,
-          integrationKey: null,
           enabled: false,
           config: {},
           secrets: {},
@@ -152,13 +153,15 @@ export async function deleteConnection(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await ctx.db((tx) =>
+  if (!isUuid(id)) return
+  const [deleted] = await ctx.db((tx) =>
     tx
       .update(syncConnections)
       .set({ deletedAt: new Date(), enabled: false })
-      .where(eq(syncConnections.id, id)),
+      .where(and(eq(syncConnections.id, id), isNull(syncConnections.deletedAt)))
+      .returning({ id: syncConnections.id }),
   )
+  if (!deleted) return
   await recordAudit(ctx, {
     entityType: 'sync_connection',
     entityId: id,
@@ -172,9 +175,18 @@ export async function renameConnection(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!id || !name) return
-  await ctx.db((tx) => tx.update(syncConnections).set({ name }).where(eq(syncConnections.id, id)))
+  const name = String(formData.get('name') ?? '')
+    .trim()
+    .slice(0, 200)
+  if (!isUuid(id) || !name) return
+  const [renamed] = await ctx.db((tx) =>
+    tx
+      .update(syncConnections)
+      .set({ name })
+      .where(and(eq(syncConnections.id, id), isNull(syncConnections.deletedAt)))
+      .returning({ id: syncConnections.id }),
+  )
+  if (!renamed) return
   await recordAudit(ctx, {
     entityType: 'sync_connection',
     entityId: id,
@@ -236,15 +248,20 @@ export async function saveSchedule(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
-  if (!id) return
+  if (!isUuid(id)) return
   const scheduleRaw = String(formData.get('schedule') ?? '').trim()
   if (scheduleRaw !== '' && scheduleRaw !== 'manual' && !SCHEDULE_PRESETS.has(scheduleRaw)) return
   const schedule = scheduleRaw === '' || scheduleRaw === 'manual' ? null : scheduleRaw
   const enabled =
     (formData.get('enabled') === 'on' || formData.get('enabled') === 'true') && !!schedule
-  await ctx.db((tx) =>
-    tx.update(syncConnections).set({ schedule, enabled }).where(eq(syncConnections.id, id)),
+  const [updated] = await ctx.db((tx) =>
+    tx
+      .update(syncConnections)
+      .set({ schedule, enabled })
+      .where(and(eq(syncConnections.id, id), isNull(syncConnections.deletedAt)))
+      .returning({ id: syncConnections.id }),
   )
+  if (!updated) return
   await recordAudit(ctx, {
     entityType: 'sync_connection',
     entityId: id,
@@ -321,8 +338,8 @@ export async function runNow(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   const conn = await loadConn(ctx, id)
   if (!conn) return
-  const { scheduledQueue } = await import('@beaconhs/jobs')
-  await scheduledQueue.add('sync_run', {
+  const { enqueueScheduled } = await import('@beaconhs/jobs')
+  await enqueueScheduled('sync_run', {
     kind: 'sync_run',
     tenantId: ctx.tenantId,
     connectionId: id,

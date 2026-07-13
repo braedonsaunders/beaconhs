@@ -3,9 +3,9 @@
 // by tenant slug in ?t=<slug> + the tenant's equipment-station PIN (verified
 // server-side on every action). Mirrors the people sign-in/out kiosk at /kiosk.
 
-import { sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { db, type Database } from '@beaconhs/db'
 import { EquipmentKioskClient } from './kiosk-client'
+import { resolveActiveTenant } from '@/lib/active-tenant'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Equipment kiosk · check in/out' }
@@ -41,22 +41,16 @@ export default async function EquipmentKioskPage({
     )
   }
 
-  const data = await db.transaction(async (tx) => {
-    const tenantRows = await tx.execute(
-      sql`SELECT id, name, slug FROM tenants WHERE slug = ${slug} LIMIT 1`,
-    )
-    const tenant = (tenantRows as unknown as { id: string; name: string; slug: string }[])[0]
-    if (!tenant) return null
-    return { tenant }
-  })
+  const tenant = await db.transaction((tx) =>
+    resolveActiveTenant(tx as unknown as Database, { slug }),
+  )
 
-  if (!data) {
+  if (!tenant) {
     return (
-      <Notice title="Tenant not found">
-        No tenant matches slug{' '}
-        <code className="rounded bg-slate-950 px-1.5 py-0.5 font-mono text-amber-400">{slug}</code>.
+      <Notice title="Kiosk unavailable">
+        This workspace is unavailable. Ask your administrator to check its status.
       </Notice>
     )
   }
-  return <EquipmentKioskClient tenantId={data.tenant.id} tenantName={data.tenant.name} />
+  return <EquipmentKioskClient tenantId={tenant.id} tenantName={tenant.name} />
 }

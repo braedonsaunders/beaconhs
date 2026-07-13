@@ -8,6 +8,8 @@ import { eq } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import { attachments } from '@beaconhs/db/schema'
 import { verifyWopiToken } from '@/lib/wopi'
+import { wopiGrantCanAccessFile, wopiPrincipalIsAuthorized } from '@/lib/wopi-access'
+import { tenantIsActive } from '@/lib/active-tenant'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +18,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
   const token = req.nextUrl.searchParams.get('access_token') ?? ''
   const grant = verifyWopiToken(token, fileId)
   if (!grant) return new NextResponse('Invalid or expired WOPI token', { status: 401 })
+  if (!(await tenantIsActive(grant.tenantId))) {
+    return new NextResponse('Workspace unavailable', { status: 403 })
+  }
+  if (!(await wopiPrincipalIsAuthorized(grant))) {
+    return new NextResponse('WOPI access has been revoked', { status: 403 })
+  }
 
   const att = await withTenant(db, grant.tenantId, async (tx) => {
+    if (!(await wopiGrantCanAccessFile(tx, grant))) return null
     const [row] = await tx
       .select({
         filename: attachments.filename,

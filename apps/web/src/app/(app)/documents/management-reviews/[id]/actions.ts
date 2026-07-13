@@ -5,9 +5,9 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { documentManagementReviews } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 /**
  * Instant-create a management review and land in its detail editor (the single
@@ -33,6 +33,12 @@ export async function createManagementReview(formData: FormData): Promise<void> 
       })
       .returning({ id: documentManagementReviews.id })
     if (!row) throw new Error('Failed to create management review')
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: row.id,
+      moduleKey: 'documents',
+      event: 'on_create',
+      occurrenceKey: row.id,
+    })
     return row.id
   })
   await recordAudit(ctx, {
@@ -42,7 +48,6 @@ export async function createManagementReview(formData: FormData): Promise<void> 
     summary: `Recorded management review "${title}"`,
     after: { title, periodEnd },
   })
-  await runModuleFlows(ctx, { moduleKey: 'documents', event: 'on_create', subjectId: id })
   revalidatePath('/documents/management-reviews')
   redirect(`/documents/management-reviews/${id}`)
 }
@@ -123,7 +128,7 @@ export async function updateActionItems(id: string, caIds: string[]): Promise<vo
   revalidatePath(`/documents/management-reviews/${id}`)
 }
 
-export async function deleteManagementReview(id: string): Promise<void> {
+async function deleteManagementReview(id: string): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   const deletedAt = new Date()

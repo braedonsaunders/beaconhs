@@ -26,6 +26,7 @@ import {
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -62,7 +63,7 @@ function severityVariant(s: Severity): 'destructive' | 'warning' | 'secondary' {
   return s === 'critical' || s === 'high' ? 'destructive' : s === 'medium' ? 'warning' : 'secondary'
 }
 
-export type BuilderType = {
+type BuilderType = {
   id: string
   name: string
   category: string | null
@@ -71,8 +72,8 @@ export type BuilderType = {
   requiresCertificate: boolean
   sizingScheme: string[] | null
 }
-export type BuilderGroup = { id: string; label: string; sequence: number; inspectionKind: Kind }
-export type BuilderCriterion = {
+type BuilderGroup = { id: string; label: string; sequence: number; inspectionKind: Kind }
+type BuilderCriterion = {
   id: string
   groupId: string | null
   sequence: number
@@ -82,7 +83,7 @@ export type BuilderCriterion = {
   requiresPhoto: boolean
   inspectionKind: Kind
 }
-export type BuilderBank = {
+type BuilderBank = {
   id: string
   name: string
   category: string | null
@@ -108,16 +109,13 @@ export function PpeTypeBuilder({
 }) {
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  const [groups, setGroups] = React.useState(initialGroups)
-  const [criteria, setCriteria] = React.useState(initialCriteria)
+  const [groups, setGroups] = useReseededState(initialGroups, initialGroups)
+  const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [kind, setKind] = React.useState<Kind>('pre_use')
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
   const [editor, setEditor] = React.useState<EditorState | null>(null)
   const [importing, setImporting] = React.useState(false)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  React.useEffect(() => setGroups(initialGroups), [initialGroups])
-  React.useEffect(() => setCriteria(initialCriteria), [initialCriteria])
 
   const run = React.useCallback(
     (fn: () => Promise<unknown>, errMsg = 'Something went wrong') => {
@@ -640,21 +638,21 @@ function CriterionEditorDrawer({
     groupId: string | null
   }) => void
 }) {
-  const [question, setQuestion] = React.useState('')
-  const [description, setDescription] = React.useState('')
-  const [severity, setSeverity] = React.useState<Severity>('medium')
-  const [requiresPhoto, setRequiresPhoto] = React.useState(false)
-  const [groupId, setGroupId] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (!editor) return
-    const c = editor.criterion
-    setQuestion(c?.question ?? '')
-    setDescription(c?.description ?? '')
-    setSeverity(c?.severity ?? 'medium')
-    setRequiresPhoto(c?.requiresPhoto ?? false)
-    setGroupId(editor.groupId ?? c?.groupId ?? null)
-  }, [editor])
+  const criterion = editor?.criterion
+  const [question, setQuestion] = useReseededState(editor, criterion?.question ?? '')
+  const [description, setDescription] = useReseededState(editor, criterion?.description ?? '')
+  const [severity, setSeverity] = useReseededState<Severity>(
+    editor,
+    criterion?.severity ?? 'medium',
+  )
+  const [requiresPhoto, setRequiresPhoto] = useReseededState(
+    editor,
+    criterion?.requiresPhoto ?? false,
+  )
+  const [groupId, setGroupId] = useReseededState<string | null>(
+    editor,
+    editor?.groupId ?? criterion?.groupId ?? null,
+  )
 
   return (
     <Drawer

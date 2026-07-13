@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { scheduledQueue } from '@beaconhs/jobs'
+import { enqueueScheduled } from '@beaconhs/jobs'
 import { MAINTENANCE_TABLES, type DbTableSetting } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -53,7 +53,7 @@ export async function savePlatformDatabase(formData: FormData) {
 export async function runMaintenanceNow(): Promise<{ ok: boolean; message: string }> {
   const ctx = await requireRequestContext()
   gatePlatform(ctx)
-  await scheduledQueue.add(
+  await enqueueScheduled(
     'manual:db_maintenance',
     { kind: 'db_maintenance', trigger: 'manual' },
     { jobId: `manual:db_maintenance:${Date.now()}` },

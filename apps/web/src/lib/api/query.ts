@@ -1,18 +1,18 @@
 // Read one exposed entity as clean JSON rows. Safety comes entirely from the
 // reports registry: table + column identifiers are resolved through the entity
 // whitelist (never interpolated from input) and filter values bind as
-// parameters via @beaconhs/reports' compileFlatFilters. The caller's ctx.db is
+// parameters via @beaconhs/reports' canonical rule-tree compiler. The caller's ctx.db is
 // already RLS-bound to the key's tenant.
 
 import { getTableColumns, getTableName, is, sql, type SQL } from 'drizzle-orm'
 import { PgTable } from 'drizzle-orm/pg-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import * as dbSchema from '@beaconhs/db/schema'
-import type { ReportCustomFilter, ReportFilterOperator } from '@beaconhs/db/schema'
+import type { ReportFilterOperator, ReportRule } from '@beaconhs/db/schema'
 import {
   augmentReportEntityWithCustomFields,
   columnRef,
-  compileFlatFilters,
+  compileRuleGroup,
   entityColumnSql,
   extractRows,
   type ReportColumnKind,
@@ -38,7 +38,7 @@ const SUFFIX_OPS: Record<string, ReportFilterOperator> = {
   is_not_null: 'is_not_null',
 }
 
-export type EntityPage = {
+type EntityPage = {
   data: Record<string, unknown>[]
   pagination: { limit: number; offset: number; total: number; hasMore: boolean }
 }
@@ -60,8 +60,10 @@ function parseFilterParam(name: string): { column: string; op: ReportFilterOpera
 
 /** Build the validated filter list from query params, skipping anything that
  *  doesn't resolve to a whitelisted column or a known operator. */
-function buildFilters(entity: ReportEntity, params: URLSearchParams): ReportCustomFilter[] {
-  const filters: ReportCustomFilter[] = []
+type ApiFilter = { column: string; op: ReportFilterOperator; value?: ReportRule['value'] }
+
+function buildFilters(entity: ReportEntity, params: URLSearchParams): ApiFilter[] {
+  const filters: ApiFilter[] = []
   for (const [name, value] of params.entries()) {
     if (CONTROL_PARAMS.has(name)) continue
     const parsed = parseFilterParam(name)
@@ -142,6 +144,12 @@ export async function readEntityRows(
   const offset = clampInt(params.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER)
   const fields = resolveFields(entity, params)
   const filters = buildFilters(entity, params)
+  const filterSql = filters.length
+    ? compileRuleGroup(entity, {
+        combinator: 'and',
+        rules: filters.map(({ column, ...filter }) => ({ field: column, ...filter })),
+      })
+    : null
   // Recordable entities (physical tables) always return their own `id` first.
   const idCol = recordIdColumn(entity)
 
@@ -156,10 +164,8 @@ export async function readEntityRows(
     orderReq === 'asc' || orderReq === 'desc' ? orderReq : (entity.defaultSort?.direction ?? 'desc')
 
   // Soft-deleted rows are never exposed through the public API; the filters
-  // from compileFlatFilters are AND-joined so composing here is safe.
-  const conditions = [notDeletedSql(entity), compileFlatFilters(entity, filters)].filter(
-    (c): c is SQL => c !== null,
-  )
+  // from compileRuleGroup are AND-joined so composing here is safe.
+  const conditions = [notDeletedSql(entity), filterSql].filter((c): c is SQL => c !== null)
   const whereSql = conditions.length
     ? sql.join([sql.raw('WHERE'), sql.join(conditions, sql.raw(' AND '))], sql.raw(' '))
     : sql.raw('')

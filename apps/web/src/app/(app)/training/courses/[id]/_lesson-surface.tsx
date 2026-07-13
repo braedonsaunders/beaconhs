@@ -27,7 +27,6 @@ import { confirmDialog } from '@/lib/confirm'
 import { RichEditor } from '../../_editor/rich-editor'
 import { LessonRibbon } from '../../_editor/ribbon'
 import { lessonProseCss } from '../../_editor/prose'
-import { blocksToHtml } from '../../_editor/legacy'
 import { SlideDeckEditor } from '../../_editor/slide-deck-editor'
 import type { CompletionRule, LessonKind, LessonLite } from './_workspace'
 import { deleteLesson, importLessonPptx, saveLessonRich, updateLesson } from './studio/_actions'
@@ -112,19 +111,33 @@ export function LessonSurface({
     duration,
     criteria,
   })
-  metaRef.current = {
-    title,
-    kind,
-    rule,
-    required,
+  useEffect(() => {
+    metaRef.current = {
+      title,
+      kind,
+      rule,
+      required,
+      assessmentTypeId,
+      classId,
+      attachmentId,
+      embedUrl,
+      contentItemId,
+      duration,
+      criteria,
+    }
+  }, [
     assessmentTypeId,
-    classId,
     attachmentId,
-    embedUrl,
+    classId,
     contentItemId,
-    duration,
     criteria,
-  }
+    duration,
+    embedUrl,
+    kind,
+    required,
+    rule,
+    title,
+  ])
 
   const saveMetaNow = useCallback(async () => {
     const m = metaRef.current
@@ -368,7 +381,7 @@ export function LessonSurface({
             <div className="lesson-prose min-h-[60vh] w-full rounded-lg border border-slate-200 bg-white px-12 py-10 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <RichEditor
                 initialJson={lesson.contentJson ?? undefined}
-                initialHtml={lesson.contentHtml ?? blocksToHtml(lesson.contentBlocks)}
+                initialHtml={lesson.contentHtml}
                 placeholder="Write your lesson — type, paste, format with the ribbon above…"
                 onChange={({ json, html }) => saveRich(json, html)}
                 onFocusEditor={setActiveEditor}
@@ -457,7 +470,7 @@ export function LessonSurface({
             <div className="lesson-prose min-h-[40vh] w-full rounded-lg border border-slate-200 bg-white px-12 py-10 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <RichEditor
                 initialJson={lesson.contentJson ?? undefined}
-                initialHtml={lesson.contentHtml ?? blocksToHtml(lesson.contentBlocks)}
+                initialHtml={lesson.contentHtml}
                 placeholder="Instructions for the learner — what to prepare, where, with what equipment…"
                 onChange={({ json, html }) => saveRich(json, html)}
                 onFocusEditor={setActiveEditor}

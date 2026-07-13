@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { Download, Pencil } from 'lucide-react'
 import { Button, PageHeader, cn } from '@beaconhs/ui'
-import { runBhql } from '@beaconhs/analytics/server'
 import type { BhqlResult } from '@beaconhs/analytics'
+import { runAuthorizedBhql } from '@/lib/analytics-access'
 import { requireRequestContext } from '@/lib/auth'
 import { canPublishInsights, canViewInsights } from '../../_access'
 import { loadInsightRoleOptions } from '../../_visibility'
@@ -11,6 +11,7 @@ import { loadCard } from '../_data'
 import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { AiCardView } from '../../_viz/ai-card-view.client'
 import { CardToolbar } from '../_studio/card-toolbar.client'
+import { isTrustedSystemCard } from '../../_system-cards'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,10 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   let error: string | null = null
   if (!isAi) {
     try {
-      result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 50_000 }))
+      result = await runAuthorizedBhql(ctx, card.query, {
+        maxRows: 50_000,
+        trustedSystemCard: isTrustedSystemCard(card),
+      })
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not run this card.'
     }

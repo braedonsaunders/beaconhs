@@ -7,7 +7,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 import { departments, notificationGroups, people, roles } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
-export type RecipientOptionsData = {
+type RecipientOptionsData = {
   people: { id: string; name: string }[]
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]

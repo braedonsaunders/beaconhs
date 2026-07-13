@@ -15,8 +15,17 @@
 import { NextResponse } from 'next/server'
 import { getRequestContext } from '@/lib/auth'
 import { persistDraft, type SaveDraftInput } from '@/app/(app)/apps/templates/[id]/fill/actions'
+import {
+  readBoundedJsonBody,
+  RequestBodyLengthError,
+  RequestBodyParseError,
+  RequestBodyTimeoutError,
+  RequestBodyTooLargeError,
+} from '@/lib/request-body'
 
 export const dynamic = 'force-dynamic'
+const MAX_DRAFT_BYTES = 1024 * 1024
+const MAX_DRAFT_READ_MS = 15_000
 
 export async function POST(req: Request): Promise<NextResponse> {
   const ctx = await getRequestContext()
@@ -29,8 +38,21 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   let body: unknown
   try {
-    body = await req.json()
-  } catch {
+    body = await readBoundedJsonBody(req, {
+      maxBytes: MAX_DRAFT_BYTES,
+      timeoutMs: MAX_DRAFT_READ_MS,
+    })
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ ok: false, error: 'draft payload too large' }, { status: 413 })
+    }
+    if (error instanceof RequestBodyTimeoutError) {
+      return NextResponse.json({ ok: false, error: 'draft request timed out' }, { status: 408 })
+    }
+    if (error instanceof RequestBodyLengthError || error instanceof RequestBodyParseError) {
+      return NextResponse.json({ ok: false, error: 'invalid JSON body' }, { status: 400 })
+    }
+    console.error('[forms] failed to read draft request', error)
     return NextResponse.json({ ok: false, error: 'invalid JSON body' }, { status: 400 })
   }
 

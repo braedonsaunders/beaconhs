@@ -10,7 +10,7 @@
 // makes a stale session's late autosave a harmless 409.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { aiConversations, aiMessages, attachments, documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
@@ -20,17 +20,41 @@ import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { getTenantAiConfig } from '@/lib/ai-config'
+import { documentReadFilter } from '@/lib/assistant/doc-access'
+import { isUuid } from '@/lib/list-params'
 
 const SCOPE = 'documents.editor'
+const MAX_STORED_MESSAGES = 100
+const MAX_TURN_MESSAGES = 40
+const MAX_MESSAGE_LENGTH = 24_000
+const MAX_TURN_TEXT = 256_000
 
-export type DocAiRole = 'user' | 'assistant'
-export type DocAiMessage = { id: string; role: DocAiRole; content: string }
+type DocAiRole = 'user' | 'assistant'
+type DocAiMessage = { id: string; role: DocAiRole; content: string }
+
+async function documentIsVisible(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  documentId: string,
+): Promise<boolean> {
+  if (!isUuid(documentId)) return false
+  const [document] = await ctx.db((tx) =>
+    tx
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(eq(documents.id, documentId), isNull(documents.deletedAt), documentReadFilter(ctx)),
+      )
+      .limit(1),
+  )
+  return Boolean(document)
+}
 
 export async function loadDocConversation(
   documentId: string,
 ): Promise<{ conversationId: string; messages: DocAiMessage[] }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
+  if (!(await documentIsVisible(ctx, documentId))) throw new Error('Document not found')
   return ctx.db(async (tx) => {
     const existing = await tx
       .select()
@@ -62,10 +86,12 @@ export async function loadDocConversation(
       .select()
       .from(aiMessages)
       .where(eq(aiMessages.conversationId, conv.id))
-      .orderBy(asc(aiMessages.createdAt))
+      .orderBy(desc(aiMessages.createdAt))
+      .limit(MAX_STORED_MESSAGES)
     return {
       conversationId: conv.id,
       messages: msgs
+        .reverse()
         .filter((m) => m.role === 'user' || m.role === 'assistant')
         .map((m) => ({ id: m.id, role: m.role as DocAiRole, content: m.content })),
     }
@@ -78,18 +104,46 @@ export async function appendDocMessages(input: {
 }): Promise<{ ok: boolean }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
-  if (!input.conversationId || input.messages.length === 0) return { ok: false }
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.conversationId) ||
+    !Array.isArray(input.messages) ||
+    input.messages.length === 0 ||
+    input.messages.length > 20 ||
+    input.messages.some(
+      (message) =>
+        !message ||
+        (message.role !== 'user' && message.role !== 'assistant') ||
+        typeof message.content !== 'string' ||
+        message.content.length > MAX_MESSAGE_LENGTH,
+    )
+  ) {
+    return { ok: false }
+  }
   // Ownership: only the conversation's own user may append to it, and only
   // within this module's scope — a client-supplied id can't write into another
   // user's thread.
   const [conv] = await ctx.db((tx) =>
     tx
-      .select({ userId: aiConversations.userId, scope: aiConversations.scope })
+      .select({
+        userId: aiConversations.userId,
+        scope: aiConversations.scope,
+        scopeRefId: aiConversations.scopeRefId,
+      })
       .from(aiConversations)
       .where(eq(aiConversations.id, input.conversationId))
       .limit(1),
   )
-  if (!conv || conv.userId !== ctx.userId || conv.scope !== SCOPE) return { ok: false }
+  if (
+    !conv ||
+    conv.userId !== ctx.userId ||
+    conv.scope !== SCOPE ||
+    !conv.scopeRefId ||
+    !(await documentIsVisible(ctx, conv.scopeRefId))
+  ) {
+    return { ok: false }
+  }
   await ctx.db(async (tx) => {
     for (const m of input.messages) {
       await tx.insert(aiMessages).values({
@@ -106,6 +160,7 @@ export async function appendDocMessages(input: {
 export async function newDocConversation(documentId: string): Promise<{ conversationId: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')
+  if (!(await documentIsVisible(ctx, documentId))) throw new Error('Document not found')
   const [conv] = await ctx.db((tx) =>
     tx
       .insert(aiConversations)
@@ -121,7 +176,7 @@ export async function newDocConversation(documentId: string): Promise<{ conversa
   return { conversationId: conv!.id }
 }
 
-export type DocAiTurnResult =
+type DocAiTurnResult =
   | { ok: true; text: string; actions: string[]; docChanged: boolean }
   | { ok: false; error: string }
 
@@ -131,12 +186,20 @@ export async function runDocumentAiTurn(
 ): Promise<DocAiTurnResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  if (!Array.isArray(messages) || messages.length === 0) {
+  if (!(await documentIsVisible(ctx, documentId))) return { ok: false, error: 'Document not found' }
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 200) {
     return { ok: false, error: 'No messages' }
   }
   const chat: DocChatMessage[] = messages
+    .slice(-MAX_TURN_MESSAGES)
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 24_000) }))
+    .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_MESSAGE_LENGTH) }))
+  if (
+    chat.length === 0 ||
+    chat.reduce((total, message) => total + message.content.length, 0) > MAX_TURN_TEXT
+  ) {
+    return { ok: false, error: 'The conversation is too large for one AI turn.' }
+  }
 
   const loadMaster = async () => {
     return ctx.db(async (tx) => {

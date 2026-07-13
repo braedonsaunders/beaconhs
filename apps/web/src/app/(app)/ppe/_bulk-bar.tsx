@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, HandHelping, Square, Trash2, X } from 'lucide-react'
 import { Button, SearchSelect, Select } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { bulkDiscardPpe, bulkExportPpeCsv, bulkIssuePpeToPerson } from './_actions'
+import { useHydrated } from '@/lib/use-hydrated'
 
 export type PpeHolderOption = {
   id: string
@@ -31,8 +32,7 @@ export function BulkPpeBar({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   // Portal target only exists after mount (SSR renders nothing here).
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   const label = useMemo(
     () => `${selectedIds.length} PPE item${selectedIds.length === 1 ? '' : 's'} selected`,

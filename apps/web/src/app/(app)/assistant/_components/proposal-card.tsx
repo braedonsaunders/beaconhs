@@ -9,7 +9,7 @@ import { Check, ExternalLink, FileWarning, Sparkles } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { commitCorrectiveAction, commitIncident, type CommitResult } from '../_commit-actions'
 
-export type ProposalData = {
+type ProposalData = {
   kind: string
   preview: Record<string, unknown>
   confirmToken: string

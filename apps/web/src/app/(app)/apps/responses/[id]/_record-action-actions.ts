@@ -8,15 +8,17 @@
 // conditions + approval gates. No second automation system.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { evaluateLogicRule, planAutomation, type AutomationPlan } from '@beaconhs/forms-core'
-import { formAutomations, formResponses } from '@beaconhs/db/schema'
+import { formAutomations, formResponses, people } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { executeFlowPlan } from '@/app/(app)/apps/_lib/run-automations'
 import { createFormFlowAdapter } from '@/app/(app)/apps/_lib/form-flow-adapter'
+import { canAccessResponseTemplate } from '@/app/(app)/apps/_lib/access'
+import { isUuid } from '@/lib/list-params'
 
 export async function runRecordAction(input: {
   responseId: string
@@ -28,6 +30,22 @@ export async function runRecordAction(input: {
 }): Promise<{ ok: boolean; ran?: string[]; failed?: string[]; error?: string }> {
   const ctx = await requireRequestContext()
   try {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !isUuid(input.responseId) ||
+      !isUuid(input.flowId) ||
+      typeof input.buttonId !== 'string' ||
+      input.buttonId.length === 0 ||
+      input.buttonId.length > 128 ||
+      (input.inputs !== undefined &&
+        (!input.inputs || typeof input.inputs !== 'object' || Array.isArray(input.inputs)))
+    ) {
+      return { ok: false, error: 'Action not found' }
+    }
+    if (!(await canAccessResponseTemplate(ctx, input.responseId, 'operate'))) {
+      return { ok: false, error: 'Action not found' }
+    }
     const [flow] = await ctx.db((tx) =>
       tx
         .select({
@@ -87,24 +105,87 @@ export async function runRecordAction(input: {
         n.data.trigger.trigger === 'manual' &&
         n.data.trigger.buttonId === input.buttonId,
     )
+    if (!node || node.data.kind !== 'trigger' || node.data.trigger.trigger !== 'manual') {
+      return { ok: false, error: 'Action not found' }
+    }
     const adapter = createFormFlowAdapter(ctx, input.responseId)
     const recordValues = await adapter.loadValues()
-    if (node && node.data.kind === 'trigger' && node.data.trigger.trigger === 'manual') {
-      const td = node.data.trigger
-      if (td.requirePermission && !can(ctx, td.requirePermission)) {
-        return { ok: false, error: 'You do not have permission to run this action' }
+    const td = node.data.trigger
+    if (td.requirePermission && !can(ctx, td.requirePermission)) {
+      return { ok: false, error: 'You do not have permission to run this action' }
+    }
+    if (
+      td.showIf &&
+      !evaluateLogicRule(td.showIf, { values: recordValues, rows: {}, entities: {} })
+    ) {
+      return { ok: false, error: 'This action is not available for this record' }
+    }
+
+    const supplied = input.inputs ?? {}
+    if (Object.keys(supplied).length > 50) return { ok: false, error: 'Too many action inputs' }
+    const actionInputs: Record<string, unknown> = {}
+    for (const spec of td.inputs ?? []) {
+      const raw = supplied[spec.id]
+      const missing = raw === undefined || raw === null || raw === ''
+      if (missing) {
+        if (spec.required) return { ok: false, error: `${spec.label} is required` }
+        continue
       }
-      if (
-        td.showIf &&
-        !evaluateLogicRule(td.showIf, { values: recordValues, rows: {}, entities: {} })
-      ) {
-        return { ok: false, error: 'This action is not available for this record' }
+      if (spec.type === 'number') {
+        const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+        if (!Number.isFinite(value)) return { ok: false, error: `${spec.label} must be a number` }
+        actionInputs[spec.id] = value
+      } else if (spec.type === 'person') {
+        if (typeof raw !== 'string' || !isUuid(raw)) {
+          return { ok: false, error: `${spec.label} is invalid` }
+        }
+        actionInputs[spec.id] = raw
+      } else if (spec.type === 'date') {
+        if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+          return { ok: false, error: `${spec.label} must be a date` }
+        }
+        const date = new Date(`${raw}T00:00:00.000Z`)
+        if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== raw) {
+          return { ok: false, error: `${spec.label} must be a date` }
+        }
+        actionInputs[spec.id] = raw
+      } else {
+        if (typeof raw !== 'string') return { ok: false, error: `${spec.label} is invalid` }
+        const value = raw.trim().slice(0, spec.type === 'textarea' ? 10_000 : 2_000)
+        if (spec.required && !value) return { ok: false, error: `${spec.label} is required` }
+        if (
+          spec.type === 'select' &&
+          spec.options &&
+          !spec.options.some((option) => option.value === value)
+        ) {
+          return { ok: false, error: `${spec.label} is invalid` }
+        }
+        actionInputs[spec.id] = value
+      }
+    }
+    const personIds = Array.from(
+      new Set(
+        (td.inputs ?? [])
+          .filter((spec) => spec.type === 'person')
+          .map((spec) => actionInputs[spec.id])
+          .filter((value): value is string => typeof value === 'string'),
+      ),
+    )
+    if (personIds.length > 0) {
+      const available = await ctx.db((tx) =>
+        tx
+          .select({ id: people.id })
+          .from(people)
+          .where(and(inArray(people.id, personIds), isNull(people.deletedAt))),
+      )
+      if (available.length !== personIds.length) {
+        return { ok: false, error: 'One or more selected people are unavailable' }
       }
     }
 
     const values: Record<string, unknown> = {
       ...recordValues,
-      ...(input.inputs ?? {}),
+      ...actionInputs,
     }
 
     let plan: AutomationPlan

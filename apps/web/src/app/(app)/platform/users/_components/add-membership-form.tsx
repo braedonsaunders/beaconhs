@@ -92,7 +92,7 @@ export function AddMembershipForm({
             {
               value: 'invite',
               title: 'Send an invite',
-              desc: 'Emails a magic link. Membership starts as “invited” until they sign in.',
+              desc: 'Emails a one-time link. Membership stays “invited” until they accept it.',
               defaultChecked: true,
             },
             {

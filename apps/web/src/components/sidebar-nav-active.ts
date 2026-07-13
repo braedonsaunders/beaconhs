@@ -1,9 +1,9 @@
-export type ActiveNavItem = {
+type ActiveNavItem = {
   href: string
   exact?: boolean
 }
 
-export type ActiveNavGroup = {
+type ActiveNavGroup = {
   items: ActiveNavItem[]
 }
 
@@ -27,7 +27,7 @@ export function findActiveNavHref(
   return activeHref
 }
 
-export function matchesNavPath(pathname: string, item: ActiveNavItem): boolean {
+function matchesNavPath(pathname: string, item: ActiveNavItem): boolean {
   if (pathname === item.href) return true
   if (item.exact || item.href === '/') return false
   return pathname.startsWith(item.href + '/')

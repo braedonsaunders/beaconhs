@@ -15,7 +15,7 @@ import {
 } from '@beaconhs/forms-core'
 import { SaveDot, useAutoSave, type SaveState } from '@/components/live-field'
 
-export type CustomFieldInputDef = {
+type CustomFieldInputDef = {
   key: string
   label: string
   helpText: string | null

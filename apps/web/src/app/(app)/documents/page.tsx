@@ -76,7 +76,7 @@ export default async function DocumentsPage({
 
       const orderBy =
         params.sort === 'category'
-          ? [params.dir === 'asc' ? asc(documents.category) : desc(documents.category)]
+          ? [params.dir === 'asc' ? asc(documentCategories.name) : desc(documentCategories.name)]
           : params.sort === 'status'
             ? [params.dir === 'asc' ? asc(documents.status) : desc(documents.status)]
             : params.sort === 'next_review_on'
@@ -85,8 +85,9 @@ export default async function DocumentsPage({
 
       const [tot] = await tx.select({ c: count() }).from(documents).where(whereClause)
       const data = await tx
-        .select()
+        .select({ document: documents, categoryName: documentCategories.name })
         .from(documents)
+        .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
         .where(whereClause)
         .orderBy(...orderBy)
         .limit(params.perPage)
@@ -134,28 +135,27 @@ export default async function DocumentsPage({
   )
 
   const books = await listDocumentBooksForBulk()
-  const catName = new Map(categories.map((c) => [c.id, c.name]))
   const typeMap = new Map(types.map((t) => [t.id, t]))
 
-  const tableRows: DocumentsTableRow[] = rows.map((d) => {
+  const tableRows: DocumentsTableRow[] = rows.map(({ document: d, categoryName }) => {
     const t = d.typeId ? typeMap.get(d.typeId) : null
     return {
       id: d.id,
       title: d.title,
-      category: d.categoryId ? (catName.get(d.categoryId) ?? null) : d.category,
+      category: categoryName,
       type: t ? { name: t.name, color: t.color ?? null } : null,
       status: d.status,
       nextReviewOn: d.nextReviewOn,
     }
   })
 
-  const cardRows: ReadOnlyDoc[] = rows.map((d) => {
+  const cardRows: ReadOnlyDoc[] = rows.map(({ document: d, categoryName }) => {
     const t = d.typeId ? typeMap.get(d.typeId) : null
     return {
       id: d.id,
       title: d.title,
       description: d.description,
-      category: d.categoryId ? (catName.get(d.categoryId) ?? null) : d.category,
+      category: categoryName,
       type: t ? { name: t.name, color: t.color ?? null } : null,
     }
   })

@@ -22,7 +22,7 @@ const READ_PERMISSION_BY_CATEGORY: Record<string, CataloguePermission> = {
   corrective_actions: 'ca.read.all',
 }
 
-export function isApiPermission(permission: string): boolean {
+function isApiPermission(permission: string): boolean {
   return VALID_PERMISSIONS.has(permission)
 }
 
@@ -38,6 +38,10 @@ export function keyHasPermission(permissions: string[], required: string): boole
     if (permission.endsWith('.*') && required.startsWith(permission.slice(0, -1))) return true
   }
   return false
+}
+
+export function hasBuilderAppGrant(grantedTemplateIds: readonly string[], templateId: string) {
+  return grantedTemplateIds.includes(templateId)
 }
 
 export function readPermissionForEntity(entity: ReportEntity): CataloguePermission {

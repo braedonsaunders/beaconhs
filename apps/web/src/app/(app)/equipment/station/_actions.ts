@@ -13,6 +13,7 @@ import { recordAudit } from '@/lib/audit'
 import {
   searchStationCore,
   stationScanCore,
+  parseStationScanInput,
   type StationScanInput,
   type StationScanResult,
   type StationSearchResults,
@@ -21,12 +22,14 @@ import {
 export async function searchStation(query: string): Promise<StationSearchResults> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  return ctx.db((tx) => searchStationCore(tx, query))
+  return ctx.db((tx) => searchStationCore(tx, typeof query === 'string' ? query.slice(0, 200) : ''))
 }
 
 export async function performStationScan(input: StationScanInput): Promise<StationScanResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
+  const parsed = parseStationScanInput(input)
+  if (!parsed) return { ok: false, error: 'Invalid station scan' }
 
   const result = await ctx.db(async (tx) => {
     const [settings] = await tx
@@ -38,7 +41,7 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
       .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
       .limit(1)
     return stationScanCore(tx, {
-      ...input,
+      ...parsed,
       tenantId: ctx.tenantId,
       homeOrgUnitId: settings?.homeOrgUnitId ?? null,
       actorTenantUserId: ctx.membership?.id ?? null,

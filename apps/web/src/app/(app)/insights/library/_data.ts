@@ -10,7 +10,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { insightDashboardPins, insightDashboards } from '@beaconhs/db/schema'
 import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
 
-export type LibraryDashboard = { id: string; name: string; pinned: boolean }
+type LibraryDashboard = { id: string; name: string; pinned: boolean }
 
 export async function loadLibraryDashboards(ctx: RequestContext): Promise<LibraryDashboard[]> {
   const roleKeys = await getInsightRoleKeys(ctx)

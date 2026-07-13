@@ -17,7 +17,7 @@ import { Button, Drawer, Input, SearchSelect, Select, type SelectOption } from '
 import type { DashboardParam, DashboardParamMap, DashboardParamType } from '@beaconhs/db/schema'
 import { paramSearchKey } from './_params'
 
-export type ParamCardColumn = {
+type ParamCardColumn = {
   key: string
   label: string
   semanticType: string

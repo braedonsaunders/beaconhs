@@ -132,7 +132,6 @@ import { listDataSources, type DataSourceSummary } from '../../../_lib/data-sour
 // Field-type icon registry. Falls back to a generic Type icon for unknowns.
 const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number }>>> = {
   text: Type,
-  textarea: AlignLeft,
   long_text: AlignLeft,
   number: Hash,
   slider: Sliders,
@@ -173,7 +172,6 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   signature: Pencil,
   typed_attestation: CheckCircle2,
   formula: Calculator,
-  calc: Calculator,
   risk_matrix: Sliders,
   heading: Type,
   paragraph: AlignLeft,
@@ -192,10 +190,7 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
 // Categorized palette. The first group of each section gets prominent
 // placement at the top; rare ones live in "More" further down.
 type PaletteGroup = { label: string; types: FieldType[] }
-// One element per concept — no duplicates across groups. `long_text` is the
-// canonical multi-line text (legacy `textarea` is omitted) and `formula` is the
-// canonical computed value (legacy `calc` is omitted); both legacy types still
-// render fine on existing forms — they're just not offered for new fields.
+// One element per concept — no duplicates across groups.
 const PALETTE_PRIMARY: PaletteGroup[] = [
   {
     label: 'Common',
@@ -288,7 +283,7 @@ const KIND_META: Record<
   },
 }
 
-export type AppOverview = {
+type AppOverview = {
   description: string | null
   category: string | null
   iconKey: string | null
@@ -398,14 +393,16 @@ export function FormDesigner({
     [templateId, appName, liveFieldIds],
   )
 
-  const selectedField = useMemo(() => {
-    if (selection.kind !== 'field') return null
+  let selectedField: { section: FormSchemaV1['sections'][number]; field: FormField } | null = null
+  if (selection.kind === 'field') {
     for (const sec of schema.sections) {
       const f = sec.fields.find((x) => x.id === selection.fieldId)
-      if (f) return { section: sec, field: f }
+      if (f) {
+        selectedField = { section: sec, field: f }
+        break
+      }
     }
-    return null
-  }, [schema, selection])
+  }
 
   const selectedSection = useMemo(() => {
     if (selection.kind !== 'section') return null
@@ -1317,7 +1314,7 @@ function FieldRow({
         ) : null}
         {field.formula ? (
           <Badge variant="secondary" className="text-[10px]">
-            calc
+            formula
           </Badge>
         ) : null}
       </button>
@@ -1491,9 +1488,9 @@ function WorkflowEditor({
   )
 }
 
-// --- Field properties (Basic / Validation / Logic / Default / Calc) -------
+// --- Field properties (Basic / Validation / Logic / Default / Formula) ----
 
-type FieldPropTab = 'basic' | 'validation' | 'logic' | 'default' | 'calc'
+type FieldPropTab = 'basic' | 'validation' | 'logic' | 'default' | 'formula'
 
 function FieldProperties({
   field,
@@ -1506,7 +1503,7 @@ function FieldProperties({
   onChange: (patch: Partial<FormField>) => void
 }) {
   const [tab, setTab] = useState<FieldPropTab>('basic')
-  const isCalcField = field.type === 'formula' || field.type === 'calc'
+  const isCalcField = field.type === 'formula'
   const otherFields = schema.sections
     .flatMap((s) => s.fields)
     .filter((f) => f.id !== field.id)
@@ -1536,7 +1533,7 @@ function FieldProperties({
     { value: 'validation', label: 'Validation', show: true },
     { value: 'logic', label: 'Logic', show: true },
     { value: 'default', label: 'Default', show: true },
-    { value: 'calc', label: 'Calc', show: isCalcField },
+    { value: 'formula', label: 'Formula', show: isCalcField },
   ]
 
   return (
@@ -1579,7 +1576,7 @@ function FieldProperties({
         </div>
       ) : null}
       {tab === 'default' ? <FieldDefaultTab field={field} onChange={onChange} /> : null}
-      {tab === 'calc' && isCalcField ? (
+      {tab === 'formula' && isCalcField ? (
         <div className="space-y-1">
           <Label className="text-xs">Formula</Label>
           <p className="text-[10px] text-slate-500">
@@ -2332,7 +2329,6 @@ function FieldValidationTab({
   const isNumeric = field.type === 'number' || field.type === 'rating'
   const isText =
     field.type === 'text' ||
-    field.type === 'textarea' ||
     field.type === 'long_text' ||
     field.type === 'email' ||
     field.type === 'phone' ||
@@ -3010,7 +3006,6 @@ function Preview({ schema }: { schema: FormSchemaV1 }) {
 
 function PreviewField({ type }: { type: FieldType }) {
   switch (type) {
-    case 'textarea':
     case 'long_text':
       return <Textarea rows={2} disabled placeholder="Preview" />
     case 'select':
@@ -3042,7 +3037,6 @@ function PreviewField({ type }: { type: FieldType }) {
     case 'divider':
       return <hr className="border-slate-200" />
     case 'formula':
-    case 'calc':
       return <Input disabled value="(computed)" />
     case 'pass_fail_na':
       return (

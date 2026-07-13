@@ -110,7 +110,7 @@ export function DetailPageLayout({
  * card etc) + a tabbed pane. The sidebar AND the body each scroll
  * independently so neither bleeds out of the viewport.
  */
-export function DetailSplitLayout({
+function DetailSplitLayout({
   header,
   alerts,
   sidebar,

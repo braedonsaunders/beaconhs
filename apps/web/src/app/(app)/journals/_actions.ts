@@ -7,12 +7,14 @@
 // entries even though RLS only bounds to the tenant.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   attachments,
   journalEntries,
   journalEntryPhotos,
   journalEntryTags,
+  orgUnits,
+  people,
 } from '@beaconhs/db/schema'
 import { describePhoto, extractEntryMeta } from '@beaconhs/ai'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
@@ -21,13 +23,14 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
-import { emitJournalEntrySubmitted } from '@beaconhs/integrations'
+import { journalEntrySubmittedEvent } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import {
   getAuthorPersonId,
   htmlToText,
   journalCanBrowseAll,
   journalCanReadAll,
+  journalSelfScopeWhere,
   journalScopeWhere,
 } from './_lib'
 import { buildTree, getEntry, getOrCreateEntryForDate, getWorkspaceData } from './_data'
@@ -42,6 +45,13 @@ import type {
   TreeNode,
   WorkspaceData,
 } from './_types'
+import { isUuid } from '@/lib/list-params'
+import {
+  canCreateJournal,
+  canEmailJournal,
+  journalMutationScope,
+  type JournalMutation,
+} from './_mutation-policy'
 
 type ActionOk<T = {}> = { ok: true } & T
 type ActionErr = { ok: false; error: string }
@@ -49,9 +59,39 @@ type ActionErr = { ok: false; error: string }
 /** Visibility-scoped WHERE for a single live entry (tenant + author/site/self).
  *  Always excludes soft-deleted entries — a deleted journal is not editable. */
 async function scopedWhere(ctx: RequestContext, id: string): Promise<SQL> {
+  if (!isUuid(id)) return sql`false`
   const authorPersonId = journalCanReadAll(ctx) ? null : await getAuthorPersonId(ctx)
   const scope = journalScopeWhere(ctx, authorPersonId)
   return and(eq(journalEntries.id, id), isNull(journalEntries.deletedAt), scope)!
+}
+
+/**
+ * Mutations cannot reuse the read predicate blindly: `journals.update.own`
+ * remains own-only even when a custom role also has site/all read access.
+ * `journals.assign` is the explicit permission that widens writes to the
+ * caller's normal read scope.
+ */
+async function mutationWhere(
+  ctx: RequestContext,
+  id: string,
+  mutation: JournalMutation,
+): Promise<SQL> {
+  if (!isUuid(id)) return sql`false`
+  const scope = journalMutationScope(ctx, mutation)
+  if (scope === 'read_scope') return scopedWhere(ctx, id)
+  if (scope === 'none') return sql`false`
+  const authorPersonId = await getAuthorPersonId(ctx)
+  return and(
+    eq(journalEntries.id, id),
+    isNull(journalEntries.deletedAt),
+    journalSelfScopeWhere(ctx, authorPersonId),
+  )!
+}
+
+function validDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
 }
 
 // ---- create -----------------------------------------------------------------
@@ -61,6 +101,7 @@ const NO_AUTHOR_IDENTITY =
 
 export async function createTodayEntry(): Promise<ActionOk<{ id: string }> | ActionErr> {
   const ctx = await requireRequestContext()
+  if (!canCreateJournal(ctx)) return { ok: false, error: 'You cannot create journal entries.' }
   const id = await getOrCreateEntryForDate(ctx)
   if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
   revalidatePath('/journals')
@@ -71,6 +112,8 @@ export async function createEntryForDate(
   dateISO: string,
 ): Promise<ActionOk<{ id: string }> | ActionErr> {
   const ctx = await requireRequestContext()
+  if (!canCreateJournal(ctx)) return { ok: false, error: 'You cannot create journal entries.' }
+  if (!validDate(dateISO)) return { ok: false, error: 'Choose a valid journal date.' }
   const id = await getOrCreateEntryForDate(ctx, dateISO)
   if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
   revalidatePath('/journals')
@@ -84,11 +127,28 @@ export async function updateEntry(input: {
   patch: EntryPatch
 }): Promise<ActionOk<{ updatedAt: string }> | ActionErr> {
   const ctx = await requireRequestContext()
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.id) ||
+    !input.patch ||
+    typeof input.patch !== 'object'
+  ) {
+    return { ok: false, error: 'Invalid journal update.' }
+  }
   const { id, patch } = input
 
   const values: Record<string, unknown> = {}
-  if (patch.title !== undefined) values.title = patch.title?.slice(0, 300) ?? null
+  if (patch.title !== undefined) {
+    if (patch.title !== null && typeof patch.title !== 'string') {
+      return { ok: false, error: 'Invalid journal title.' }
+    }
+    values.title = patch.title?.slice(0, 300) ?? null
+  }
   if (patch.bodyHtml !== undefined) {
+    if (typeof patch.bodyHtml !== 'string' || patch.bodyHtml.length > 1_000_000) {
+      return { ok: false, error: 'Journal content is invalid or too large.' }
+    }
     // Server-side sanitisation — this action accepts arbitrary strings, so never
     // trust the client editor. Shared allow-list sanitiser (same as Documents)
     // strips scripts/event handlers while keeping every TipTap node and mark.
@@ -96,21 +156,54 @@ export async function updateEntry(input: {
     values.bodyHtml = clean
     values.bodyText = htmlToText(clean)
   }
-  if (patch.definition !== undefined) values.definition = patch.definition
-  if (patch.siteOrgUnitId !== undefined) values.siteOrgUnitId = patch.siteOrgUnitId || null
-  if (patch.supervisorPersonId !== undefined)
+  if (patch.definition !== undefined) {
+    if (patch.definition !== 'worker' && patch.definition !== 'supervisor') {
+      return { ok: false, error: 'Invalid journal definition.' }
+    }
+    values.definition = patch.definition
+  }
+  if (patch.siteOrgUnitId !== undefined) {
+    if (patch.siteOrgUnitId && !isUuid(patch.siteOrgUnitId)) {
+      return { ok: false, error: 'Invalid site.' }
+    }
+    values.siteOrgUnitId = patch.siteOrgUnitId || null
+  }
+  if (patch.supervisorPersonId !== undefined) {
+    if (patch.supervisorPersonId && !isUuid(patch.supervisorPersonId)) {
+      return { ok: false, error: 'Invalid supervisor.' }
+    }
     values.supervisorPersonId = patch.supervisorPersonId || null
-  if (patch.entryDate !== undefined && patch.entryDate) values.entryDate = patch.entryDate
+  }
+  if (patch.entryDate !== undefined) {
+    if (!validDate(patch.entryDate)) return { ok: false, error: 'Invalid journal date.' }
+    values.entryDate = patch.entryDate
+  }
   if (Object.keys(values).length === 0) return { ok: false, error: 'Nothing to update.' }
 
-  const where = await scopedWhere(ctx, id)
-  const [row] = await ctx.db((tx) =>
-    tx
+  const where = await mutationWhere(ctx, id, 'edit')
+  const [row] = await ctx.db(async (tx) => {
+    if (typeof values.siteOrgUnitId === 'string') {
+      const [site] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(and(eq(orgUnits.id, values.siteOrgUnitId), isNull(orgUnits.deletedAt)))
+        .limit(1)
+      if (!site) return []
+    }
+    if (typeof values.supervisorPersonId === 'string') {
+      const [supervisor] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.id, values.supervisorPersonId), isNull(people.deletedAt)))
+        .limit(1)
+      if (!supervisor) return []
+    }
+    return tx
       .update(journalEntries)
       .set(values)
       .where(where)
-      .returning({ updatedAt: journalEntries.updatedAt }),
-  )
+      .returning({ updatedAt: journalEntries.updatedAt })
+  })
   if (!row) return { ok: false, error: 'Entry not found.' }
   // Autosave is high-frequency — the client owns optimistic state, so we skip
   // revalidatePath here to avoid thrashing the route cache.
@@ -119,16 +212,40 @@ export async function updateEntry(input: {
 
 export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const where = await scopedWhere(ctx, id)
+  const where = await mutationWhere(ctx, id, 'submit')
+  const submittedAt = new Date()
   // Draft guard: re-submitting (double-click, replayed request) must not reset
   // submittedAt or re-fire flows / integrations / AI for the same submission.
-  const [row] = await ctx.db((tx) =>
-    tx
+  const [row] = await ctx.db(async (tx) => {
+    const rows = await tx
       .update(journalEntries)
-      .set({ status: 'submitted', submittedAt: new Date() })
+      .set({ status: 'submitted', submittedAt })
       .where(and(where, eq(journalEntries.status, 'draft')))
-      .returning({ reference: journalEntries.reference }),
-  )
+      .returning({ reference: journalEntries.reference })
+    const submitted = rows[0]
+    if (submitted) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'journal_entry.submitted',
+        subjectId: id,
+        dedupKey: `journal-entry.submitted:${id}:${submittedAt.toISOString()}`,
+        payload: {
+          integration: journalEntrySubmittedEvent(ctx.tenantId, {
+            id,
+            reference: submitted.reference,
+            status: 'submitted',
+            submittedAt,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: id,
+            moduleKey: 'journals',
+            event: 'on_submit',
+          }),
+        },
+      })
+    }
+    return rows
+  })
   if (!row) {
     const [existing] = await ctx.db((tx) =>
       tx.select({ id: journalEntries.id }).from(journalEntries).where(where).limit(1),
@@ -144,14 +261,6 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
     action: 'publish',
     summary: `Submitted ${row.reference}`,
   })
-  // Fire any "on submit" journal Flows (email/notify/CAPA/approval). Guarded.
-  await runModuleFlows(ctx, { moduleKey: 'journals', event: 'on_submit', subjectId: id })
-  await emitJournalEntrySubmitted(ctx, {
-    id,
-    reference: row.reference,
-    status: 'submitted',
-    submittedAt: new Date(),
-  }).catch(() => {})
   // Background categorisation: when enabled (Admin → AI → Automation), summarise
   // and tag the submitted entry so logs stay organised without the worker doing
   // it. Best-effort — never block a submit on AI.
@@ -166,14 +275,23 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
 
 export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const where = await scopedWhere(ctx, id)
-  const [row] = await ctx.db((tx) =>
-    tx
+  const where = await mutationWhere(ctx, id, 'edit')
+  const [row] = await ctx.db(async (tx) => {
+    const rows = await tx
       .update(journalEntries)
       .set({ deletedAt: new Date() })
       .where(where)
-      .returning({ reference: journalEntries.reference }),
-  )
+      .returning({ reference: journalEntries.reference })
+    if (rows[0]) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'journals',
+        event: 'on_delete',
+        occurrenceKey: 'deleted',
+      })
+    }
+    return rows
+  })
   if (!row) return { ok: false, error: 'Entry not found.' }
   await recordAudit(ctx, {
     entityType: 'journal_entry',
@@ -181,7 +299,6 @@ export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
     action: 'delete',
     summary: `Deleted ${row.reference}`,
   })
-  await runModuleFlows(ctx, { moduleKey: 'journals', event: 'on_delete', subjectId: id })
   revalidatePath('/journals')
   return { ok: true }
 }
@@ -193,9 +310,23 @@ export async function setEntryTags(input: {
   tags: string[]
 }): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const where = await scopedWhere(ctx, input.id)
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.id) ||
+    !Array.isArray(input.tags) ||
+    input.tags.length > 100
+  ) {
+    return { ok: false, error: 'Invalid journal tags.' }
+  }
+  const where = await mutationWhere(ctx, input.id, 'edit')
   const clean = Array.from(
-    new Set(input.tags.map((t) => t.trim().toLowerCase()).filter(Boolean)),
+    new Set(
+      input.tags
+        .filter((tag): tag is string => typeof tag === 'string')
+        .map((tag) => tag.trim().toLowerCase().slice(0, 80))
+        .filter(Boolean),
+    ),
   ).slice(0, 20)
 
   const done = await ctx.db(async (tx) => {
@@ -220,6 +351,13 @@ export async function setEntryTags(input: {
     return true
   })
   if (!done) return { ok: false, error: 'Entry not found.' }
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: input.id,
+    action: 'update',
+    summary: 'Updated journal tags',
+    metadata: { tags: clean },
+  })
   revalidatePath('/journals')
   return { ok: true }
 }
@@ -288,8 +426,19 @@ export async function attachJournalPhotos(input: {
   attachmentIds: string[]
 }): Promise<ActionOk<{ photoIds: string[] }> | ActionErr> {
   const ctx = await requireRequestContext()
-  if (input.attachmentIds.length === 0) return { ok: true, photoIds: [] }
-  const where = await scopedWhere(ctx, input.entryId)
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.entryId) ||
+    !Array.isArray(input.attachmentIds) ||
+    input.attachmentIds.length > 50 ||
+    input.attachmentIds.some((id) => typeof id !== 'string' || !isUuid(id))
+  ) {
+    return { ok: false, error: 'Invalid journal photos.' }
+  }
+  const attachmentIds = Array.from(new Set(input.attachmentIds))
+  if (attachmentIds.length === 0) return { ok: true, photoIds: [] }
+  const where = await mutationWhere(ctx, input.entryId, 'edit')
 
   const ids = await ctx.db(async (tx) => {
     const [e] = await tx
@@ -298,6 +447,11 @@ export async function attachJournalPhotos(input: {
       .where(where)
       .limit(1)
     if (!e) return null
+    const availableAttachments = await tx
+      .select({ id: attachments.id })
+      .from(attachments)
+      .where(inArray(attachments.id, attachmentIds))
+    if (availableAttachments.length !== attachmentIds.length) return null
     const [{ maxOrder } = { maxOrder: -1 }] = await tx
       .select({ maxOrder: sql<number>`coalesce(max(${journalEntryPhotos.sortOrder}), -1)::int` })
       .from(journalEntryPhotos)
@@ -306,7 +460,7 @@ export async function attachJournalPhotos(input: {
     const inserted = await tx
       .insert(journalEntryPhotos)
       .values(
-        input.attachmentIds.map((attachmentId, i) => ({
+        attachmentIds.map((attachmentId, i) => ({
           tenantId: ctx.tenantId,
           entryId: input.entryId,
           attachmentId,
@@ -330,6 +484,7 @@ export async function attachJournalPhotos(input: {
 
 export async function removeJournalPhoto(photoId: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
+  if (!isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
   const photo = await ctx.db(async (tx) => {
     const [p] = await tx
       .select({ entryId: journalEntryPhotos.entryId })
@@ -342,7 +497,7 @@ export async function removeJournalPhoto(photoId: string): Promise<ActionOk | Ac
 
   // Visibility check on the parent entry — a photo id alone must never allow
   // mutating another user's journal.
-  const where = await scopedWhere(ctx, photo.entryId)
+  const where = await mutationWhere(ctx, photo.entryId, 'edit')
   const done = await ctx.db(async (tx) => {
     const [e] = await tx
       .select({ id: journalEntries.id })
@@ -369,6 +524,7 @@ export async function describeJournalPhoto(
   photoId: string,
 ): Promise<ActionOk<{ caption: string }> | ActionErr> {
   const ctx = await requireRequestContext()
+  if (!isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
   const aiConfig = await getTenantAiConfig(ctx)
   if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
 
@@ -389,7 +545,7 @@ export async function describeJournalPhoto(
 
   // Visibility check on the parent entry before mutating it (or spending AI
   // budget) — mirrors attachJournalPhotos / removeJournalPhoto.
-  const where = await scopedWhere(ctx, photo.entryId)
+  const where = await mutationWhere(ctx, photo.entryId, 'edit')
   const visible = await ctx.db(async (tx) => {
     const [e] = await tx
       .select({ id: journalEntries.id })
@@ -419,6 +575,13 @@ export async function describeJournalPhoto(
       .set({ caption: insight.caption })
       .where(eq(journalEntryPhotos.id, photoId)),
   )
+  await recordAudit(ctx, {
+    entityType: 'journal_entry',
+    entityId: photo.entryId,
+    action: 'update',
+    summary: 'Generated a journal photo caption with AI',
+    metadata: { photoId },
+  })
   revalidatePath('/journals')
   return { ok: true, caption: insight.caption }
 }
@@ -497,6 +660,14 @@ export async function fetchAuthorTree(input: {
 
 export async function emailEntry(id: string): Promise<ActionOk<{ sent: number }> | ActionErr> {
   const ctx = await requireRequestContext()
+  if (!canEmailJournal(ctx)) {
+    return { ok: false, error: 'You cannot email journal entries.' }
+  }
+  const where = await mutationWhere(ctx, id, 'submit')
+  const [visible] = await ctx.db((tx) =>
+    tx.select({ id: journalEntries.id }).from(journalEntries).where(where).limit(1),
+  )
+  if (!visible) return { ok: false, error: 'Entry not found.' }
   const sent = await sendJournalEntryEmail(ctx, id)
   if (sent === 0) {
     return {

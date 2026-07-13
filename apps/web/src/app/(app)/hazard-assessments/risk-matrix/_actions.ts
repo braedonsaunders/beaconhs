@@ -17,7 +17,7 @@ import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { RISK_AXIS_MAX } from '../_risk-scale'
 
-export type SaveResult = { ok: true } | { ok: false; error: string }
+type SaveResult = { ok: true } | { ok: false; error: string }
 
 const MAX_LABEL = 48
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/

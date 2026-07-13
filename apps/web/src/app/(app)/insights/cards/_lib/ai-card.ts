@@ -17,7 +17,7 @@ import { BhqlValidationError } from '@beaconhs/analytics'
 import { discoverEntities, validateBhql } from '@beaconhs/analytics/server'
 import type { BhqlQuery } from '@beaconhs/db/schema'
 
-export type GenResult<T> = { ok: true; value: T } | { ok: false; error: string }
+type GenResult<T> = { ok: true; value: T } | { ok: false; error: string }
 
 // Pull the first JSON object out of a model response (handles ```json fences and
 // stray prose around the object).

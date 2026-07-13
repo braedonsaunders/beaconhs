@@ -11,7 +11,7 @@ const PIN_WINDOW_SECONDS = 10 * 60
 const CLIENT_LIMIT = 8
 const TENANT_LIMIT = 30
 
-export type PublicPinRateLimitHandle = {
+type PublicPinRateLimitHandle = {
   checks: RateLimitInput[]
 }
 

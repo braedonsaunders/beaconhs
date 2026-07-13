@@ -6,7 +6,6 @@ import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   formResponses,
-  formTemplates,
   formTemplateVersions,
   orgUnits,
   type FormResponseDraftData,
@@ -20,65 +19,29 @@ import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { fetchSingleEntityAttrs } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
+import { decideDraftSave } from '@/app/(app)/apps/_lib/draft-save-order'
 import { submitFormResponseLifecycle } from '@/lib/forms/form-response-lifecycle'
-import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+import {
+  canAccessResponseTemplate,
+  canAccessTemplateById,
+  canEditResponsePayload,
+} from '@/app/(app)/apps/_lib/access'
+import { parseBuilderReturnTo } from '@/app/(app)/apps/_lib/return-to'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
+const uuidSchema = z.string().uuid()
 
 async function canFillTemplate(ctx: Ctx, templateId: string): Promise<boolean> {
-  if (!can(ctx, 'forms.response.create')) return false
-  const [tmpl] = await ctx.db((tx) =>
-    tx
-      .select({ allowedRoles: formTemplates.allowedRoles })
-      .from(formTemplates)
-      .where(
-        and(
-          eq(formTemplates.id, templateId),
-          eq(formTemplates.tenantId, ctx.tenantId),
-          isNull(formTemplates.deletedAt),
-        ),
-      )
-      .limit(1),
-  )
-  if (!tmpl) return false
-  return appVisibleTo(ctx, tmpl.allowedRoles, await getUserRoleKeys(ctx))
+  if (!uuidSchema.safeParse(templateId).success) return false
+  return can(ctx, 'forms.response.create') && canAccessTemplateById(ctx, templateId, 'operate')
 }
 
 async function canFillResponse(ctx: Ctx, responseId: string): Promise<boolean> {
-  const [row] = await ctx.db((tx) =>
-    tx
-      .select({ allowedRoles: formTemplates.allowedRoles })
-      .from(formResponses)
-      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-      .where(
-        and(
-          eq(formResponses.id, responseId),
-          eq(formResponses.tenantId, ctx.tenantId),
-          isNull(formResponses.deletedAt),
-          isNull(formTemplates.deletedAt),
-        ),
-      )
-      .limit(1),
-  )
-  if (!row) return false
-  return appVisibleTo(ctx, row.allowedRoles, await getUserRoleKeys(ctx))
-}
-
-function canEditResponsePayload(
-  ctx: Ctx,
-  row: { status: string; submittedBy: string | null },
-): boolean {
-  const callerMembershipId = ctx.membership?.id ?? null
-  const isOwner = row.submittedBy !== null && row.submittedBy === callerMembershipId
-  const canWorkDraft =
-    (row.status === 'draft' || row.status === 'in_progress') && can(ctx, 'forms.response.create')
-  return (
-    ctx.isSuperAdmin ||
-    ctx.permissions.has('*') ||
-    can(ctx, 'forms.response.read.all') ||
-    (isOwner && (can(ctx, 'forms.response.update.own') || canWorkDraft)) ||
-    (row.submittedBy === null && canWorkDraft)
-  )
+  if (!uuidSchema.safeParse(responseId).success) return false
+  // This helper gates mutations, not read-only record inspection. Historical
+  // records may remain visible to a template builder, but an unpublished app
+  // must never accept autosaves or inline edits.
+  return canAccessResponseTemplate(ctx, responseId, 'operate')
 }
 
 export async function submitFormResponse(args: {
@@ -94,7 +57,10 @@ export async function submitFormResponse(args: {
   returnTo?: string | null
 }): Promise<{ ok: boolean; responseId?: string; errors?: { fieldId: string; message: string }[] }> {
   const ctx = await requireRequestContext()
-  if (!(await canFillTemplate(ctx, args.templateId))) {
+  if (
+    (args.responseId != null && !uuidSchema.safeParse(args.responseId).success) ||
+    !(await canFillTemplate(ctx, args.templateId))
+  ) {
     return { ok: false, errors: [{ fieldId: '', message: 'You do not have access to this app' }] }
   }
 
@@ -108,10 +74,7 @@ export async function submitFormResponse(args: {
   if (!result.ok) return { ok: false, errors: result.errors }
 
   revalidatePath('/apps/responses')
-  const returnTo =
-    args.returnTo && args.returnTo.startsWith('/') && !args.returnTo.startsWith('//')
-      ? args.returnTo
-      : null
+  const returnTo = parseBuilderReturnTo(args.returnTo)
   if (returnTo) {
     revalidatePath(returnTo.split('?')[0] || returnTo)
     redirect(returnTo as any)
@@ -145,7 +108,7 @@ export async function fetchEntityAttrs(args: {
 
 // The org_units hierarchy levels, one per org-unit picker element.
 const ORG_UNIT_LEVELS = ['customer', 'project', 'site', 'area'] as const
-export type OrgUnitLevel = (typeof ORG_UNIT_LEVELS)[number]
+type OrgUnitLevel = (typeof ORG_UNIT_LEVELS)[number]
 
 /**
  * Active org units at a given hierarchy level (customer / project / site /
@@ -172,9 +135,8 @@ export async function listOrgUnitOptions(
  *
  * Called by the filler client on debounced changes, step navigation, and a
  * sendBeacon on page-unload (via /api/apps/draft-save which delegates to this
- * helper). Creates a lazy draft row the first time we see this responseId =
- * `null` — that is, on the user's first keystroke. Subsequent calls update
- * in-place.
+ * helper). The filler creates a lazy draft row on the first content change,
+ * then passes that response id to every autosave call here.
  *
  * Audits ONLY on first draft save in a session (when draft_updated_at was
  * null), not every keystroke. Keeps the audit log readable.
@@ -191,26 +153,23 @@ export async function listOrgUnitOptions(
  */
 
 const draftInputSchema = z.object({
-  responseId: z.string().min(1),
+  responseId: uuidSchema,
   values: z.record(z.string(), z.unknown()),
   rows: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))),
   stepIndex: z.number().int().min(0),
+  clientSessionId: uuidSchema,
+  clientSequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  baseRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 })
 
 export type SaveDraftInput = z.infer<typeof draftInputSchema>
+type SaveDraftResult =
+  | { ok: true; savedAt: string; revision: number; sequence: number }
+  | { ok: false; error: string }
 
-export async function saveFormResponseDraft(
-  input: SaveDraftInput,
-): Promise<{ ok: true; savedAt: string } | { ok: false; error: string }> {
-  const parsed = draftInputSchema.safeParse(input)
-  if (!parsed.success) {
-    return { ok: false, error: 'Invalid draft payload' }
-  }
+export async function saveFormResponseDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
   const ctx = await requireRequestContext()
-  if (!(await canFillResponse(ctx, parsed.data.responseId))) {
-    return { ok: false, error: 'You do not have access to this app' }
-  }
-  return await persistDraft(ctx, parsed.data)
+  return persistDraft(ctx, input)
 }
 
 /**
@@ -222,7 +181,13 @@ export async function saveFormResponseDraft(
 export async function persistDraft(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   input: SaveDraftInput,
-): Promise<{ ok: true; savedAt: string } | { ok: false; error: string }> {
+): Promise<SaveDraftResult> {
+  const parsed = draftInputSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: 'Invalid draft payload' }
+  if (!(await canFillResponse(ctx, parsed.data.responseId))) {
+    return { ok: false, error: 'You do not have access to this app' }
+  }
+  const draft = parsed.data
   const now = new Date()
 
   try {
@@ -233,17 +198,19 @@ export async function persistDraft(
           status: formResponses.status,
           locked: formResponses.locked,
           submittedBy: formResponses.submittedBy,
+          draftData: formResponses.draftData,
           draftUpdatedAt: formResponses.draftUpdatedAt,
         })
         .from(formResponses)
         .where(
           and(
-            eq(formResponses.id, input.responseId),
+            eq(formResponses.id, draft.responseId),
             eq(formResponses.tenantId, ctx.tenantId),
             isNull(formResponses.deletedAt),
           ),
         )
         .limit(1)
+        .for('update')
 
       if (!row) {
         return { ok: false as const, error: 'Response not found' }
@@ -272,14 +239,45 @@ export async function persistDraft(
         }
       }
 
+      const order = decideDraftSave(row.draftData as FormResponseDraftData | null, {
+        sessionId: draft.clientSessionId,
+        sequence: draft.clientSequence,
+        baseRevision: draft.baseRevision,
+      })
+      if (order.kind === 'conflict') {
+        return {
+          ok: false as const,
+          error: 'This draft changed in another tab. Refresh before continuing.',
+        }
+      }
+      if (order.kind === 'superseded') {
+        return {
+          ok: true as const,
+          savedAt: (row.draftUpdatedAt ?? now).toISOString(),
+          revision: order.revision,
+          sequence: order.sequence,
+          wasFirstSave: false,
+        }
+      }
+
       const wasFirstSave = row.draftUpdatedAt === null
 
-      await tx
+      const ownerUnchanged =
+        row.submittedBy === null
+          ? isNull(formResponses.submittedBy)
+          : eq(formResponses.submittedBy, row.submittedBy)
+      const [updated] = await tx
         .update(formResponses)
         .set({
-          draftData: { values: input.values, rows: input.rows },
+          draftData: {
+            values: draft.values,
+            rows: draft.rows,
+            saveSessionId: draft.clientSessionId,
+            saveSequence: draft.clientSequence,
+            saveRevision: order.nextRevision,
+          },
           draftUpdatedAt: now,
-          draftStepIndex: input.stepIndex,
+          draftStepIndex: draft.stepIndex,
           // Adopt ownership on first save if it was unset (typical for
           // brand-new drafts created by createDraftResponse below).
           ...(row.submittedBy === null && ctx.membership?.id
@@ -289,9 +287,32 @@ export async function persistDraft(
           // views can distinguish "empty shell" from "actively being filled".
           ...(row.status === 'draft' ? { status: 'in_progress' as const } : {}),
         })
-        .where(eq(formResponses.id, input.responseId))
+        .where(
+          and(
+            eq(formResponses.id, draft.responseId),
+            eq(formResponses.tenantId, ctx.tenantId),
+            eq(formResponses.status, row.status),
+            eq(formResponses.locked, false),
+            isNull(formResponses.deletedAt),
+            ownerUnchanged,
+          ),
+        )
+        .returning({ id: formResponses.id })
 
-      return { ok: true as const, wasFirstSave }
+      if (!updated) {
+        return {
+          ok: false as const,
+          error: 'This response changed before the draft could be saved',
+        }
+      }
+
+      return {
+        ok: true as const,
+        savedAt: now.toISOString(),
+        revision: order.nextRevision,
+        sequence: draft.clientSequence,
+        wasFirstSave,
+      }
     })
 
     if (!result.ok) return result
@@ -301,17 +322,22 @@ export async function persistDraft(
     if (result.wasFirstSave) {
       await recordAudit(ctx, {
         entityType: 'form_response',
-        entityId: input.responseId,
+        entityId: draft.responseId,
         action: 'create',
         summary: 'Started filling out form (draft saved)',
-        metadata: { stepIndex: input.stepIndex },
+        metadata: { stepIndex: draft.stepIndex },
       })
     }
 
-    return { ok: true, savedAt: now.toISOString() }
+    return {
+      ok: true,
+      savedAt: result.savedAt,
+      revision: result.revision,
+      sequence: result.sequence,
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'save failed'
-    return { ok: false, error: message }
+    console.error('[forms] draft save failed', err)
+    return { ok: false, error: 'Unable to save this draft right now' }
   }
 }
 
@@ -414,6 +440,7 @@ export async function updateResponseField(input: {
           ),
         )
         .limit(1)
+        .for('update', { of: formResponses })
 
       if (!row) return { ok: false as const, error: 'Response not found' }
       if (row.locked) return { ok: false as const, error: 'This record is locked' }
@@ -450,7 +477,11 @@ export async function updateResponseField(input: {
       }
       const verdict = computeFormScore(schema, newData, rows)
 
-      await tx
+      const ownerUnchanged =
+        row.submittedBy === null
+          ? isNull(formResponses.submittedBy)
+          : eq(formResponses.submittedBy, row.submittedBy)
+      const [updated] = await tx
         .update(formResponses)
         .set({
           data: newData,
@@ -466,7 +497,21 @@ export async function updateResponseField(input: {
             ? { submittedBy: ctx.membership.id }
             : {}),
         })
-        .where(eq(formResponses.id, input.responseId))
+        .where(
+          and(
+            eq(formResponses.id, input.responseId),
+            eq(formResponses.tenantId, ctx.tenantId),
+            eq(formResponses.status, row.status),
+            eq(formResponses.locked, false),
+            isNull(formResponses.deletedAt),
+            ownerUnchanged,
+          ),
+        )
+        .returning({ id: formResponses.id })
+
+      if (!updated) {
+        return { ok: false as const, error: 'This record changed before it could be saved' }
+      }
 
       return { ok: true as const }
     })

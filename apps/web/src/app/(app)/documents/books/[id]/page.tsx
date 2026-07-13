@@ -144,7 +144,6 @@ async function updateBookSettings(formData: FormData) {
   await ctx.db(async (tx) => {
     const patch: Record<string, unknown> = {
       title,
-      name: title,
       description,
       categoryId,
       typeId,
@@ -244,7 +243,8 @@ export default async function DocumentBookPage({
   if (!data) notFound()
   const { book, items, available, categories, types } = data
   const basePath = `/documents/books/${id}`
-  const display = book.title || book.name || '(untitled)'
+  const display = book.title || '(untitled)'
+  const categoryName = categories.find((category) => category.id === book.categoryId)?.name ?? null
 
   return (
     <DetailPageLayout
@@ -252,7 +252,7 @@ export default async function DocumentBookPage({
         <DetailHeader
           back={{ href: '/documents/books', label: 'Back to books' }}
           title={display}
-          subtitle={`${book.category ?? 'book'} · ${items.length} ${items.length === 1 ? 'document' : 'documents'}`}
+          subtitle={`${categoryName ?? 'Book'} · ${items.length} ${items.length === 1 ? 'document' : 'documents'}`}
           badge={
             <Badge variant={book.status === 'published' ? 'success' : 'secondary'}>
               {book.status}
@@ -369,7 +369,7 @@ export default async function DocumentBookPage({
               <form action={updateBookSettings} className="space-y-4 text-sm">
                 <input type="hidden" name="bookId" value={id} />
                 <Field label="Title" required>
-                  <Input name="title" defaultValue={book.title || book.name || ''} required />
+                  <Input name="title" defaultValue={book.title} required />
                 </Field>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Category">

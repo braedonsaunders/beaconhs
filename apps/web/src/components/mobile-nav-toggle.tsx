@@ -14,12 +14,12 @@ import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 import { useNavGroups } from './use-platform-nav'
 import { ThemeToggle } from './theme-toggle'
+import { useHydrated } from '@/lib/use-hydrated'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
   const { open, setOpen } = useMobileNav()
   const navGroups = useNavGroups(groups)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   useEffect(() => {
     if (!open) return
@@ -33,7 +33,7 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [open])
+  }, [open, setOpen])
 
   return (
     <>

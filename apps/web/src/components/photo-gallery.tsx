@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X } from 'lucide-react'
+import { RawImage } from '@/components/raw-image'
 
 export type GalleryPhoto = {
   id: string
@@ -25,7 +26,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
             onClick={() => setLightbox(p)}
             className="group relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800"
           >
-            <img
+            <RawImage
               src={p.url}
               alt={p.caption ?? p.filename}
               className="h-full w-full object-cover transition-transform group-hover:scale-105"
@@ -50,7 +51,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
           >
             <X size={20} />
           </button>
-          <img
+          <RawImage
             src={lightbox.url}
             alt={lightbox.caption ?? lightbox.filename}
             className="max-h-full max-w-full rounded-md object-contain"

@@ -4,7 +4,7 @@
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 
-export type PpeSubNavKey = 'records' | 'types' | 'banks'
+type PpeSubNavKey = 'records' | 'types' | 'banks'
 
 export function PpeSubNav({ active }: { active: PpeSubNavKey }) {
   return <ModuleNav moduleKey="ppe" active={active} />

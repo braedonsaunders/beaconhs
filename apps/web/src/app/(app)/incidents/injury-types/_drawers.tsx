@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
 
-export type InjuryTypeEditing = {
+type InjuryTypeEditing = {
   id: string
   name: string
   oshaCode: string | null

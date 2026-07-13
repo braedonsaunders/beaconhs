@@ -6,7 +6,7 @@ import type { Database } from '@beaconhs/db'
 // which raced (two concurrent creates read the same count → identical reference)
 // and drifted (a deleted record lowered the count → a reused reference).
 
-export type ReferenceEntity =
+type ReferenceEntity =
   | 'incident'
   | 'corrective_action'
   | 'inspection'

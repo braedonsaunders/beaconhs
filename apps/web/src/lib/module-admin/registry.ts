@@ -11,7 +11,7 @@
 // the global /compliance hub, and form building lives in the global Builder —
 // module sections may LINK to those, never re-own them.
 
-export type AdminSection = {
+type AdminSection = {
   /** Stable key; also the sub-nav `active` value for this section's page. */
   key: string
   label: string

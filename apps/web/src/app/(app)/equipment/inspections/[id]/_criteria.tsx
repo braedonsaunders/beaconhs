@@ -12,9 +12,10 @@ import { useRouter } from 'next/navigation'
 import { Badge, Button, Input, Label, Textarea, cn } from '@beaconhs/ui'
 import { Camera, CheckCircle2 } from 'lucide-react'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { RawImage } from '@/components/raw-image'
 
-export type EqAnswer = 'pass' | 'fail' | 'n_a'
-export type EqSeverity = 'low' | 'medium' | 'high' | 'critical'
+type EqAnswer = 'pass' | 'fail' | 'n_a'
+type EqSeverity = 'low' | 'medium' | 'high' | 'critical'
 export type EqKind = 'pass_fail' | 'pass_fail_na' | 'text' | 'numeric' | 'photo'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -131,7 +132,7 @@ const ANSWER_OPTS: Record<'pass_fail' | 'pass_fail_na', EqAnswer[]> = {
 }
 const ANSWER_LABEL: Record<EqAnswer, string> = { pass: 'Pass', fail: 'Fail', n_a: 'N/A' }
 
-export type CriterionActions = {
+type CriterionActions = {
   setAnswer: (fd: FormData) => Promise<void>
   setSeverity: (fd: FormData) => Promise<void>
   setComment: (fd: FormData) => Promise<void>
@@ -349,7 +350,7 @@ export function CriterionCard({
                   rel="noreferrer"
                   className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
                 >
-                  <img src={p.url} alt={p.filename} className="h-full w-full object-cover" />
+                  <RawImage src={p.url} alt={p.filename} className="h-full w-full object-cover" />
                 </a>
               ))}
             </div>

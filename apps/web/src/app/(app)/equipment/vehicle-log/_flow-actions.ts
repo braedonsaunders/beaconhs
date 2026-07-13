@@ -16,6 +16,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { executeFlowPlan } from '@/lib/flows/execute-flow-plan'
 import { createVehicleLogFlowAdapter } from '@/lib/flows/adapters/vehicle-log'
+import { isUuid } from '@/lib/list-params'
 
 export async function runVehicleLogAction(input: {
   entryId: string
@@ -24,6 +25,17 @@ export async function runVehicleLogAction(input: {
 }): Promise<{ ok: boolean; ran?: string[]; failed?: string[]; error?: string }> {
   const ctx = await requireRequestContext()
   try {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !isUuid(input.entryId) ||
+      !isUuid(input.flowId) ||
+      typeof input.buttonId !== 'string' ||
+      input.buttonId.length === 0 ||
+      input.buttonId.length > 128
+    ) {
+      return { ok: false, error: 'Action not found' }
+    }
     if (
       !can(ctx, 'equipment.read.all') &&
       !can(ctx, 'equipment.read.site') &&

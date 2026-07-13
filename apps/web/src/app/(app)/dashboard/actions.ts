@@ -7,11 +7,13 @@
 // dropped so a removed widget can't crash the renderer.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { formTemplates, userDashboardLayouts, type DashboardLayoutData } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { NAV_MODULES } from '@/lib/nav/registry'
+import { templateAccessWhere } from '../apps/_lib/access'
 import { canViewInsights } from '../insights/_access'
 import { getUserRoleTier } from './_role-tier'
 import {
@@ -60,6 +62,9 @@ export async function saveDashboardLayout(input: unknown) {
   const sourceRole = dashboardDefault.sourceKey
 
   await ctx.db(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`dashboard:${ctx.tenantId}:${ctx.userId}`}, 0))`,
+    )
     // The grid only ever sends geometry — preserve the user's saved Quick-actions
     // tiles (stored in the same jsonb) so saving a layout never wipes them.
     const [existing] = await tx
@@ -127,6 +132,9 @@ export async function saveQuickActions(input: unknown) {
   const sourceRole = dashboardDefault.sourceKey
 
   await ctx.db(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`dashboard:${ctx.tenantId}:${ctx.userId}`}, 0))`,
+    )
     const [existing] = await tx
       .select({
         layout: userDashboardLayouts.layout,
@@ -190,6 +198,7 @@ function labelForKind(kind: string): string {
  */
 export async function listQuickActionOptions(): Promise<QuickActionOptions> {
   const ctx = await requireRequestContext()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   // Curated "start something" shortcuts (shared with the default tiles),
   // filtered to what the caller can actually reach — no dead-end offers.
@@ -215,26 +224,27 @@ export async function listQuickActionOptions(): Promise<QuickActionOptions> {
     common.push(o)
   }
 
-  const formRows = await ctx.db(async (tx) =>
-    tx
-      .select({
-        key: formTemplates.key,
-        name: formTemplates.name,
-        iconKey: formTemplates.iconKey,
-        kind: formTemplates.kind,
-        surfaceAsTool: formTemplates.surfaceAsTool,
-      })
-      .from(formTemplates)
-      .where(
-        and(
-          eq(formTemplates.tenantId, ctx.tenantId),
-          eq(formTemplates.status, 'published'),
-          isNull(formTemplates.deletedAt),
-        ),
+  const formRows = can(ctx, 'forms.response.create')
+    ? await ctx.db(async (tx) =>
+        tx
+          .select({
+            key: formTemplates.key,
+            name: formTemplates.name,
+            iconKey: formTemplates.iconKey,
+            kind: formTemplates.kind,
+            surfaceAsTool: formTemplates.surfaceAsTool,
+          })
+          .from(formTemplates)
+          .where(
+            and(
+              eq(formTemplates.tenantId, ctx.tenantId),
+              templateAccessWhere(ctx, effectiveRoleKeys, 'operate'),
+            ),
+          )
+          .orderBy(desc(formTemplates.surfaceAsTool), asc(formTemplates.name))
+          .limit(200),
       )
-      .orderBy(desc(formTemplates.surfaceAsTool), asc(formTemplates.name))
-      .limit(200),
-  )
+    : []
 
   const forms: QuickActionOption[] = formRows.map((f) => ({
     label: f.name,
@@ -253,6 +263,9 @@ export async function resetDashboardLayout() {
     return { ok: false as const, error: 'Not a member of this tenant — nothing to reset.' }
   }
   await ctx.db(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`dashboard:${ctx.tenantId}:${ctx.userId}`}, 0))`,
+    )
     await tx
       .delete(userDashboardLayouts)
       .where(

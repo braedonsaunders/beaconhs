@@ -5,12 +5,11 @@ import {
   trainingAssessmentTypes,
   trainingClasses,
   trainingCourseFiles,
-  trainingCourses,
   trainingRecords,
   tenants,
   attachments,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { isUuid } from '@/lib/list-params'
 import { courseCredentialOutputIds, enabledCredentialOutputs } from '@/lib/credential-designs'
@@ -130,7 +129,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         id: file.id,
         label: file.label,
         filename: att?.filename ?? null,
-        url: att?.r2Key ? publicUrl(att.r2Key) : null,
+        url: att?.r2Key ? attachmentUrl(att.id) : null,
         sizeBytes: att?.sizeBytes != null ? Number(att.sizeBytes) : null,
       }))}
     />

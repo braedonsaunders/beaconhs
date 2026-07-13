@@ -125,6 +125,10 @@ Online and external certificate courses do not show the content builder — thei
 3. Tap a lesson to edit it. Changes save automatically.
 4. Use **Preview as learner** to see the course as a worker sees it. **Play** presents the whole course full-screen.
 
+## Reuse material from the Content Library
+
+Open **Training → Content Library** to create material that can be reused in more than one course. Open a text item, write and format it with the rich-text toolbar, then tap **Save content**. In a course lesson, choose that library item under **Reuse library item**.
+
 ## Run a classroom (present the content)
 
 For instructor-led courses, BeaconHS is the screen you run the class from. Build the deck, quizzes, and practical once on the course, then present it to the room.
@@ -191,6 +195,10 @@ Open **Training** in the left menu, then **Courses**. Open a course, add or open
 3. After each save the slideshow re-renders for learners; the toolbar shows **rendering…** until it catches up.
 
 If the page says PowerPoint editing is not configured, ask your administrator — the editor needs the Collabora server set up. The slideshow still plays and the file can still be downloaded.
+
+If the page says the workspace is unavailable, a platform administrator must restore the workspace before the editor can open or save the file.
+
+The editor is also blocked while an administrator is using **View as user**. Exit that session and open the deck as yourself.
 
 ## Download the PowerPoint
 
@@ -316,6 +324,10 @@ If AI is set up for your company, an **AI** button appears in the Write toolbar.
 
 Changes the assistant makes save into the working draft like your own edits — nothing publishes until you click **Publish**.
 
+If the editor says the workspace is unavailable, a platform administrator must restore the workspace before the editor can open or save the file.
+
+The editor is blocked while an administrator is using **View as user**. Exit that session and open the document as yourself.
+
 ## Publish a version
 
 1. Click **Publish** in the Write toolbar.
@@ -333,6 +345,14 @@ Open the **Versions** tab. Every published version keeps its own PDF and Word fi
 ## Uploaded PDFs
 
 Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. Once a PDF is in place, **Replace** in the PDF toolbar swaps in a new file, and **Publish** at the top of the page makes it visible to readers.
+
+## Organize categories, types, and management reviews
+
+If your role manages Documents, use the document tabs to keep the library organized:
+
+1. Open **Categories** to arrange the library into a hierarchy. Search by category, description, or parent. Use **Level** to show top-level or nested categories, and **Usage** to find categories with or without documents. Use the searchable **Parent** picker to move a category within the hierarchy. Category names must be unique under the same parent, but different branches can reuse a name.
+2. Open **Types** to manage classifications such as Policy, Procedure, SDS, and Manual. Use the search box to find a type by name, key, or description. Use **Usage** to show types that are used or unused.
+3. Open **Management reviews** to record board reviews of the safety management system. Search by review title, or use **Next review** to show reviews that have or do not have another review scheduled.
 
 ## Archive or delete
 
@@ -475,6 +495,8 @@ Some yards run a tablet at the door in kiosk mode.
 
 1. Walk up to the tablet. If it is locked, enter the yard PIN and tap **Unlock kiosk**.
 2. Scan your badge, then scan your units — same steps as above.
+
+The kiosk locks automatically when the workspace is suspended or archived. Ask a platform administrator to restore the workspace before using it again.
 
 ## Tips
 

@@ -68,7 +68,6 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
   const choices = labels.length ? labels : ['Option A', 'Option B']
 
   switch (t) {
-    case 'textarea':
     case 'long_text':
       return <Textarea rows={compact ? 2 : 3} disabled placeholder="" className="bg-white" />
     case 'number':
@@ -203,7 +202,6 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
     case 'typed_attestation':
       return <Input disabled placeholder="Type your name to attest" className="bg-white" />
     case 'formula':
-    case 'calc':
       return <Input disabled value="= computed" className="bg-slate-50 italic" />
     case 'slider': {
       const c = cfg(field) as { min?: number; max?: number }

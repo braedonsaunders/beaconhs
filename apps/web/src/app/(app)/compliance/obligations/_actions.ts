@@ -43,7 +43,7 @@ export type ObligationInput = {
   jobTitleId?: string
 }
 
-export type ObligationResult =
+type ObligationResult =
   | { ok: true; id: string; kind: ObligationKind }
   | { ok: false; error: string }
 

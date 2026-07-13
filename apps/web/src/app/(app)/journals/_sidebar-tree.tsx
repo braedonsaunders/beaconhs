@@ -4,7 +4,7 @@
 // entries by Date / Site / Topic / Person (rebuilt from data, never foldered by
 // hand), with quick filters, On-This-Day memories, and the activity heatmap.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CalendarClock, ChevronRight, Plus, Search, Sparkles, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import {
@@ -69,31 +69,16 @@ export function SidebarTree({
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => seedExpanded(data.tree, selectedId))
   const [q, setQ] = useState(filters.q ?? '')
-  const firstKey = data.tree[0]?.key
-
-  // Reseed expansion when the grouping (and thus tree shape) changes.
-  useEffect(() => {
-    setExpanded(seedExpanded(data.tree, selectedId))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy, firstKey])
-
-  // Always reveal the path to the selected entry.
-  useEffect(() => {
-    const path = pathTo(data.tree, selectedId)
-    if (path) setExpanded((prev) => new Set([...prev, ...path]))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  const selectedPath = pathTo(data.tree, selectedId)
+  const visibleExpanded = selectedPath ? new Set([...expanded, ...selectedPath]) : expanded
 
   // Debounce search → filters.
-  const qRef = useRef(q)
-  qRef.current = q
   useEffect(() => {
     const t = setTimeout(() => {
-      if ((filters.q ?? '') !== qRef.current) onFiltersChange({ q: qRef.current || undefined })
+      if ((filters.q ?? '') !== q) onFiltersChange({ q: q || undefined })
     }, 300)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q])
+  }, [filters.q, onFiltersChange, q])
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -236,7 +221,7 @@ export function SidebarTree({
                 key={node.key}
                 node={node}
                 depth={0}
-                expanded={expanded}
+                expanded={visibleExpanded}
                 selectedId={selectedId}
                 onToggle={toggle}
                 onSelect={onSelect}

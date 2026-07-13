@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import {
   Activity,
   ArrowLeftRight,
@@ -75,15 +76,16 @@ import {
   orgUnits,
   people,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
-import { deleteObject, publicUrl } from '@beaconhs/storage'
+import { deleteObject } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -249,12 +251,13 @@ async function updateEquipmentField(formData: FormData) {
     }
   }
 
-  const before = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [prior] = await tx
       .select({ isDraft: equipmentItems.isDraft, status: equipmentItems.status })
       .from(equipmentItems)
       .where(eq(equipmentItems.id, id))
       .limit(1)
+      .for('update')
     await tx
       .update(equipmentItems)
       .set({
@@ -271,7 +274,22 @@ async function updateEquipmentField(formData: FormData) {
     if (field === 'currentHolderPersonId' || field === 'status') {
       await refreshAvailability(tx, id)
     }
-    return prior ?? null
+    if (prior?.isDraft) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'equipment-assets',
+        event: 'on_create',
+        occurrenceKey: randomUUID(),
+      })
+    } else if (field === 'status' && prior && prior.status !== val) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'equipment-assets',
+        event: 'status_change',
+        toStatus: String(val),
+        occurrenceKey: randomUUID(),
+      })
+    }
   })
   await recordAudit(ctx, {
     entityType: 'equipment',
@@ -280,18 +298,6 @@ async function updateEquipmentField(formData: FormData) {
     summary: `Updated ${field}`,
     after: { [field]: val },
   })
-  // Equipment-asset Flows (guarded — never break the save): committing a draft
-  // is the "asset registered" moment; a status edit fires status_change.
-  if (before?.isDraft) {
-    await runModuleFlows(ctx, { moduleKey: 'equipment-assets', event: 'on_create', subjectId: id })
-  } else if (field === 'status' && before && before.status !== val) {
-    await runModuleFlows(ctx, {
-      moduleKey: 'equipment-assets',
-      event: 'status_change',
-      subjectId: id,
-      toStatus: String(val),
-    })
-  }
   revalidatePath(`/equipment/${id}`)
   revalidatePath('/equipment')
 }
@@ -1053,7 +1059,7 @@ export default async function EquipmentDetailPage({
 
     return {
       ...row,
-      photoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
+      photoUrl: row.item.photoAttachmentId ? attachmentUrl(row.item.photoAttachmentId) : null,
       history,
       historyTotal,
       workOrders,
@@ -1136,6 +1142,9 @@ export default async function EquipmentDetailPage({
   const customValues = readCustomFieldValues(item.metadata)
 
   const todayIso = new Date().toISOString().slice(0, 10)
+  const dueSoonCutoffIso = new Date(Date.parse(todayIso) + 30 * 86_400_000)
+    .toISOString()
+    .slice(0, 10)
   const activeSchedules = schedules.filter((s) => s.schedule.isActive)
   const nextInspectionDue = activeSchedules[0]?.schedule.nextDueOn ?? null
 
@@ -1950,7 +1959,7 @@ export default async function EquipmentDetailPage({
                                 <TableCell>
                                   <div className="flex items-center justify-end gap-3">
                                     <a
-                                      href={publicUrl(a.r2Key)}
+                                      href={attachmentUrl(a.id)}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-xs text-teal-700 hover:underline dark:text-teal-400"
@@ -2040,8 +2049,7 @@ export default async function EquipmentDetailPage({
                               const dueSoon =
                                 schedule.isActive &&
                                 !overdue &&
-                                schedule.nextDueOn <=
-                                  new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+                                schedule.nextDueOn <= dueSoonCutoffIso
                               return (
                                 <TableRow key={schedule.id}>
                                   <TableCell className="font-medium">

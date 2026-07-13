@@ -7,18 +7,23 @@
 // key's tenant exactly like a UI session.
 
 import { createHash } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { apiKeys } from '@beaconhs/db/schema'
+import { apiKeys, tenants } from '@beaconhs/db/schema'
+import { consumeRateLimit } from '@beaconhs/jobs/rate-limit'
 import { makeTenantContext, type RequestContext } from '@beaconhs/tenant'
 import { ApiError } from './errors'
 import { sanitizeApiPermissions } from './permissions'
+import { isActiveTenantStatus } from '../active-tenant'
+import { parseApiBearerToken } from './token'
 
-export type ApiKeyInfo = {
+type ApiKeyInfo = {
   id: string
   name: string
   tenantId: string
   permissions: string[]
+  builderTemplateIds: string[]
+  rateLimitHeaders: Record<string, string>
 }
 
 export type ApiAuth = {
@@ -26,36 +31,78 @@ export type ApiAuth = {
   key: ApiKeyInfo
 }
 
-function bearerToken(req: Request): string | null {
-  const header = req.headers.get('authorization') ?? req.headers.get('Authorization')
-  if (!header) return null
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim())
-  return match?.[1]?.trim() || null
-}
-
 /**
  * Resolve the API key on a request into an auth context, or throw an
  * ApiError the caller renders. Stamps last_used_at on success.
  */
 export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
-  const token = bearerToken(req)
+  const token = parseApiBearerToken(req)
   if (!token) throw ApiError.unauthorized()
 
   const keyHash = createHash('sha256').update(token).digest('hex')
 
-  const row = await withSuperAdmin(db, async (tx) => {
-    const [k] = await tx.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1)
-    if (!k) return null
-    // Stamp usage opportunistically inside the same bypass transaction.
-    await tx.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, k.id))
-    return k
+  const result = await withSuperAdmin(db, async (tx) => {
+    const [match] = await tx
+      .select({ key: apiKeys, tenantStatus: tenants.status })
+      .from(apiKeys)
+      .innerJoin(tenants, eq(tenants.id, apiKeys.tenantId))
+      .where(eq(apiKeys.keyHash, keyHash))
+      .limit(1)
+    if (!match) return { error: 'missing' } as const
+    if (match.key.revokedAt) return { error: 'revoked' } as const
+    if (match.key.expiresAt && match.key.expiresAt.getTime() <= Date.now()) {
+      return { error: 'expired' } as const
+    }
+    if (!isActiveTenantStatus(match.tenantStatus)) {
+      return { error: 'tenant_unavailable' } as const
+    }
+
+    return { key: match.key } as const
   })
 
-  if (!row) throw ApiError.unauthorized()
-  if (row.revokedAt) throw ApiError.unauthorized('API key has been revoked')
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) {
-    throw ApiError.unauthorized('API key has expired')
+  if ('error' in result) {
+    if (result.error === 'revoked') throw ApiError.unauthorized('API key has been revoked')
+    if (result.error === 'expired') throw ApiError.unauthorized('API key has expired')
+    if (result.error === 'tenant_unavailable') {
+      throw ApiError.unauthorized('API key tenant is not active')
+    }
+    throw ApiError.unauthorized()
   }
+  const row = result.key
+
+  let rate
+  try {
+    rate = await consumeRateLimit({
+      key: `public-api:key:${row.id}`,
+      limit: 600,
+      windowSeconds: 60,
+    })
+  } catch (error) {
+    console.error('[api/v1] rate limiter unavailable', error)
+    throw ApiError.unavailable('API rate limiter is unavailable')
+  }
+  const retryAfter = Math.max(1, Math.ceil((rate.resetAt.getTime() - Date.now()) / 1_000))
+  const rateLimitHeaders = {
+    'RateLimit-Limit': '600',
+    'RateLimit-Remaining': String(rate.remaining),
+    'RateLimit-Reset': String(Math.ceil(rate.resetAt.getTime() / 1_000)),
+  }
+  if (!rate.allowed) throw ApiError.rateLimited(retryAfter, rateLimitHeaders)
+
+  // Avoid a write lock on every request. This telemetry timestamp is updated at
+  // most once every five minutes and is not part of the authorization decision.
+  const lastUsedCutoff = new Date(Date.now() - 5 * 60_000)
+  await withSuperAdmin(db, (tx) =>
+    tx
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(
+        and(
+          eq(apiKeys.id, row.id),
+          or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, lastUsedCutoff)),
+        ),
+      ),
+  ).catch((error) => console.error('[api/v1] last-used telemetry update failed', error))
 
   const permissions = sanitizeApiPermissions(row.permissions ?? [])
   const ctx = makeTenantContext(db, {
@@ -75,5 +122,15 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     scopes: [{ type: 'tenant' }],
   })
 
-  return { ctx, key: { id: row.id, name: row.name, tenantId: row.tenantId, permissions } }
+  return {
+    ctx,
+    key: {
+      id: row.id,
+      name: row.name,
+      tenantId: row.tenantId,
+      permissions,
+      builderTemplateIds: row.builderTemplateIds ?? [],
+      rateLimitHeaders,
+    },
+  }
 }

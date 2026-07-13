@@ -20,7 +20,7 @@ export type ScheduleFormDefinition = {
 
 export type ScheduleFormMember = { userId: string; name: string; email: string }
 
-export type ScheduleFormInitial = {
+type ScheduleFormInitial = {
   definitionId?: string
   name?: string
   cadence?: 'daily' | 'weekly' | 'monthly'

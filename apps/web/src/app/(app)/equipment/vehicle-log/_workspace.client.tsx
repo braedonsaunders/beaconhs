@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Popover, Select, cn } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import type {
   ApplyVehicleLogImportInput,
   ApplyVehicleLogImportResult,
@@ -125,6 +126,41 @@ function serializeDraft(entry: VehicleLogEntryDraft) {
     entry.siteOrgUnitId ?? null,
     entry.otherDestination?.trim() || null,
   ])
+}
+
+type DraftSnapshot = {
+  workspace: VehicleLogWorkspace
+  scopeKey: string
+  drafts: Record<string, VehicleLogEntryDraft>
+  saved: Record<string, string>
+}
+
+function vehicleLogScopeKey(workspace: VehicleLogWorkspace) {
+  return `${workspace.month.key}:${workspace.selectedDriverId}:${workspace.selectedEquipmentId}:${workspace.mode}`
+}
+
+function reconcileDrafts(
+  previous: DraftSnapshot | null,
+  workspace: VehicleLogWorkspace,
+): DraftSnapshot {
+  const scopeKey = vehicleLogScopeKey(workspace)
+  const scopeChanged = previous?.scopeKey !== scopeKey
+  const current = scopeChanged ? {} : (previous?.drafts ?? {})
+  const saved = scopeChanged ? {} : { ...(previous?.saved ?? {}) }
+  const drafts: Record<string, VehicleLogEntryDraft> = {}
+
+  for (const row of workspace.rows) {
+    const existing = current[row.date]
+    const dirty = existing && serializeDraft(existing) !== saved[row.date]
+    if (existing && dirty) {
+      drafts[row.date] = existing
+    } else {
+      drafts[row.date] = cloneDraft(row.entry, workspace.mode)
+      saved[row.date] = serializeDraft(row.entry)
+    }
+  }
+
+  return { workspace, scopeKey, drafts, saved }
 }
 
 // A blank odometer Start inherits the previous day's End at save time, so a
@@ -331,63 +367,41 @@ export function VehicleLogWorkspaceClient({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [drafts, setDrafts] = useState<Record<string, VehicleLogEntryDraft>>({})
-  const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
-  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
-  const [actionResult, setActionResult] = useState<string | null>(null)
-  const [importPickerOpen, setImportPickerOpen] = useState(false)
-  const [selectedImportSourceId, setSelectedImportSourceId] = useState('')
+  const scopeKey = vehicleLogScopeKey(workspace)
+  const [draftSnapshot, setDraftSnapshot] = useState(() => reconcileDrafts(null, workspace))
+  const currentDraftSnapshot =
+    draftSnapshot.workspace === workspace
+      ? draftSnapshot
+      : reconcileDrafts(draftSnapshot, workspace)
+  const drafts = currentDraftSnapshot.drafts
+  const [rowStates, setRowStates] = useReseededState<Record<string, RowState>>(scopeKey, {})
+  const [rowErrors, setRowErrors] = useReseededState<Record<string, string>>(scopeKey, {})
+  const [actionResult, setActionResult] = useReseededState<string | null>(scopeKey, null)
+  const [importPickerOpen, setImportPickerOpen] = useReseededState(scopeKey, false)
+  const importSources = workspace.importSources.sources
+  const importableSources = importSources.filter((source) => source.active)
+  const [selectedImportSourceChoice, setSelectedImportSourceId] = useState('')
+  const selectedImportSourceId = importSources.some(
+    (source) => source.id === selectedImportSourceChoice && source.active,
+  )
+    ? selectedImportSourceChoice
+    : (importableSources[0]?.id ?? importSources[0]?.id ?? '')
 
-  const savedRef = useRef<Record<string, string>>({})
-  const scopeKeyRef = useRef('')
   const savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  const draftsRef = useRef(drafts)
 
-  // Keep the ref in lock-step with state so the merge effect below can read
-  // the latest drafts without putting `drafts` in its dependency list. This
-  // effect is declared first so it runs before the merge on every commit.
-  useEffect(() => {
-    draftsRef.current = drafts
-  }, [drafts])
-
-  const scopeKey = `${workspace.month.key}:${workspace.selectedDriverId}:${workspace.selectedEquipmentId}:${workspace.mode}`
-
-  // Merge server rows into local drafts. On a scope change (month / driver /
-  // vehicle / mode) everything resets; on a background refresh (row save,
-  // import) only clean rows are replaced so in-flight typing is never lost.
-  // The merge is computed in the effect body — never inside a setState
-  // updater — because it mutates savedRef, and updaters must stay pure
-  // (React dev double-invokes them, which would corrupt the dirty check).
-  useEffect(() => {
-    const scopeChanged = scopeKeyRef.current !== scopeKey
-    scopeKeyRef.current = scopeKey
-    if (scopeChanged) {
-      savedRef.current = {}
-      setRowStates({})
-      setRowErrors({})
-      setActionResult(null)
-      setImportPickerOpen(false)
-    }
-    const current = draftsRef.current
-    const next: Record<string, VehicleLogEntryDraft> = {}
-    for (const row of workspace.rows) {
-      const existing = scopeChanged ? undefined : current[row.date]
-      const dirty = existing && serializeDraft(existing) !== savedRef.current[row.date]
-      if (existing && dirty) {
-        next[row.date] = existing
-      } else {
-        next[row.date] = cloneDraft(row.entry, workspace.mode)
-        savedRef.current[row.date] = serializeDraft(row.entry)
+  function setDrafts(
+    update:
+      | Record<string, VehicleLogEntryDraft>
+      | ((current: Record<string, VehicleLogEntryDraft>) => Record<string, VehicleLogEntryDraft>),
+  ) {
+    setDraftSnapshot((current) => {
+      const base = current.workspace === workspace ? current : reconcileDrafts(current, workspace)
+      return {
+        ...base,
+        drafts: typeof update === 'function' ? update(base.drafts) : update,
       }
-    }
-    draftsRef.current = next
-    setDrafts(next)
-    setSelectedImportSourceId((current) => {
-      const sources = workspace.importSources.sources
-      if (sources.some((source) => source.id === current && source.active)) return current
-      return sources.find((source) => source.active)?.id ?? sources[0]?.id ?? ''
     })
-  }, [workspace, scopeKey])
+  }
 
   useEffect(() => {
     const timers = savedTimersRef.current
@@ -478,7 +492,7 @@ export function VehicleLogWorkspaceClient({
     if (!base) return
     const draft = withCarriedStart(base, workspace.mode, computed.rows[date]?.prevEnd ?? null)
     if (!draft.id && !hasMeaningfulDraft(draft)) return
-    if (serializeDraft(draft) === savedRef.current[date]) return
+    if (serializeDraft(draft) === currentDraftSnapshot.saved[date]) return
     markRowState(date, 'saving')
     setRowErrors((s) => ({ ...s, [date]: '' }))
     const res = await saveAction({
@@ -497,8 +511,14 @@ export function VehicleLogWorkspaceClient({
       notes: draft.notes,
     })
     if (res.ok) {
-      savedRef.current[date] = serializeDraft(res.entry)
-      setDrafts((current) => ({ ...current, [date]: cloneDraft(res.entry, workspace.mode) }))
+      setDraftSnapshot((current) => {
+        const base = current.workspace === workspace ? current : reconcileDrafts(current, workspace)
+        return {
+          ...base,
+          drafts: { ...base.drafts, [date]: cloneDraft(res.entry, workspace.mode) },
+          saved: { ...base.saved, [date]: serializeDraft(res.entry) },
+        }
+      })
       markRowState(date, 'saved')
       router.refresh()
     } else {
@@ -608,8 +628,6 @@ export function VehicleLogWorkspaceClient({
     })
   }
 
-  const importSources = workspace.importSources.sources
-  const importableSources = importSources.filter((source) => source.active)
   const selectedImportSource =
     importSources.find((source) => source.id === selectedImportSourceId) ?? importableSources[0]
   const hasActiveSource = workspace.importSources.activeSourceCount > 0

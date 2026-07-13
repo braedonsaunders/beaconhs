@@ -27,14 +27,18 @@ export function ShareDrawer({
 
   useEffect(() => {
     if (open && conversationId) {
-      setData(null)
-      setTargetId('')
-      setError(null)
       getShareData(conversationId)
         .then(setData)
         .catch(() => setData({ shares: [], users: [], roles: [] }))
     }
   }, [open, conversationId])
+
+  function close() {
+    setData(null)
+    setTargetId('')
+    setError(null)
+    onClose()
+  }
 
   function refresh() {
     if (conversationId)
@@ -72,7 +76,7 @@ export function ShareDrawer({
   return (
     <Drawer
       open={open}
-      onClose={onClose}
+      onClose={close}
       title="Share conversation"
       description="People you share with can read this conversation. Only you can continue it."
       size="sm"

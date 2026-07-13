@@ -16,13 +16,11 @@ import {
   trainingCourses,
   trainingLessons,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import type { ModuleLite } from '../_workspace'
 import type { AssessmentMeta, AttachmentMeta, ItemContent, QuizQuestion } from '../_presenter'
 
-export type { AssessmentMeta }
-
-export type CoursePresentation = {
+type CoursePresentation = {
   course: typeof trainingCourses.$inferSelect
   modules: ModuleLite[]
   /** Slim list for the builder's library picker. */
@@ -93,42 +91,38 @@ export async function loadCoursePresentation(
         .where(inArray(trainingAssessmentTypes.id, usedTypeIds))
     : []
 
-  // Resolve media URLs for lesson media + slide images + block images across
+  // Resolve media URLs for lesson media + slide images across
   // both lessons and any library items they reference.
   const attIds = new Set<string>()
-  const collectBlocks = (blocks: (typeof lessons)[number]['contentBlocks'] | null) => {
-    for (const b of blocks ?? []) {
-      if (
-        (b.type === 'image' || b.type === 'file' || b.type === 'video') &&
-        'attachmentId' in b &&
-        b.attachmentId
-      ) {
-        attIds.add(b.attachmentId)
-      }
-    }
-  }
   const collectSlides = (slides: (typeof lessons)[number]['slides'] | null) => {
     for (const s of slides ?? []) {
       if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
       for (const el of s.elements ?? []) {
         if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
       }
-      collectBlocks(Array.isArray(s.body) ? s.body : null)
-      collectBlocks(Array.isArray(s.left) ? s.left : null)
-      collectBlocks(Array.isArray(s.right) ? s.right : null)
+      for (const region of [s.body, s.left, s.right]) {
+        if (!Array.isArray(region)) continue
+        for (const block of region) {
+          if (
+            (block.type === 'image' || block.type === 'file' || block.type === 'video') &&
+            'attachmentId' in block &&
+            block.attachmentId
+          ) {
+            attIds.add(block.attachmentId)
+          }
+        }
+      }
     }
   }
   for (const l of lessons) {
     if (l.attachmentId) attIds.add(l.attachmentId)
     if (l.sourceAttachmentId) attIds.add(l.sourceAttachmentId)
-    collectBlocks(l.contentBlocks)
     collectSlides(l.slides)
   }
   const usedItemIds = new Set(lessons.map((l) => l.contentItemId).filter(Boolean))
   for (const it of contentItemRows) {
     if (!usedItemIds.has(it.id)) continue
     if (it.attachmentId) attIds.add(it.attachmentId)
-    collectBlocks(it.contentBlocks)
     collectSlides(it.slides)
   }
   const atts = attIds.size
@@ -147,7 +141,7 @@ export async function loadCoursePresentation(
     atts.map((a) => [
       a.id,
       {
-        url: a.key ? publicUrl(a.key) : null,
+        url: a.key ? attachmentUrl(a.id) : null,
         contentType: a.contentType ?? null,
         filename: a.filename ?? null,
       },
@@ -183,7 +177,6 @@ export async function loadCoursePresentation(
       {
         kind: it.kind,
         contentHtml: it.contentHtml,
-        contentBlocks: it.contentBlocks ?? [],
         slides: it.slides ?? [],
         embedUrl: it.embedUrl,
         attachmentId: it.attachmentId,
@@ -210,7 +203,6 @@ export async function loadCoursePresentation(
         embedUrl: l.embedUrl,
         contentItemId: l.contentItemId,
         durationMinutes: l.durationMinutes,
-        contentBlocks: l.contentBlocks ?? [],
         contentJson: l.contentJson,
         contentHtml: l.contentHtml,
         slides: l.slides ?? [],

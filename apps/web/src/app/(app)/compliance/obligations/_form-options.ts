@@ -20,7 +20,9 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import type { AudienceOptions } from '@/components/audience-picker'
+import { templateAccessWhere } from '../../apps/_lib/access'
 import type { ObligationTargets } from './_obligation-form'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
@@ -28,6 +30,7 @@ type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 export async function loadObligationFormOptions(
   ctx: Ctx,
 ): Promise<{ targets: ObligationTargets; audienceOptions: AudienceOptions }> {
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   const data = await ctx.db(async (tx) => {
     const [
       inspTypes,
@@ -77,7 +80,7 @@ export async function loadObligationFormOptions(
       tx
         .select({ id: formTemplates.id, name: formTemplates.name })
         .from(formTemplates)
-        .where(eq(formTemplates.status, 'published'))
+        .where(templateAccessWhere(ctx, effectiveRoleKeys, 'operate'))
         .orderBy(asc(formTemplates.name))
         .limit(500),
       tx.select({ key: roles.key, name: roles.name }).from(roles).orderBy(asc(roles.name)),

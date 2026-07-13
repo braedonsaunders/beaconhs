@@ -35,11 +35,7 @@ export async function uploadSignatureDataUrl(dataUrl: string): Promise<string> {
   })
   if (!put.ok) throw new Error(`Signature upload failed (${put.status})`)
   const fin = await finalizeUpload({
-    kind: 'signature',
-    key: req.key,
-    filename,
-    contentType,
-    sizeBytes: blob.size,
+    uploadId: req.uploadId,
   })
   if (!fin.ok) throw new Error(fin.error)
   return fin.attachmentId

@@ -21,9 +21,9 @@ export const OBLIGATION_KINDS = [
 ] as const
 export type ObligationKind = (typeof OBLIGATION_KINDS)[number]
 
-export type SubjectKind = 'per_person' | 'per_record' | 'per_task'
+type SubjectKind = 'per_person' | 'per_record' | 'per_task'
 
-export type TargetKind =
+type TargetKind =
   | 'inspectionType'
   | 'document'
   | 'trainingItem'
@@ -35,7 +35,7 @@ export type TargetKind =
   | 'jobTitle'
   | 'none'
 
-export type KindMeta = {
+type KindMeta = {
   label: string
   subjectKind: SubjectKind
   /** per_person kinds resolve an audience; per_record/per_task do not. */

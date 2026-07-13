@@ -16,14 +16,14 @@ import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from 
 
 // ---- Event timeline --------------------------------------------------------
 
-export type EventInput = {
+type EventInput = {
   id?: string
   incidentId: string
   occurredAt: string // ISO datetime-local value
   description: string
 }
 
-export type EventAction = (input: EventInput) => Promise<{ ok: boolean; error?: string }>
+type EventAction = (input: EventInput) => Promise<{ ok: boolean; error?: string }>
 
 export function EventDrawer({
   open,
@@ -142,14 +142,14 @@ export const FACTOR_CATEGORIES = [
 ] as const
 export type FactorCategory = (typeof FACTOR_CATEGORIES)[number]
 
-export type FactorInput = {
+type FactorInput = {
   id?: string
   incidentId: string
   category: FactorCategory
   description: string
 }
 
-export type FactorAction = (input: FactorInput) => Promise<{ ok: boolean; error?: string }>
+type FactorAction = (input: FactorInput) => Promise<{ ok: boolean; error?: string }>
 
 export function FactorDrawer({
   open,
@@ -259,14 +259,14 @@ export function FactorDrawer({
 
 // ---- Root cause why --------------------------------------------------------
 
-export type WhyInput = {
+type WhyInput = {
   id?: string
   incidentId: string
   ordinal: number
   whyText: string
 }
 
-export type WhyAction = (input: WhyInput) => Promise<{ ok: boolean; error?: string }>
+type WhyAction = (input: WhyInput) => Promise<{ ok: boolean; error?: string }>
 
 export function WhyDrawer({
   open,
@@ -385,7 +385,7 @@ export function WhyDrawer({
 export const PREV_STEP_STATUSES = ['planned', 'in_progress', 'completed'] as const
 export type PrevStepStatus = (typeof PREV_STEP_STATUSES)[number]
 
-export type PrevStepInput = {
+type PrevStepInput = {
   id?: string
   incidentId: string
   description: string
@@ -394,7 +394,7 @@ export type PrevStepInput = {
   status: PrevStepStatus
 }
 
-export type PrevStepAction = (input: PrevStepInput) => Promise<{ ok: boolean; error?: string }>
+type PrevStepAction = (input: PrevStepInput) => Promise<{ ok: boolean; error?: string }>
 
 type Person = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
 

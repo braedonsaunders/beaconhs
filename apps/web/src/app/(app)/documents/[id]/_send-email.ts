@@ -1,12 +1,11 @@
 // Server-only helper to email a document. The body of the email includes
 // the document description + a link to the in-app view; if the published
-// version has a content_attachment_id, we surface its public URL as a
-// "view attachment" link too. (We don't attach the PDF inline — the
+// version has a content attachment, we surface its authenticated, audited
+// download route too. (We don't attach the PDF inline — the
 // email queue keeps payloads small.)
 
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { attachments, documentVersions, documents, tenantUsers, users } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachments, documentCategories, documentVersions, documents } from '@beaconhs/db/schema'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import { appBaseUrl } from '@/lib/app-base-url'
@@ -23,7 +22,12 @@ export async function sendDocumentEmail(
   },
 ): Promise<{ recipientCount: number } | null> {
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(documents).where(eq(documents.id, documentId)).limit(1)
+    const [row] = await tx
+      .select({ doc: documents, categoryName: documentCategories.name })
+      .from(documents)
+      .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
+      .where(eq(documents.id, documentId))
+      .limit(1)
     if (!row) return null
 
     const [publishedVersion] = await tx
@@ -39,7 +43,7 @@ export async function sendDocumentEmail(
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
-    return { doc: row, publishedVersion }
+    return { doc: row.doc, categoryName: row.categoryName, publishedVersion }
   })
   if (!data) return null
 
@@ -51,7 +55,7 @@ export async function sendDocumentEmail(
   const appUrl = appBaseUrl()
   const docUrl = `${appUrl}/documents/${documentId}`
   const attachmentUrl = data.publishedVersion?.attachment
-    ? publicUrl(data.publishedVersion.attachment.r2Key)
+    ? `${appUrl}/documents/${documentId}/versions/${data.publishedVersion.v.id}/download`
     : null
 
   const subject =
@@ -62,7 +66,7 @@ export async function sendDocumentEmail(
     `${data.doc.title} (${data.doc.key})`,
     ``,
     `Status: ${data.doc.status}`,
-    `Category: ${data.doc.category ?? '—'}`,
+    `Category: ${data.categoryName ?? '—'}`,
     data.publishedVersion
       ? `Published version: v${data.publishedVersion.v.version}`
       : 'No published version.',
@@ -86,7 +90,7 @@ export async function sendDocumentEmail(
       <h2 style="margin:0 0 4px;font-size:18px;">${escapeHtml(data.doc.title)}</h2>
       <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
         <span style="font-family:monospace">${escapeHtml(data.doc.key)}</span> ·
-        ${escapeHtml(data.doc.category ?? 'document')} ·
+        ${escapeHtml(data.categoryName ?? 'document')} ·
         ${escapeHtml(data.doc.status)}
         ${data.publishedVersion ? ` · v${data.publishedVersion.v.version}` : ''}
       </div>

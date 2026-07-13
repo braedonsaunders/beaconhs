@@ -12,6 +12,7 @@
 //   client surfaces "this action is locked".
 
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import {
   caCompleteSteps,
@@ -19,19 +20,18 @@ import {
   correctiveActions,
   orgUnits,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
-import { emitCorrectiveActionAssigned, emitCorrectiveActionCompleted } from '@beaconhs/events'
-import { emitCorrectiveActionClosed } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { correctiveActionClosedEvent } from '@beaconhs/integrations'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { recordAudit } from '@/lib/audit'
-import { storeSignatureValue } from '@/lib/signature-storage'
+import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
-export type ActionResult = { ok: true } | { ok: false; error: string }
+type ActionResult = { ok: true } | { ok: false; error: string }
 
 async function loadCA(ctx: Awaited<ReturnType<typeof requireRequestContext>>, id: string) {
   return ctx.db(async (tx) => {
@@ -189,31 +189,24 @@ async function insertCompleteStep(
     signatureDataUrl?: string | null
   },
 ): Promise<ActionResult> {
-  const [nextOrder] = await ctx.db((tx) =>
-    tx
+  await withStoredSignatureAttachment(ctx, args.signatureDataUrl, async (tx, attachmentId) => {
+    const [nextOrder] = await tx
       .select({
         n: sql<number>`COALESCE(MAX(${caCompleteSteps.entityOrder}), 0) + 1`,
       })
       .from(caCompleteSteps)
-      .where(eq(caCompleteSteps.caId, args.caId)),
-  )
+      .where(eq(caCompleteSteps.caId, args.caId))
 
-  // Persist captured signatures to object storage and keep only the public URL
-  // in the column. Idempotent: existing https URLs pass through untouched, so
-  // every caller (appendCompleteStep, verifyCorrectiveAction) is covered here.
-  const storedSignature = await storeSignatureValue(ctx.tenantId, args.signatureDataUrl)
-
-  await ctx.db((tx) =>
-    tx.insert(caCompleteSteps).values({
+    await tx.insert(caCompleteSteps).values({
       tenantId: ctx.tenantId,
       caId: args.caId,
       kind: args.kind,
       description: args.description?.trim() || null,
-      signatureDataUrl: storedSignature,
+      signatureAttachmentId: attachmentId,
       completedByTenantUserId: safeTenantUserId(ctx),
       entityOrder: Number(nextOrder?.n ?? 1),
-    }),
-  )
+    })
+  })
   await recordAudit(ctx, {
     entityType: 'corrective_action',
     entityId: args.caId,
@@ -255,8 +248,8 @@ export async function verifyCorrectiveAction(args: {
   // untouched (no double-fired automations).
   const transitioning = ca.status !== 'pending_verification'
 
-  await ctx.db((tx) =>
-    tx
+  const verified = await ctx.db(async (tx) => {
+    const [updated] = await tx
       .update(correctiveActions)
       .set({
         verifiedAt: new Date(),
@@ -264,17 +257,39 @@ export async function verifyCorrectiveAction(args: {
         verificationNotes: args.notes.trim() || null,
         ...(transitioning ? { status: 'pending_verification' as const } : {}),
       })
-      .where(eq(correctiveActions.id, args.caId)),
-  )
-
-  if (transitioning) {
-    await runModuleFlows(ctx, {
-      moduleKey: 'corrective-actions',
-      event: 'status_change',
-      subjectId: args.caId,
-      toStatus: 'pending_verification',
-    })
-    await emitCorrectiveActionCompleted(ctx, { caId: args.caId, completerUserId: ctx.userId })
+      .where(
+        and(
+          eq(correctiveActions.id, args.caId),
+          eq(correctiveActions.locked, false),
+          eq(correctiveActions.status, ca.status),
+        ),
+      )
+      .returning({ id: correctiveActions.id })
+    if (updated && transitioning) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.completed',
+        subjectId: args.caId,
+        dedupKey: `corrective_action.completed:${args.caId}:${randomUUID()}`,
+        payload: {
+          notification: {
+            kind: 'corrective_action_completed',
+            caId: args.caId,
+            completerUserId: ctx.userId,
+          },
+          web: moduleFlowCommand(ctx, {
+            subjectId: args.caId,
+            moduleKey: 'corrective-actions',
+            event: 'status_change',
+            toStatus: 'pending_verification',
+          }),
+        },
+      })
+    }
+    return Boolean(updated)
+  })
+  if (!verified) {
+    return { ok: false, error: 'The corrective action changed before it could be verified.' }
   }
 
   // Persist the verification step + optional signature on the timeline so it
@@ -325,17 +340,49 @@ export async function closeCorrectiveAction(args: {
   const cost = args.costImpact?.trim()
   const parsedCost = cost && /^[0-9]+(\.[0-9]{1,2})?$/.test(cost) ? cost : null
 
-  await ctx.db((tx) =>
-    tx
+  const closedAt = new Date()
+  const closed = await ctx.db(async (tx) => {
+    const [updated] = await tx
       .update(correctiveActions)
       .set({
         status: 'closed',
         locked: true,
-        closedAt: new Date(),
+        closedAt,
         costImpact: parsedCost as any,
       })
-      .where(eq(correctiveActions.id, args.caId)),
-  )
+      .where(and(eq(correctiveActions.id, args.caId), eq(correctiveActions.locked, false)))
+      .returning({ id: correctiveActions.id })
+    if (!updated) return false
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'corrective_action.closed',
+      subjectId: args.caId,
+      dedupKey: `corrective_action.closed:${args.caId}:${closedAt.toISOString()}`,
+      payload: {
+        notification: {
+          kind: 'corrective_action_completed',
+          caId: args.caId,
+          completerUserId: ctx.userId,
+        },
+        integration: correctiveActionClosedEvent(ctx.tenantId, {
+          id: args.caId,
+          reference: ca.reference,
+          title: ca.title,
+          status: 'closed',
+          severity: ca.severity,
+          closedAt,
+        }),
+        web: moduleFlowCommand(ctx, {
+          subjectId: args.caId,
+          moduleKey: 'corrective-actions',
+          event: 'status_change',
+          toStatus: 'closed',
+        }),
+      },
+    })
+    return true
+  })
+  if (!closed) return { ok: false, error: 'This corrective action is already closed.' }
   if (args.closeNotes && args.closeNotes.trim().length > 0) {
     await insertCompleteStep(ctx, {
       caId: args.caId,
@@ -348,22 +395,7 @@ export async function closeCorrectiveAction(args: {
     entityId: args.caId,
     action: 'update',
     summary: 'Closed + locked',
-    after: { status: 'closed', closedAt: new Date().toISOString(), costImpact: parsedCost },
-  })
-  await emitCorrectiveActionCompleted(ctx, { caId: args.caId, completerUserId: ctx.userId })
-  await emitCorrectiveActionClosed(ctx, {
-    id: args.caId,
-    reference: ca.reference,
-    title: ca.title,
-    status: 'closed',
-    severity: ca.severity,
-    closedAt: new Date(),
-  }).catch(() => {})
-  await runModuleFlows(ctx, {
-    moduleKey: 'corrective-actions',
-    event: 'status_change',
-    subjectId: args.caId,
-    toStatus: 'closed',
+    after: { status: 'closed', closedAt: closedAt.toISOString(), costImpact: parsedCost },
   })
   revalidatePath(`/corrective-actions/${args.caId}`)
   revalidatePath('/corrective-actions')
@@ -621,20 +653,33 @@ export async function bulkReassignCorrectiveActions(args: {
   const editable = rows.filter((r) => !r.locked).map((r) => r.id)
   // Out-of-scope / unknown ids never come back from the scoped select, so
   // count everything that wasn't updated as skipped.
-  const skipped = ids.length - editable.length
-
   if (editable.length === 0) {
-    return { ok: true, updated: 0, skipped }
+    return { ok: true, updated: 0, skipped: ids.length }
   }
 
-  await ctx.db((tx) =>
-    tx
+  const reassignmentEventId = randomUUID()
+  const updated = await ctx.db(async (tx) => {
+    const changed = await tx
       .update(correctiveActions)
       .set({ ownerTenantUserId: args.newOwnerTenantUserId })
-      .where(inArray(correctiveActions.id, editable)),
-  )
+      .where(and(inArray(correctiveActions.id, editable), eq(correctiveActions.locked, false)))
+      .returning({ id: correctiveActions.id })
+    for (const { id } of changed) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.assigned',
+        subjectId: id,
+        dedupKey: `corrective_action.assigned:${id}:${reassignmentEventId}`,
+        payload: {
+          notification: { kind: 'corrective_action_assigned', caId: id },
+        },
+      })
+    }
+    return changed.map((row) => row.id)
+  })
+  const skipped = ids.length - updated.length
 
-  for (const id of editable) {
+  for (const id of updated) {
     await recordAudit(ctx, {
       entityType: 'corrective_action',
       entityId: id,
@@ -642,19 +687,13 @@ export async function bulkReassignCorrectiveActions(args: {
       summary: 'Bulk reassigned',
       after: { ownerTenantUserId: args.newOwnerTenantUserId },
     })
-    // Notify the new owner the same way the single-record create path does.
-    await emitCorrectiveActionAssigned(ctx, {
-      caId: id,
-      assigneeUserId: null,
-      assignerUserId: null,
-    })
   }
   await recordAudit(ctx, {
     entityType: 'corrective_action',
     action: 'update',
-    summary: `Bulk reassigned ${editable.length} action${editable.length === 1 ? '' : 's'}`,
+    summary: `Bulk reassigned ${updated.length} action${updated.length === 1 ? '' : 's'}`,
     metadata: {
-      caIds: editable,
+      caIds: updated,
       skipped,
       newOwnerTenantUserId: args.newOwnerTenantUserId,
     },
@@ -662,7 +701,7 @@ export async function bulkReassignCorrectiveActions(args: {
 
   revalidatePath('/corrective-actions')
   revalidatePath('/corrective-actions/reports/by-assignee')
-  return { ok: true, updated: editable.length, skipped }
+  return { ok: true, updated: updated.length, skipped }
 }
 
 // ---------- Lookups (used by bulk-reassign + verification UI) -----------

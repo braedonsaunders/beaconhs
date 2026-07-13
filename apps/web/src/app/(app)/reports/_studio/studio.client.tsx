@@ -34,7 +34,6 @@ import type {
   ReportTemporalBin,
 } from '@beaconhs/db/schema'
 import {
-  REPORT_ENTITY_MAP,
   type ReportEntity,
   type ReportEntityColumn,
   type ReportOperatorMeta,
@@ -47,6 +46,7 @@ import {
 } from '@/components/builder/builder-shell'
 import { ReportPagedPreview } from '../_components/report-paged-preview.client'
 import { previewCustomReport, type StudioPreviewResult } from './actions'
+import { useHydrated } from '@/lib/use-hydrated'
 
 type QueryMode = 'rows' | 'summarize'
 type BreakoutRow = { column: string; bin?: ReportTemporalBin }
@@ -128,8 +128,7 @@ function defaultRowsQuery(entity: ReportEntity): ReportCustomQuery {
     columns: defaultColumnsFor(entity),
     breakouts: [],
     measures: [],
-    filters: [],
-    filtersV2: null,
+    filters: null,
     groupBy: null,
     sort: entity.defaultSort ?? null,
     limit: 1000,
@@ -216,8 +215,7 @@ function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
         measures: numberColumn
           ? [{ fn: 'sum', column: numberColumn.key }, { fn: 'count' }]
           : [{ fn: 'count' }],
-        filters: [],
-        filtersV2: null,
+        filters: null,
         groupBy: null,
         sort: null,
         limit: 1000,
@@ -236,8 +234,7 @@ function reportTemplatesFor(entity: ReportEntity): StudioTemplate[] {
         columns: [],
         breakouts: [{ column: category.key }],
         measures: [{ fn: 'sum', column: numberColumn.key }, { fn: 'count' }],
-        filters: [],
-        filtersV2: null,
+        filters: null,
         groupBy: null,
         sort: null,
         limit: 1000,
@@ -271,16 +268,7 @@ export function ReportStudio({
   cloneFromId?: string | null
   action: (formData: FormData) => Promise<void>
 }) {
-  // Build the working catalog: the discovered list, plus the legacy static
-  // entity being edited if its key isn't in the discovered set (so old saved
-  // reports still open without the picker exploding to all legacy entries).
-  const catalog = useMemo(() => {
-    const startKey = initialQuery?.entity ?? initialEntityKey ?? null
-    if (startKey && !entities.some((e) => e.key === startKey) && REPORT_ENTITY_MAP[startKey]) {
-      return [REPORT_ENTITY_MAP[startKey]!, ...entities]
-    }
-    return entities
-  }, [entities, initialQuery?.entity, initialEntityKey])
+  const catalog = entities
 
   const fallbackEntity = catalog[0]!.key
   const [entityKey, setEntityKey] = useState<string>(
@@ -336,8 +324,7 @@ export function ReportStudio({
 
   // react-querybuilder assigns random ids, which never match between SSR and
   // hydration — render it client-only behind a mount gate.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   function hydrateQuery(nextEntity: ReportEntity, query: ReportCustomQuery) {
     const validColumns = query.columns?.filter((column) => hasColumn(nextEntity, column)) ?? []
@@ -378,7 +365,7 @@ export function ReportStudio({
   }
 
   const customQuery: ReportCustomQuery = useMemo(() => {
-    const filtersV2 = toEngineGroup(rqbQuery, entity)
+    const filters = toEngineGroup(rqbQuery, entity)
     if (queryMode === 'summarize') {
       const bks = breakouts.filter((b) => b.column)
       const mss: ReportMeasure[] = measures
@@ -390,8 +377,7 @@ export function ReportStudio({
         columns: [],
         breakouts: bks,
         measures: mss.length ? mss : [{ fn: 'count' }],
-        filters: [],
-        filtersV2,
+        filters,
         groupBy: null,
         sort: null,
         limit,
@@ -403,8 +389,7 @@ export function ReportStudio({
       columns: Array.from(columns),
       breakouts: [],
       measures: [],
-      filters: [],
-      filtersV2,
+      filters,
       groupBy: groupBy || null,
       sort: sortCol ? { column: sortCol, direction: sortDir } : null,
       limit,
@@ -1158,21 +1143,10 @@ function toEngineGroup(group: RuleGroupType, entity: ReportEntity): ReportRuleGr
   return out.rules.length ? out : null
 }
 
-/** Stored plan → react-querybuilder state. Migrates v1 flat filters when no v2
- *  tree exists so older definitions open cleanly. */
+/** Stored canonical filter tree → react-querybuilder state. */
 function fromEngineGroup(q: ReportCustomQuery | null | undefined): RuleGroupType {
-  if (q?.filtersV2 && q.filtersV2.rules.length) {
-    return walk(q.filtersV2)
-  }
-  if (q?.filters?.length) {
-    return {
-      combinator: 'and',
-      rules: q.filters.map((f) => ({
-        field: f.column,
-        operator: f.op,
-        value: displayValue(f.value),
-      })),
-    }
+  if (q?.filters && q.filters.rules.length) {
+    return walk(q.filters)
   }
   return { combinator: 'and', rules: [] }
 

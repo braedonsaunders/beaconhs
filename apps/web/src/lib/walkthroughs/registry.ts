@@ -10,7 +10,7 @@
 // AGENTS: when a step's target button/route changes, update the step here and
 // the matching /help article (see AGENTS.md "In-app user guide").
 
-export type WalkthroughStep = {
+type WalkthroughStep = {
   /** Route this step happens on. The player navigates there when needed. */
   path?: string
   /**
@@ -267,6 +267,35 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         title: 'Your tickets',
         body: 'Finished training becomes a record with a certificate. Your wallet in My Workspace keeps them on your phone — with a QR code anyone can scan to verify.',
+      },
+    ],
+  },
+  {
+    id: 'manage-user-access',
+    title: 'Invite users and manage access',
+    description: 'Invite a member, resend a link, and set their tenant role and scope.',
+    startPath: '/admin/users',
+    defaultEnabled: false,
+    defaultAutoStart: false,
+    steps: [
+      {
+        path: '/admin/users',
+        title: 'Users',
+        body: 'This list controls membership in this workspace. Global account security stays with the member or a platform super-admin.',
+      },
+      {
+        path: '/admin/users',
+        target: 'a[href="/admin/users/invite"]',
+        title: 'Send an invitation',
+        body: 'Tap Invite user, enter the work email, and choose an initial role. The member gets a one-time link that expires after 15 minutes.',
+      },
+      {
+        title: 'Pending invitations',
+        body: 'An invited membership activates only when the person accepts the email link. Open the member and tap Resend invite when the link expires.',
+      },
+      {
+        title: 'Roles, scope, and status',
+        body: 'Open a member to set their tenant display name, person link, roles, scope, and permission overrides. Suspend access when it should be temporarily blocked.',
       },
     ],
   },

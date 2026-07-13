@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
-import { auth } from '@beaconhs/auth'
+import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { auditLog, sessions, tenantUsers } from '@beaconhs/db/schema'
 
@@ -19,7 +19,7 @@ import { auditLog, sessions, tenantUsers } from '@beaconhs/db/schema'
  * actor. A no-op (back to the dashboard) when not impersonating.
  */
 export async function stopImpersonation(): Promise<void> {
-  const authSession = await auth.api.getSession({
+  const authSession = await getAuth().api.getSession({
     headers: (await headers()) as unknown as Headers,
   })
   const token = authSession?.session?.token

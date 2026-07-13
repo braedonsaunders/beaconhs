@@ -1,29 +1,17 @@
-// Minimal service worker for PWA installability.
-// Online-only by design (per REWRITE_PLAN). Future iterations can add a
-// stale-while-revalidate cache for static assets + draft-save handling.
+// Minimal, deliberately online-only service worker. It provides PWA
+// installability and push notifications without caching authenticated HTML.
+// A shared shell cache can leak one user's dashboard to the next user of the
+// device and can resurrect a signed-in page after logout, so navigations are
+// always handled by the browser/network.
 
-const CACHE = 'beaconhs-shell-v1'
-const SHELL = ['/']
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL).catch(() => undefined)))
+self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
-  )
+  // Remove the retired v1 shell cache from existing installations.
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))))
   self.clients.claim()
-})
-
-self.addEventListener('fetch', (event) => {
-  // Network-first for navigations; fall back to cached shell only on offline.
-  if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match('/')))
-  }
 })
 
 self.addEventListener('push', (event) => {

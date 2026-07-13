@@ -41,7 +41,7 @@ export const BUILDER_APP_CREATE_PERMISSION = 'forms.response.create'
 export const BUILDER_APP_UPDATE_PERMISSION = 'forms.response.update.own'
 export const BUILDER_APP_DELETE_PERMISSION = 'forms.response.delete'
 
-export type BuilderAppFieldSummary = {
+type BuilderAppFieldSummary = {
   id: string
   label: string
   type: string
@@ -62,13 +62,13 @@ export type BuilderAppOpenApiEntity = {
   schema: FormSchemaV1
 }
 
-export type BuilderAppSummary = BuilderAppOpenApiEntity & {
+type BuilderAppSummary = BuilderAppOpenApiEntity & {
   fields: BuilderAppFieldSummary[]
   endpoint: string
   responses_endpoint: string
 }
 
-export type BuilderAppResponse = {
+type BuilderAppResponse = {
   id: string
   template_id: string
   template_key: string
@@ -90,7 +90,7 @@ export type BuilderAppResponse = {
   data: Record<string, unknown>
 }
 
-export type BuilderAppResponsePage = {
+type BuilderAppResponsePage = {
   data: BuilderAppResponse[]
   pagination: { limit: number; offset: number; total: number; hasMore: boolean }
 }
@@ -295,9 +295,11 @@ async function ensurePerson(ctx: RequestContext, id: string | null | undefined):
 export async function resolveBuilderApp(
   ctx: RequestContext,
   templateKeyOrId: string,
+  grantedTemplateIds: readonly string[],
 ): Promise<BuilderAppOpenApiEntity> {
   const lookup = decodeURIComponent(templateKeyOrId).trim()
   if (!lookup) throw ApiError.notFound('Builder app not found')
+  if (grantedTemplateIds.length === 0) throw ApiError.notFound('Builder app not found')
 
   return ctx.db(async (tx) => {
     const [template] = await tx
@@ -315,6 +317,7 @@ export async function resolveBuilderApp(
           eq(formTemplates.tenantId, ctx.tenantId),
           eq(formTemplates.status, 'published'),
           isNull(formTemplates.deletedAt),
+          inArray(formTemplates.id, [...grantedTemplateIds]),
           isUuid(lookup)
             ? or(eq(formTemplates.id, lookup), eq(formTemplates.key, lookup))
             : eq(formTemplates.key, lookup),
@@ -348,7 +351,11 @@ export async function resolveBuilderApp(
   })
 }
 
-export async function listBuilderApps(ctx: RequestContext): Promise<BuilderAppSummary[]> {
+export async function listBuilderApps(
+  ctx: RequestContext,
+  grantedTemplateIds: readonly string[],
+): Promise<BuilderAppSummary[]> {
+  if (grantedTemplateIds.length === 0) return []
   const rows = await ctx.db(async (tx) => {
     const templates = await tx
       .select({
@@ -365,6 +372,7 @@ export async function listBuilderApps(ctx: RequestContext): Promise<BuilderAppSu
           eq(formTemplates.tenantId, ctx.tenantId),
           eq(formTemplates.status, 'published'),
           isNull(formTemplates.deletedAt),
+          inArray(formTemplates.id, [...grantedTemplateIds]),
         ),
       )
       .orderBy(asc(formTemplates.name))
@@ -407,8 +415,11 @@ export async function listBuilderApps(ctx: RequestContext): Promise<BuilderAppSu
 
 export async function listBuilderAppOpenApiEntities(
   ctx: RequestContext,
+  grantedTemplateIds: readonly string[],
 ): Promise<BuilderAppOpenApiEntity[]> {
-  return (await listBuilderApps(ctx)).map(({ fields, endpoint, responses_endpoint, ...app }) => app)
+  return (await listBuilderApps(ctx, grantedTemplateIds)).map(
+    ({ fields, endpoint, responses_endpoint, ...app }) => app,
+  )
 }
 
 function dataFilterParams(schema: FormSchemaV1, params: URLSearchParams): SQL[] {
@@ -728,7 +739,7 @@ export async function deleteBuilderAppResponse(
   }
 }
 
-export function fieldOpenApiSchema(field: FormField): Record<string, unknown> {
+function fieldOpenApiSchema(field: FormField): Record<string, unknown> {
   switch (field.type) {
     case 'number':
     case 'rating':

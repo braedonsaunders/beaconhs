@@ -79,7 +79,7 @@ const PATH_LABELS: ReadonlyArray<[prefix: string, label: string]> = [
 ]
 
 /** Human noun for a path, e.g. "/people/x?tab=y" → "people". Null if unknown. */
-export function labelForPath(path: string): string | null {
+function labelForPath(path: string): string | null {
   const pathname = path.split('?')[0] ?? path
   for (const [prefix, label] of PATH_LABELS) {
     if (pathname === prefix || pathname.startsWith(prefix + '/')) return label
@@ -99,7 +99,7 @@ export function backLabel(path: string, title?: string | null): string {
  * history stack usually makes this unnecessary — reserve it for links that must
  * survive a fresh load / share (e.g. emailed deep links, print views).
  */
-export function withFrom(href: string, from: { path: string; label?: string }): string {
+function withFrom(href: string, from: { path: string; label?: string }): string {
   const sep = href.includes('?') ? '&' : '?'
   const parts = [`from=${encodeURIComponent(from.path)}`]
   if (from.label) parts.push(`fromLabel=${encodeURIComponent(from.label)}`)
@@ -111,7 +111,7 @@ export function withFrom(href: string, from: { path: string; label?: string }): 
  * that prefer to compute the back link during render (rather than the client
  * SmartBackLink). Ignores the history stack — that's client-only.
  */
-export function resolveBack(
+function resolveBack(
   searchParams: Record<string, string | string[] | undefined>,
   fallback: { href: string; label: string },
 ): { href: string; label: string } {

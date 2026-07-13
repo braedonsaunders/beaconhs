@@ -18,6 +18,7 @@ import {
 import {
   searchStationCore,
   stationScanCore,
+  parseStationScanInput,
   type StationScanInput,
   type StationScanResult,
   type StationSearchResults,
@@ -27,6 +28,8 @@ import {
   recordPublicPinFailure,
   resetPublicPinRateLimit,
 } from '@/lib/public-pin-rate-limit'
+import { resolveActiveTenant } from '@/lib/active-tenant'
+import { isUuid } from '@/lib/list-params'
 
 type Settings = {
   pin: string | null
@@ -44,7 +47,12 @@ export type EquipmentKioskConfig = {
   availableCount: number
 }
 
-async function loadSettings(tx: Database, tenantId: string): Promise<Settings> {
+async function loadSettings(
+  tx: Database,
+  tenantId: string,
+): Promise<{ tenantActive: false } | { tenantActive: true; settings: Settings }> {
+  const tenant = await resolveActiveTenant(tx, { id: tenantId })
+  if (!tenant) return { tenantActive: false }
   await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
   const [row] = await tx
     .select({
@@ -55,7 +63,7 @@ async function loadSettings(tx: Database, tenantId: string): Promise<Settings> {
     .from(equipmentStationSettings)
     .where(eq(equipmentStationSettings.tenantId, tenantId))
     .limit(1)
-  return row ?? null
+  return { tenantActive: true, settings: row ?? null }
 }
 
 export async function searchKioskScan(input: {
@@ -63,13 +71,25 @@ export async function searchKioskScan(input: {
   pin: string
   query: string
 }): Promise<{ ok: true; results: StationSearchResults } | { ok: false; error: string }> {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.tenantId) ||
+    typeof input.pin !== 'string' ||
+    typeof input.query !== 'string' ||
+    input.query.length > 200
+  ) {
+    return { ok: false, error: 'Invalid kiosk request' }
+  }
   const pin = normalizeKioskPin(input.pin)
   if (!input.tenantId || !pin) return { ok: false, error: 'PIN required' }
   const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', input.tenantId)
   if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
   return db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as Database
-    const settings = await loadSettings(tx, input.tenantId)
+    const loaded = await loadSettings(tx, input.tenantId)
+    if (!loaded.tenantActive) return { ok: false, error: 'Workspace unavailable' }
+    const settings = loaded.settings
     if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
     if (!(await verifyKioskPin(settings.pin, pin))) {
       const recorded = await recordPublicPinFailure(pinLimit.handle)
@@ -86,13 +106,23 @@ export async function unlockEquipmentKiosk(input: {
   tenantId: string
   pin: string
 }): Promise<{ ok: true; config: EquipmentKioskConfig } | { ok: false; error: string }> {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.tenantId) ||
+    typeof input.pin !== 'string'
+  ) {
+    return { ok: false, error: 'Invalid kiosk request' }
+  }
   const pin = normalizeKioskPin(input.pin)
   if (!input.tenantId || !pin) return { ok: false, error: 'PIN required' }
   const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', input.tenantId)
   if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
   return db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as Database
-    const settings = await loadSettings(tx, input.tenantId)
+    const loaded = await loadSettings(tx, input.tenantId)
+    if (!loaded.tenantActive) return { ok: false, error: 'Workspace unavailable' }
+    const settings = loaded.settings
     if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
     if (!(await verifyKioskPin(settings.pin, pin))) {
       const recorded = await recordPublicPinFailure(pinLimit.handle)
@@ -174,13 +204,28 @@ export async function unlockEquipmentKiosk(input: {
 export async function performKioskScan(
   input: StationScanInput & { tenantId: string; pin: string; deviceLabel?: string | null },
 ): Promise<StationScanResult> {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !isUuid(input.tenantId) ||
+    typeof input.pin !== 'string' ||
+    (input.deviceLabel !== undefined &&
+      input.deviceLabel !== null &&
+      (typeof input.deviceLabel !== 'string' || input.deviceLabel.length > 200))
+  ) {
+    return { ok: false, error: 'Invalid kiosk request' }
+  }
+  const parsed = parseStationScanInput(input)
+  if (!parsed) return { ok: false, error: 'Invalid station scan' }
   const pin = normalizeKioskPin(input.pin)
   if (!input.tenantId || !pin) return { ok: false, error: 'PIN required' }
   const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', input.tenantId)
   if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
   return db.transaction(async (txRaw) => {
     const tx = txRaw as unknown as Database
-    const settings = await loadSettings(tx, input.tenantId)
+    const loaded = await loadSettings(tx, input.tenantId)
+    if (!loaded.tenantActive) return { ok: false, error: 'Workspace unavailable' }
+    const settings = loaded.settings
     if (!settings?.pin) return { ok: false, error: 'Kiosk is not enabled for this tenant' }
     if (!(await verifyKioskPin(settings.pin, pin))) {
       const recorded = await recordPublicPinFailure(pinLimit.handle)
@@ -190,7 +235,7 @@ export async function performKioskScan(
     await resetPublicPinRateLimit(pinLimit.handle)
 
     const result = await stationScanCore(tx, {
-      ...input,
+      ...parsed,
       tenantId: input.tenantId,
       homeOrgUnitId: settings.homeOrgUnitId,
       actorTenantUserId: null,
@@ -210,7 +255,7 @@ export async function performKioskScan(
           action: result.action,
           holder: result.holderName,
           location: result.locationName,
-          deviceLabel: input.deviceLabel ?? null,
+          deviceLabel: input.deviceLabel?.trim() || null,
         },
       })
     }

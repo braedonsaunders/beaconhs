@@ -17,7 +17,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { compileBuilderHtml } from '@/lib/email-templates'
 
-export type EnsureFormPdfTemplateResult = {
+type EnsureFormPdfTemplateResult = {
   /** True when this call created the template. */
   created: boolean
   /** The app's active template id (existing or new); null when none exists. */

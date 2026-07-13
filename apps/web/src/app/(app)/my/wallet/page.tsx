@@ -25,7 +25,7 @@ import {
   trainingSkillCertificates,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import {
   createWalletDesignDocument,
   renderDesignDocumentHtml,
@@ -166,7 +166,7 @@ export default async function MyWalletPage() {
         .from(attachments)
         .where(eq(attachments.id, person.photoAttachmentId))
         .limit(1)
-      photoUrl = photo ? publicUrl(photo.r2Key) : null
+      photoUrl = photo ? attachmentUrl(person.photoAttachmentId) : null
     }
 
     return { person, tenant, records, skills, recordCerts, skillCerts, photoUrl } as const
@@ -260,7 +260,7 @@ export default async function MyWalletPage() {
         kind: 'training' as const,
         title: r.courseName ?? 'Training credential',
         status: statusFor(r.expiresOn, todayStr),
-        pdfHref: `/training/records/${r.id}/certificate?format=wallet&output=${recordOutput.id}`,
+        pdfHref: `/training/records/${r.id}/certificate?output=${recordOutput.id}`,
         verifyHref: token ? `/verify/${token}` : null,
         ...faces,
       }
@@ -291,7 +291,7 @@ export default async function MyWalletPage() {
         kind: 'skill' as const,
         title: s.skillName,
         status: statusFor(s.expiresOn, todayStr),
-        pdfHref: `/training/skills/${s.id}/certificate?format=wallet&output=${defaultOutput.id}`,
+        pdfHref: `/training/skills/${s.id}/certificate?output=${defaultOutput.id}`,
         verifyHref: token ? `/verify/${token}` : null,
         ...faces,
       }

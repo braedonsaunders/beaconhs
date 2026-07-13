@@ -5,7 +5,7 @@
 // Always reports success so the form never reveals which emails are registered.
 
 import { headers } from 'next/headers'
-import { auth } from '@beaconhs/auth'
+import { getAuth } from '@beaconhs/auth'
 
 export async function requestReset(
   _prev: { sent: boolean } | null,
@@ -16,7 +16,7 @@ export async function requestReset(
     .toLowerCase()
   if (email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     try {
-      await auth.api.requestPasswordReset({
+      await getAuth().api.requestPasswordReset({
         body: { email, redirectTo: '/reset-password' },
         headers: (await headers()) as unknown as Headers,
       })

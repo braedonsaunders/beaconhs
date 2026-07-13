@@ -12,12 +12,13 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { asc, eq, isNull } from 'drizzle-orm'
 import { trainingClasses, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 // Create a draft class and jump straight into its unified record page — no
 // intermediate form. Course/date/instructor/roster are all filled in inline on
@@ -51,6 +52,14 @@ export async function startClass(): Promise<void> {
         endsAt,
       })
       .returning({ id: trainingClasses.id })
+    if (row) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: row.id,
+        moduleKey: 'training-classes',
+        event: 'on_create',
+        occurrenceKey: row.id,
+      })
+    }
     return row?.id ?? null
   })
 
@@ -63,8 +72,6 @@ export async function startClass(): Promise<void> {
     action: 'create',
     summary: 'Created class draft',
   })
-  // Classes have no separate publish step — the draft IS the creation.
-  await runModuleFlows(ctx, { moduleKey: 'training-classes', event: 'on_create', subjectId: newId })
   revalidatePath('/training/classes')
   redirect(`/training/classes/${newId}`)
 }
@@ -150,20 +157,24 @@ export async function cancelClass(id: string, _formData: FormData): Promise<void
   const ctx = await requireRequestContext()
   assertCan(ctx, 'training.class.manage')
   if (!id) return
-  await ctx.db((tx) =>
-    tx.update(trainingClasses).set({ cancelledAt: new Date() }).where(eq(trainingClasses.id, id)),
-  )
+  await ctx.db(async (tx) => {
+    await tx
+      .update(trainingClasses)
+      .set({ cancelledAt: new Date() })
+      .where(eq(trainingClasses.id, id))
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'training-classes',
+      event: 'status_change',
+      toStatus: 'cancelled',
+      occurrenceKey: randomUUID(),
+    })
+  })
   await recordAudit(ctx, {
     entityType: 'training_class',
     entityId: id,
     action: 'update',
     summary: 'Cancelled training class',
-  })
-  await runModuleFlows(ctx, {
-    moduleKey: 'training-classes',
-    event: 'status_change',
-    subjectId: id,
-    toStatus: 'cancelled',
   })
   revalidatePath(`/training/classes/${id}`)
   revalidatePath('/training/classes')
@@ -173,20 +184,21 @@ export async function reopenClass(id: string, _formData: FormData): Promise<void
   const ctx = await requireRequestContext()
   assertCan(ctx, 'training.class.manage')
   if (!id) return
-  await ctx.db((tx) =>
-    tx.update(trainingClasses).set({ cancelledAt: null }).where(eq(trainingClasses.id, id)),
-  )
+  await ctx.db(async (tx) => {
+    await tx.update(trainingClasses).set({ cancelledAt: null }).where(eq(trainingClasses.id, id))
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'training-classes',
+      event: 'status_change',
+      toStatus: 'scheduled',
+      occurrenceKey: randomUUID(),
+    })
+  })
   await recordAudit(ctx, {
     entityType: 'training_class',
     entityId: id,
     action: 'update',
     summary: 'Reopened training class',
-  })
-  await runModuleFlows(ctx, {
-    moduleKey: 'training-classes',
-    event: 'status_change',
-    subjectId: id,
-    toStatus: 'scheduled',
   })
   revalidatePath(`/training/classes/${id}`)
   revalidatePath('/training/classes')

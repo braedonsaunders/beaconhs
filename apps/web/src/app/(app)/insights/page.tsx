@@ -46,7 +46,9 @@ export default async function InsightsPage({
       // Each placed widget that's a saved Card OR a BHQL-backed built-in runs
       // through the engine; the AI journal widget falls through (bespoke render).
       const items: Array<
-        Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>
+        Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'> & {
+          trustedSystemCard?: true
+        }
       > = []
       for (const w of d.layout.widgets) {
         const card = cardsById.get(w.id)
@@ -64,6 +66,7 @@ export default async function InsightsPage({
             vizType: builtin.vizType,
             vizSettings: builtin.vizSettings ?? {},
             config: null,
+            trustedSystemCard: true,
           })
         }
       }

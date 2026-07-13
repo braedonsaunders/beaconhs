@@ -9,7 +9,6 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
-import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import {
   augmentEntityMapWithCustomFields,
@@ -22,9 +21,9 @@ import {
   runReport,
   type ReportEntity,
 } from '@beaconhs/reports'
-import { discoverEntityMapWithApps } from '@beaconhs/analytics/server'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import { loadDefinitionById } from '../_definitions'
 import { loadTenantBranding } from '../_run'
 import { validateCustomQuery, validateReportLayout } from './validate'
@@ -83,7 +82,7 @@ async function resolveStudioEntityMap(
 ): Promise<Record<string, ReportEntity>> {
   return ctx.db(async (tx) =>
     refineEntityMapForDocuments(
-      await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+      await augmentEntityMapWithCustomFields(tx, (await resolveAnalyticsAccess(ctx, tx)).entityMap),
     ),
   )
 }
@@ -109,9 +108,9 @@ export async function createCustomDefinition(formData: FormData): Promise<void> 
 
   const slug = buildSlug(name)
 
-  // We write through super-admin because the definitions table has no RLS —
-  // tenant scoping is enforced by setting tenantId on insert.
-  const newId = await withSuperAdmin(db, async (tx) => {
+  // report_definitions exposes global built-ins read-only while its command-
+  // specific RLS policies constrain custom-definition writes to this tenant.
+  const newId = await ctx.db(async (tx) => {
     const [row] = await tx
       .insert(reportDefinitions)
       .values({
@@ -153,7 +152,7 @@ export async function updateCustomDefinition(
     await resolveStudioEntityMap(ctx),
   )
 
-  await withSuperAdmin(db, async (tx) => {
+  await ctx.db(async (tx) => {
     const [d] = await tx
       .select()
       .from(reportDefinitions)
@@ -212,7 +211,10 @@ export async function previewCustomReport(payload: {
     const range = computeRangeFor('custom_query', {})
     const result = await ctx.db(async (tx) => {
       const entityMap = refineEntityMapForDocuments(
-        await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+        await augmentEntityMapWithCustomFields(
+          tx,
+          (await resolveAnalyticsAccess(ctx, tx)).entityMap,
+        ),
       )
       const customQuery = validateCustomQuery(payload.query, entityMap)
       return runReport(tx, {

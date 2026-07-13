@@ -14,6 +14,9 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
 
 const FALLBACK_SECRET = 'beaconhs-dev-insecure-secret'
 const HKDF_INFO = 'beaconhs.wopi.v1'
+const WOPI_GRANT_VERSION = 1
+const MAX_WOPI_TOKEN_LENGTH = 4096
+const CLOCK_SKEW_MS = 60_000
 
 function sourceSecret(): string {
   const secret = process.env.BETTER_AUTH_SECRET
@@ -35,7 +38,7 @@ function key(): Buffer {
 }
 
 /** What a WOPI-edited file belongs to: a training deck target or a document. */
-export type WopiTarget = 'lesson' | 'content_item' | 'document'
+type WopiTarget = 'lesson' | 'content_item' | 'document'
 /** Training-deck subset (slides lessons + library items). */
 export type WopiDeckTarget = 'lesson' | 'content_item'
 
@@ -47,6 +50,7 @@ export type WopiGrant = {
   target: WopiTarget
   targetId: string
   canWrite: boolean
+  activeRoleId: string | null
   /** Expiry, ms since epoch. */
   exp: number
 }
@@ -57,9 +61,13 @@ function sign(payload: string): Buffer {
   return createHmac('sha256', key()).update(payload).digest()
 }
 
-export function mintWopiToken(grant: Omit<WopiGrant, 'exp'>): { token: string; exp: number } {
-  const exp = Date.now() + WOPI_TOKEN_TTL_MS
-  const full: WopiGrant = { ...grant, exp }
+export function mintWopiToken(
+  grant: Omit<WopiGrant, 'exp'>,
+  now = Date.now(),
+): { token: string; exp: number } {
+  if (!Number.isSafeInteger(now)) throw new Error('Invalid WOPI issuance time.')
+  const exp = now + WOPI_TOKEN_TTL_MS
+  const full = { v: WOPI_GRANT_VERSION, iat: now, ...grant, exp }
   const payload = Buffer.from(JSON.stringify(full)).toString('base64url')
   return { token: `${payload}.${sign(payload).toString('base64url')}`, exp }
 }
@@ -68,9 +76,14 @@ export function mintWopiToken(grant: Omit<WopiGrant, 'exp'>): { token: string; e
  * Verify a WOPI access token and bind it to the file id in the request path —
  * a token minted for one attachment can never read or write another.
  */
-export function verifyWopiToken(token: string, attachmentId: string): WopiGrant | null {
+export function verifyWopiToken(
+  token: string,
+  attachmentId: string,
+  now = Date.now(),
+): WopiGrant | null {
+  if (!token || token.length > MAX_WOPI_TOKEN_LENGTH || !Number.isSafeInteger(now)) return null
   const dot = token.lastIndexOf('.')
-  if (dot <= 0) return null
+  if (dot <= 0 || dot !== token.indexOf('.') || dot === token.length - 1) return null
   const payload = token.slice(0, dot)
   const sig = token.slice(dot + 1)
   let expected: Buffer
@@ -82,23 +95,77 @@ export function verifyWopiToken(token: string, attachmentId: string): WopiGrant 
     return null
   }
   if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) return null
-  let grant: WopiGrant
+  let parsed: unknown
   try {
-    grant = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as WopiGrant
+    parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
   } catch {
     return null
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const grant = parsed as Partial<WopiGrant> & { v?: unknown; iat?: unknown }
+  const issuedAt = grant.iat
+  const expiresAt = grant.exp
   if (
-    typeof grant.attachmentId !== 'string' ||
-    typeof grant.tenantId !== 'string' ||
-    typeof grant.userId !== 'string' ||
-    typeof grant.targetId !== 'string' ||
+    grant.v !== WOPI_GRANT_VERSION ||
+    !isBoundedString(grant.attachmentId, 100) ||
+    !isBoundedString(grant.tenantId, 100) ||
+    !isBoundedString(grant.userId, 200) ||
+    !isBoundedString(grant.userName, 200) ||
+    !isBoundedString(grant.targetId, 100) ||
+    (grant.activeRoleId !== null && !isBoundedString(grant.activeRoleId, 100)) ||
     (grant.target !== 'lesson' && grant.target !== 'content_item' && grant.target !== 'document') ||
-    typeof grant.exp !== 'number'
+    typeof grant.canWrite !== 'boolean' ||
+    !isSafeInteger(issuedAt) ||
+    !isSafeInteger(expiresAt) ||
+    expiresAt <= issuedAt ||
+    expiresAt - issuedAt > WOPI_TOKEN_TTL_MS
   ) {
     return null
   }
   if (grant.attachmentId !== attachmentId) return null
-  if (Date.now() > grant.exp) return null
-  return grant
+  if (now < issuedAt - CLOCK_SKEW_MS || now > expiresAt) return null
+  return {
+    attachmentId: grant.attachmentId,
+    tenantId: grant.tenantId,
+    userId: grant.userId,
+    userName: grant.userName,
+    target: grant.target,
+    targetId: grant.targetId,
+    canWrite: grant.canWrite,
+    activeRoleId: grant.activeRoleId,
+    exp: expiresAt,
+  }
+}
+
+type WopiPrincipalState = {
+  isSuperAdmin: boolean
+  membershipStatus: 'active' | 'invited' | 'suspended' | null
+  permissions: Set<string>
+  appliedRoleId: string | null
+}
+
+function wopiRequiredPermission(grant: WopiGrant): string {
+  if (grant.target !== 'document') return 'training.course.manage'
+  return grant.canWrite ? 'documents.manage' : 'documents.read'
+}
+
+/** Pure revocation check shared by callback authorization and focused tests. */
+export function evaluateWopiPrincipal(grant: WopiGrant, principal: WopiPrincipalState): boolean {
+  if (principal.isSuperAdmin) return true
+  if (principal.membershipStatus !== 'active') return false
+  if (grant.activeRoleId && principal.appliedRoleId !== grant.activeRoleId) return false
+  const required = wopiRequiredPermission(grant)
+  if (principal.permissions.has(required)) return true
+  for (const permission of principal.permissions) {
+    if (permission.endsWith('.*') && required.startsWith(permission.slice(0, -1))) return true
+  }
+  return false
+}
+
+function isBoundedString(value: unknown, max: number): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= max
+}
+
+function isSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value)
 }

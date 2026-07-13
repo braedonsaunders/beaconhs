@@ -17,8 +17,6 @@ import { getTenantAiConfig } from '@/lib/ai-config'
 const MAX_IMAGES = 4
 const MAX_BYTES = 8 * 1024 * 1024
 
-export type { SafetyVisionAnalysis }
-
 /**
  * Run the construction-safety vision analysis over the given attachment ids.
  * Returns null when AI is unconfigured, no ids are image attachments, or every

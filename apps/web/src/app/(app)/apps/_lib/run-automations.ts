@@ -16,10 +16,8 @@ import { executeFlowPlan as executeGenericFlowPlan } from '@/lib/flows/execute-f
 import { createFormFlowAdapter } from '@/app/(app)/apps/_lib/form-flow-adapter'
 
 /**
- * Execute a planned Flow against a form response. Back-compat shim that keeps the
- * original (ctx, { responseId, … }) signature so the gate-resume path
- * (responses/[id]/_flow-gate-actions.ts) keeps working unchanged. Builds the form
- * adapter and delegates to the shared executor. NEVER throws.
+ * Execute a planned Flow against a form response by building the canonical form
+ * adapter and delegating to the shared executor.
  */
 export async function executeFlowPlan(
   ctx: RequestContext,
@@ -28,6 +26,7 @@ export async function executeFlowPlan(
     flowId: string
     plan: AutomationPlan
     values: Record<string, unknown>
+    executionId?: string
   },
 ): Promise<{ ran: string[]; failed: string[] }> {
   const adapter = createFormFlowAdapter(ctx, params.responseId)
@@ -35,6 +34,7 @@ export async function executeFlowPlan(
     flowId: params.flowId,
     plan: params.plan,
     values: params.values,
+    executionId: params.executionId,
   })
 }
 
@@ -47,6 +47,7 @@ export async function runOnSubmitAutomations(
     score: number
     status: string
   },
+  executionId?: string,
 ): Promise<void> {
   const flows = await ctx.db((tx) =>
     tx
@@ -68,33 +69,41 @@ export async function runOnSubmitAutomations(
 
   const ran: string[] = []
   const failed: string[] = []
+  let hadWork = false
   for (const flow of flows) {
-    let plan: AutomationPlan
-    try {
-      plan = planAutomation(flow.graph, 'on_submit', { values: baseValues, rows: {}, entities: {} })
-    } catch {
-      continue
-    }
+    const plan: AutomationPlan = planAutomation(flow.graph, 'on_submit', {
+      values: baseValues,
+      rows: {},
+      entities: {},
+    })
     if (plan.actions.length === 0 && plan.gates.length === 0) continue
+    hadWork = true
     // Each flow gets its own values copy so set_field stays flow-local.
     const res = await executeFlowPlan(ctx, {
       responseId: args.responseId,
       flowId: flow.id,
       plan,
       values: { ...baseValues },
+      executionId,
     })
     ran.push(...res.ran)
     failed.push(...res.failed)
   }
 
-  if (ran.length > 0 || failed.length > 0) {
+  if (failed.length > 0 && executionId) {
+    throw new Error(`Form flow actions failed: ${failed.join(', ')}`)
+  }
+  if (hadWork || failed.length > 0) {
     await recordAudit(ctx, {
       entityType: 'form_response',
       entityId: args.responseId,
       action: 'update',
-      summary: `Flows: ${ran.length ? `ran ${ran.join(', ')}` : 'no actions ran'}${
-        failed.length ? ` · issues ${failed.join(', ')}` : ''
-      }`,
+      dedupKey: executionId ? `domain:${executionId}:form-submit-flow` : undefined,
+      summary: executionId
+        ? 'Flows: durable on-submit execution completed'
+        : `Flows: ${ran.length ? `ran ${ran.join(', ')}` : 'no actions ran'}${
+            failed.length ? ` · issues ${failed.join(', ')}` : ''
+          }`,
     })
   }
 }
@@ -113,6 +122,7 @@ export async function runStatusChangeAutomations(
     status: string | null
     toStatus: string
   },
+  executionId?: string,
 ): Promise<void> {
   const flows = await ctx.db((tx) =>
     tx
@@ -132,6 +142,7 @@ export async function runStatusChangeAutomations(
 
   const ran: string[] = []
   const failed: string[] = []
+  let hadWork = false
   for (const flow of flows) {
     const trig = flow.graph.nodes.find(
       (n) => n.data.kind === 'trigger' && n.data.trigger.trigger === 'status_change',
@@ -140,35 +151,38 @@ export async function runStatusChangeAutomations(
     const td = trig.data.trigger
     if (td.trigger !== 'status_change' || td.to !== args.toStatus) continue
 
-    let plan: AutomationPlan
-    try {
-      plan = planAutomation(flow.graph, 'status_change', {
-        values: baseValues,
-        rows: {},
-        entities: {},
-      })
-    } catch {
-      continue
-    }
+    const plan: AutomationPlan = planAutomation(flow.graph, 'status_change', {
+      values: baseValues,
+      rows: {},
+      entities: {},
+    })
     if (plan.actions.length === 0 && plan.gates.length === 0) continue
+    hadWork = true
     const res = await executeFlowPlan(ctx, {
       responseId: args.responseId,
       flowId: flow.id,
       plan,
       values: { ...baseValues },
+      executionId,
     })
     ran.push(...res.ran)
     failed.push(...res.failed)
   }
 
-  if (ran.length > 0 || failed.length > 0) {
+  if (failed.length > 0 && executionId) {
+    throw new Error(`Form status flow actions failed: ${failed.join(', ')}`)
+  }
+  if (hadWork || failed.length > 0) {
     await recordAudit(ctx, {
       entityType: 'form_response',
       entityId: args.responseId,
       action: 'update',
-      summary: `Flows (status→${args.toStatus}): ${
-        ran.length ? `ran ${ran.join(', ')}` : 'no actions ran'
-      }${failed.length ? ` · issues ${failed.join(', ')}` : ''}`,
+      dedupKey: executionId ? `domain:${executionId}:form-status-flow` : undefined,
+      summary: executionId
+        ? `Flows (status→${args.toStatus}): durable execution completed`
+        : `Flows (status→${args.toStatus}): ${
+            ran.length ? `ran ${ran.join(', ')}` : 'no actions ran'
+          }${failed.length ? ` · issues ${failed.join(', ')}` : ''}`,
     })
   }
 }

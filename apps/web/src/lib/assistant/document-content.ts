@@ -15,9 +15,9 @@ import { can, type RequestContext } from '@beaconhs/tenant'
 import { getObject } from '@beaconhs/storage'
 import { documentReadFilter } from './doc-access'
 
-export type DocumentTextSource = 'html' | 'pdf' | 'empty'
+type DocumentTextSource = 'html' | 'pdf' | 'empty'
 
-export type DocumentText = {
+type DocumentText = {
   id: string
   key: string
   title: string
@@ -33,13 +33,13 @@ export type DocumentText = {
 }
 
 /** Returned when the document isn't found or the user may not read it. */
-export type DocumentTextResult =
+type DocumentTextResult =
   | { ok: true; doc: DocumentText }
   | { ok: false; error: 'not_found' | 'forbidden' }
 
 // ---- plain-text helpers ----------------------------------------------------
 
-export function htmlToText(html: string | null | undefined): string {
+function htmlToText(html: string | null | undefined): string {
   if (!html) return ''
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -185,7 +185,7 @@ export async function getDocumentText(
 
 // ---- raw PDF bytes (for vision rasterization) ------------------------------
 
-export type DocumentPdfBytesResult =
+type DocumentPdfBytesResult =
   | { ok: true; bytes: Buffer; title: string }
   | { ok: false; error: 'not_found' | 'forbidden' | 'not_pdf' }
 

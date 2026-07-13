@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
-import { Badge, Button, DetailHeader, EmptyState, cn } from '@beaconhs/ui'
-import { roleAssignments, roles, tenantUsers, user } from '@beaconhs/db/schema'
+import { and, asc, count, desc, eq, exists, ilike, inArray, or, type SQL } from 'drizzle-orm'
+import { Badge, Button, DetailHeader, EmptyState } from '@beaconhs/ui'
+import { roleAssignments, roles, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
@@ -10,7 +10,9 @@ import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { SearchInput } from '@/components/search-input'
-import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Users & roles' }
 export const dynamic = 'force-dynamic'
@@ -47,57 +49,99 @@ export default async function AdminUsersPage({
   if (!can(ctx, 'admin.users.manage')) redirect('/admin')
 
   const sp = await searchParams
-  const { sort, dir, q } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
+  const listParams = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const { sort, dir } = listParams
   // Default to active members; `?status=all` is the explicit show-everything sentinel.
-  const statusFilter = pickString(sp.status) ?? 'active'
-  const query = (q ?? '').trim().toLowerCase()
+  const statusParam = pickString(sp.status)
+  const statusFilter =
+    STATUS_FILTERS.find((filter) => filter.value === statusParam)?.value ?? 'active'
 
-  const rows = await ctx.db(async (tx) => {
-    const memberRows = await tx
-      .select({ membership: tenantUsers, account: user })
-      .from(tenantUsers)
-      .innerJoin(user, eq(user.id, tenantUsers.userId))
-      .orderBy(asc(user.name))
-    const allAssignments = await tx
-      .select({ tenantUserId: roleAssignments.tenantUserId, roleName: roles.name })
-      .from(roleAssignments)
-      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-    return memberRows.map<MemberRow>((m) => ({
-      membershipId: m.membership.id,
-      name: m.account.name,
-      email: m.account.email,
-      displayName: m.membership.displayName,
-      status: m.membership.status,
-      isSuperAdmin: m.account.isSuperAdmin,
-      joinedAt: m.membership.joinedAt,
-      roleNames: allAssignments
-        .filter((a) => a.tenantUserId === m.membership.id)
-        .map((a) => a.roleName),
-    }))
-  })
-
-  const filtered = rows.filter((r) => {
-    if (statusFilter !== 'all' && r.status !== statusFilter) return false
-    if (!query) return true
-    // Match name, tenant display name, email, or any assigned role.
-    const haystack = [r.name, r.displayName ?? '', r.email, ...r.roleNames].join(' ').toLowerCase()
-    return haystack.includes(query)
-  })
-  const sorted = [...filtered].sort((a, b) => {
-    const mult = dir === 'asc' ? 1 : -1
-    switch (sort) {
-      case 'email':
-        return a.email.localeCompare(b.email) * mult
-      case 'status':
-        return a.status.localeCompare(b.status) * mult
-      case 'joined':
-        return ((a.joinedAt?.getTime() ?? 0) - (b.joinedAt?.getTime() ?? 0)) * mult
-      default:
-        return (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name) * mult
+  const { rows, total, activeCount, statusCounts } = await ctx.db(async (tx) => {
+    const search: SQL<unknown> | undefined = listParams.q
+      ? or(
+          ilike(user.name, `%${listParams.q}%`),
+          ilike(user.email, `%${listParams.q}%`),
+          ilike(tenantUsers.displayName, `%${listParams.q}%`),
+          exists(
+            tx
+              .select({ id: roleAssignments.id })
+              .from(roleAssignments)
+              .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+              .where(
+                and(
+                  eq(roleAssignments.tenantUserId, tenantUsers.id),
+                  ilike(roles.name, `%${listParams.q}%`),
+                ),
+              ),
+          ),
+        )
+      : undefined
+    const where = and(
+      search,
+      statusFilter === 'all' ? undefined : eq(tenantUsers.status, statusFilter),
+    )
+    const dirFn = dir === 'asc' ? asc : desc
+    const orderBy =
+      sort === 'email'
+        ? [dirFn(user.email)]
+        : sort === 'status'
+          ? [dirFn(tenantUsers.status), asc(user.name)]
+          : sort === 'joined'
+            ? [dirFn(tenantUsers.joinedAt), asc(user.name)]
+            : [dirFn(tenantUsers.displayName), dirFn(user.name)]
+    const baseCount = () =>
+      tx.select({ c: count() }).from(tenantUsers).innerJoin(user, eq(user.id, tenantUsers.userId))
+    const [totalRow, activeRow, countRows, memberRows] = await Promise.all([
+      baseCount().where(where),
+      baseCount().where(eq(tenantUsers.status, 'active')),
+      tx
+        .select({ status: tenantUsers.status, c: count() })
+        .from(tenantUsers)
+        .innerJoin(user, eq(user.id, tenantUsers.userId))
+        .where(search)
+        .groupBy(tenantUsers.status),
+      tx
+        .select({ membership: tenantUsers, account: user })
+        .from(tenantUsers)
+        .innerJoin(user, eq(user.id, tenantUsers.userId))
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(listParams.perPage)
+        .offset((listParams.page - 1) * listParams.perPage),
+    ])
+    const membershipIds = memberRows.map((row) => row.membership.id)
+    const assignments =
+      membershipIds.length === 0
+        ? []
+        : await tx
+            .select({ tenantUserId: roleAssignments.tenantUserId, roleName: roles.name })
+            .from(roleAssignments)
+            .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+            .where(inArray(roleAssignments.tenantUserId, membershipIds))
+            .orderBy(asc(roles.name))
+    return {
+      rows: memberRows.map<MemberRow>((m) => ({
+        membershipId: m.membership.id,
+        name: m.account.name,
+        email: m.account.email,
+        displayName: m.membership.displayName,
+        status: m.membership.status,
+        isSuperAdmin: m.account.isSuperAdmin,
+        joinedAt: m.membership.joinedAt,
+        roleNames: assignments
+          .filter((assignment) => assignment.tenantUserId === m.membership.id)
+          .map((assignment) => assignment.roleName),
+      })),
+      total: Number(totalRow[0]?.c ?? 0),
+      activeCount: Number(activeRow[0]?.c ?? 0),
+      statusCounts: Object.fromEntries(countRows.map((row) => [row.status, Number(row.c)])),
     }
   })
-
-  const activeCount = rows.filter((r) => r.status === 'active').length
 
   const basePath = '/admin/users'
   const sortProps = { basePath, currentParams: sp, sort, dir }
@@ -123,34 +167,25 @@ export default async function AdminUsersPage({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <SearchInput placeholder="Search name, email, or role…" />
-          <div className="flex flex-wrap gap-1.5">
-            {STATUS_FILTERS.map((f) => {
-              const active = statusFilter === f.value
-              return (
-                <Link
-                  key={f.value}
-                  href={mergeHref(basePath, sp, {
-                    status: f.value === 'active' ? undefined : f.value,
-                  })}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                    active
-                      ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/60',
-                  )}
-                >
-                  {f.label}
-                </Link>
-              )
-            })}
-          </div>
+          <FilterChips
+            basePath={basePath}
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            defaultValue="active"
+            options={STATUS_FILTERS.filter((filter) => filter.value !== 'all').map((filter) => ({
+              value: filter.value,
+              label: filter.label,
+              count: statusCounts[filter.value] ?? 0,
+            }))}
+          />
         </div>
 
-        {sorted.length === 0 ? (
+        {rows.length === 0 ? (
           <EmptyState
             title="No members match"
             description={
-              query
+              listParams.q
                 ? 'No members match your search. Try a different term or status filter.'
                 : 'Try a different status filter, or invite someone.'
             }
@@ -159,7 +194,7 @@ export default async function AdminUsersPage({
           <>
             {/* Phones: tappable cards. */}
             <MobileCardList>
-              {sorted.map((r) => (
+              {rows.map((r) => (
                 <ListCard
                   key={r.membershipId}
                   href={`/admin/users/${r.membershipId}`}
@@ -212,7 +247,7 @@ export default async function AdminUsersPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {sorted.map((r) => (
+                  {rows.map((r) => (
                     <tr
                       key={r.membershipId}
                       className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
@@ -257,6 +292,13 @@ export default async function AdminUsersPage({
             </div>
           </>
         )}
+        <Pagination
+          basePath={basePath}
+          currentParams={sp}
+          total={total}
+          page={listParams.page}
+          perPage={listParams.perPage}
+        />
       </div>
     </PageContainer>
   )

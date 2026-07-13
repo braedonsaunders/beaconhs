@@ -18,7 +18,7 @@ import {
   equipmentItems,
   people,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'

@@ -9,7 +9,7 @@
 // Rendering uses the app-themed pdf.js viewer so the chrome follows the
 // platform's light/dark theme.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Download, ExternalLink, Loader2, RefreshCw, UploadCloud } from 'lucide-react'
 import { Button, FileUploader, cn } from '@beaconhs/ui'
@@ -34,30 +34,69 @@ export function DocumentPdfPane({
   draft?: boolean
 }) {
   const router = useRouter()
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-  const [url, setUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [noSource, setNoSource] = useState(false)
+  const requestKey = `${documentId}:${draft ? 'draft' : 'published'}`
+  const [resource, setResource] = useState<{
+    key: string
+    status: 'loading' | 'ready' | 'error'
+    url: string | null
+    error: string | null
+    noSource: boolean
+  }>({ key: requestKey, status: 'loading', url: null, error: null, noSource: false })
+  const requestSequence = useRef(0)
   const [uploadOpen, setUploadOpen] = useState(false)
 
-  const load = useCallback(async () => {
-    setStatus('loading')
-    setError(null)
-    setNoSource(false)
-    const r = await getDocumentPdfUrl(documentId, { draft })
-    if (!r.ok) {
-      setStatus('error')
-      setError(r.error)
-      setNoSource(r.reason === 'no_source')
-      return
-    }
-    setUrl(r.url)
-    setStatus('ready')
-  }, [documentId, draft])
+  const applyResult = useCallback(
+    (sequence: number, r: Awaited<ReturnType<typeof getDocumentPdfUrl>>) => {
+      if (sequence !== requestSequence.current) return
+      if (!r.ok) {
+        setResource({
+          key: requestKey,
+          status: 'error',
+          url: null,
+          error: r.error,
+          noSource: r.reason === 'no_source',
+        })
+        return
+      }
+      setResource({
+        key: requestKey,
+        status: 'ready',
+        url: r.url,
+        error: null,
+        noSource: false,
+      })
+    },
+    [requestKey],
+  )
+
+  const requestPdf = useCallback(() => {
+    const sequence = ++requestSequence.current
+    return getDocumentPdfUrl(documentId, { draft }).then((result) => applyResult(sequence, result))
+  }, [applyResult, documentId, draft])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void requestPdf()
+    return () => {
+      requestSequence.current += 1
+    }
+  }, [requestPdf])
+
+  const current =
+    resource.key === requestKey
+      ? resource
+      : { key: requestKey, status: 'loading' as const, url: null, error: null, noSource: false }
+  const { status, url, error, noSource } = current
+
+  function reload() {
+    setResource({
+      key: requestKey,
+      status: 'loading',
+      url: null,
+      error: null,
+      noSource: false,
+    })
+    void requestPdf()
+  }
 
   function onUploaded(attachmentId: string) {
     setUploadOpen(false)
@@ -65,7 +104,7 @@ export function DocumentPdfPane({
       const res = await attachFileVersion({ documentId, attachmentId })
       if (res.ok) {
         toast.success('PDF source updated.')
-        await load()
+        await requestPdf()
         router.refresh()
       } else {
         toast.error(res.error ?? 'Upload failed')
@@ -90,7 +129,7 @@ export function DocumentPdfPane({
           {draft && !readOnly ? (
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={reload}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
             >
               <RefreshCw size={13} /> Regenerate
@@ -179,7 +218,7 @@ export function DocumentPdfPane({
                 <p className={noSource ? '' : 'text-rose-600 dark:text-rose-400'}>
                   {error ?? 'Could not load the PDF.'}
                 </p>
-                <Button variant="outline" onClick={load}>
+                <Button variant="outline" onClick={reload}>
                   <RefreshCw size={14} /> Retry
                 </Button>
               </>

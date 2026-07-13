@@ -129,7 +129,7 @@ export async function resolveSubjectDefaultPdfTemplate(
   return templateId ? getFormTemplateDefaultTemplate(ctx, templateId) : null
 }
 
-export type PdfTemplateOption = {
+type PdfTemplateOption = {
   id: string
   name: string
   key: string

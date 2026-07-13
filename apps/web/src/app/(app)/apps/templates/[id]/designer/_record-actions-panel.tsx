@@ -312,6 +312,11 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
         toast.error(saved.error ?? 'Could not save the button')
         return
       }
+      const enabled = await setFlowEnabled(created.id, true)
+      if (!enabled.ok) {
+        toast.error('The button was saved but could not be enabled')
+        return
+      }
       toast.success('Button added')
       window.location.reload()
     })

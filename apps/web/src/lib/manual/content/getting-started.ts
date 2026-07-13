@@ -35,12 +35,24 @@ export const GETTING_STARTED_ARTICLES: ManualArticle[] = [
 
 ## Signing in
 
+BeaconHS does not have public sign-up. Your administrator creates your account and sends an invitation to your work email.
+
+For your first visit:
+
+1. Open the invitation email.
+2. Tap **Accept the invitation and sign in** within 15 minutes. The link works once.
+3. If the link expired, ask your administrator to open **Users** and tap **Resend invite**.
+
+After your invitation is accepted:
+
 1. Open the site your company gave you and go to the sign-in page.
 2. Enter your work **Email**.
 3. Pick one of the two tabs at the top:
    - **Password** — type your password, then tap **Sign in**. Tap **Forgot password?** if you need a reset.
    - **Magic link** — tap **Send magic link**. Check your email and open the link. No password needed.
 4. You land on the **Dashboard**.
+
+A normal password or magic-link sign-in does not activate a pending invitation. Use the link from the invitation email first. Each workspace sends its own invitation.
 
 ## Finding your way around
 

@@ -55,7 +55,7 @@ export type InboxFolders = {
   categories: { category: string; total: number; unread: number }[]
 }
 
-export type TodoKind = 'compliance' | 'capa'
+type TodoKind = 'compliance' | 'capa'
 export type TodoItem = {
   id: string
   kind: TodoKind

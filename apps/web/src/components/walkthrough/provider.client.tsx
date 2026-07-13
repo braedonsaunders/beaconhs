@@ -14,10 +14,11 @@
 // On finish/skip the outcome is persisted via a server action so auto-start
 // tours never replay.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { recordWalkthroughProgress } from '@/lib/walkthroughs/actions'
 import { walkthroughById, type Walkthrough } from '@/lib/walkthroughs/registry'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import { WalkthroughPlayer } from './player.client'
 
 const AUTO_START_DELAY_MS = 1200
@@ -43,31 +44,28 @@ export function WalkthroughProvider({
 
   const requestedId = searchParams.get('walkthrough')
   const requestedPreview = searchParams.get('wt_preview') === '1'
-
-  // The finish handler strips ?walkthrough= via router.replace, but this effect
-  // can re-run (active just cleared) BEFORE the new searchParams land — which
-  // would relaunch the tour it just closed. Remember the request we already
-  // consumed; the ref resets once the param is actually gone, so clicking a
-  // launch link again later still works.
-  const consumedRequestRef = useRef<string | null>(null)
-
-  // URL-requested tour (help links + admin preview).
-  useEffect(() => {
-    if (!requestedId) {
-      consumedRequestRef.current = null
-      return
-    }
-    if (active || consumedRequestRef.current === requestedId) return
-    const walkthrough = walkthroughById(requestedId)
-    if (!walkthrough) return
-    if (!requestedPreview && !available.has(walkthrough.id)) return
-    consumedRequestRef.current = requestedId
-    setActive({ walkthrough, preview: requestedPreview })
-  }, [requestedId, requestedPreview, available, active])
+  const requestedWalkthrough = useMemo(
+    () => (requestedId ? walkthroughById(requestedId) : null),
+    [requestedId],
+  )
+  // Keying dismissal to this search-param snapshot prevents a finished tour
+  // from relaunching before router.replace lands, while a later launch link
+  // receives a fresh snapshot and can start the same tour again.
+  const [requestedDismissed, setRequestedDismissed] = useReseededState(searchParams, false)
+  const requestedActive = useMemo<Active | null>(
+    () =>
+      !requestedDismissed &&
+      requestedWalkthrough &&
+      (requestedPreview || available.has(requestedWalkthrough.id))
+        ? { walkthrough: requestedWalkthrough, preview: requestedPreview }
+        : null,
+    [available, requestedDismissed, requestedPreview, requestedWalkthrough],
+  )
+  const displayedActive = active ?? requestedActive
 
   // First-run auto-start.
   useEffect(() => {
-    if (!autoStartId || autoConsumed || active || requestedId) return
+    if (!autoStartId || autoConsumed || active || requestedActive) return
     const walkthrough = walkthroughById(autoStartId)
     if (!walkthrough) return
     const t = window.setTimeout(() => {
@@ -75,12 +73,13 @@ export function WalkthroughProvider({
       setActive({ walkthrough, preview: false })
     }, AUTO_START_DELAY_MS)
     return () => window.clearTimeout(t)
-  }, [autoStartId, autoConsumed, active, requestedId])
+  }, [autoStartId, autoConsumed, active, requestedActive])
 
   const handleFinish = useCallback(
     (status: 'completed' | 'dismissed') => {
-      const current = active
-      setActive(null)
+      const current = displayedActive
+      if (active) setActive(null)
+      else setRequestedDismissed(true)
       // Drop the launch params so a refresh doesn't replay the tour.
       if (searchParams.get('walkthrough')) {
         const params = new URLSearchParams(searchParams.toString())
@@ -93,9 +92,9 @@ export function WalkthroughProvider({
         void recordWalkthroughProgress(current.walkthrough.id, status)
       }
     },
-    [active, pathname, router, searchParams],
+    [active, displayedActive, pathname, router, searchParams, setRequestedDismissed],
   )
 
-  if (!active) return null
-  return <WalkthroughPlayer walkthrough={active.walkthrough} onFinish={handleFinish} />
+  if (!displayedActive) return null
+  return <WalkthroughPlayer walkthrough={displayedActive.walkthrough} onFinish={handleFinish} />
 }

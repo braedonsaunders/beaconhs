@@ -7,10 +7,12 @@ import {
   safeDistanceSegments,
   tenants,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
+import { canUseSafeDistance } from '@/lib/safe-distance-access'
 import {
   distanceUnitLabel,
   formatDistance,
@@ -43,6 +45,7 @@ export default async function SafeDistancePrintPage({
 }) {
   const { id } = await params
   const ctx = await requireRequestContext()
+  if (!canUseSafeDistance(ctx) || !isUuid(id)) notFound()
   const detail = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({

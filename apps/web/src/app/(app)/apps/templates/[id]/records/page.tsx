@@ -9,7 +9,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ClipboardCheck, Plus, Settings2 } from 'lucide-react'
-import { and, asc, count, desc, eq, isNull, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -30,18 +30,21 @@ import {
   orgUnits,
   people,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { createDraftResponse } from '@/app/(app)/apps/templates/[id]/fill/actions'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { SearchInput } from '@/components/search-input'
+import { canAccessTemplate } from '@/app/(app)/apps/_lib/access'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,15 +118,27 @@ function formatListCell(field: SchemaField | undefined, raw: unknown): string {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) return { title: 'App records' }
   const ctx = await requireRequestContext()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   const [tmpl] = await ctx.db((tx) =>
     tx
-      .select({ name: formTemplates.name })
+      .select({
+        name: formTemplates.name,
+        status: formTemplates.status,
+        allowedRoles: formTemplates.allowedRoles,
+        deletedAt: formTemplates.deletedAt,
+      })
       .from(formTemplates)
       .where(eq(formTemplates.id, id))
       .limit(1),
   )
-  return { title: tmpl?.name ?? 'App records' }
+  return {
+    title:
+      tmpl && canAccessTemplate(ctx, tmpl, effectiveRoleKeys, 'browse-records')
+        ? tmpl.name
+        : 'App records',
+  }
 }
 
 export default async function AppRecordsPage({
@@ -134,22 +149,37 @@ export default async function AppRecordsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   const canConfigure = can(ctx, 'forms.template.create')
-  const canSubmitResponses = can(ctx, 'forms.response.create')
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   // App-level list config (recordConfig.list) seeds columns, default sort, and
   // the default status filter — loaded before parseListParams so the configured
   // default sort applies on first load.
-  const [cfgRow] = await ctx.db((tx) =>
+  const [template] = await ctx.db((tx) =>
     tx
-      .select({ recordConfig: formTemplates.recordConfig })
+      .select({
+        id: formTemplates.id,
+        name: formTemplates.name,
+        description: formTemplates.description,
+        status: formTemplates.status,
+        allowedRoles: formTemplates.allowedRoles,
+        deletedAt: formTemplates.deletedAt,
+        recordConfig: formTemplates.recordConfig,
+      })
       .from(formTemplates)
       .where(eq(formTemplates.id, id))
       .limit(1),
   )
-  const listConfig = ((cfgRow?.recordConfig as { list?: ListConfig } | null)?.list ??
+  if (!template || !canAccessTemplate(ctx, template, effectiveRoleKeys, 'browse-records')) {
+    notFound()
+  }
+  const canSubmitResponses =
+    can(ctx, 'forms.response.create') &&
+    canAccessTemplate(ctx, template, effectiveRoleKeys, 'operate')
+  const listConfig = ((template.recordConfig as { list?: ListConfig } | null)?.list ??
     {}) as ListConfig
   const defaultSortKey: (typeof SORTS)[number] =
     listConfig.defaultSort && (SORTS as readonly string[]).includes(listConfig.defaultSort.key)
@@ -161,22 +191,20 @@ export default async function AppRecordsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
+  const searchQuery = listParams.q?.trim()
   // Default status filter applies on first load (no explicit ?status= param).
-  const statusFilter =
+  const requestedStatus =
     sp.status !== undefined ? pickString(sp.status) : listConfig.defaultStatus || undefined
+  const statusFilter = STATUS_OPTIONS.some((option) => option.value === requestedStatus)
+    ? (requestedStatus as (typeof formResponses.$inferSelect)['status'])
+    : undefined
+  const defaultStatusFilter = STATUS_OPTIONS.some(
+    (option) => option.value === listConfig.defaultStatus,
+  )
+    ? listConfig.defaultStatus
+    : undefined
 
   const result = await ctx.db(async (tx) => {
-    const [tmpl] = await tx
-      .select({
-        id: formTemplates.id,
-        name: formTemplates.name,
-        description: formTemplates.description,
-      })
-      .from(formTemplates)
-      .where(and(eq(formTemplates.id, id), isNull(formTemplates.deletedAt)))
-      .limit(1)
-    if (!tmpl) return null
-
     const [ver] = await tx
       .select({ schema: formTemplateVersions.schema })
       .from(formTemplateVersions)
@@ -199,7 +227,13 @@ export default async function AppRecordsPage({
       isNull(formResponses.deletedAt),
     ]
     if (vis) filters.push(vis)
-    if (statusFilter) filters.push(eq(formResponses.status, statusFilter as never))
+    if (statusFilter) filters.push(eq(formResponses.status, statusFilter))
+    if (searchQuery) {
+      const term = `%${searchQuery}%`
+      filters.push(
+        sql`concat_ws(' ', ${formResponses.id}::text, coalesce(${people.firstName}, ''), coalesce(${people.lastName}, ''), coalesce(${orgUnits.name}, ''), coalesce(${user.name}, '')) ilike ${term}`,
+      )
+    }
     const whereClause = and(...filters)
 
     const orderBy =
@@ -217,7 +251,16 @@ export default async function AppRecordsPage({
                 : desc(formResponses.submittedAt),
             ]
 
-    const [tot] = await tx.select({ c: count() }).from(formResponses).where(whereClause)
+    const [tot] = await tx
+      .select({ c: count() })
+      .from(formResponses)
+      .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, formResponses.submittedBy))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .leftJoin(people, eq(people.id, formResponses.subjectPersonId))
+      .where(whereClause)
+    const total = Number(tot?.c ?? 0)
+    const page = Math.min(listParams.page, Math.max(1, Math.ceil(total / listParams.perPage)))
     const data = await tx
       .select({
         response: formResponses,
@@ -232,25 +275,25 @@ export default async function AppRecordsPage({
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(people, eq(people.id, formResponses.subjectPersonId))
       .where(whereClause)
-      .orderBy(...orderBy)
+      .orderBy(...orderBy, asc(formResponses.id))
       .limit(listParams.perPage)
-      .offset((listParams.page - 1) * listParams.perPage)
+      .offset((page - 1) * listParams.perPage)
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
       .where(and(eq(formResponses.templateId, id), isNull(formResponses.deletedAt), vis))
       .groupBy(formResponses.status)
     return {
-      tmpl,
       schema: ver?.schema ?? null,
       rows: data,
-      total: Number(tot?.c ?? 0),
+      total,
+      page,
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
     }
   })
 
-  if (!result) notFound()
-  const { tmpl, schema, rows, total, statusCounts } = result
+  const { schema, rows, total, page, statusCounts } = result
+  const tmpl = template
   const basePath = `/apps/templates/${id}/records`
   const sortProps = { basePath, currentParams: sp, dir: listParams.dir }
 
@@ -306,11 +349,13 @@ export default async function AppRecordsPage({
             }
           />
           <TableToolbar>
+            <SearchInput placeholder="Search ID, subject, site, or submitter…" />
             <FilterChips
               basePath={basePath}
               currentParams={sp}
               paramKey="status"
               label="Status"
+              defaultValue={defaultStatusFilter}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
@@ -320,8 +365,12 @@ export default async function AppRecordsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck size={32} />}
-          title={statusFilter ? 'No entries match this filter' : 'No entries yet'}
-          description="Create the first entry for this app."
+          title={statusFilter || searchQuery ? 'No entries match these filters' : 'No entries yet'}
+          description={
+            statusFilter || searchQuery
+              ? 'Clear or change the current search and status filter.'
+              : 'Create the first entry for this app.'
+          }
           action={newEntryButton}
         />
       ) : (
@@ -443,7 +492,7 @@ export default async function AppRecordsPage({
             basePath={basePath}
             currentParams={sp}
             total={total}
-            page={listParams.page}
+            page={page}
             perPage={listParams.perPage}
           />
         </>

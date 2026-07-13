@@ -5,12 +5,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { equipmentWorkOrders } from '@beaconhs/db/schema'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { nextReference } from '@/lib/reference'
 
-export type CreateWorkOrderInput = {
+type CreateWorkOrderInput = {
   itemId: string
   summary: string
   description: string | null
@@ -40,6 +40,14 @@ export async function createEquipmentWorkOrder(
         openedByTenantUserId: ctx.membership?.id,
       })
       .returning({ id: equipmentWorkOrders.id, reference: equipmentWorkOrders.reference })
+    if (inserted) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: inserted.id,
+        moduleKey: 'equipment',
+        event: 'on_create',
+        occurrenceKey: inserted.id,
+      })
+    }
     return inserted ?? null
   })
   if (!row) return null
@@ -57,7 +65,6 @@ export async function createEquipmentWorkOrder(
       status: 'open',
     },
   })
-  await runModuleFlows(ctx, { moduleKey: 'equipment', event: 'on_create', subjectId: row.id })
   revalidatePath('/equipment/work-orders')
   revalidatePath(`/equipment/${input.itemId}`)
   return row

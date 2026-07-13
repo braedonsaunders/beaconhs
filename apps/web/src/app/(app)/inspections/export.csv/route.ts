@@ -19,7 +19,7 @@ import {
   inspectionTypes,
   orgUnits,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'

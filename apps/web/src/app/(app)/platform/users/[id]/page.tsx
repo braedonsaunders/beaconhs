@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, exists, ilike, inArray, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -18,6 +18,12 @@ import { getCurrentUserId, getRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { ConfirmButton } from '@/components/confirm-button'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { AddMembershipForm } from '../_components/add-membership-form'
 import {
   openMembershipInTenant,
@@ -30,6 +36,8 @@ import {
 
 export const metadata = { title: 'User · Platform' }
 export const dynamic = 'force-dynamic'
+
+const MEMBERSHIP_SORTS = ['tenant', 'status', 'joined'] as const
 
 type MembershipStatus = 'active' | 'invited' | 'suspended'
 
@@ -51,35 +59,131 @@ export default async function PlatformUserDetailPage({
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const notice = typeof sp.notice === 'string' ? sp.notice : undefined
+  const statusParam = pickString(sp.membershipStatus)
+  const membershipStatus =
+    statusParam === 'active' || statusParam === 'invited' || statusParam === 'suspended'
+      ? statusParam
+      : undefined
+  const membershipParams = parseListParams(
+    {
+      q: sp.membershipQ,
+      sort: sp.membershipSort,
+      dir: sp.membershipDir,
+      page: sp.membershipPage,
+      perPage: sp.membershipPerPage,
+    },
+    { sort: 'tenant', dir: 'asc', perPage: 10, allowedSorts: MEMBERSHIP_SORTS },
+  )
 
   const data = await withSuperAdmin(db, async (tx) => {
     const [account] = await tx.select().from(users).where(eq(users.id, id)).limit(1)
     if (!account) return null
-    const memberRows = await tx
-      .select({ membership: tenantUsers, tenant: tenants })
-      .from(tenantUsers)
-      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .where(eq(tenantUsers.userId, id))
-      .orderBy(asc(tenants.name))
-    const roleRows = await tx
-      .select({ tenantUserId: roleAssignments.tenantUserId, roleName: roles.name })
-      .from(roleAssignments)
-      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-      .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
-      .where(eq(tenantUsers.userId, id))
-    const allTenants = await tx
-      .select({ id: tenants.id, name: tenants.name })
-      .from(tenants)
-      .orderBy(asc(tenants.name))
-    const allRoles = await tx
-      .select({ id: roles.id, name: roles.name, tenantId: roles.tenantId })
-      .from(roles)
-      .orderBy(asc(roles.name))
-    return { account, memberRows, roleRows, allTenants, allRoles }
+    const search: SQL<unknown> | undefined = membershipParams.q
+      ? or(
+          ilike(tenants.name, `%${membershipParams.q}%`),
+          ilike(tenants.slug, `%${membershipParams.q}%`),
+          exists(
+            tx
+              .select({ id: roleAssignments.id })
+              .from(roleAssignments)
+              .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+              .where(
+                and(
+                  eq(roleAssignments.tenantUserId, tenantUsers.id),
+                  ilike(roles.name, `%${membershipParams.q}%`),
+                ),
+              ),
+          ),
+        )
+      : undefined
+    const baseWhere = eq(tenantUsers.userId, id)
+    const where = and(
+      baseWhere,
+      search,
+      membershipStatus ? eq(tenantUsers.status, membershipStatus) : undefined,
+    )
+    const dirFn = membershipParams.dir === 'asc' ? asc : desc
+    const orderBy =
+      membershipParams.sort === 'status'
+        ? [dirFn(tenantUsers.status), asc(tenants.name)]
+        : membershipParams.sort === 'joined'
+          ? [dirFn(tenantUsers.joinedAt), asc(tenants.name)]
+          : [dirFn(tenants.name)]
+    const [totalRow, statusRows, memberRows, memberTenantRows, allTenants] = await Promise.all([
+      tx
+        .select({ c: count() })
+        .from(tenantUsers)
+        .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+        .where(where),
+      tx
+        .select({ status: tenantUsers.status, c: count() })
+        .from(tenantUsers)
+        .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+        .where(and(baseWhere, search))
+        .groupBy(tenantUsers.status),
+      tx
+        .select({ membership: tenantUsers, tenant: tenants })
+        .from(tenantUsers)
+        .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(membershipParams.perPage)
+        .offset((membershipParams.page - 1) * membershipParams.perPage),
+      tx
+        .select({ tenantId: tenantUsers.tenantId, status: tenantUsers.status })
+        .from(tenantUsers)
+        .where(baseWhere),
+      tx.select({ id: tenants.id, name: tenants.name }).from(tenants).orderBy(asc(tenants.name)),
+    ])
+    const pageMembershipIds = memberRows.map((row) => row.membership.id)
+    const roleRows =
+      pageMembershipIds.length === 0
+        ? []
+        : await tx
+            .select({ tenantUserId: roleAssignments.tenantUserId, roleName: roles.name })
+            .from(roleAssignments)
+            .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+            .where(inArray(roleAssignments.tenantUserId, pageMembershipIds))
+            .orderBy(asc(roles.name))
+    const memberTenantIds = new Set(memberTenantRows.map((row) => row.tenantId))
+    const eligibleTenantIds = allTenants
+      .filter((tenant) => !memberTenantIds.has(tenant.id))
+      .map((tenant) => tenant.id)
+    const allRoles =
+      eligibleTenantIds.length === 0
+        ? []
+        : await tx
+            .select({ id: roles.id, name: roles.name, tenantId: roles.tenantId })
+            .from(roles)
+            .where(inArray(roles.tenantId, eligibleTenantIds))
+            .orderBy(asc(roles.name))
+    return {
+      account,
+      memberRows,
+      roleRows,
+      allTenants,
+      allRoles,
+      memberTenantIds,
+      total: Number(totalRow[0]?.c ?? 0),
+      statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.c)])),
+      membershipCount: memberTenantRows.length,
+      activeCount: memberTenantRows.filter((row) => row.status === 'active').length,
+    }
   })
 
   if (!data) notFound()
-  const { account, memberRows, roleRows, allTenants, allRoles } = data
+  const {
+    account,
+    memberRows,
+    roleRows,
+    allTenants,
+    allRoles,
+    memberTenantIds,
+    total,
+    statusCounts,
+    membershipCount,
+    activeCount,
+  } = data
 
   const rolesByMembership = new Map<string, string[]>()
   for (const r of roleRows) {
@@ -88,7 +192,6 @@ export default async function PlatformUserDetailPage({
     rolesByMembership.set(r.tenantUserId, arr)
   }
 
-  const memberTenantIds = new Set(memberRows.map((m) => m.tenant.id))
   const eligibleTenants = allTenants.filter((t) => !memberTenantIds.has(t.id))
   const rolesByTenant: Record<string, { id: string; name: string }[]> = {}
   for (const t of eligibleTenants) rolesByTenant[t.id] = []
@@ -97,7 +200,16 @@ export default async function PlatformUserDetailPage({
     if (bucket) bucket.push({ id: r.id, name: r.name })
   }
 
-  const activeCount = memberRows.filter((m) => m.membership.status === 'active').length
+  const membershipBase = `/platform/users/${account.id}`
+  const membershipSortProps = {
+    basePath: membershipBase,
+    currentParams: sp,
+    sort: membershipParams.sort,
+    dir: membershipParams.dir,
+    sortParamKey: 'membershipSort',
+    dirParamKey: 'membershipDir',
+    pageParamKey: 'membershipPage',
+  }
 
   // Full IANA list (searchable Select) — a free-text time zone would let a typo
   // silently break the target user's local-time rendering. Mirrors
@@ -127,7 +239,7 @@ export default async function PlatformUserDetailPage({
           badge={
             <div className="flex items-center gap-2">
               <Badge variant="outline">
-                {memberRows.length} tenant{memberRows.length === 1 ? '' : 's'}
+                {membershipCount} tenant{membershipCount === 1 ? '' : 's'}
               </Badge>
               {account.isSuperAdmin ? <Badge variant="warning">super-admin</Badge> : null}
             </div>
@@ -251,24 +363,51 @@ export default async function PlatformUserDetailPage({
             <CardTitle>
               Memberships
               <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
-                {activeCount} active of {memberRows.length}
+                {activeCount} active of {membershipCount}
               </span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <TableToolbar>
+              <SearchInput
+                placeholder="Search tenant or role…"
+                paramKey="membershipQ"
+                pageParamKey="membershipPage"
+              />
+              <FilterChips
+                basePath={membershipBase}
+                currentParams={sp}
+                paramKey="membershipStatus"
+                pageParamKey="membershipPage"
+                label="Status"
+                options={[
+                  { value: 'active', label: 'Active', count: statusCounts.active ?? 0 },
+                  { value: 'invited', label: 'Invited', count: statusCounts.invited ?? 0 },
+                  { value: 'suspended', label: 'Suspended', count: statusCounts.suspended ?? 0 },
+                ]}
+              />
+            </TableToolbar>
             {memberRows.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Not a member of any tenant yet. Add them to one above.
+                {membershipCount === 0
+                  ? 'Not a member of any tenant yet. Add them to one above.'
+                  : 'No memberships match the search or status filter.'}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                      <th className="px-3 py-2">Tenant</th>
-                      <th className="px-3 py-2">Status</th>
+                      <SortTh column="tenant" {...membershipSortProps}>
+                        Tenant
+                      </SortTh>
+                      <SortTh column="status" {...membershipSortProps}>
+                        Status
+                      </SortTh>
                       <th className="px-3 py-2">Roles</th>
-                      <th className="px-3 py-2">Joined</th>
+                      <SortTh column="joined" {...membershipSortProps}>
+                        Joined
+                      </SortTh>
                       <th className="px-3 py-2 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -308,13 +447,16 @@ export default async function PlatformUserDetailPage({
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap items-center justify-end gap-1.5">
-                              <form action={openMembershipInTenant}>
-                                <input type="hidden" name="tenantId" value={tenant.id} />
-                                <input type="hidden" name="membershipId" value={membership.id} />
-                                <Button type="submit" size="sm" variant="outline">
-                                  Open in tenant
-                                </Button>
-                              </form>
+                              {tenant.status === 'active' ? (
+                                <form action={openMembershipInTenant}>
+                                  <input type="hidden" name="userId" value={account.id} />
+                                  <input type="hidden" name="tenantId" value={tenant.id} />
+                                  <input type="hidden" name="membershipId" value={membership.id} />
+                                  <Button type="submit" size="sm" variant="outline">
+                                    Open in tenant
+                                  </Button>
+                                </form>
+                              ) : null}
                               {membership.status === 'active' ? (
                                 <form action={setMembershipStatus}>
                                   <input type="hidden" name="userId" value={account.id} />
@@ -324,16 +466,16 @@ export default async function PlatformUserDetailPage({
                                     Suspend
                                   </Button>
                                 </form>
-                              ) : (
+                              ) : membership.status === 'suspended' ? (
                                 <form action={setMembershipStatus}>
                                   <input type="hidden" name="userId" value={account.id} />
                                   <input type="hidden" name="membershipId" value={membership.id} />
                                   <input type="hidden" name="status" value="active" />
                                   <Button type="submit" size="sm" variant="ghost">
-                                    {membership.status === 'invited' ? 'Mark active' : 'Reactivate'}
+                                    Reactivate
                                   </Button>
                                 </form>
-                              )}
+                              ) : null}
                               {membership.status === 'invited' ? (
                                 <form action={resendInvite}>
                                   <input type="hidden" name="userId" value={account.id} />
@@ -365,6 +507,14 @@ export default async function PlatformUserDetailPage({
                 </table>
               </div>
             )}
+            <Pagination
+              basePath={membershipBase}
+              currentParams={sp}
+              total={total}
+              page={membershipParams.page}
+              perPage={membershipParams.perPage}
+              pageParamKey="membershipPage"
+            />
           </CardContent>
         </Card>
       </div>

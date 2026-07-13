@@ -13,7 +13,7 @@ export type PermissionRule =
   | { mode: 'anyOf'; perms: string[] }
   | { mode: 'allOf'; perms: string[] }
 
-export type ToolCategory = 'read' | 'search' | 'write'
+type ToolCategory = 'read' | 'search' | 'write'
 
 /** Structured, model-readable result. Tools NEVER throw to the loop — a failure
  *  is returned as `{ ok: false }` so one bad call can't crash the turn. */

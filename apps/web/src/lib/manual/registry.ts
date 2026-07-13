@@ -9,7 +9,7 @@ import { KNOWLEDGE_ASSETS_ARTICLES } from './content/knowledge-assets'
 import { OVERSIGHT_ADMIN_ARTICLES } from './content/oversight-admin'
 import { MANUAL_GROUP_ORDER, type ManualArticle, type ManualGroup } from './types'
 
-export const MANUAL_ARTICLES: ManualArticle[] = [
+const MANUAL_ARTICLES: ManualArticle[] = [
   ...GETTING_STARTED_ARTICLES,
   ...FRONTLINE_ARTICLES,
   ...KNOWLEDGE_ASSETS_ARTICLES,
@@ -19,7 +19,7 @@ export const MANUAL_ARTICLES: ManualArticle[] = [
 const BY_SLUG = new Map(MANUAL_ARTICLES.map((a) => [a.slug, a]))
 
 /** Can this user see this article? Mirrors the nav registry's gating. */
-export function canSeeArticle(ctx: RequestContext, article: ManualArticle): boolean {
+function canSeeArticle(ctx: RequestContext, article: ManualArticle): boolean {
   if (article.requiredPermission && !can(ctx, article.requiredPermission)) return false
   if (article.requiredAnyPermission && !article.requiredAnyPermission.some((p) => can(ctx, p)))
     return false
@@ -27,7 +27,7 @@ export function canSeeArticle(ctx: RequestContext, article: ManualArticle): bool
 }
 
 /** Every article the user may read, in registry order. */
-export function visibleManualArticles(ctx: RequestContext): ManualArticle[] {
+function visibleManualArticles(ctx: RequestContext): ManualArticle[] {
   return MANUAL_ARTICLES.filter((a) => canSeeArticle(ctx, a))
 }
 
@@ -49,7 +49,7 @@ export function groupedManualArticles(
   })).filter((g) => g.articles.length > 0)
 }
 
-export type ManualSearchHit = {
+type ManualSearchHit = {
   article: ManualArticle
   /** A short plain-text excerpt around the first body match (empty when the
    *  match was title/keywords only). */

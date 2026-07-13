@@ -4,12 +4,7 @@
 
 import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
 
-export type CorrectiveActionsSubNavKey =
-  | 'records'
-  | 'overdue'
-  | 'by-source'
-  | 'by-assignee'
-  | 'aging'
+type CorrectiveActionsSubNavKey = 'records' | 'overdue' | 'by-source' | 'by-assignee' | 'aging'
 
 const TABS = [
   { key: 'records', label: 'Records', href: '/corrective-actions' },

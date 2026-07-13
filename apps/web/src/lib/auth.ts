@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
-import { auth } from '@beaconhs/auth'
+import { redirect } from 'next/navigation'
+import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import {
   people,
@@ -16,10 +17,11 @@ import {
   assertCan,
   assertNotImpersonating,
   makeTenantContext,
-  UnauthorizedError,
   type RequestContext,
 } from '@beaconhs/tenant'
 import { actorMayImpersonate, resolveMembershipPerms } from './impersonation'
+import { activeTenantPredicate } from './active-tenant'
+import { isUuid } from './list-params'
 
 export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
 // The single role a multi-role user has switched into. Cleared whenever the
@@ -47,7 +49,7 @@ async function resolvePersonId(
 
 export async function getCurrentUserId(): Promise<string | null> {
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
+    const session = await getAuth().api.getSession({ headers: await headers() })
     return session?.user?.id ?? null
   } catch {
     return null
@@ -60,9 +62,46 @@ export async function getCurrentUserId(): Promise<string | null> {
  * identity), this is always the actual account — used by the top-bar account menu.
  */
 export async function getSessionUser(): Promise<{ name: string; email: string } | null> {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await getAuth().api.getSession({ headers: await headers() })
   if (!session?.user) return null
   return { name: session.user.name ?? '', email: session.user.email ?? '' }
+}
+
+type SignedInAccessSummary = {
+  userId: string
+  email: string
+  memberships: {
+    membershipId: string
+    membershipStatus: 'active' | 'invited' | 'suspended'
+    tenantId: string
+    tenantName: string
+    tenantStatus: 'active' | 'suspended' | 'archived'
+  }[]
+}
+
+/**
+ * Resolve access even when the user has no active membership and therefore no
+ * RequestContext. This powers the post-auth recovery screen and prevents the
+ * old /login ↔ /dashboard loop for invited, suspended, or orphaned accounts.
+ */
+export async function getSignedInAccessSummary(): Promise<SignedInAccessSummary | null> {
+  const session = await getAuth().api.getSession({ headers: await headers() })
+  if (!session?.user?.id) return null
+  const memberships = await withSuperAdmin(db, (tx) =>
+    tx
+      .select({
+        membershipId: tenantUsers.id,
+        membershipStatus: tenantUsers.status,
+        tenantId: tenants.id,
+        tenantName: tenants.name,
+        tenantStatus: tenants.status,
+      })
+      .from(tenantUsers)
+      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+      .where(eq(tenantUsers.userId, session.user.id))
+      .orderBy(asc(tenants.name)),
+  )
+  return { userId: session.user.id, email: session.user.email, memberships }
 }
 
 /**
@@ -86,7 +125,7 @@ export async function getSessionUser(): Promise<{ name: string; email: string } 
  */
 export const getRequestContext = cache(async (): Promise<RequestContext | null> => {
   const headerStore = await headers()
-  const session = await auth.api.getSession({ headers: headerStore })
+  const session = await getAuth().api.getSession({ headers: headerStore })
   if (!session?.user?.id) return null
 
   const userId = session.user.id
@@ -95,8 +134,13 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
   // so this stays the admin's token throughout — "stop" just clears the pointer.
   const sessionToken = session.session?.token ?? null
   const cookieStore = await cookies()
-  const cookieTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value ?? null
-  const cookieRoleId = cookieStore.get(ACTIVE_ROLE_COOKIE)?.value ?? null
+  const rawTenantId = cookieStore.get(ACTIVE_TENANT_COOKIE)?.value ?? null
+  const rawRoleId = cookieStore.get(ACTIVE_ROLE_COOKIE)?.value ?? null
+  // These cookies are user-controlled request input. Never pass malformed
+  // values into UUID comparisons, which would turn a stale/tampered cookie into
+  // a PostgreSQL cast error on every authenticated page.
+  const cookieTenantId = rawTenantId && isUuid(rawTenantId) ? rawTenantId : null
+  const cookieRoleId = rawRoleId && isUuid(rawRoleId) ? rawRoleId : null
 
   // Bootstrap read: resolve identity + membership ACROSS tenants before any
   // tenant scope is chosen. Runs on the BYPASSRLS super pool — the tenant tables
@@ -117,14 +161,23 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
     }
 
     if (u.isSuperAdmin) {
-      // Find which tenant to view
-      let tenantId = cookieTenantId
-      if (!tenantId) {
-        // No active-tenant cookie yet (e.g. first login). Default to a tenant
-        // the super-admin belongs to, else the oldest tenant. We must NOT
-        // return null while tenants exist: the (app) layout treats a null
-        // context as "logged out" and redirects to /login, which then redirects
-        // a logged-in user back to /dashboard → infinite redirect loop.
+      const loadTenant = async (tenantId: string) => {
+        const [row] = await tx
+          .select()
+          .from(tenants)
+          .where(activeTenantPredicate(tenantId))
+          .limit(1)
+        return row ?? null
+      }
+      // Honour an operational selection. A deleted, suspended, archived, or
+      // otherwise stale cookie falls back instead of granting the full app
+      // context inside an inactive workspace.
+      let tenant = cookieTenantId ? await loadTenant(cookieTenantId) : null
+      if (!tenant) {
+        // No usable tenant cookie (e.g. first login). Default to a tenant the
+        // super-admin belongs to, else the oldest tenant. We must NOT return
+        // null while tenants exist: the app shell requires a tenant-bound
+        // RequestContext even for platform administration.
         const [pick] = await tx
           .select({ id: tenants.id })
           .from(tenants)
@@ -136,15 +189,12 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
               eq(tenantUsers.status, 'active'),
             ),
           )
+          .where(activeTenantPredicate())
           .orderBy(sql`(${tenantUsers.id} is null)`, tenants.createdAt)
           .limit(1)
-        tenantId = pick?.id ?? null
+        tenant = pick ? await loadTenant(pick.id) : null
       }
-      if (!tenantId) return null
-
-      // Verify tenant exists
-      const [t] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1)
-      if (!t) return null
+      if (!tenant) return null
 
       // Super-admin has all permissions; no scoping. But they can ALSO have a
       // tenant_users row in the active tenant — in which case we attach that
@@ -156,7 +206,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         .where(
           and(
             eq(tenantUsers.userId, userId),
-            eq(tenantUsers.tenantId, t.id),
+            eq(tenantUsers.tenantId, tenant.id),
             eq(tenantUsers.status, 'active'),
           ),
         )
@@ -164,11 +214,11 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       const permissions = new Set<string>(['*'])
       return makeTenantContext(db, {
         userId,
-        tenantId: t.id,
+        tenantId: tenant.id,
         isSuperAdmin: true,
         timezone: u.timezone,
         membership: m ? { id: m.id, displayName: m.displayName ?? u.name } : null,
-        personId: await resolvePersonId(tx as unknown as Database, userId, t.id),
+        personId: await resolvePersonId(tx as unknown as Database, userId, tenant.id),
         permissions,
         scopes: [{ type: 'tenant' }],
       })
@@ -179,7 +229,13 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       .select({ membership: tenantUsers, tenant: tenants })
       .from(tenantUsers)
       .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .where(and(eq(tenantUsers.userId, userId), eq(tenantUsers.status, 'active')))
+      .where(
+        and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.status, 'active'),
+          activeTenantPredicate(),
+        ),
+      )
       // Deterministic order so a multi-tenant user defaults to a STABLE tenant (their oldest /
       // "home" membership) across requests — not a random one that flips per query.
       .orderBy(asc(tenantUsers.joinedAt))
@@ -248,6 +304,15 @@ async function resolveImpersonation(
   if (!s?.targetUserId || !s.tenantId || !s.expiresAt) return null
   if (s.expiresAt.getTime() <= Date.now()) return null
 
+  // A suspended or archived tenant cannot be reached through an existing
+  // impersonation pointer, including by a platform super-admin.
+  const [activeTenant] = await tx
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(activeTenantPredicate(s.tenantId))
+    .limit(1)
+  if (!activeTenant) return null
+
   // Re-authorize the real actor for the pinned tenant on EVERY request, so a
   // mid-session role change / suspension immediately ends the impersonation.
   if (!(await actorMayImpersonate(tx, actor, s.tenantId))) return null
@@ -293,7 +358,7 @@ async function resolveImpersonation(
 
 export async function requireRequestContext(): Promise<RequestContext> {
   const ctx = await getRequestContext()
-  if (!ctx) throw new UnauthorizedError()
+  if (!ctx) redirect((await getSessionUser()) ? '/auth/continue' : '/login')
   return ctx
 }
 
@@ -329,6 +394,7 @@ export async function listAccessibleTenants(): Promise<
       const rows = await tx
         .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
         .from(tenants)
+        .where(activeTenantPredicate())
         .orderBy(tenants.name)
       return rows
     }
@@ -336,7 +402,13 @@ export async function listAccessibleTenants(): Promise<
       .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
       .from(tenants)
       .innerJoin(tenantUsers, eq(tenantUsers.tenantId, tenants.id))
-      .where(and(eq(tenantUsers.userId, userId), eq(tenantUsers.status, 'active')))
+      .where(
+        and(
+          eq(tenantUsers.userId, userId),
+          eq(tenantUsers.status, 'active'),
+          activeTenantPredicate(),
+        ),
+      )
       .orderBy(tenants.name)
   })
 }

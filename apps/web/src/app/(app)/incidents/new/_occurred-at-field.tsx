@@ -7,7 +7,7 @@
 // local pick; a hidden field submits the unambiguous ISO timestamp so the
 // server action never re-interprets a timezone-less string in its own zone.
 
-import { useEffect, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { Input } from '@beaconhs/ui'
 
 function toLocalInputValue(d: Date): string {
@@ -15,11 +15,17 @@ function toLocalInputValue(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const clientDefault = typeof window === 'undefined' ? '' : toLocalInputValue(new Date())
+const subscribe = () => () => undefined
+
 export function OccurredAtField({ name }: { name: string }) {
-  const [value, setValue] = useState('')
-  useEffect(() => {
-    setValue(toLocalInputValue(new Date()))
-  }, [])
+  const defaultValue = useSyncExternalStore(
+    subscribe,
+    () => clientDefault,
+    () => '',
+  )
+  const [editedValue, setEditedValue] = useState<string | null>(null)
+  const value = editedValue ?? defaultValue
 
   const parsed = value ? new Date(value) : null
   const iso = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : ''
@@ -30,7 +36,7 @@ export function OccurredAtField({ name }: { name: string }) {
         type="datetime-local"
         required
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => setEditedValue(e.target.value)}
       />
       <input type="hidden" name={name} value={iso} />
     </>

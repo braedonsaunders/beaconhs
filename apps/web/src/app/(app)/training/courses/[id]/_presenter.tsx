@@ -19,12 +19,12 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { isRichRegion, type Slide } from '@beaconhs/db/schema'
-import { LessonBlocksView, toEmbedUrl } from '../../_lib/blocks'
+import type { Slide } from '@beaconhs/db/schema'
+import { toEmbedUrl } from '../../_lib/blocks'
 import { lessonProseCss } from '../../_editor/prose'
 import { SlideView } from '../../_components/slide-view'
-import { blocksToHtml } from '../../_editor/legacy'
 import type { LessonLite, ModuleLite } from './_workspace'
+import { RawImage } from '@/components/raw-image'
 
 export type AttachmentMeta = {
   url: string | null
@@ -34,7 +34,6 @@ export type AttachmentMeta = {
 export type ItemContent = {
   kind: string
   contentHtml: string | null
-  contentBlocks: LessonLite['contentBlocks']
   slides: Slide[]
   embedUrl: string | null
   attachmentId: string | null
@@ -56,7 +55,6 @@ type Effective = {
   moduleTitle: string
   kind: string
   contentHtml: string | null
-  blocks: LessonLite['contentBlocks']
   slides: Slide[]
   embedUrl: string | null
   attachmentId: string | null
@@ -95,7 +93,6 @@ export function CoursePresenter({
           moduleTitle: mod.title,
           kind: item ? item.kind : lesson.kind,
           contentHtml: item ? item.contentHtml : lesson.contentHtml,
-          blocks: item ? (item.contentBlocks ?? []) : (lesson.contentBlocks ?? []),
           slides: item ? (item.slides ?? []) : (lesson.slides ?? []),
           embedUrl: item ? item.embedUrl : lesson.embedUrl,
           attachmentId: item ? item.attachmentId : lesson.attachmentId,
@@ -284,13 +281,11 @@ function Stage({
 
   // Rich text — a readable page.
   if (eff.kind === 'rich') {
-    const html = eff.contentHtml ?? blocksToHtml(eff.blocks)
+    const html = eff.contentHtml
     return (
       <div className="app-scroll max-h-full w-full max-w-4xl overflow-y-auto rounded-lg bg-white px-12 py-10 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100">
         {html ? (
           <div className="lesson-prose" dangerouslySetInnerHTML={{ __html: html }} />
-        ) : eff.blocks.length > 0 ? (
-          <LessonBlocksView blocks={eff.blocks} attachmentUrls={attachmentUrls} />
         ) : (
           <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
         )}
@@ -301,7 +296,7 @@ function Stage({
   // Practical exam — a classroom activity guide. Shows the brief, then the
   // sign-off criteria the evaluator marks hands-on. Not self-completed.
   if (eff.kind === 'practical') {
-    const html = eff.contentHtml ?? blocksToHtml(eff.blocks)
+    const html = eff.contentHtml
     return (
       <ActivityGuide
         tone="amber"
@@ -312,10 +307,6 @@ function Stage({
       >
         {html ? (
           <div className="lesson-prose mt-5 text-left" dangerouslySetInnerHTML={{ __html: html }} />
-        ) : eff.blocks.length > 0 ? (
-          <div className="mt-5 text-left">
-            <LessonBlocksView blocks={eff.blocks} attachmentUrls={attachmentUrls} />
-          </div>
         ) : null}
         {eff.lesson.practicalCriteria.length > 0 ? (
           <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left dark:border-slate-700 dark:bg-slate-800/50">
@@ -376,9 +367,8 @@ function Stage({
       )
     }
     if (isImage) {
-      // eslint-disable-next-line @next/next/no-img-element
       return (
-        <img
+        <RawImage
           src={meta.url}
           alt={eff.lesson.title}
           className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"

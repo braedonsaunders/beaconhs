@@ -10,7 +10,7 @@ import { Check, CloudUpload } from 'lucide-react'
 import { Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
 import { updateDocumentMeta } from './_actions'
 
-export type OverviewMeta = {
+type OverviewMeta = {
   title: string
   key: string
   categoryId: string

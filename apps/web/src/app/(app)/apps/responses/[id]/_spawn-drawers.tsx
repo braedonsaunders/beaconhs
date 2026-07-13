@@ -8,7 +8,7 @@
 // refresh the page (so the new CAPA shows in audit), and redirect to the
 // freshly-created entity's detail page.
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
@@ -87,32 +87,32 @@ export function SpawnDrawers({
 }) {
   return (
     <>
-      <SpawnCAPADrawer
-        open={openDrawer === 'spawn-ca'}
-        closeHref={closeHref}
-        responseId={responseId}
-        prefill={prefill}
-        action={spawnCa}
-      />
-      <SpawnIncidentDrawer
-        open={openDrawer === 'spawn-incident'}
-        closeHref={closeHref}
-        responseId={responseId}
-        prefill={prefill}
-        action={spawnIncident}
-      />
+      {openDrawer === 'spawn-ca' ? (
+        <SpawnCAPADrawer
+          closeHref={closeHref}
+          responseId={responseId}
+          prefill={prefill}
+          action={spawnCa}
+        />
+      ) : null}
+      {openDrawer === 'spawn-incident' ? (
+        <SpawnIncidentDrawer
+          closeHref={closeHref}
+          responseId={responseId}
+          prefill={prefill}
+          action={spawnIncident}
+        />
+      ) : null}
     </>
   )
 }
 
 function SpawnCAPADrawer({
-  open,
   closeHref,
   responseId,
   prefill,
   action,
 }: {
-  open: boolean
   closeHref: string
   responseId: string
   prefill: SpawnPrefill
@@ -125,17 +125,6 @@ function SpawnCAPADrawer({
   const [dueOn, setDueOn] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-
-  // Re-seed when the drawer re-opens with new prefill values (e.g. per-field
-  // CAPA spawning sets a different title).
-  useEffect(() => {
-    if (open) {
-      setTitle(prefill.caTitle)
-      setDescription(prefill.caDescription)
-      setSeverity(prefill.caSeverity)
-      setError(null)
-    }
-  }, [open, prefill.caTitle, prefill.caDescription, prefill.caSeverity])
 
   function submit() {
     setError(null)
@@ -165,7 +154,7 @@ function SpawnCAPADrawer({
 
   return (
     <UrlDrawer
-      open={open}
+      open
       closeHref={closeHref}
       title="Create corrective action"
       description="Address the non-compliance flagged by this form response."
@@ -246,13 +235,11 @@ function SpawnCAPADrawer({
 }
 
 function SpawnIncidentDrawer({
-  open,
   closeHref,
   responseId,
   prefill,
   action,
 }: {
-  open: boolean
   closeHref: string
   responseId: string
   prefill: SpawnPrefill
@@ -267,15 +254,6 @@ function SpawnIncidentDrawer({
   const [location, setLocation] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-
-  useEffect(() => {
-    if (open) {
-      setTitle(prefill.incidentTitle)
-      setDescription(prefill.incidentDescription)
-      setOccurredAt(localDatetimeValue())
-      setError(null)
-    }
-  }, [open, prefill.incidentTitle, prefill.incidentDescription])
 
   function submit() {
     setError(null)
@@ -315,7 +293,7 @@ function SpawnIncidentDrawer({
 
   return (
     <UrlDrawer
-      open={open}
+      open
       closeHref={closeHref}
       title="Create incident"
       description="Escalate this response into an incident report."

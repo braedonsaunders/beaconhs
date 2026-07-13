@@ -1,6 +1,6 @@
 import { Activity, Check, Pencil, Plus, Signature, Trash2 } from 'lucide-react'
 
-export type ActivityEntry = {
+type ActivityEntry = {
   id: string
   action: string
   summary?: string | null

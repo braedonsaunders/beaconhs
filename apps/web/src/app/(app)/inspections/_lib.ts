@@ -18,8 +18,8 @@ import {
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
 
-export type CriterionAnswer = 'pass' | 'fail' | 'n_a'
-export type CriterionSeverity = 'low' | 'medium' | 'high' | 'critical'
+type CriterionAnswer = 'pass' | 'fail' | 'n_a'
+type CriterionSeverity = 'low' | 'medium' | 'high' | 'critical'
 
 const ANSWER_VALUES = ['pass', 'fail', 'n_a'] as const
 const SEVERITY_VALUES = ['low', 'medium', 'high', 'critical'] as const
@@ -97,7 +97,7 @@ export async function materialiseCriteriaForRecord(
  * Decide whether a fail-severity combination should trigger an auto-CA.
  * Spec: severity ≥ high.
  */
-export function shouldSpawnCorrectiveAction(
+function shouldSpawnCorrectiveAction(
   answer: CriterionAnswer | null,
   severity: CriterionSeverity | null,
 ): boolean {

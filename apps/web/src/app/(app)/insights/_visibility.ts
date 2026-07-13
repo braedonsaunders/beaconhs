@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import { roles } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { canPublishInsights } from './_access'
 
 export function canSeePublishedInsight(
@@ -15,10 +15,10 @@ export function canSeePublishedInsight(
 }
 
 export async function getInsightRoleKeys(ctx: RequestContext) {
-  return getUserRoleKeys(ctx)
+  return getEffectiveRoleKeys(ctx)
 }
 
-export type InsightRoleOption = { key: string; name: string }
+type InsightRoleOption = { key: string; name: string }
 
 /** Tenant roles offered as publish-restriction targets (allowedRoles). */
 export async function loadInsightRoleOptions(ctx: RequestContext): Promise<InsightRoleOption[]> {

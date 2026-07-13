@@ -17,10 +17,10 @@ import {
 import type { RequestContext } from '@beaconhs/tenant'
 import { MODULE_FLOW_PROFILES } from './module-profiles'
 
-export type SubjectFieldOption = { key: string; label: string }
-export type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
+type SubjectFieldOption = { key: string; label: string }
+type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
 /** A repeating child collection exposed for {{#each}} tables. */
-export type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
+type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
 
 /** Latest schema version for a Builder app (palette source of truth). */
 async function loadLatestFormSchema(

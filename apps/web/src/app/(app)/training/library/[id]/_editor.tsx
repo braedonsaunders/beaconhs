@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Trash2 } from 'lucide-react'
+import type { Editor } from '@tiptap/react'
 import {
   Badge,
   Button,
@@ -14,17 +15,18 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import type { LessonBlock, Slide } from '@beaconhs/db/schema'
+import type { Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
-// Shared bespoke editors (also used by the course Studio).
-import { BlockEditor } from '../../courses/[id]/studio/_block-editor'
 import { SlideDeckEditor } from '../../_editor/slide-deck-editor'
+import { RichEditor } from '../../_editor/rich-editor'
+import { LessonRibbon } from '../../_editor/ribbon'
+import { lessonProseCss } from '../../_editor/prose'
 import {
   deleteContentItem,
   importContentItemPptx,
-  saveContentItemBlocks,
+  saveContentItemRich,
   updateContentItem,
 } from '../_actions'
 
@@ -38,7 +40,8 @@ type Item = {
   durationMinutes: number | null
   attachmentId: string | null
   embedUrl: string | null
-  contentBlocks: LessonBlock[]
+  contentJson: Record<string, unknown> | null
+  contentHtml: string | null
   slides: Slide[]
   importStatus: string | null
   importError: string | null
@@ -64,6 +67,11 @@ export function ContentItemEditor({
   const [duration, setDuration] = useState(item.durationMinutes?.toString() ?? '')
   const [attachmentId, setAttachmentId] = useState(item.attachmentId ?? '')
   const [embedUrl, setEmbedUrl] = useState(item.embedUrl ?? '')
+  const [activeEditor, setActiveEditor] = useState<Editor | null>(null)
+  const [richContent, setRichContent] = useState({
+    json: item.contentJson as unknown,
+    html: item.contentHtml ?? '',
+  })
 
   function saveMeta() {
     startTransition(async () => {
@@ -95,6 +103,7 @@ export function ContentItemEditor({
 
   return (
     <div className="space-y-5">
+      <style dangerouslySetInnerHTML={{ __html: lessonProseCss('.lesson-prose') }} />
       <Card>
         <CardContent className="space-y-4 py-5">
           <div className="flex items-center justify-between">
@@ -216,15 +225,35 @@ export function ContentItemEditor({
 
       {kind === 'rich' ? (
         <Card>
-          <CardContent className="space-y-2 py-5">
-            <Label>Content</Label>
-            <BlockEditor
-              initialBlocks={item.contentBlocks}
-              onSave={async (blocks) => {
-                await saveContentItemBlocks(item.id, blocks)
-                router.refresh()
-              }}
-            />
+          <CardContent className="space-y-3 py-5">
+            <div className="flex items-center justify-between gap-3">
+              <Label>Content</Label>
+              <Button
+                type="button"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    await saveContentItemRich(item.id, richContent.json, richContent.html)
+                    router.refresh()
+                    toast.success('Content saved')
+                  })
+                }
+              >
+                {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                Save content
+              </Button>
+            </div>
+            <LessonRibbon editor={activeEditor} />
+            <div className="lesson-prose min-h-80 rounded-lg border border-slate-200 bg-white px-10 py-8 dark:border-slate-800 dark:bg-slate-900">
+              <RichEditor
+                initialJson={item.contentJson}
+                initialHtml={item.contentHtml}
+                placeholder="Write reusable training content…"
+                onChange={setRichContent}
+                onFocusEditor={setActiveEditor}
+              />
+            </div>
           </CardContent>
         </Card>
       ) : null}

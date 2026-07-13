@@ -6,7 +6,7 @@ import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field
 // unified record page. "New certificate" creates the row immediately (default
 // person/course) and lands here, where every field edits inline.
 
-export type RecordFieldValues = {
+type RecordFieldValues = {
   personId: string
   courseId: string
   source: string
@@ -18,7 +18,7 @@ export type RecordFieldValues = {
   notes: string | null
 }
 
-export type RecordFieldOptions = {
+type RecordFieldOptions = {
   people: { id: string; firstName: string; lastName: string; employeeNo: string | null }[]
   courses: { id: string; name: string; code: string | null }[]
 }

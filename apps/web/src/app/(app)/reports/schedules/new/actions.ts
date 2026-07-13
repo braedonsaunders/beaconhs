@@ -13,6 +13,9 @@ import { parseScheduleForm } from '../_parse'
 export async function createSchedule(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
+  if (!ctx.membership)
+    throw new Error('An active tenant membership is required to schedule reports')
+  const runAsTenantUserId = ctx.membership.id
 
   const definitionId = String(formData.get('definitionId') ?? '').trim()
   if (!definitionId) throw new Error('Report definition is required')
@@ -59,6 +62,8 @@ export async function createSchedule(formData: FormData): Promise<void> {
         recipientUserIds,
         recipientEmails,
         filters,
+        runAsTenantUserId,
+        runAsRoleId: ctx.activeRoleId ?? null,
         nextRunAt,
         active: true,
       })

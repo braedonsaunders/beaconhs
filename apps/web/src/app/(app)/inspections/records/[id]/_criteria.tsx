@@ -22,8 +22,9 @@ import {
 } from '@beaconhs/ui'
 import { AlertOctagon, Camera, CheckCircle2 } from 'lucide-react'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { RawImage } from '@/components/raw-image'
 
-export type CriterionAnswer = 'pass' | 'fail' | 'n_a'
+type CriterionAnswer = 'pass' | 'fail' | 'n_a'
 export type CriterionSeverity = 'low' | 'medium' | 'high' | 'critical'
 export type CriterionResponseType = 'pass_fail_na' | 'rating' | 'yes_no'
 
@@ -153,7 +154,7 @@ const ANSWER_LABELS: Record<CriterionResponseType, Record<CriterionAnswer, strin
   yes_no: { pass: 'Yes', fail: 'No', n_a: 'N/A' },
 }
 
-export type CriterionActions = {
+type CriterionActions = {
   setAnswer: (fd: FormData) => Promise<void>
   setSeverity: (fd: FormData) => Promise<void>
   setNonCompliance: (fd: FormData) => Promise<void>
@@ -475,7 +476,7 @@ export function CriterionCard({
                   rel="noreferrer"
                   className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
                 >
-                  <img src={p.url} alt={p.filename} className="h-full w-full object-cover" />
+                  <RawImage src={p.url} alt={p.filename} className="h-full w-full object-cover" />
                 </a>
               ))}
             </div>

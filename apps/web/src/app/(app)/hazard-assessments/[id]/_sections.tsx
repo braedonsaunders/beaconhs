@@ -1318,7 +1318,7 @@ export function QuestionRow({
 // Shared row buttons
 // ============================================================================
 
-export function MoveButton({
+function MoveButton({
   id,
   assessmentId,
   direction,
@@ -1354,7 +1354,7 @@ export function MoveButton({
   )
 }
 
-export function DeleteButton({
+function DeleteButton({
   id,
   assessmentId,
   action,
@@ -1385,7 +1385,7 @@ export function DeleteButton({
   )
 }
 
-export function EditLinkButton({ href }: { href: string }) {
+function EditLinkButton({ href }: { href: string }) {
   return (
     <Link
       href={href as any}
@@ -1412,7 +1412,7 @@ export function EditLinkButton({ href }: { href: string }) {
 // be omitted. This keeps each body self-contained without needing to thread
 // a form ID up to the page.
 
-export function DrawerSubmitHandle({
+function DrawerSubmitHandle({
   pending,
   onSubmit,
   closeHref,

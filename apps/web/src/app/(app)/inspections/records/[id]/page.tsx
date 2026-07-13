@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   Building2,
@@ -35,15 +36,15 @@ import {
   orgUnits,
   people,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { assertCan } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
-import { storeSignatureValue } from '@/lib/signature-storage'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
+import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -189,7 +190,7 @@ async function updateStatus(formData: FormData) {
   // advertised in the UI. Closing locks the record, so the evidence must be
   // complete first.
   if (closing) {
-    if (current.type.requiresCustomerSignature && !current.record.customerSignatureDataUrl) {
+    if (current.type.requiresCustomerSignature && !current.record.customerSignatureAttachmentId) {
       throw new Error('Cannot close: this inspection type requires a customer signature.')
     }
     if (
@@ -200,9 +201,10 @@ async function updateStatus(formData: FormData) {
       throw new Error('Cannot close: this inspection type requires a foreman on the record.')
     }
   }
+  if (current.record.status === status) return
 
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(inspectionRecords)
       .set({
         status: status as (typeof STATUSES)[number],
@@ -216,20 +218,27 @@ async function updateStatus(formData: FormData) {
         closedByTenantUserId: closing ? (ctx.membership?.id ?? null) : null,
         locked: closing,
       })
-      .where(eq(inspectionRecords.id, id)),
-  )
+      .where(eq(inspectionRecords.id, id))
+    const occurrenceKey = randomUUID()
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'inspections',
+      event: 'status_change',
+      toStatus: status,
+      occurrenceKey,
+    })
+    if (status === 'submitted') {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'inspections',
+        event: 'on_submit',
+        occurrenceKey,
+      })
+    }
+  })
   await logRecordAudit(ctx, id, `Status changed to "${status.replace(/_/g, ' ')}"`, 'update', {
     status,
   })
-  await runModuleFlows(ctx, {
-    moduleKey: 'inspections',
-    event: 'status_change',
-    subjectId: id,
-    toStatus: status,
-  })
-  if (status === 'submitted') {
-    await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_submit', subjectId: id })
-  }
   revalidatePath(`/inspections/records/${id}`)
   revalidatePath('/inspections/records')
 }
@@ -563,18 +572,20 @@ async function saveCustomerSignature(formData: FormData) {
   if (!recordId) return
   await assertCanSeeInspection(ctx, recordId)
   const dataUrl = signature === 'clear' || signature === '' ? null : signature
-  // Move the captured signature bytes to object storage; the column keeps a
-  // stable public URL instead of an inline base64 blob.
-  const storedSignature = dataUrl ? await storeSignatureValue(ctx.tenantId, dataUrl) : null
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecords)
-      .set({
-        customerSignatureDataUrl: storedSignature,
-        customerSignerName: signerName,
-        customerSignedAt: storedSignature ? new Date() : null,
-      })
-      .where(eq(inspectionRecords.id, recordId)),
+  const storedSignature = await withStoredSignatureAttachment(
+    ctx,
+    dataUrl,
+    async (tx, attachmentId) => {
+      await tx
+        .update(inspectionRecords)
+        .set({
+          customerSignatureAttachmentId: attachmentId,
+          customerSignerName: signerName,
+          customerSignedAt: attachmentId ? new Date() : null,
+        })
+        .where(eq(inspectionRecords.id, recordId))
+      return attachmentId
+    },
   )
   await logRecordAudit(
     ctx,
@@ -696,7 +707,11 @@ export default async function InspectionRecordDetailPage({
         .from(attachments)
         .where(inArray(attachments.id, allPhotoIds))
       for (const r of rows) {
-        criterionPhotoMap.set(r.id, { id: r.id, url: publicUrl(r.key), filename: r.filename })
+        criterionPhotoMap.set(r.id, {
+          id: r.id,
+          url: attachmentUrl(r.id),
+          filename: r.filename,
+        })
       }
     }
 
@@ -738,7 +753,7 @@ export default async function InspectionRecordDetailPage({
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
-    url: publicUrl(p.attachment.r2Key),
+    url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
   }))
@@ -761,7 +776,7 @@ export default async function InspectionRecordDetailPage({
   }
 
   const needsSignature = type.requiresCustomerSignature
-  const signed = Boolean(record.customerSignatureDataUrl)
+  const signed = Boolean(record.customerSignatureAttachmentId)
 
   const sectionItems: SectionNavItem[] = [
     { id: 'overview', label: 'Overview' },
@@ -1178,7 +1193,11 @@ export default async function InspectionRecordDetailPage({
             >
               <CustomerSignatureCard
                 recordId={id}
-                currentSignature={record.customerSignatureDataUrl}
+                currentSignature={
+                  record.customerSignatureAttachmentId
+                    ? attachmentUrl(record.customerSignatureAttachmentId)
+                    : null
+                }
                 currentSignerName={record.customerSignerName}
                 signedAt={record.customerSignedAt}
                 locked={record.locked}

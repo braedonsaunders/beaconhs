@@ -44,7 +44,7 @@ const PAPER_PX: Record<PaperSize, [number, number]> = {
 }
 const mmToPx = (mm: number) => Math.round(mm * 3.7795)
 
-export function pageMetrics(size: PaperSize, orientation: Orientation, marginMm: number) {
+function pageMetrics(size: PaperSize, orientation: Orientation, marginMm: number) {
   const [pw, ph] = PAPER_PX[size]
   const [w, h] = orientation === 'landscape' ? [ph, pw] : [pw, ph]
   const m = mmToPx(marginMm)

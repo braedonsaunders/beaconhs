@@ -26,7 +26,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { getTenantAiConfig } from '@/lib/ai-config'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import {
   authorTenantUserId,
@@ -148,7 +148,7 @@ function entryWhere(
   return conds.length === 0 ? undefined : and(...conds)
 }
 
-export async function listMetaOptions(
+async function listMetaOptions(
   ctx: RequestContext,
 ): Promise<{ sites: JournalOption[]; people: JournalOption[] }> {
   return ctx.db(async (tx) => {
@@ -357,7 +357,7 @@ async function firstPhotoThumbs(
   const rows = await tx
     .select({
       entryId: journalEntryPhotos.entryId,
-      r2Key: attachments.r2Key,
+      attachmentId: attachments.id,
       sortOrder: journalEntryPhotos.sortOrder,
     })
     .from(journalEntryPhotos)
@@ -365,7 +365,7 @@ async function firstPhotoThumbs(
     .where(inArray(journalEntryPhotos.entryId, entryIds))
     .orderBy(asc(journalEntryPhotos.sortOrder))
   const out: Record<string, string> = {}
-  for (const r of rows) if (!out[r.entryId]) out[r.entryId] = publicUrl(r.r2Key)
+  for (const r of rows) if (!out[r.entryId]) out[r.entryId] = attachmentUrl(r.attachmentId)
   return out
 }
 
@@ -415,7 +415,7 @@ export async function getEntry(
       .select({
         id: journalEntryPhotos.id,
         caption: journalEntryPhotos.caption,
-        r2Key: attachments.r2Key,
+        attachmentId: attachments.id,
       })
       .from(journalEntryPhotos)
       .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
@@ -439,7 +439,7 @@ export async function getEntry(
       tags: tagRows.map((t) => t.tag),
       photos: photoRows.map((p) => ({
         id: p.id,
-        url: publicUrl(p.r2Key),
+        url: attachmentUrl(p.attachmentId),
         caption: p.caption,
       })),
       authorName: row.firstName ? `${row.firstName} ${row.lastName ?? ''}`.trim() : null,

@@ -5,6 +5,9 @@ import 'server-only'
 // assessment / incident flow can create a corrective action.
 
 import { correctiveActions } from '@beaconhs/db/schema'
+import { eq } from 'drizzle-orm'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
@@ -22,6 +25,7 @@ export async function spawnCorrectiveActionForSubject(
     severity?: 'low' | 'medium' | 'high' | 'critical'
     dueOn?: string | null
     siteOrgUnitId?: string | null
+    flowExecutionKey?: string
   },
 ): Promise<{ ok: boolean }> {
   if (!ctx.tenantId) return { ok: false }
@@ -30,6 +34,14 @@ export async function spawnCorrectiveActionForSubject(
   const assignedOn = new Date().toISOString().slice(0, 10)
 
   const row = await ctx.db(async (tx) => {
+    if (input.flowExecutionKey) {
+      const [existing] = await tx
+        .select({ id: correctiveActions.id, reference: correctiveActions.reference })
+        .from(correctiveActions)
+        .where(eq(correctiveActions.flowExecutionKey, input.flowExecutionKey))
+        .limit(1)
+      if (existing) return { record: existing, replayed: true }
+    }
     const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     const [inserted] = await tx
       .insert(correctiveActions)
@@ -48,17 +60,58 @@ export async function spawnCorrectiveActionForSubject(
         dueOn: input.dueOn ?? null,
         assignedByTenantUserId: ctx.membership?.id,
         ownerTenantUserId: ctx.membership?.id,
+        flowExecutionKey: input.flowExecutionKey,
+      })
+      .onConflictDoNothing({
+        target: [correctiveActions.tenantId, correctiveActions.flowExecutionKey],
       })
       .returning({ id: correctiveActions.id, reference: correctiveActions.reference })
-    return inserted
+    if (inserted) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.created',
+        subjectId: inserted.id,
+        dedupKey: `corrective_action.created:${inserted.id}`,
+        payload: {
+          notification: { kind: 'corrective_action_assigned', caId: inserted.id },
+          integration: correctiveActionCreatedEvent(ctx.tenantId, {
+            id: inserted.id,
+            reference: inserted.reference,
+            title,
+            status: 'open',
+            severity: input.severity ?? 'medium',
+            source: input.source,
+            dueOn: input.dueOn ?? null,
+            assignedOn,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: inserted.id,
+            moduleKey: 'corrective-actions',
+            event: 'on_create',
+          }),
+        },
+      })
+      return { record: inserted, replayed: false }
+    }
+    if (input.flowExecutionKey) {
+      const [existing] = await tx
+        .select({ id: correctiveActions.id, reference: correctiveActions.reference })
+        .from(correctiveActions)
+        .where(eq(correctiveActions.flowExecutionKey, input.flowExecutionKey))
+        .limit(1)
+      if (existing) return { record: existing, replayed: true }
+    }
+    return null
   })
 
   if (!row) return { ok: false }
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: row.id,
-    action: 'create',
-    summary: `Spawned ${row.reference} from ${input.sourceEntityType} flow`,
-  })
+  if (!row.replayed) {
+    await recordAudit(ctx, {
+      entityType: 'corrective_action',
+      entityId: row.record.id,
+      action: 'create',
+      summary: `Spawned ${row.record.reference} from ${input.sourceEntityType} flow`,
+    })
+  }
   return { ok: true }
 }

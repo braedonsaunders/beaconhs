@@ -11,11 +11,14 @@
 // policies.
 
 import { and, eq, isNull } from 'drizzle-orm'
-import { formResponses } from '@beaconhs/db/schema'
+import { formResponses, formTemplates } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
+import { isUuid } from '@/lib/list-params'
 import { spawnCorrectiveActionCore, spawnIncidentCore } from '@/app/(app)/apps/_lib/spawn-core'
+import { canAccessTemplate } from '@/app/(app)/apps/_lib/access'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 
 // -- Shared visibility gate --------------------------------------------------
 
@@ -23,19 +26,39 @@ async function canSpawnFromResponse(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   responseId: string,
 ): Promise<boolean> {
+  if (!isUuid(responseId)) return false
+  const roleKeys = await getEffectiveRoleKeys(ctx)
   const row = await ctx.db(async (tx) => {
     const [r] = await tx
       .select({
         submittedBy: formResponses.submittedBy,
         subjectPersonId: formResponses.subjectPersonId,
         siteOrgUnitId: formResponses.siteOrgUnitId,
+        templateStatus: formTemplates.status,
+        templateAllowedRoles: formTemplates.allowedRoles,
+        templateDeletedAt: formTemplates.deletedAt,
       })
       .from(formResponses)
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
       .where(and(eq(formResponses.id, responseId), isNull(formResponses.deletedAt)))
       .limit(1)
     return r ?? null
   })
   if (!row) return false
+  if (
+    !canAccessTemplate(
+      ctx,
+      {
+        status: row.templateStatus,
+        allowedRoles: row.templateAllowedRoles,
+        deletedAt: row.templateDeletedAt,
+      },
+      roleKeys,
+      'operate',
+    )
+  ) {
+    return false
+  }
   // Per-user record visibility re-check: incident/CA creation is intentionally
   // broad, but the caller must at least be able to SEE the source response
   // before spawning from it by id.
@@ -51,7 +74,7 @@ async function canSpawnFromResponse(
 
 // -- 1. Create CAPA from response ------------------------------------------
 
-export type CreateCorrectiveActionFromResponseInput = {
+type CreateCorrectiveActionFromResponseInput = {
   responseId: string
   title: string
   description?: string | null
@@ -82,7 +105,7 @@ export async function createCorrectiveActionFromResponse(
 
 // -- 2. Create incident from response --------------------------------------
 
-export type CreateIncidentFromResponseInput = {
+type CreateIncidentFromResponseInput = {
   responseId: string
   title: string
   description?: string | null

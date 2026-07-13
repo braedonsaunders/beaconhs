@@ -3,7 +3,9 @@
 // failed inspection (the legacy "fail = WO" rule).
 
 import { and, count, eq, sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
 import type { RequestContext } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import {
   equipmentInspectionCriteria,
   equipmentInspectionGroups,
@@ -17,8 +19,8 @@ import {
 import { nextReference } from '@/lib/reference'
 import { addInterval } from '@/lib/equipment/intervals'
 
-export type EqAnswer = 'pass' | 'fail' | 'n_a'
-export type EqSeverity = 'low' | 'medium' | 'high' | 'critical'
+type EqAnswer = 'pass' | 'fail' | 'n_a'
+type EqSeverity = 'low' | 'medium' | 'high' | 'critical'
 
 const ANSWERS = ['pass', 'fail', 'n_a'] as const
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
@@ -93,7 +95,7 @@ export async function materialiseEquipmentCriteria(
   })
 }
 
-export type SubmitOutcome =
+type SubmitOutcome =
   | {
       ok: true
       result: 'pass' | 'fail' | 'incomplete'
@@ -103,7 +105,7 @@ export type SubmitOutcome =
   | { ok: false; error: string }
 
 /** Next-due date (YYYY-MM-DD) for a value+unit cadence (null = no cadence). */
-export function nextDueFromInterval(
+function nextDueFromInterval(
   intervalValue: number | null,
   intervalUnit: 'day' | 'week' | 'month' | 'year' | null,
   occurredAt: Date,
@@ -277,6 +279,13 @@ export async function finaliseEquipmentInspection(
           .where(eq(equipmentInspectionSchedules.id, s.id))
       }
     }
+
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: recordId,
+      moduleKey: 'equipment-inspections',
+      event: 'on_submit',
+      occurrenceKey: randomUUID(),
+    })
 
     return { ok: true, result, failed: fails.length, workOrdersSpawned: spawned }
   })

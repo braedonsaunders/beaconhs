@@ -12,7 +12,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Search } from 'lucide-react'
 import { Button, Input, Label } from '@beaconhs/ui'
 
-export type Candidate = {
+type Candidate = {
   id: string
   firstName: string
   lastName: string

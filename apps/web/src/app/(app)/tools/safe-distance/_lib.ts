@@ -30,7 +30,7 @@ export const SAFE_DISTANCE_METHOD_SUBTITLES: Record<SafeDistanceMethod, string> 
   lloyds: '(96-02) Form T-0240 S4.3',
 }
 
-export const SAFE_DISTANCE_UNIT_LABELS: Record<SafeDistanceUnit, string> = {
+const SAFE_DISTANCE_UNIT_LABELS: Record<SafeDistanceUnit, string> = {
   metric: 'Metric',
   imperial: 'Imperial',
 }
@@ -160,7 +160,7 @@ function lookupD1000(testPressurePsi: number): number {
 
 // --- Core calculation -------------------------------------------------------
 
-export type SafeDistanceComputeInput = {
+type SafeDistanceComputeInput = {
   method: SafeDistanceMethod
   unit: SafeDistanceUnit
   /** Test pressure in the record's unit system (psi for imperial, bar for metric). */
@@ -172,7 +172,7 @@ export type SafeDistanceComputeInput = {
   }>
 }
 
-export type SafeDistanceResults = {
+type SafeDistanceResults = {
   /** Total system volume in the record's display unit (m³ or ft³). */
   totalVolume: number
   /** Total system volume in m³ (canonical) — handy for storing per-segment vols. */

@@ -17,6 +17,16 @@ import {
   normalizeCredentialOutputs,
 } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
+import {
+  readBoundedJsonBody,
+  RequestBodyLengthError,
+  RequestBodyParseError,
+  RequestBodyTimeoutError,
+  RequestBodyTooLargeError,
+} from '@/lib/request-body'
+
+const MAX_DESIGN_BYTES = 512_000
+const MAX_DESIGN_READ_MS = 15_000
 
 export async function POST(request: Request) {
   const ctx = await requireRequestContext()
@@ -24,15 +34,25 @@ export async function POST(request: Request) {
     return new Response('Forbidden', { status: 403 })
   }
 
-  let body: { output?: unknown }
+  let body: unknown
   try {
-    const raw = await request.text()
-    if (raw.length > 512_000) return new Response('Design too large', { status: 413 })
-    body = JSON.parse(raw)
-  } catch {
+    body = await readBoundedJsonBody(request, {
+      maxBytes: MAX_DESIGN_BYTES,
+      timeoutMs: MAX_DESIGN_READ_MS,
+    })
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return new Response('Design too large', { status: 413 })
+    }
+    if (error instanceof RequestBodyTimeoutError) {
+      return new Response('Design request timed out', { status: 408 })
+    }
+    if (error instanceof RequestBodyLengthError || error instanceof RequestBodyParseError) {
+      return new Response('Invalid request body', { status: 400 })
+    }
     return new Response('Invalid request body', { status: 400 })
   }
-  if (!body.output || typeof body.output !== 'object') {
+  if (!body || typeof body !== 'object' || !('output' in body) || !body.output) {
     return new Response('Missing design', { status: 400 })
   }
 

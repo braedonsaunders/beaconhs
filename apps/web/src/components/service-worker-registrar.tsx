@@ -5,9 +5,9 @@
 // platform supports it (installed PWAs on Chrome/Edge/Android, and iOS/iPadOS
 // 16.4+ home-screen installs). Renders nothing.
 //
-// The service worker is what makes the app installable with an offline shell
-// and lets push notifications reach the device; without registration the
-// /sw.js file is inert. See apps/web/public/sw.js.
+// The service worker makes the app installable and lets push notifications
+// reach the device. BeaconHS remains deliberately online-only; authenticated
+// pages are never placed in a cross-session browser cache. See public/sw.js.
 
 import { useEffect } from 'react'
 

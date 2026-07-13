@@ -13,7 +13,7 @@ import { can, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { NOTIFICATION_CATEGORIES } from './_catalog'
-import { DEFAULT_SCAN_CRON, DEFAULT_SCAN_TZ, isValidCron, isValidTimezone } from './_schedule'
+import { isValidCron, isValidTimezone } from './_schedule'
 
 export type EscalationStep = { afterDays: number; roleKeys: string[] }
 
@@ -112,7 +112,10 @@ async function loadAllowedRecipients(ctx: RequestContext, items: CategorySetting
  * saved, so the dispatcher/scans read the tenant's explicit choice rather than
  * the built-in defaults.
  */
-export async function saveNotificationSettings(items: CategorySettingInput[]) {
+export async function saveNotificationConfiguration(
+  items: CategorySettingInput[],
+  input: PolicyInput,
+) {
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) {
     throw new Error('You do not have permission to manage notification settings.')
@@ -120,7 +123,35 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
   if (items.some((item) => !VALID_CATEGORIES.has(item.category))) {
     throw new Error('One or more notification categories are invalid.')
   }
+  if (!(['off', 'daily', 'weekly'] as const).includes(input.digestMode)) {
+    throw new Error('Choose a valid digest schedule.')
+  }
+  if (
+    !Number.isInteger(input.digestHourUtc) ||
+    input.digestHourUtc < 0 ||
+    input.digestHourUtc > 23
+  ) {
+    throw new Error('Digest hour must be a whole UTC hour from 0 to 23.')
+  }
+  if (
+    input.quietHours &&
+    (!Number.isInteger(input.quietHours.start) ||
+      input.quietHours.start < 0 ||
+      input.quietHours.start > 23 ||
+      !Number.isInteger(input.quietHours.end) ||
+      input.quietHours.end < 0 ||
+      input.quietHours.end > 23)
+  ) {
+    throw new Error('Quiet hours must use whole UTC hours from 0 to 23.')
+  }
+  if (!isValidCron(input.scanCron)) throw new Error('Enter a valid five-part scan schedule.')
+  if (!isValidTimezone(input.scanTimezone)) throw new Error('Choose a valid scan timezone.')
 
+  const digestMode = input.digestMode
+  const digestHourUtc = input.digestHourUtc
+  const quietHours = input.quietHours
+  const scanCron = input.scanCron.trim()
+  const scanTimezone = input.scanTimezone
   const allowed = await loadAllowedRecipients(ctx, items)
 
   await ctx.db(async (tx) => {
@@ -155,62 +186,10 @@ export async function saveNotificationSettings(items: CategorySettingInput[]) {
           },
         })
     }
-  })
 
-  await recordAudit(ctx, {
-    entityType: 'tenant',
-    entityId: ctx.tenantId,
-    action: 'update',
-    summary: 'Updated notification routing rules',
-    metadata: { categories: items.map((item) => item.category) },
-  })
-  revalidatePath('/admin/notifications')
-}
-
-/** Tenant-wide routing policy: unified detection, digest, quiet hours. */
-export async function saveNotificationPolicy(input: PolicyInput) {
-  const ctx = await requireRequestContext()
-  if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) {
-    throw new Error('You do not have permission to manage notification settings.')
-  }
-  const digestMode = (['off', 'daily', 'weekly'] as const).includes(input.digestMode)
-    ? input.digestMode
-    : 'off'
-  const digestHourUtc = Math.min(23, Math.max(0, Math.round(input.digestHourUtc || 0)))
-  const quietHours =
-    input.quietHours &&
-    Number.isFinite(input.quietHours.start) &&
-    Number.isFinite(input.quietHours.end)
-      ? {
-          start: Math.min(23, Math.max(0, Math.round(input.quietHours.start))),
-          end: Math.min(23, Math.max(0, Math.round(input.quietHours.end))),
-        }
-      : null
-  // Reject a malformed cron / timezone rather than silently scheduling something
-  // the worker can't parse — fall back to the safe legacy default.
-  const scanCron = isValidCron(input.scanCron) ? input.scanCron.trim() : DEFAULT_SCAN_CRON
-  const scanTimezone = isValidTimezone(input.scanTimezone) ? input.scanTimezone : DEFAULT_SCAN_TZ
-
-  await ctx.db(async (tx) => {
-    const [existing] = await tx
-      .select({ id: tenantNotificationPolicy.id })
-      .from(tenantNotificationPolicy)
-      .where(eq(tenantNotificationPolicy.tenantId, ctx.tenantId))
-      .limit(1)
-    if (existing) {
-      await tx
-        .update(tenantNotificationPolicy)
-        .set({
-          digestMode,
-          digestHourUtc,
-          quietHours,
-          scanCron,
-          scanTimezone,
-          updatedAt: new Date(),
-        })
-        .where(eq(tenantNotificationPolicy.id, existing.id))
-    } else {
-      await tx.insert(tenantNotificationPolicy).values({
+    await tx
+      .insert(tenantNotificationPolicy)
+      .values({
         tenantId: ctx.tenantId,
         digestMode,
         digestHourUtc,
@@ -218,15 +197,32 @@ export async function saveNotificationPolicy(input: PolicyInput) {
         scanCron,
         scanTimezone,
       })
-    }
+      .onConflictDoUpdate({
+        target: tenantNotificationPolicy.tenantId,
+        set: {
+          digestMode,
+          digestHourUtc,
+          quietHours,
+          scanCron,
+          scanTimezone,
+          updatedAt: new Date(),
+        },
+      })
   })
 
   await recordAudit(ctx, {
     entityType: 'tenant',
     entityId: ctx.tenantId,
     action: 'update',
-    summary: 'Updated notification routing policy',
-    metadata: { digestMode, digestHourUtc, quietHours, scanCron, scanTimezone },
+    summary: 'Updated notification routing configuration',
+    metadata: {
+      categories: items.map((item) => item.category),
+      digestMode,
+      digestHourUtc,
+      quietHours,
+      scanCron,
+      scanTimezone,
+    },
   })
   revalidatePath('/admin/notifications')
 }

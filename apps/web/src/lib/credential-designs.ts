@@ -6,10 +6,10 @@ import {
 } from '@beaconhs/design-studio'
 
 export type CredentialFormat = 'letter-landscape' | 'letter-portrait' | 'wallet'
-export type CredentialTemplateId = 'sovereign-seal' | 'field-pass' | 'clean-authority'
-export type CredentialTypeface = 'classic' | 'modern' | 'technical'
+type CredentialTemplateId = 'sovereign-seal' | 'field-pass' | 'clean-authority'
+type CredentialTypeface = 'classic' | 'modern' | 'technical'
 
-export type CredentialDesign = {
+type CredentialDesign = {
   name: string
   format: CredentialFormat
   templateId: CredentialTemplateId
@@ -30,10 +30,9 @@ export type CredentialOutput = CredentialDesign & {
   enabled: boolean
 }
 
-export const CREDENTIAL_DESIGN_SETTINGS_KEY = 'trainingCredentialDesign'
 export const CREDENTIAL_OUTPUTS_SETTINGS_KEY = 'trainingCredentialOutputs'
 
-export const DEFAULT_CREDENTIAL_DESIGN: CredentialDesign = {
+const DEFAULT_CREDENTIAL_DESIGN: CredentialDesign = {
   name: 'Default training credential',
   format: 'letter-landscape',
   templateId: 'sovereign-seal',
@@ -80,15 +79,13 @@ export const DEFAULT_CREDENTIAL_OUTPUTS: CredentialOutput[] = [
   },
 ]
 export const DEFAULT_CREDENTIAL_OUTPUT = DEFAULT_CREDENTIAL_OUTPUTS[0]!
-export const DEFAULT_WALLET_CREDENTIAL_OUTPUT =
-  DEFAULT_CREDENTIAL_OUTPUTS[1] ?? DEFAULT_CREDENTIAL_OUTPUT
 
 const formats: CredentialFormat[] = ['letter-landscape', 'letter-portrait', 'wallet']
 const templates: CredentialTemplateId[] = ['sovereign-seal', 'field-pass', 'clean-authority']
 const typefaces: CredentialTypeface[] = ['classic', 'modern', 'technical']
 const hex = /^#[0-9a-fA-F]{6}$/
 
-export function normalizeCredentialDesign(input: unknown): CredentialDesign {
+function normalizeCredentialDesign(input: unknown): CredentialDesign {
   const raw = input && typeof input === 'object' ? (input as Partial<CredentialDesign>) : {}
   return {
     ...DEFAULT_CREDENTIAL_DESIGN,
@@ -158,34 +155,6 @@ function normalizeCredentialOutput(input: unknown, fallback: CredentialOutput): 
   }
 }
 
-function outputsFromLegacyDesign(input: unknown): CredentialOutput[] {
-  const design = normalizeCredentialDesign(input)
-  const fullSizeFormat = design.format === 'wallet' ? 'letter-landscape' : design.format
-  return [
-    normalizeCredentialOutput(
-      {
-        ...design,
-        id: 'certificate',
-        name:
-          design.name === DEFAULT_CREDENTIAL_DESIGN.name ? 'Full-size certificate' : design.name,
-        format: fullSizeFormat,
-        enabled: true,
-      },
-      DEFAULT_CREDENTIAL_OUTPUT,
-    ),
-    normalizeCredentialOutput(
-      {
-        ...design,
-        id: 'wallet-card',
-        name: 'Wallet card',
-        format: 'wallet',
-        enabled: true,
-      },
-      DEFAULT_WALLET_CREDENTIAL_OUTPUT,
-    ),
-  ]
-}
-
 export function normalizeCredentialOutputs(settings: unknown): CredentialOutput[] {
   const raw = settings && typeof settings === 'object' ? (settings as Record<string, unknown>) : {}
   const nextValue = raw[CREDENTIAL_OUTPUTS_SETTINGS_KEY]
@@ -215,10 +184,6 @@ export function normalizeCredentialOutputs(settings: unknown): CredentialOutput[
       used.add(id)
       return { ...normalized, id }
     })
-  }
-
-  if (raw[CREDENTIAL_DESIGN_SETTINGS_KEY]) {
-    return outputsFromLegacyDesign(raw[CREDENTIAL_DESIGN_SETTINGS_KEY])
   }
 
   return DEFAULT_CREDENTIAL_OUTPUTS
@@ -273,7 +238,7 @@ export function resolveCredentialOutput(
 // course's `metadata.credentialOutputIds`). When set, only those still-enabled
 // designs apply to that course; when empty, the tenant defaults apply.
 
-export const COURSE_CREDENTIAL_OUTPUTS_KEY = 'credentialOutputIds'
+const COURSE_CREDENTIAL_OUTPUTS_KEY = 'credentialOutputIds'
 
 export function courseCredentialOutputIds(metadata: unknown): string[] {
   const raw =

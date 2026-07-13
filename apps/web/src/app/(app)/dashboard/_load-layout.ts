@@ -10,6 +10,7 @@ import {
   type DashboardLayoutData,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { effectiveRoleAssignments } from '@/lib/effective-role-policy'
 import { DEFAULT_LAYOUTS } from './_role-defaults'
 import {
   dashboardSourceKeyForRole,
@@ -51,7 +52,9 @@ async function loadAssignedRoleDefault(ctx: RequestContext): Promise<DashboardDe
       .where(eq(roleAssignments.tenantUserId, ctx.membership!.id)),
   )
 
-  const candidates = rows.filter((r) => r.layout != null)
+  const candidates = effectiveRoleAssignments(ctx.activeRoleId, rows).filter(
+    (r) => r.layout != null,
+  )
   candidates.sort((a, b) => {
     const aTier = inferRoleTier(a)
     const bTier = inferRoleTier(b)

@@ -10,14 +10,14 @@ import { vizDef } from '@beaconhs/analytics'
 import { VizIcon } from '../_viz/viz-icon'
 import { PinButton } from './_pin-button.client'
 
-export type LibraryCardItem = {
+type LibraryCardItem = {
   id: string
   name: string
   description: string | null
   vizType: string
   status: 'draft' | 'published'
 }
-export type LibraryDashItem = { id: string; name: string; pinned: boolean }
+type LibraryDashItem = { id: string; name: string; pinned: boolean }
 
 export function LibraryTabs({
   cards,

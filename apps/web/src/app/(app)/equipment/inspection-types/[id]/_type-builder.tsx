@@ -23,6 +23,7 @@ import {
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import { IntervalPicker, type IntervalValue } from '@/components/equipment/interval-picker'
 import type { EquipmentIntervalUnit } from '@/lib/equipment/intervals'
 import {
@@ -63,7 +64,7 @@ function severityVariant(s: Severity): 'destructive' | 'warning' | 'secondary' {
   return s === 'critical' || s === 'high' ? 'destructive' : s === 'medium' ? 'warning' : 'secondary'
 }
 
-export type BuilderType = {
+type BuilderType = {
   id: string
   name: string
   description: string | null
@@ -75,8 +76,8 @@ export type BuilderType = {
   failsSpawnWorkOrders: boolean
   isActive: boolean
 }
-export type BuilderGroup = { id: string; label: string; sequence: number }
-export type BuilderCriterion = {
+type BuilderGroup = { id: string; label: string; sequence: number }
+type BuilderCriterion = {
   id: string
   groupId: string | null
   sequence: number
@@ -89,7 +90,7 @@ export type BuilderCriterion = {
   isRequired: boolean
   isCritical: boolean
 }
-export type AppliesToOption = { id: string; name: string }
+type AppliesToOption = { id: string; name: string }
 
 type CriterionData = Omit<BuilderCriterion, 'id' | 'sequence'>
 type EditorState = { mode: 'add' | 'edit'; groupId: string | null; criterion?: BuilderCriterion }
@@ -109,14 +110,11 @@ export function EquipmentInspectionTypeBuilder({
 }) {
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  const [groups, setGroups] = React.useState(initialGroups)
-  const [criteria, setCriteria] = React.useState(initialCriteria)
+  const [groups, setGroups] = useReseededState(initialGroups, initialGroups)
+  const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
   const [editor, setEditor] = React.useState<EditorState | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  React.useEffect(() => setGroups(initialGroups), [initialGroups])
-  React.useEffect(() => setCriteria(initialCriteria), [initialCriteria])
 
   const run = React.useCallback(
     (fn: () => Promise<unknown>, errMsg = 'Something went wrong') => {
@@ -563,29 +561,28 @@ function CriterionEditorDrawer({
   onClose: () => void
   onSave: (data: CriterionData) => void
 }) {
-  const [question, setQuestion] = React.useState('')
-  const [description, setDescription] = React.useState('')
-  const [kind, setKind] = React.useState<Kind>('pass_fail')
-  const [severity, setSeverity] = React.useState<Severity>('medium')
-  const [requiresPhoto, setRequiresPhoto] = React.useState(false)
-  const [requiresComment, setRequiresComment] = React.useState(false)
-  const [isRequired, setIsRequired] = React.useState(true)
-  const [isCritical, setIsCritical] = React.useState(false)
-  const [groupId, setGroupId] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (!editor) return
-    const c = editor.criterion
-    setQuestion(c?.question ?? '')
-    setDescription(c?.description ?? '')
-    setKind(c?.kind ?? 'pass_fail')
-    setSeverity(c?.severity ?? 'medium')
-    setRequiresPhoto(c?.requiresPhoto ?? false)
-    setRequiresComment(c?.requiresComment ?? false)
-    setIsRequired(c?.isRequired ?? true)
-    setIsCritical(c?.isCritical ?? false)
-    setGroupId(editor.groupId ?? c?.groupId ?? null)
-  }, [editor])
+  const criterion = editor?.criterion
+  const [question, setQuestion] = useReseededState(editor, criterion?.question ?? '')
+  const [description, setDescription] = useReseededState(editor, criterion?.description ?? '')
+  const [kind, setKind] = useReseededState<Kind>(editor, criterion?.kind ?? 'pass_fail')
+  const [severity, setSeverity] = useReseededState<Severity>(
+    editor,
+    criterion?.severity ?? 'medium',
+  )
+  const [requiresPhoto, setRequiresPhoto] = useReseededState(
+    editor,
+    criterion?.requiresPhoto ?? false,
+  )
+  const [requiresComment, setRequiresComment] = useReseededState(
+    editor,
+    criterion?.requiresComment ?? false,
+  )
+  const [isRequired, setIsRequired] = useReseededState(editor, criterion?.isRequired ?? true)
+  const [isCritical, setIsCritical] = useReseededState(editor, criterion?.isCritical ?? false)
+  const [groupId, setGroupId] = useReseededState<string | null>(
+    editor,
+    editor?.groupId ?? criterion?.groupId ?? null,
+  )
 
   return (
     <Drawer

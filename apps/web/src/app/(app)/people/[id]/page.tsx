@@ -61,7 +61,7 @@ import {
   users,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
@@ -430,7 +430,7 @@ export default async function PersonDetailPage({
 
     return {
       ...row,
-      photoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
+      photoUrl: row.person.photoAttachmentId ? attachmentUrl(row.person.photoAttachmentId) : null,
       linkedAccount,
       training,
       skills,
@@ -1300,7 +1300,7 @@ export default async function PersonDetailPage({
                               <TableCell className="text-xs text-slate-600">
                                 {attachment ? (
                                   <a
-                                    href={publicUrl(attachment.r2Key)}
+                                    href={attachmentUrl(attachment.id)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-teal-700 hover:underline"

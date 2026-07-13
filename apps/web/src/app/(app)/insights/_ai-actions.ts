@@ -12,18 +12,19 @@ import {
   type DatasetAnalysis,
   type JournalAnalysis,
 } from '@beaconhs/ai'
-import { runBhql } from '@beaconhs/analytics/server'
 import { journalEntries, orgUnits, people, type AiCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
+import { runAuthorizedBhql } from '@/lib/analytics-access'
 import { getAuthorPersonId, journalScopeWhere } from '../journals/_lib'
 import { canViewInsights } from './_access'
 import { loadCard } from './cards/_data'
+import { isUuid } from '@/lib/list-params'
 
 const analysisAuthor = alias(people, 'analysis_author')
 
-export type JournalAnalysisResult =
+type JournalAnalysisResult =
   | { ok: true; analysis: JournalAnalysis; entryCount: number; days: number }
   | { ok: false; error: string }
 
@@ -37,7 +38,7 @@ export async function runJournalAnalysis(days = 30): Promise<JournalAnalysisResu
   const aiConfig = await getTenantAiConfig(ctx)
   if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
 
-  const safeDays = Math.min(370, Math.max(1, Math.floor(days)))
+  const safeDays = Number.isFinite(days) ? Math.min(370, Math.max(1, Math.floor(days))) : 30
   const since = new Date(Date.now() - safeDays * 86_400_000).toISOString().slice(0, 10)
   const authorPersonId = await getAuthorPersonId(ctx)
   const scope = journalScopeWhere(ctx, authorPersonId)
@@ -101,6 +102,7 @@ export type InsightAiResult =
 export async function runInsightAiCard(cardId: string): Promise<InsightAiResult> {
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) return { ok: false, error: 'You do not have access to insights.' }
+  if (!isUuid(cardId)) return { ok: false, error: 'Card not found.' }
   const aiConfig = await getTenantAiConfig(ctx)
   if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
 
@@ -116,7 +118,7 @@ export async function runInsightAiCard(cardId: string): Promise<InsightAiResult>
 
   let result
   try {
-    result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 5_000 }))
+    result = await runAuthorizedBhql(ctx, card.query, { maxRows: 5_000 })
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not run the card dataset.' }
   }
@@ -134,5 +136,12 @@ export async function runInsightAiCard(cardId: string): Promise<InsightAiResult>
     rows: result.rows,
   })
   if (!analysis) return { ok: false, error: 'Could not analyse this dataset.' }
+  await recordAudit(ctx, {
+    entityType: 'insight_card',
+    entityId: cardId,
+    action: 'export',
+    summary: `Sent ${result.rows.length} Insights rows for AI analysis`,
+    metadata: { rowCount: result.rows.length },
+  })
   return { ok: true, analysis, rowCount: result.rows.length }
 }

@@ -41,7 +41,7 @@ import {
   trainingCourses,
   trainingRecords,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
@@ -212,7 +212,7 @@ export default async function TrainingRecordPage({
         .where(
           and(
             eq(attachments.kind, 'document'),
-            like(attachments.r2Key, `training/records/${id}/%`),
+            like(attachments.r2Key, `t/${ctx.tenantId}/document/training-records/${id}/%`),
           ),
         )
         .orderBy(desc(attachments.createdAt)),
@@ -562,7 +562,7 @@ export default async function TrainingRecordPage({
                         <TableCell>{formatDate(new Date(a.createdAt), ctx.timezone)}</TableCell>
                         <TableCell>
                           <a
-                            href={publicUrl(a.r2Key)}
+                            href={attachmentUrl(a.id)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs text-teal-700 hover:underline dark:text-teal-400"

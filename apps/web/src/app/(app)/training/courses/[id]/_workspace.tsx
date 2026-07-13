@@ -37,10 +37,11 @@ import {
   Video,
 } from 'lucide-react'
 import { Badge, Button, FileUploader, Input, Label, RichTextEditor, Select } from '@beaconhs/ui'
-import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
+import type { PracticalCriterion, Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import { LessonSurface } from './_lesson-surface'
 import {
   CoursePresenter,
@@ -88,7 +89,6 @@ export type LessonLite = {
   embedUrl: string | null
   contentItemId: string | null
   durationMinutes: number | null
-  contentBlocks: LessonBlock[]
   contentJson: Record<string, unknown> | null
   contentHtml: string | null
   slides: Slide[]
@@ -105,7 +105,7 @@ export type ModuleLite = {
   description: string | null
   lessons: LessonLite[]
 }
-export type CourseLite = {
+type CourseLite = {
   id: string
   name: string
   code: string
@@ -118,16 +118,16 @@ export type CourseLite = {
   requiresEvaluator: boolean
   credentialOutputIds: string[]
 }
-export type CredentialOutputLite = { id: string; name: string; format: string }
-export type RecordLite = {
+type CredentialOutputLite = { id: string; name: string; format: string }
+type RecordLite = {
   id: string
   personName: string
   employeeNo: string | null
   completedOn: string | null
   expiresOn: string | null
 }
-export type ClassLite = { id: string; title: string; startsAt: string }
-export type FileLite = {
+type ClassLite = { id: string; title: string; startsAt: string }
+type FileLite = {
   id: string
   label: string | null
   filename: string | null
@@ -240,19 +240,16 @@ export function CourseWorkspace({
   // surface, header, per-type surfaces) reshapes the instant the Overview
   // dropdown changes — before the settings are even saved. The Overview form
   // still posts this value on save.
-  const [deliveryType, setDeliveryType] = useState(course.deliveryType)
-  useEffect(() => setDeliveryType(course.deliveryType), [course.deliveryType])
+  const [deliveryType, setDeliveryType] = useReseededState(course.deliveryType, course.deliveryType)
   const delivery = deliveryMeta(deliveryType)
   // The course page opens on Overview (settings); authors switch to Build to
   // edit the curriculum.
   const [railTab, setRailTab] = useState<RailTab>('overview')
-  const [tree, setTree] = useState<ModuleLite[]>(modules)
+  const [tree, setTree] = useReseededState<ModuleLite[]>(modules, modules)
   const [editingId, setEditingId] = useState<string | null>(search.get('lesson'))
   const [dropHover, setDropHover] = useState<string | null>(null)
   const [presenting, setPresenting] = useState(false)
   const [, startTransition] = useTransition()
-  useEffect(() => setTree(modules), [modules])
-
   const moduleOrderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lessonOrderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 

@@ -11,7 +11,11 @@ import {
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
-import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+import { canAccessTemplate, canEditResponsePayload } from '@/app/(app)/apps/_lib/access'
+import { parseBuilderReturnTo } from '@/app/(app)/apps/_lib/return-to'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { isUuid } from '@/lib/list-params'
+import { canSeeRecord } from '@/lib/visibility'
 import { FormRenderer } from './form-renderer'
 
 export const dynamic = 'force-dynamic'
@@ -31,12 +35,12 @@ export default async function FillTemplatePage({
   const { id } = await params
   const sp = await searchParams
   const responseIdParam = typeof sp.responseId === 'string' ? sp.responseId : null
-  const returnTo =
-    typeof sp.returnTo === 'string' && sp.returnTo.startsWith('/') && !sp.returnTo.startsWith('//')
-      ? sp.returnTo
-      : null
+  const returnTo = parseBuilderReturnTo(sp.returnTo)
+  if (!isUuid(id) || (responseIdParam !== null && !isUuid(responseIdParam))) notFound()
 
   const ctx = await requireRequestContext()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
+  const accessMode = responseIdParam ? 'browse-records' : 'operate'
   const data = await ctx.db(async (tx) => {
     const [tmpl] = await tx
       .select()
@@ -44,14 +48,7 @@ export default async function FillTemplatePage({
       .where(and(eq(formTemplates.id, id), isNull(formTemplates.deletedAt)))
       .limit(1)
     if (!tmpl) return null
-    const [version] = await tx
-      .select()
-      .from(formTemplateVersions)
-      .where(eq(formTemplateVersions.templateId, id))
-      .orderBy(desc(formTemplateVersions.version))
-      .limit(1)
-    if (!version) return null
-
+    if (!canAccessTemplate(ctx, tmpl, effectiveRoleKeys, accessMode)) return null
     // If a `?responseId=` param is present and points at a response owned by
     // this tenant, load it. Drafts/in-progress hydrate the editable filler;
     // submitted/closed responses render read-only from their final `data`
@@ -63,6 +60,10 @@ export default async function FillTemplatePage({
       data: Record<string, unknown>
       draftData: FormResponseDraftData | null
       draftStepIndex: number | null
+      templateVersionId: string
+      submittedBy: string | null
+      subjectPersonId: string | null
+      siteOrgUnitId: string | null
     } | null = null
     if (responseIdParam) {
       const [row] = await tx
@@ -74,6 +75,10 @@ export default async function FillTemplatePage({
           draftData: formResponses.draftData,
           draftStepIndex: formResponses.draftStepIndex,
           templateId: formResponses.templateId,
+          templateVersionId: formResponses.templateVersionId,
+          submittedBy: formResponses.submittedBy,
+          subjectPersonId: formResponses.subjectPersonId,
+          siteOrgUnitId: formResponses.siteOrgUnitId,
         })
         .from(formResponses)
         .where(
@@ -92,9 +97,39 @@ export default async function FillTemplatePage({
           data: row.data ?? {},
           draftData: row.draftData,
           draftStepIndex: row.draftStepIndex,
+          templateVersionId: row.templateVersionId,
+          submittedBy: row.submittedBy,
+          subjectPersonId: row.subjectPersonId,
+          siteOrgUnitId: row.siteOrgUnitId,
         }
       }
+      if (!responseRow) return null
+      const visible = await canSeeRecord(ctx, tx, {
+        prefix: 'forms.response',
+        ownerIds: [responseRow.submittedBy],
+        personId: responseRow.subjectPersonId,
+        siteId: responseRow.siteOrgUnitId,
+      })
+      if (!visible) return null
     }
+
+    // Existing responses are immutable snapshots of the template version they
+    // started on. Loading the latest version here would render one schema while
+    // the row still referenced another, corrupting resumed drafts after publish.
+    const [version] = await tx
+      .select()
+      .from(formTemplateVersions)
+      .where(
+        responseRow
+          ? and(
+              eq(formTemplateVersions.id, responseRow.templateVersionId),
+              eq(formTemplateVersions.templateId, id),
+            )
+          : eq(formTemplateVersions.templateId, id),
+      )
+      .orderBy(desc(formTemplateVersions.version))
+      .limit(1)
+    if (!version) return null
 
     const [sites, allPeople, currentPerson] = await Promise.all([
       tx
@@ -133,30 +168,29 @@ export default async function FillTemplatePage({
   if (!data) notFound()
 
   const response = data.responseRow
-  if (response && !returnTo) {
-    redirect(`/apps/responses/${response.id}`)
-  }
-
-  // Access gating. Filling the app (creating / editing) requires the app's
-  // roles. Viewing an existing entry read-only is also allowed for reviewers
-  // with `forms.response.read.all`.
-  const userRoleKeys = await getUserRoleKeys(ctx)
   const canFillApp =
-    can(ctx, 'forms.response.create') && appVisibleTo(ctx, data.tmpl.allowedRoles, userRoleKeys)
-  const canView = canFillApp || can(ctx, 'forms.response.read.all')
+    can(ctx, 'forms.response.create') &&
+    canAccessTemplate(ctx, data.tmpl, effectiveRoleKeys, 'operate')
   if (response) {
-    if (!canView) notFound()
+    // Template and per-record visibility were both enforced in the scoped load.
+    // Keep this explicit lifecycle check to make later refactors fail closed.
+    if (!canAccessTemplate(ctx, data.tmpl, effectiveRoleKeys, 'browse-records')) notFound()
   } else if (!canFillApp) {
     // No existing entry → this is a "new entry" attempt, which needs fill access.
     notFound()
   }
+  if (response && !returnTo) redirect(`/apps/responses/${response.id}`)
 
   // A response is editable only while in a pre-submit state AND the user can
   // fill the app. Submitted/closed entries (or view-only users) render
   // read-only — the same record surface, just locked.
   const isDraftState =
     response !== null && (response.status === 'draft' || response.status === 'in_progress')
-  const editable = canFillApp && !response?.locked && (response === null || isDraftState)
+  const editable = response
+    ? isDraftState &&
+      canAccessTemplate(ctx, data.tmpl, effectiveRoleKeys, 'operate') &&
+      canEditResponsePayload(ctx, response)
+    : canFillApp
   const readOnly = !editable
   // Reviewers/admins get a link to the richer review surface (CAPA/comments/
   // audit/sign-off) for an existing response.
@@ -212,6 +246,7 @@ export default async function FillTemplatePage({
       initialValues={initialValues}
       initialRows={initialRows}
       initialStepIndex={initialStepIndex}
+      initialDraftRevision={response?.draftData?.saveRevision ?? 0}
       isResumed={resumeOk}
       returnTo={returnTo}
       readOnly={readOnly}

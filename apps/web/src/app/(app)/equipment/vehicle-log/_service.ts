@@ -1,6 +1,8 @@
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { and, asc, eq, gte, inArray, isNull, lt } from 'drizzle-orm'
 import {
+  equipmentCategories,
   equipmentItems,
   equipmentTypes,
   orgUnits,
@@ -14,18 +16,18 @@ import {
 } from '@beaconhs/db/schema'
 import { unsealSecret, type SealedSecret } from '@beaconhs/sync'
 import { can, type RequestContext } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 
 export type VehicleLogMode = TruckLogEntryMode
 
-export type VehicleLogSelectorOption = {
+type VehicleLogSelectorOption = {
   id: string
   label: string
   hint?: string | null
 }
 
-export type VehicleLogImportSource = {
+type VehicleLogImportSource = {
   id: string
   name: string
   connectorKey: string
@@ -52,7 +54,7 @@ export type VehicleLogEntryDraft = {
   importStatus: TruckLogImportStatus | null
 }
 
-export type VehicleLogWorkspaceRow = {
+type VehicleLogWorkspaceRow = {
   date: string
   day: number
   weekday: string
@@ -63,12 +65,12 @@ export type VehicleLogWorkspaceRow = {
 // Tenant mode configuration resolved for the workspace: which modes the
 // segmented toggle offers, and where an unset URL mode lands (per-driver
 // metadata override first, then the tenant default).
-export type VehicleLogModeConfig = {
+type VehicleLogModeConfig = {
   enabledModes: VehicleLogMode[]
   defaultMode: VehicleLogMode
 }
 
-export function parseVehicleLogMode(raw: unknown): VehicleLogMode | null {
+function parseVehicleLogMode(raw: unknown): VehicleLogMode | null {
   return raw === 'odometer' || raw === 'destination' ? raw : null
 }
 
@@ -181,11 +183,11 @@ function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
 
-export function monthKey(year: number, month: number) {
+function monthKey(year: number, month: number) {
   return `${year}-${pad2(month)}`
 }
 
-export function parseMonth(raw: string | null | undefined): { year: number; month: number } {
+function parseMonth(raw: string | null | undefined): { year: number; month: number } {
   if (raw && MONTH.test(raw)) {
     const [y, m] = raw.split('-').map(Number)
     if (y && m && m >= 1 && m <= 12) return { year: y, month: m }
@@ -194,14 +196,14 @@ export function parseMonth(raw: string | null | undefined): { year: number; mont
   return { year: now.getFullYear(), month: now.getMonth() + 1 }
 }
 
-export function shiftMonth(year: number, month: number, delta: number) {
+function shiftMonth(year: number, month: number, delta: number) {
   const total = year * 12 + (month - 1) + delta
   const nextYear = Math.floor(total / 12)
   const nextMonth = (total % 12) + 1
   return { year: nextYear, month: nextMonth }
 }
 
-export function dateKey(year: number, month: number, day: number) {
+function dateKey(year: number, month: number, day: number) {
   return `${year}-${pad2(month)}-${pad2(day)}`
 }
 
@@ -382,11 +384,12 @@ export async function loadVehicleLogWorkspace(
           id: equipmentItems.id,
           assetTag: equipmentItems.assetTag,
           name: equipmentItems.name,
-          category: equipmentTypes.category,
+          category: equipmentCategories.name,
           typeName: equipmentTypes.name,
         })
         .from(equipmentItems)
         .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+        .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
         .where(isNull(equipmentItems.deletedAt))
         .orderBy(asc(equipmentItems.assetTag))
         .limit(1000),
@@ -645,6 +648,14 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
         set: fields,
       })
       .returning()
+    if (inserted) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: inserted.id,
+        moduleKey: 'vehicle-log',
+        event: 'on_submit',
+        occurrenceKey: randomUUID(),
+      })
+    }
     return inserted
   })
   if (!row) throw new Error('Failed to save vehicle log entry.')
@@ -663,8 +674,6 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
     },
     metadata: { operation: 'upsert' },
   })
-  // Fire the vehicle-log Flows subject (guarded — never breaks the save).
-  await runModuleFlows(ctx, { moduleKey: 'vehicle-log', event: 'on_submit', subjectId: row.id })
   revalidateVehicleLogPaths(input.equipmentItemId, input.entryDate)
   return entryDraft(row, input.entryDate, entryMode)
 }

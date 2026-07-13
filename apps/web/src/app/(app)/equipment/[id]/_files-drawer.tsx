@@ -12,7 +12,7 @@ import { Button, FileUploader, Input, Label, Select, UrlDrawer } from '@beaconhs
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 
-export const EQUIPMENT_FILE_KINDS = [
+const EQUIPMENT_FILE_KINDS = [
   { value: 'certificate', label: 'Certificate' },
   { value: 'manual', label: 'Manual' },
   { value: 'photo', label: 'Photo' },

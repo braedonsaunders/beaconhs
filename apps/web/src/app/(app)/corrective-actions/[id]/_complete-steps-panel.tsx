@@ -3,8 +3,9 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, FilePen, Signature } from 'lucide-react'
-import { Button, Label, Textarea } from '@beaconhs/ui'
+import { Label, Textarea } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
+import { RawImage } from '@/components/raw-image'
 import { appendCompleteStep } from '../_actions'
 
 export type CompleteStep = {
@@ -79,7 +80,7 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
                   </p>
                 ) : null}
                 {s.signatureDataUrl ? (
-                  <img
+                  <RawImage
                     src={s.signatureDataUrl}
                     alt="Signature"
                     className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"

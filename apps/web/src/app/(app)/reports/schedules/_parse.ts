@@ -3,9 +3,9 @@
 // place keeps validation identical (hour/minute/day ranges, timezone,
 // recipients, filters JSON) so the two paths cannot drift.
 
-export type ScheduleCadence = 'daily' | 'weekly' | 'monthly'
+type ScheduleCadence = 'daily' | 'weekly' | 'monthly'
 
-export type ParsedScheduleForm = {
+type ParsedScheduleForm = {
   name: string
   cadence: ScheduleCadence
   dayOfWeek: number | null

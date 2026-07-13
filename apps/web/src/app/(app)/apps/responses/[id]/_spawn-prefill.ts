@@ -18,7 +18,7 @@ export function labelForField(schema: FormSchemaV1, fieldKey: string): string {
   return fieldKey
 }
 
-export function failedFieldSummary(
+function failedFieldSummary(
   schema: FormSchemaV1,
   values: Record<string, unknown>,
   failedKeys: string[],

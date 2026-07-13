@@ -14,11 +14,11 @@ import {
   runReport,
   type ReportRunResult,
 } from '@beaconhs/reports'
-import { discoverEntityMapWithApps } from '@beaconhs/analytics/server'
 import type { RequestContext } from '@beaconhs/tenant'
+import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import type { ReportDefinitionRow } from './_definitions'
 
-export type ViewerRun = {
+type ViewerRun = {
   result: ReportRunResult
   rangeLabel: string
   rangeMode: 'lookback' | 'lookahead' | 'as_of'
@@ -58,7 +58,10 @@ export async function runReportForViewer(
         customQuery: definition.customQuery,
         maxRows: opts.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS,
         entityMap: refineEntityMapForDocuments(
-          await augmentEntityMapWithCustomFields(tx, await discoverEntityMapWithApps(tx)),
+          await augmentEntityMapWithCustomFields(
+            tx,
+            (await resolveAnalyticsAccess(ctx, tx)).entityMap,
+          ),
         ),
       }),
     )
@@ -76,7 +79,7 @@ export async function runReportForViewer(
 
 // --- Tenant branding for the document header --------------------------------
 
-export type TenantBranding = {
+type TenantBranding = {
   name: string
   logoUrl: string | null
   primaryColor: string | null

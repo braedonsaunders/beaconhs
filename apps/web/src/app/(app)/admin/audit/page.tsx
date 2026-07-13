@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { auditLog, user } from '@beaconhs/db/schema'
+import { auditLog, users as user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'

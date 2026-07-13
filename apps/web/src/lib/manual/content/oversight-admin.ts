@@ -65,7 +65,7 @@ The org chart shows who reports to whom. It is built from the manager set on eac
 
 ## ID badges
 
-Every person can have a printed ID badge — a wallet-size card with their photo, name, and a QR code. Scanning the QR opens a public page with their live training record: what is valid, what is expiring, and what has expired. The page always shows current information, so a printed badge never goes stale.
+Every person can have a printed ID badge — a wallet-size card with their photo, name, and a QR code. Scanning the QR opens a public page with their live training record: what is valid, what is expiring, and what has expired. The page always shows current information while the workspace is active, so a printed badge never goes stale. If the workspace is suspended or archived, the live badge page stops showing company data. Individual certificate QR codes still verify the credential's lasting record.
 
 To print a badge:
 
@@ -198,13 +198,15 @@ Schedules send a report as a PDF email on a repeating schedule, so nobody has to
 4. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
 5. Click **Create schedule**.
 
-The **Schedules** tab shows every schedule with its next run and last run. Use the pause button to stop one without deleting it.
+The schedule runs with the current access of the member and active role that created or last edited it. If that membership is suspended, the role is removed, or access to a Builder app is revoked, the run fails without exposing that app's records. Edit and save the schedule to claim it under your current role.
+
+The **Schedules** tab shows every schedule with its next run and last run. Use **Search schedules and reports…** to find one by schedule or report name, and use the **Status** filter to show active or paused schedules. Use the pause button to stop one without deleting it.
 
 ## Build your own report
 
 If no built-in report fits, click **New report** to build a custom one. You can also open a built-in report and click **Edit a copy** to start from something close.
 
-The builder shows a live print preview while you work. Your Builder apps appear in the **Data source** list by their own names — pick one to report on its submissions. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, set the page margin, choose **Compact** to fit more rows per page, and turn the **Summary cards** band on or off — the preview and every export follow it.
+The builder shows a live print preview while you work. Builder apps you can currently open appear in the **Data source** list by their own names — pick one to report on its submissions. Draft, archived, and role-restricted apps you cannot open stay out of the list and cannot be queried from a saved report. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, set the page margin, choose **Compact** to fit more rows per page, and turn the **Summary cards** band on or off — the preview and every export follow it.
 
 On the full report, subscriptions, past runs, and report details live on the **Schedules & activity** tab.`,
   },
@@ -252,7 +254,7 @@ A card is one saved chart or table. The fastest way to build one is to describe 
 3. Click **Ask AI**. It sets up the data and chart for you.
 4. Adjust anything in the side panel (data, filters, grouping, chart type), then click **Save card**.
 
-You can also build a card by hand using the same side panel, without asking AI.
+You can also build a card by hand using the same side panel, without asking AI. The data-source list only includes Builder apps you can currently open. If an app is a draft, archived, or restricted to another active role, its records cannot be used by your cards.
 
 ## Build or change a dashboard
 
@@ -308,9 +310,9 @@ The system then tracks every person in the audience and creates their tasks auto
 
 ## See who is overdue
 
-1. Open the **Due & expiring** tab. The cards at the top show **Overdue**, **Expired**, **Due soon (30d)**, and **Open tasks**. Filter the list by status to work through it. Certifications only count for active people — someone marked inactive or terminated in People drops off this list. Only the newest certificate per person and course counts: once someone is retrained, their older certificate for that course stops showing as expired.
+1. Open the **Due & expiring** tab. The cards at the top show **Overdue**, **Expired**, **Due soon (30d)**, and **Open tasks**. Search by item or person, filter by **Status** or **Module**, and click a heading to sort the list. Certifications only count for active people — someone marked inactive or terminated in People drops off this list. Only the newest certificate per person and course counts: once someone is retrained, their older certificate for that course stops showing as expired.
 2. Open the **Aging** tab to see how long items have been overdue, grouped into 0–7 days, 7–30 days, and 30+ days. Start with the oldest.
-3. Open the **By person** tab and pick a person to see every requirement on their plate, with status badges like **Overdue**, **Expiring**, and **Completed**.
+3. Open the **By person** tab and pick a person to see every requirement on their plate. Search the selected person's obligations or filter them by **Status** and **Kind**. Open an obligation to search and filter its resolved subjects.
 
 ## Tips
 
@@ -347,17 +349,23 @@ When the built-in modules do not cover something — a site orientation form, a 
 
 ## Where to find it
 
-Open [Builder](/apps) from the sidebar. It lists your apps with a **published** or **draft** badge on each.
+Open [Builder](/apps) from the sidebar. People who can build templates see every live app, including **published**, **draft**, and **archived** apps. Everyone else sees only published apps allowed for the role they are currently using.
 
 ## Create and publish a form
 
 1. Open [Builder](/apps) and click **New app**.
 2. In the designer, open the **Build** tab. Under **Add an element**, drag fields onto the canvas or click one to add it to the selected section.
 3. Click a field to set its label, whether it is required, and any logic.
-4. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them.
-5. When it is ready, click **Publish v1**. Until you publish, only builders can see it.
+4. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
+5. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
 
 Publishing again later creates the next version. Old submissions keep the version they were filled on.
+
+If a person has several roles and switches roles in BeaconHS, the app gallery, pinned apps, records, and form links immediately follow the role they are acting under. A template builder can still open every app to maintain it, but can only create a live entry after the app is published.
+
+Builders can review records belonging to a draft or archived app, but those records are read-only. Publish the app before testing live entry, workflow, comment, monitoring, or record-action behaviour.
+
+When you fill a published app, watch for **Saved** at the top. You can leave and resume the entry from **In progress**. If the same draft was changed in another tab, BeaconHS stops the older tab from overwriting it and asks you to refresh before continuing.
 
 The first publish also generates the app's **PDF template** — the document its record downloads and flow attachments use. Admins can restyle it (or generate one for an older app) under **Admin → PDF templates**.
 
@@ -381,7 +389,97 @@ Flows run automatically when things happen on your form.
 
 ## See the responses
 
-Every submission lands in [Form responses](/apps/responses). Filter by app and status, open any record, or click **Export CSV** to download the list.`,
+Every submission lands in [Form responses](/apps/responses). Filter by app and status, open any record, or click **Export CSV** to download the list.
+
+The [Builder gallery](/apps) is paged for large workspaces. Search app names or descriptions, filter by app type, then use **Sort** and **Direction** to change the order. Open an app to see its records. On that record list, search by record ID, subject, site, or submitter; filter by status; and click a column heading to sort. Your search, filters, sort, and page stay in the address so a shared link opens the same view.
+
+## Monitor timed sessions
+
+Set up monitoring entirely in **Flows**:
+
+1. Connect **A record is submitted** to **Start monitored session**.
+2. Set the check-in interval, grace time, optional duration, and whether a location is required.
+3. Add **A monitored session is overdue** as another trigger.
+4. Connect it to **Notify role** or another real escalation action.
+
+Open [Monitored sessions](/apps/sessions) to review every timed Builder session you are allowed to see. Search by worker or app, filter by status, and sort the table. An overdue next check-in is shown in red. Open the worker's row to review the live session record.
+
+## Review person transcripts
+
+Reviewers can open [Form transcripts](/apps/transcripts) to find a person and see every form they participated in or signed. Search and sort the people list, then open a person. Their transcript can be searched, filtered by record status, sorted, and paged without changing the all-time summary above it.`,
+  },
+  {
+    slug: 'user-access',
+    title: 'Inviting users and managing access',
+    group: 'Administration',
+    iconKey: 'users',
+    summary: 'Invite members, assign roles and scope, suspend access, and resend expired links.',
+    keywords: [
+      'users',
+      'invite',
+      'resend invite',
+      'membership',
+      'roles',
+      'scope',
+      'permissions',
+      'suspend',
+      'access',
+      'login',
+    ],
+    requiredPermission: 'admin.users.manage',
+    body: `The Users area controls access to this workspace. It does not let tenant administrators take over a person's global account.
+
+## Invite a member
+
+1. Open [Users](/admin/users).
+2. Click **Invite user**.
+3. Enter the person's work email and optional display name.
+4. Pick an initial role and scope when needed.
+5. Click **Send invite**.
+
+The membership stays **invited** until the person opens **Accept the invitation and sign in** in their email. The one-time link expires after 15 minutes. Signing in another way does not activate it.
+
+## Find a member or role
+
+On **Users**, use the search box to find a name, email address, tenant display name, or assigned role. Use **Status** to show active, invited, or suspended memberships. Click a column heading to sort the current list.
+
+On **Roles**, search by role name or description and use **Type** to show built-in or custom roles. The list shows each role's permission and active-member counts.
+
+## Resend an expired invitation
+
+1. Open the invited member from [Users](/admin/users).
+2. Click **Resend invite**.
+3. Tell the person to use the newest email within 15 minutes.
+
+An invitation cannot reactivate a suspended member or a suspended workspace. Each workspace invitation activates only that workspace.
+
+## Change tenant access
+
+Open the member to manage only this workspace's settings:
+
+- **Display name in this tenant** changes how the name appears here.
+- **Person record** links the login to the right employee record.
+- **Roles & scope** controls what the member can do and which records they can reach.
+- **Permissions** adds a specific grant or denial when a role needs an exception.
+- **Suspend member** blocks this workspace without changing the person's other workspaces.
+- **Reactivate** restores a suspended membership.
+- **Remove from tenant** deletes this membership, its role assignments, and its overrides.
+
+Pending invitations cannot be marked active by an administrator. The person must prove control of the invited email by using the one-time link.
+
+A platform-level workspace suspension blocks normal member access, pending invitations, API keys, public kiosks, live badge pages, and in-browser Word or PowerPoint editing. Printed individual certificate links remain available so issued credentials can still be verified.
+
+## Account security
+
+Members manage their own account name and password under **Account settings**. Tenant administrators cannot change a member's sign-in email, set their password, mark their email verified, sign out all of their sessions, or grant platform super-admin access.
+
+Platform super-admins manage global identity from **Platform → Users**. Search by name, email, or tenant and use the view filter for multi-tenant, super-admin, or unassigned accounts. Open an identity to search and filter its tenant memberships. **Platform → Tenants** has the same search, status, sorting, and page controls for workspaces. Use these areas only for platform-level work.
+
+## Tips
+
+- Link the correct **Person record** before assigning self-scoped work.
+- Give the smallest role and scope the person needs.
+- Suspend access when someone is temporarily away. Remove the membership only when its tenant-specific role history is no longer needed.`,
   },
   {
     slug: 'admin',
@@ -434,15 +532,21 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Tenant settings** — branding, languages, risk matrix, hierarchy.
 - **Notifications** — who gets automatic alerts and how often reminders repeat.
 - **Navigation** — reorder the sidebar and pin forms as modules.
-- **Data sources** — reference lists and live data your apps bind to.
-- **Data export** — audited CSV exports across modules and Builder apps.
+- **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Inside a reference source, search its row values and its Builder references separately.
+- **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
 
 ## Integrations
 
 - **AI**, **Email**, and **SMS** — pick a provider and store its credentials securely.
 - **Integrations** — sync data in and send events out to other systems.
-- **API keys** — credentials for the public REST API.
+- **API keys** — credentials for the public REST API. Search by key name or prefix and filter by active, expired, or revoked status. Choose the smallest permissions and explicitly select every Builder app the integration may access; forms permissions alone expose no apps. Write requests require an **Idempotency-Key**, and keys are rate-limited. API keys stop authenticating while the workspace is suspended or archived.
+
+Integration connections can reach public **HTTPS** services only. External database connections also need a public DNS name, valid **SSL/TLS**, and a certificate that matches that name. BeaconHS blocks local, private, and reserved network addresses. When sending to an external SQL table, enter its **Identity column** so a partial retry can remove completed inserts before trying again.
+
+If a sync uses **Archive after safe full pulls**, BeaconHS applies it only after a complete full snapshot. An empty entity or failed record blocks archiving and marks the run partial. A page-limit warning means BeaconHS processed only part of the source, so it also skips archiving. Check the run details before trying again.
+
+On a sync run, use the record-decision search and the **Action** and **Entity** filters to review created, updated, skipped, failed, or conflicting rows. Click a sortable heading when you need a different order.
 
 ## Activity
 
@@ -503,9 +607,9 @@ Keep auto-start for the few tours that matter most on day one. Too many automati
 
 1. Find the tour in the list.
 2. Pick which roles should see it.
-3. Only people with one of those roles will get the tour. Leave the roles open if everyone should see it.
+3. Only people currently acting under one of those roles will get the tour. Leave the roles open if everyone should see it.
 
-This keeps admin-only tours away from field workers, and field tours away from office staff.
+This keeps admin-only tours away from field workers, and field tours away from office staff. If a person switches roles, their available tours follow the role they are now using.
 
 ## Preview a tour
 

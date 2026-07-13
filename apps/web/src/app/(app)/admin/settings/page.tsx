@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
@@ -236,7 +237,14 @@ export default async function AdminSettingsPage() {
                 <div className="sm:col-span-2">
                   <Label className="text-xs">Preview</Label>
                   <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                    <img src={tenant.branding.logoUrl} alt="" className="h-8" />
+                    <Image
+                      src={tenant.branding.logoUrl}
+                      alt=""
+                      width={160}
+                      height={32}
+                      unoptimized
+                      className="h-8 w-auto"
+                    />
                     <span
                       className="font-semibold"
                       style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}

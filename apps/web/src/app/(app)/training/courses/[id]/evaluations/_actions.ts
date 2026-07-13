@@ -11,7 +11,7 @@ import { trainingEnrollments, trainingLessonProgress, trainingLessons } from '@b
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { storeSignatureValue } from '@/lib/signature-storage'
+import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { enrollInCourse } from '../../../learn/_actions'
 import { recomputeEnrollmentCompletion } from '../../../learn/_lib/completion'
 
@@ -45,79 +45,79 @@ export async function evaluatePractical(args: {
     return { ok: false, error: 'Signature payload too large' }
   }
 
-  // Persist the captured signature to object storage; only the stable public URL
-  // is kept in evaluationSignatureDataUrl (idempotent on already-stored URLs).
-  const storedSignature = await storeSignatureValue(tenantId, args.signatureDataUrl)
-  if (args.pass && !storedSignature) {
-    return { ok: false, error: 'A signature is required to sign a learner off as competent.' }
-  }
-
   try {
-    const result = await ctx.db(async (tx) => {
-      const [enr] = await tx
-        .select()
-        .from(trainingEnrollments)
-        .where(eq(trainingEnrollments.id, args.enrollmentId))
-        .limit(1)
-      if (!enr || enr.courseId !== args.courseId) throw new Error('Enrollment not found')
-      const [lesson] = await tx
-        .select()
-        .from(trainingLessons)
-        .where(eq(trainingLessons.id, args.lessonId))
-        .limit(1)
-      if (!lesson || lesson.courseId !== args.courseId) throw new Error('Lesson not found')
-      if (lesson.kind !== 'practical') throw new Error('Not a practical lesson')
+    const result = await withStoredSignatureAttachment(
+      ctx,
+      args.signatureDataUrl,
+      async (tx, signatureAttachmentId) => {
+        if (args.pass && !signatureAttachmentId) {
+          throw new Error('A signature is required to sign a learner off as competent.')
+        }
+        const [enr] = await tx
+          .select()
+          .from(trainingEnrollments)
+          .where(eq(trainingEnrollments.id, args.enrollmentId))
+          .limit(1)
+        if (!enr || enr.courseId !== args.courseId) throw new Error('Enrollment not found')
+        const [lesson] = await tx
+          .select()
+          .from(trainingLessons)
+          .where(eq(trainingLessons.id, args.lessonId))
+          .limit(1)
+        if (!lesson || lesson.courseId !== args.courseId) throw new Error('Lesson not found')
+        if (lesson.kind !== 'practical') throw new Error('Not a practical lesson')
 
-      const now = new Date()
-      const evaluatorFields = {
-        evaluatedByTenantUserId: ctx.membership?.id ?? null,
-        evaluationNotes: args.notes,
-        evaluationSignatureDataUrl: storedSignature,
-        criteriaResults: args.criteriaResults,
-      }
-      const [existing] = await tx
-        .select()
-        .from(trainingLessonProgress)
-        .where(
-          and(
-            eq(trainingLessonProgress.enrollmentId, args.enrollmentId),
-            eq(trainingLessonProgress.lessonId, args.lessonId),
-          ),
-        )
-        .limit(1)
-      if (existing) {
-        await tx
-          .update(trainingLessonProgress)
-          .set({
+        const now = new Date()
+        const evaluatorFields = {
+          evaluatedByTenantUserId: ctx.membership?.id ?? null,
+          evaluationNotes: args.notes,
+          evaluationSignatureAttachmentId: signatureAttachmentId,
+          criteriaResults: args.criteriaResults,
+        }
+        const [existing] = await tx
+          .select()
+          .from(trainingLessonProgress)
+          .where(
+            and(
+              eq(trainingLessonProgress.enrollmentId, args.enrollmentId),
+              eq(trainingLessonProgress.lessonId, args.lessonId),
+            ),
+          )
+          .limit(1)
+        if (existing) {
+          await tx
+            .update(trainingLessonProgress)
+            .set({
+              status: args.pass ? 'completed' : 'in_progress',
+              completedAt: args.pass ? now : null,
+              ...evaluatorFields,
+            })
+            .where(eq(trainingLessonProgress.id, existing.id))
+        } else {
+          await tx.insert(trainingLessonProgress).values({
+            tenantId,
+            enrollmentId: args.enrollmentId,
+            lessonId: args.lessonId,
+            personId: enr.personId,
             status: args.pass ? 'completed' : 'in_progress',
+            startedAt: now,
             completedAt: args.pass ? now : null,
             ...evaluatorFields,
           })
-          .where(eq(trainingLessonProgress.id, existing.id))
-      } else {
-        await tx.insert(trainingLessonProgress).values({
-          tenantId,
-          enrollmentId: args.enrollmentId,
-          lessonId: args.lessonId,
-          personId: enr.personId,
-          status: args.pass ? 'completed' : 'in_progress',
-          startedAt: now,
-          completedAt: args.pass ? now : null,
-          ...evaluatorFields,
-        })
-      }
+        }
 
-      if (args.pass) {
-        const summary = await recomputeEnrollmentCompletion(tx, {
-          tenantId,
-          enrollmentId: args.enrollmentId,
-          courseId: args.courseId,
-          personId: enr.personId,
-        })
-        return { courseCompleted: summary.completed, recordId: summary.recordId }
-      }
-      return { courseCompleted: false, recordId: null }
-    })
+        if (args.pass) {
+          const summary = await recomputeEnrollmentCompletion(tx, {
+            tenantId,
+            enrollmentId: args.enrollmentId,
+            courseId: args.courseId,
+            personId: enr.personId,
+          })
+          return { courseCompleted: summary.completed, recordId: summary.recordId }
+        }
+        return { courseCompleted: false, recordId: null }
+      },
+    )
 
     await recordAudit(ctx, {
       entityType: 'training_lesson_progress',

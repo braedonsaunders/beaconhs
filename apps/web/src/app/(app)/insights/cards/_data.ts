@@ -3,11 +3,12 @@
 import { and, desc, eq, isNull, or } from 'drizzle-orm'
 import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { discoverEntitiesWithApps } from '@beaconhs/analytics/server'
 import type { AnalyticsEntity } from '@beaconhs/analytics'
+import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
+import { isTrustedSystemCard } from '../_system-cards'
 
-export type CardKind = 'question' | 'model' | 'metric' | 'ai'
+type CardKind = 'question' | 'model' | 'metric' | 'ai'
 
 export type CardRow = {
   id: string
@@ -21,6 +22,7 @@ export type CardRow = {
   status: 'draft' | 'published'
   createdBy: string | null
   allowedRoles: string[] | null
+  trustedSystemCard?: true
 }
 
 const SELECT = {
@@ -38,7 +40,7 @@ const SELECT = {
 }
 
 function map(row: CardRow): CardRow {
-  return { ...row }
+  return isTrustedSystemCard(row) ? { ...row, trustedSystemCard: true } : { ...row }
 }
 
 export async function loadCard(ctx: RequestContext, id: string): Promise<CardRow | null> {
@@ -125,5 +127,5 @@ export async function loadCardsForPalette(ctx: RequestContext): Promise<CardRow[
  *  so a saved card re-renders with no tenant lookup. Shared with the Reports
  *  studio via @beaconhs/analytics/server. */
 export async function loadStudioEntities(ctx: RequestContext): Promise<AnalyticsEntity[]> {
-  return ctx.db((tx) => discoverEntitiesWithApps(tx))
+  return ctx.db(async (tx) => (await resolveAnalyticsAccess(ctx, tx)).entities)
 }

@@ -21,7 +21,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
@@ -147,9 +147,14 @@ export function createHazidFlowAdapter(
               pFirst: people.firstName,
               pLast: people.lastName,
               pFormal: people.formalName,
+              signatureKey: attachments.r2Key,
             })
             .from(hazidAssessmentSignatures)
             .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
+            .leftJoin(
+              attachments,
+              eq(attachments.id, hazidAssessmentSignatures.signatureAttachmentId),
+            )
             .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId)),
         ),
         ctx.db((tx) =>
@@ -241,24 +246,28 @@ export function createHazidFlowAdapter(
           answer: q.answer ?? '',
           requires_yes: yesNo(q.requiresYes),
         })),
-        signatures: signatures.map((s) => ({
-          name:
-            personName({ firstName: s.pFirst, lastName: s.pLast, formalName: s.pFormal }) ||
-            s.row.externalName ||
-            'Unknown',
-          type: s.row.signatureType,
-          cs_entrant: yesBlank(s.row.csEntrant),
-          cs_attendant: yesBlank(s.row.csAttendant),
-          cs_rescue: yesBlank(s.row.csRescue),
-          signed_at: fmtDateTime(s.row.signedAt),
-          // Drawn signature as a PNG data URL (same source the bespoke PDF
-          // embeds) — templates render it with <img src="{{image}}">.
-          image: s.row.signatureDataUrl ?? '',
-        })),
-        photos: photos.map((p) => ({
-          url: publicUrl(p.r2Key),
-          caption: p.caption ?? '',
-        })),
+        signatures: await Promise.all(
+          signatures.map(async (s) => ({
+            name:
+              personName({ firstName: s.pFirst, lastName: s.pLast, formalName: s.pFormal }) ||
+              s.row.externalName ||
+              'Unknown',
+            type: s.row.signatureType,
+            cs_entrant: yesBlank(s.row.csEntrant),
+            cs_attendant: yesBlank(s.row.csAttendant),
+            cs_rescue: yesBlank(s.row.csRescue),
+            signed_at: fmtDateTime(s.row.signedAt),
+            image: s.signatureKey
+              ? await presignGet({ key: s.signatureKey, expiresInSeconds: 900 })
+              : '',
+          })),
+        ),
+        photos: await Promise.all(
+          photos.map(async (p) => ({
+            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
+            caption: p.caption ?? '',
+          })),
+        ),
       }
     },
 
@@ -297,6 +306,7 @@ export function createHazidFlowAdapter(
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        flowExecutionKey: i.flowExecutionKey,
       }),
   }
 }

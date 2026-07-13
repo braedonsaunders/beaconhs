@@ -3,7 +3,7 @@
 // queries, one source of truth, kept fresh by the worker scan. Replaces the old
 // per-module legacy breakdowns entirely.
 
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   type ComplianceTargetRef,
   complianceObligations,
@@ -22,7 +22,7 @@ const liveFilter = () => [
   eq(complianceObligations.status, 'active'),
 ]
 
-export type RollupRow = {
+type RollupRow = {
   kind: ObligationKind
   id: string
   title: string
@@ -96,8 +96,7 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
           eq(complianceStatus.personId, personId),
           ...liveFilter(),
         ),
-      )
-      .limit(1000),
+      ),
   )
   const rank = (s: string) =>
     s === 'overdue' || s === 'expiring' ? 0 : s === 'pending' ? 1 : s === 'in_progress' ? 2 : 3
@@ -115,15 +114,26 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
 }
 
 export type AgingBucket = '0_7' | '7_30' | '30_plus' | 'no_date'
-export type AgingRow = { kind: ObligationKind; bucket: AgingBucket; count: number }
+type AgingRow = { kind: ObligationKind; bucket: AgingBucket; count: number }
 
 /** Overdue / expiring subjects bucketed by age of due date. */
 export async function agingFromStatus(ctx: Ctx): Promise<AgingRow[]> {
-  const rows = await ctx.db((tx) =>
-    tx
+  const today = new Date()
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const t7 = iso(new Date(today.getTime() - 7 * 864e5))
+  const t30 = iso(new Date(today.getTime() - 30 * 864e5))
+  return ctx.db(async (tx) => {
+    const bucket = sql<AgingBucket>`case
+      when ${complianceStatus.dueOn} is null then 'no_date'
+      when ${complianceStatus.dueOn} >= ${t7}::date then '0_7'
+      when ${complianceStatus.dueOn} >= ${t30}::date then '7_30'
+      else '30_plus'
+    end`
+    const rows = await tx
       .select({
         kind: complianceObligations.sourceModule,
-        dueOn: complianceStatus.dueOn,
+        bucket,
+        count: sql<number>`count(*)::int`,
       })
       .from(complianceStatus)
       .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
@@ -134,27 +144,13 @@ export async function agingFromStatus(ctx: Ctx): Promise<AgingRow[]> {
           ...liveFilter(),
         ),
       )
-      .limit(5000),
-  )
-  const today = new Date()
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  const t7 = iso(new Date(today.getTime() - 7 * 864e5))
-  const t30 = iso(new Date(today.getTime() - 30 * 864e5))
-  const collapsed = new Map<string, AgingRow>()
-  for (const r of rows) {
-    const bucket: AgingBucket = !r.dueOn
-      ? 'no_date'
-      : r.dueOn >= t7
-        ? '0_7'
-        : r.dueOn >= t30
-          ? '7_30'
-          : '30_plus'
-    const key = `${r.kind}::${bucket}`
-    const cur = collapsed.get(key) ?? { kind: r.kind as ObligationKind, bucket, count: 0 }
-    cur.count += 1
-    collapsed.set(key, cur)
-  }
-  return Array.from(collapsed.values())
+      .groupBy(complianceObligations.sourceModule, bucket)
+    return rows.map((row) => ({
+      kind: row.kind as ObligationKind,
+      bucket: row.bucket,
+      count: Number(row.count),
+    }))
+  })
 }
 
 export { kindLabel }

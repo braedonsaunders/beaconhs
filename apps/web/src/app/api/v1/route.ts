@@ -31,10 +31,12 @@ export async function GET(req: Request): Promise<NextResponse> {
     const origin = new URL(req.url).origin
     const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization')
     let builderApps = null
+    let rateLimitHeaders: Record<string, string> = {}
     if (authHeader) {
       const { ctx, key } = await authenticateApiKey(req)
+      rateLimitHeaders = key.rateLimitHeaders
       if (keyHasPermission(key.permissions, BUILDER_APP_READ_PERMISSION)) {
-        builderApps = await listBuilderApps(ctx)
+        builderApps = await listBuilderApps(ctx, key.builderTemplateIds)
       }
     }
     return NextResponse.json(
@@ -72,7 +74,7 @@ export async function GET(req: Request): Promise<NextResponse> {
             : null,
         })),
       },
-      { headers: noStore() },
+      { headers: noStore(rateLimitHeaders) },
     )
   } catch (err) {
     if (!(err instanceof ApiError)) console.error('[api/v1] discovery error', err)

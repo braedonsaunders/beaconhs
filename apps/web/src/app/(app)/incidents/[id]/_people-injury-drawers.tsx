@@ -35,14 +35,8 @@ function fromCommaList(s: string): string[] {
 
 // ---- People involved -------------------------------------------------------
 
-export const INCIDENT_PERSON_ROLES = [
-  'involved',
-  'witness',
-  'foreman',
-  'supervisor',
-  'other',
-] as const
-export type IncidentPersonRole = (typeof INCIDENT_PERSON_ROLES)[number]
+const INCIDENT_PERSON_ROLES = ['involved', 'witness', 'foreman', 'supervisor', 'other'] as const
+type IncidentPersonRole = (typeof INCIDENT_PERSON_ROLES)[number]
 
 export type PersonInput = {
   id?: string
@@ -52,7 +46,7 @@ export type PersonInput = {
   role: string | null
 }
 
-export type PersonAction = (input: PersonInput) => Promise<{ ok: boolean; error?: string }>
+type PersonAction = (input: PersonInput) => Promise<{ ok: boolean; error?: string }>
 
 export function PersonDrawer({
   open,
@@ -191,7 +185,7 @@ export type InjuryInput = {
   workedHoursPriorTo: number | null
 }
 
-export type InjuryAction = (input: InjuryInput) => Promise<{ ok: boolean; error?: string }>
+type InjuryAction = (input: InjuryInput) => Promise<{ ok: boolean; error?: string }>
 
 export function InjuryDrawer({
   open,

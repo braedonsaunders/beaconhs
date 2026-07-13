@@ -39,14 +39,6 @@ export type WidgetMeta = {
   rolesShown?: readonly RoleTier[]
 }
 
-const ALL_ROLES: readonly RoleTier[] = [
-  'super_admin',
-  'tenant_admin',
-  'safety_manager',
-  'foreman',
-  'worker',
-] as const
-
 export const WIDGETS: Record<string, WidgetMeta> = {
   // ---- Headline rates -----------------------------------------------------
   'kpi-trir': {

@@ -17,7 +17,6 @@ import {
   Label,
   SearchSelect,
   Select,
-  Textarea,
   type SelectOption,
 } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
@@ -84,12 +83,6 @@ function optionsFor(kind: MemberKind, o: AudienceOptions): SelectOption[] {
     default:
       return []
   }
-}
-
-function labelFor(m: Member, o: AudienceOptions): string {
-  if (m.kind === 'everyone') return 'Everyone'
-  const hit = optionsFor(m.kind, o).find((x) => x.value === m.entityKey)
-  return `${KIND_LABEL[m.kind]}: ${hit?.label ?? m.entityKey}`
 }
 
 function memberSummary(members: Member[]): string {
@@ -207,18 +200,25 @@ function GroupEditor({
 
   // Live preview — debounced resolve of the current member set.
   React.useEffect(() => {
-    if (members.length === 0) {
-      setPreview(null)
-      return
-    }
-    setPreviewing(true)
+    if (members.length === 0) return
+    let cancelled = false
     const t = setTimeout(() => {
+      setPreviewing(true)
       previewGroup(members)
-        .then(setPreview)
-        .finally(() => setPreviewing(false))
+        .then((result) => {
+          if (!cancelled) setPreview(result)
+        })
+        .finally(() => {
+          if (!cancelled) setPreviewing(false)
+        })
     }, 450)
-    return () => clearTimeout(t)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
   }, [members])
+
+  const resolvedPreview = members.length === 0 ? null : preview
 
   function addMember() {
     setMembers((m) => [...m, { kind: 'role', entityKey: '', mode: 'include' }])
@@ -407,19 +407,19 @@ function GroupEditor({
             <Users size={14} />
             {previewing ? (
               <span className="text-slate-500">Resolving…</span>
-            ) : preview ? (
+            ) : resolvedPreview ? (
               <span>
-                Reaches {preview.count} {preview.count === 1 ? 'person' : 'people'} ·{' '}
-                {preview.withEmail} with email
+                Reaches {resolvedPreview.count} {resolvedPreview.count === 1 ? 'person' : 'people'}{' '}
+                · {resolvedPreview.withEmail} with email
               </span>
             ) : (
               <span className="text-slate-500">Add members to see who this reaches</span>
             )}
           </div>
-          {preview && preview.sample.length > 0 ? (
+          {resolvedPreview && resolvedPreview.sample.length > 0 ? (
             <p className="mt-1 text-xs text-teal-800/80 dark:text-teal-300/80">
-              {preview.sample.join(', ')}
-              {preview.count > preview.sample.length ? ', …' : ''}
+              {resolvedPreview.sample.join(', ')}
+              {resolvedPreview.count > resolvedPreview.sample.length ? ', …' : ''}
             </p>
           ) : null}
         </div>

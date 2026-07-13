@@ -12,7 +12,7 @@ import { Badge, Button } from '@beaconhs/ui'
 import { cancelSession, endSession, recordSessionCheckin } from './_monitor-actions'
 
 export type MonitorStatus = 'active' | 'completed' | 'missed' | 'escalated' | 'cancelled'
-export type MonitorCheckin = {
+type MonitorCheckin = {
   id: string
   kind: string
   recordedAt: string
@@ -44,6 +44,7 @@ export function MonitorPanel({
   intervalMinutes,
   requireGeo,
   checkins,
+  readOnly,
 }: {
   responseId: string
   monitorStatus: MonitorStatus
@@ -51,6 +52,7 @@ export function MonitorPanel({
   intervalMinutes: number | null
   requireGeo: boolean
   checkins: MonitorCheckin[]
+  readOnly: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -121,8 +123,8 @@ export function MonitorPanel({
 
       {escalated ? (
         <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-          Check-in missed — supervisor and safety roles have been alerted. A check-in below
-          re-activates the session.
+          Check-in missed — supervisor and safety roles have been alerted.
+          {readOnly ? '' : ' A check-in below re-activates the session.'}
         </div>
       ) : null}
 
@@ -139,16 +141,18 @@ export function MonitorPanel({
               <div className="text-xs text-slate-400">every {intervalMinutes} min</div>
             ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={doCheckin} disabled={pending} size="lg">
-              {pending ? (
-                <Loader2 size={16} className="mr-1.5 animate-spin" />
-              ) : (
-                <Check size={16} />
-              )}
-              I&apos;m OK — check in
-            </Button>
-          </div>
+          {!readOnly ? (
+            <div className="flex items-center gap-2">
+              <Button onClick={doCheckin} disabled={pending} size="lg">
+                {pending ? (
+                  <Loader2 size={16} className="mr-1.5 animate-spin" />
+                ) : (
+                  <Check size={16} />
+                )}
+                I&apos;m OK — check in
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -162,7 +166,7 @@ export function MonitorPanel({
         </p>
       ) : null}
 
-      {live ? (
+      {live && !readOnly ? (
         <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
           <Button
             variant="outline"

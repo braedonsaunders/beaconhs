@@ -15,7 +15,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, fmtDateTime, titleize } from '../format'
@@ -80,10 +80,11 @@ export function createCorrectiveActionFlowAdapter(
               kind: caCompleteSteps.kind,
               description: caCompleteSteps.description,
               completedAt: caCompleteSteps.completedAt,
-              signatureDataUrl: caCompleteSteps.signatureDataUrl,
+              signatureKey: attachments.r2Key,
               byName: users.name,
             })
             .from(caCompleteSteps)
+            .leftJoin(attachments, eq(attachments.id, caCompleteSteps.signatureAttachmentId))
             .leftJoin(tenantUsers, eq(tenantUsers.id, caCompleteSteps.completedByTenantUserId))
             .leftJoin(users, eq(users.id, tenantUsers.userId))
             .where(eq(caCompleteSteps.caId, caId))
@@ -129,15 +130,23 @@ export function createCorrectiveActionFlowAdapter(
         site_org_unit_id: r.siteOrgUnitId ?? null,
         owner_tenant_user_id: r.ownerTenantUserId ?? null,
         // Collections.
-        complete_steps: steps.map((s) => ({
-          kind: titleize(s.kind),
-          description: s.description ?? '',
-          completed_by_name: s.byName ?? '',
-          completed_at: fmtDateTime(s.completedAt),
-          // Step sign-off signature (PNG data URL) — <img src="{{signature_image}}">.
-          signature_image: s.signatureDataUrl ?? '',
-        })),
-        photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
+        complete_steps: await Promise.all(
+          steps.map(async (s) => ({
+            kind: titleize(s.kind),
+            description: s.description ?? '',
+            completed_by_name: s.byName ?? '',
+            completed_at: fmtDateTime(s.completedAt),
+            signature_image: s.signatureKey
+              ? await presignGet({ key: s.signatureKey, expiresInSeconds: 900 })
+              : '',
+          })),
+        ),
+        photos: await Promise.all(
+          photos.map(async (p) => ({
+            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
+            caption: p.caption ?? '',
+          })),
+        ),
       }
     },
 

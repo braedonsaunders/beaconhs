@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { smsLog, tenants } from '@beaconhs/db/schema'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -85,15 +85,12 @@ export async function SmsLogListView({
   const ctx = await requireRequestContext()
   const showTenant = scope === 'platform'
 
-  const { rows, total, categoryFacets } = await withSuperAdmin(db, async (tx) => {
+  const loadRows = async (tx: Database) => {
     const filters: SQL<unknown>[] = []
-    // Tenant scope: the admin view is pinned to the active tenant (plus any
-    // platform-level rows with a null tenantId); the platform view spans every
-    // tenant. The platform layout already restricts that route to super-admins.
+    // Platform/account messages are visible only in the super-admin platform
+    // route. Tenant admins see exactly their own rows.
     if (scope === 'tenant') {
-      filters.push(
-        or(eq(smsLog.tenantId, ctx.tenantId), sql`${smsLog.tenantId} IS NULL`) as SQL<unknown>,
-      )
+      filters.push(eq(smsLog.tenantId, ctx.tenantId))
     }
     if (params.q) {
       const term = `%${params.q}%`
@@ -179,7 +176,9 @@ export async function SmsLogListView({
           count: r.n,
         })),
     }
-  })
+  }
+  const { rows, total, categoryFacets } =
+    scope === 'platform' ? await withSuperAdmin(db, loadRows) : await ctx.db(loadRows)
 
   return (
     <ListPageLayout

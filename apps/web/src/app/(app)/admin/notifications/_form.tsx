@@ -12,8 +12,7 @@ import { Button, Label, SearchSelect, Select, cn } from '@beaconhs/ui'
 import { toast } from 'sonner'
 import { type NotificationCategory } from './_catalog'
 import {
-  saveNotificationPolicy,
-  saveNotificationSettings,
+  saveNotificationConfiguration,
   type CategorySettingInput,
   type EscalationStep,
   type PolicyInput,
@@ -386,8 +385,7 @@ export function NotificationSettingsForm({
     }))
     startTransition(async () => {
       try {
-        await saveNotificationSettings(items)
-        await saveNotificationPolicy(pol)
+        await saveNotificationConfiguration(items, pol)
         window.location.reload()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Could not save settings.')

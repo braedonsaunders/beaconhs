@@ -4,8 +4,10 @@
 // notification recipients (by category / module binding), falling back to
 // active tenant members.
 
-import { and, eq, inArray } from 'drizzle-orm'
-import { sendEmail } from '@beaconhs/emails'
+import { eq } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
+import { resolveNotificationAudienceEmails } from '@beaconhs/events'
+import { enqueueEmail } from '@beaconhs/jobs'
 import {
   formResponseParticipants,
   formResponses,
@@ -13,9 +15,6 @@ import {
   formTemplates,
   orgUnits,
   people,
-  tenantNotificationRecipients,
-  tenantUsers,
-  users,
   type FormField,
   type FormSchemaV1,
 } from '@beaconhs/db/schema'
@@ -42,7 +41,6 @@ function formatScalar(field: FormField, value: unknown): string | null {
   if (value == null || value === '') return null
   switch (field.type) {
     case 'text':
-    case 'textarea':
     case 'long_text':
     case 'email':
     case 'phone':
@@ -67,6 +65,7 @@ function formatScalar(field: FormField, value: unknown): string | null {
 export async function sendFormResponseRecapEmail(
   ctx: RequestContext,
   responseId: string,
+  executionId?: string,
 ): Promise<number> {
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -87,27 +86,17 @@ export async function sendFormResponseRecapEmail(
 
     // Recipients: configured for the template's category / module binding…
     const categories = [row.category, row.moduleBinding].filter((c): c is string => !!c)
-    let recip: { email: string | null }[] = []
-    if (categories.length > 0) {
-      recip = await tx
-        .select({ email: users.email })
-        .from(tenantNotificationRecipients)
-        .innerJoin(users, eq(users.id, tenantNotificationRecipients.userId))
-        .where(
-          and(
-            eq(tenantNotificationRecipients.tenantId, ctx.tenantId),
-            inArray(tenantNotificationRecipients.category, categories),
-          ),
-        )
-    }
-    // …else fall back to all active tenant members (toolbox parity).
-    if (recip.length === 0) {
-      recip = await tx
-        .select({ email: users.email })
-        .from(tenantUsers)
-        .innerJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.status, 'active')))
-    }
+    const recip = [
+      ...new Set(
+        (
+          await Promise.all(
+            (categories.length > 0 ? categories : ['forms']).map((category) =>
+              resolveNotificationAudienceEmails(tx, ctx.tenantId, category),
+            ),
+          )
+        ).flat(),
+      ),
+    ]
 
     const parts = await tx
       .select({
@@ -143,9 +132,7 @@ export async function sendFormResponseRecapEmail(
   })
   if (!data) return 0
 
-  const to = Array.from(
-    new Set(data.recip.map((r) => r.email).filter((e): e is string => !!e && e.includes('@'))),
-  )
+  const to = data.recip
   if (to.length === 0) return 0
 
   const { row, parts, schema, siteName } = data
@@ -212,11 +199,25 @@ export async function sendFormResponseRecapEmail(
       }
     </div>`
 
-  await sendEmail({ to, subject, html, text })
+  await enqueueEmail(
+    {
+      to,
+      subject,
+      html,
+      text,
+      meta: { tenantId: ctx.tenantId, category: row.category ?? 'forms' },
+    },
+    executionId
+      ? {
+          jobId: `form-recap|${createHash('sha256').update(executionId).digest('hex')}`,
+        }
+      : undefined,
+  )
   await recordAudit(ctx, {
     entityType: 'form_response',
     entityId: responseId,
     action: 'update',
+    dedupKey: executionId ? `domain:${executionId}:form-recap` : undefined,
     summary: `Emailed recap to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
   })
   return to.length

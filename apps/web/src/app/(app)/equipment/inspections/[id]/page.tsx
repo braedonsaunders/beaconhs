@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, PageHeader } from '@beaconhs/ui'
 import { CheckCheck, ClipboardCheck, RotateCcw, Wrench } from 'lucide-react'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import {
   attachments,
   equipmentInspectionRecordCriteria,
@@ -11,7 +11,7 @@ import {
   equipmentInspectionTypes,
   equipmentItems,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
@@ -109,7 +109,7 @@ export default async function EquipmentInspectionRecordPage({
         .from(attachments)
         .where(inArray(attachments.id, allPhotoIds))
       for (const r of rows)
-        photoMap.set(r.id, { id: r.id, url: publicUrl(r.key), filename: r.filename })
+        photoMap.set(r.id, { id: r.id, url: attachmentUrl(r.id), filename: r.filename })
     }
     return { ...row, criteria, photoMap }
   })

@@ -1,10 +1,10 @@
 import { headers } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
-import { auth } from '@beaconhs/auth'
+import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { attachments, people, users } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { ProfileForm } from './_profile-form'
@@ -38,7 +38,7 @@ export default async function AccountPage() {
   const signatureRow = ctx.personId
     ? await ctx.db(async (tx) => {
         const [row] = await tx
-          .select({ r2Key: attachments.r2Key })
+          .select({ id: attachments.id })
           .from(people)
           .leftJoin(attachments, eq(attachments.id, people.signatureAttachmentId))
           .where(eq(people.id, ctx.personId!))
@@ -46,13 +46,13 @@ export default async function AccountPage() {
         return row ?? null
       })
     : null
-  const signatureUrl = signatureRow?.r2Key ? publicUrl(signatureRow.r2Key) : null
+  const signatureUrl = signatureRow?.id ? attachmentUrl(signatureRow.id) : null
 
   // Does this account have a password credential, or is it magic-link only?
   // Drives whether the Password card shows "change" vs "set a password".
   let hasPassword = false
   try {
-    const accounts = await auth.api.listUserAccounts({
+    const accounts = await getAuth().api.listUserAccounts({
       headers: (await headers()) as unknown as Headers,
     })
     hasPassword = Array.isArray(accounts) && accounts.some((a) => a.providerId === 'credential')

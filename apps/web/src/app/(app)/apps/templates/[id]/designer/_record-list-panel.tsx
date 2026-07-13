@@ -56,7 +56,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
 ]
 
-export type ListPanelField = { id: string; label: string }
+type ListPanelField = { id: string; label: string }
 
 function colKeyId(col: ListColumnConfig) {
   return `${col.source}:${col.key}`

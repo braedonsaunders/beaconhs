@@ -5,7 +5,7 @@
 
 import Link from 'next/link'
 import { Plus, Trash2 } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull } from 'drizzle-orm'
+import { asc, count, desc, ilike, isNull } from 'drizzle-orm'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 import {
   Badge,

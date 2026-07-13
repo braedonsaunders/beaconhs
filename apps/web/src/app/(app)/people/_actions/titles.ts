@@ -17,7 +17,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { storeSignatureValue } from '@/lib/signature-storage'
+import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { assertCanActOnPerson } from '../_lib/person-access'
 
 // ---------- title CRUD --------------------------------------------------
@@ -374,26 +374,25 @@ export async function acknowledgeTitleTask(formData: FormData): Promise<void> {
   })
   if (!task) throw new Error('Task not found')
   if (!holdsTitle) throw new Error('Person does not hold the title for this task')
-  const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
-  await ctx.db((tx) =>
-    tx
+  await withStoredSignatureAttachment(ctx, signatureDataUrl, async (tx, attachmentId) => {
+    await tx
       .insert(jobTitleTaskAcknowledgments)
       .values({
         tenantId: ctx.tenantId,
         taskId,
         personId,
-        signatureDataUrl: storedSignature,
+        signatureAttachmentId: attachmentId,
         notes,
       })
       .onConflictDoUpdate({
         target: [jobTitleTaskAcknowledgments.taskId, jobTitleTaskAcknowledgments.personId],
         set: {
           acknowledgedAt: new Date(),
-          signatureDataUrl: storedSignature,
+          signatureAttachmentId: attachmentId,
           notes,
         },
-      }),
-  )
+      })
+  })
   await recordAudit(ctx, {
     entityType: 'person',
     entityId: personId,

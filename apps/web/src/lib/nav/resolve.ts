@@ -28,6 +28,8 @@ import {
   PINNED_FORM_DEFAULT_ICON,
   withMissingModules,
 } from './registry'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { templateAccessWhere } from '@/app/(app)/apps/_lib/access'
 
 // Stable per-tenant slug of the built-in lift-plan form template (see
 // packages/db/src/seed/lift-plan-template.ts). Kept local to avoid a deep
@@ -101,6 +103,7 @@ export async function resolveNavGroups(
   tx: Database,
 ): Promise<SidebarNavGroup[]> {
   const config = await loadNavConfig(tx)
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx, tx)
 
   // Batch-resolve pinned form templates → name / icon.
   const formIds = [
@@ -116,7 +119,12 @@ export async function resolveNavGroups(
     const rows = await tx
       .select({ id: formTemplates.id, name: formTemplates.name, iconKey: formTemplates.iconKey })
       .from(formTemplates)
-      .where(and(inArray(formTemplates.id, formIds), isNull(formTemplates.deletedAt)))
+      .where(
+        and(
+          inArray(formTemplates.id, formIds),
+          templateAccessWhere(ctx, effectiveRoleKeys, 'operate'),
+        ),
+      )
     for (const r of rows) formMeta.set(r.id, { name: r.name, iconKey: r.iconKey })
   }
 

@@ -18,6 +18,7 @@ import {
 import { Input } from '@beaconhs/ui'
 import { cn } from '@beaconhs/ui'
 import type { SearchGroup, SearchResponse, SearchResultItem } from '@/app/api/search/route'
+import { useHydrated } from '@/lib/use-hydrated'
 
 type EntityType = SearchGroup['type']
 
@@ -92,8 +93,7 @@ export function GlobalSearch() {
   const [portalRect, setPortalRect] = useState<{ top: number; left: number; width: number } | null>(
     null,
   )
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   // Track the input position so the portal'd dropdown sits directly under
   // it. Re-measure on resize + scroll (the latter for any container that
@@ -116,12 +116,6 @@ export function GlobalSearch() {
   }, [open, value])
 
   const flat = useMemo(() => flatten(groups), [groups])
-
-  // Reset highlight whenever the result set changes so an old index doesn't
-  // point at a row that no longer exists.
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [flat.length])
 
   // Global "/" hotkey to focus the search. Skipped when the user is already
   // typing in an input/textarea so we don't hijack regular typing.
@@ -151,6 +145,7 @@ export function GlobalSearch() {
   // Debounced fetch. We abort any in-flight request when the user keeps
   // typing so the UI never flashes stale results.
   const runSearch = useCallback(async (q: string) => {
+    setActiveIndex(0)
     if (q.trim().length < 2) {
       setGroups([])
       setLoading(false)

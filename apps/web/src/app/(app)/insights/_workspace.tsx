@@ -17,7 +17,7 @@ import { DashboardFilters, type ParamCard } from './_filter-bar.client'
 import { JournalAnalysisWidget } from './_ai-widget'
 import { CardCell } from './_viz/card-cell.client'
 import { PublishControl, type PublishRoleOption } from './_publish-control.client'
-import { INSIGHT_CATEGORY_LABELS, LEGACY_INSIGHT_WIDGETS } from './_widgets'
+import { BESPOKE_INSIGHT_WIDGETS, INSIGHT_CATEGORY_LABELS } from './_widgets'
 import {
   createDashboard,
   deleteDashboard,
@@ -79,12 +79,12 @@ export function InsightsWorkspace({
   const [paletteOpen, setPaletteOpen] = useState(true)
   const [saving, startSave] = useTransition()
   const [busy, startBusy] = useTransition()
-  const baselines = useRef<Record<string, string>>(
+  const [baselines, setBaselines] = useState<Record<string, string>>(() =>
     Object.fromEntries(boards.map((b) => [b.id, JSON.stringify(b.widgets)])),
   )
 
   const active = boards.find((b) => b.id === activeId) ?? null
-  const dirty = active ? JSON.stringify(active.widgets) !== baselines.current[active.id] : false
+  const dirty = active ? JSON.stringify(active.widgets) !== baselines[active.id] : false
 
   // Card renders are keyed by `${dashboardId}:${cardId}` so each board sees its
   // own params applied. Resolve the active board's cards into the node map; the
@@ -130,7 +130,7 @@ export function InsightsWorkspace({
   // BHQL built-in is already a published Card and would otherwise show twice.
   const paletteItems = useMemo<GridItem[]>(
     () => [
-      ...LEGACY_INSIGHT_WIDGETS.map((w) => ({
+      ...BESPOKE_INSIGHT_WIDGETS.map((w) => ({
         id: w.id,
         label: w.label,
         description: w.description,
@@ -162,7 +162,7 @@ export function InsightsWorkspace({
     if (id === activeId) return
     if (editing && dirty && active) {
       if (!(await confirmDialog('Discard unsaved changes to this dashboard?'))) return
-      const base = baselines.current[active.id]
+      const base = baselines[active.id]
       setBoards((bs) =>
         bs.map((b) => (b.id === active.id ? { ...b, widgets: base ? JSON.parse(base) : [] } : b)),
       )
@@ -177,7 +177,10 @@ export function InsightsWorkspace({
     startSave(async () => {
       const r = await saveDashboardLayout({ id: active.id, layout: { widgets: active.widgets } })
       if (r.ok) {
-        baselines.current[active.id] = JSON.stringify(active.widgets)
+        setBaselines((current) => ({
+          ...current,
+          [active.id]: JSON.stringify(active.widgets),
+        }))
         toast.success('Dashboard saved')
       } else {
         toast.error(r.error)
@@ -205,7 +208,7 @@ export function InsightsWorkspace({
           allowedRoles: null,
         },
       ])
-      baselines.current[r.id] = JSON.stringify([])
+      setBaselines((current) => ({ ...current, [r.id]: JSON.stringify([]) }))
       setActiveId(r.id)
       setEditing(true)
       setPaletteOpen(true)
@@ -257,7 +260,11 @@ export function InsightsWorkspace({
         setActiveId(rest[0]?.id ?? null)
         return rest
       })
-      delete baselines.current[id]
+      setBaselines((current) => {
+        const next = { ...current }
+        delete next[id]
+        return next
+      })
       setEditing(false)
       toast.success('Dashboard deleted')
     })
@@ -403,7 +410,7 @@ export function InsightsWorkspace({
                 onClick={async () => {
                   if (dirty && active && !(await confirmDialog('Discard unsaved changes?'))) return
                   if (dirty && active) {
-                    const base = baselines.current[active.id]
+                    const base = baselines[active.id]
                     setActiveWidgets(base ? JSON.parse(base) : [])
                   }
                   setEditing(false)

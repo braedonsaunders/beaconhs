@@ -12,7 +12,7 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const userId = await getCurrentUserId()
-  if (userId) redirect('/dashboard')
+  if (userId) redirect('/auth/continue')
   const sp = await searchParams
   const justReset = sp.reset === '1'
   return (

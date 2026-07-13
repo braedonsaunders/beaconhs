@@ -19,7 +19,6 @@ import {
   type AnalyticsColumn,
   type AnalyticsEntity,
   type BhqlResult,
-  type VizKey,
   type VizSettingDef,
 } from '@beaconhs/analytics'
 import type {
@@ -252,7 +251,7 @@ function defaultMatrixSpec(
   }
 }
 
-export type CardStudioInitial = {
+type CardStudioInitial = {
   id?: string
   name: string
   query: BhqlQuery | null
@@ -262,7 +261,7 @@ export type CardStudioInitial = {
   config?: InsightCardConfig | null
 }
 
-export type StudioMetric = { id: string; name: string; source: string }
+type StudioMetric = { id: string; name: string; source: string }
 
 export function CardStudio({
   initial,
@@ -321,7 +320,7 @@ export function CardStudio({
   const [isMetric, setIsMetric] = useState(initial.kind === 'metric')
 
   const entity = entityMap[entityKey]
-  const cols = entity?.columns ?? []
+  const cols = useMemo(() => entity?.columns ?? [], [entity])
   // Source columns + every column reachable through a single-hop FK relation, so
   // group-bys / measures / filters can pick a related field ("Site → Name").
   const fields = useMemo(() => buildFields(entity, entityMap), [entity, entityMap])
@@ -601,20 +600,20 @@ export function CardStudio({
   // Debounced live preview (drops stale responses).
   const [result, setResult] = useState<BhqlResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
-  const [previewing, setPreviewing] = useState(false)
+  const [previewState, setPreviewState] = useState({ query: ast, previewing: true })
   const latest = useRef(0)
+  const previewing = previewState.query === ast ? previewState.previewing : true
 
-  // Depend on a STABLE string key (not the object identity) so the debounce
-  // timer isn't cleared+reset on every render — otherwise the preview can hang.
-  const astKey = useMemo(() => JSON.stringify(ast), [ast])
+  // `ast` is memoized from builder inputs, so unrelated UI renders do not reset
+  // this debounce. A changed query reads as loading immediately via previewState.
   useEffect(() => {
     const key = ++latest.current
-    setPreviewing(true)
     const t = setTimeout(async () => {
+      setPreviewState({ query: ast, previewing: true })
       try {
         const r = await previewCard({ query: ast })
         if (key !== latest.current) return
-        setPreviewing(false)
+        setPreviewState({ query: ast, previewing: false })
         if (r.ok) {
           setResult(r.result)
           setPreviewError(null)
@@ -625,13 +624,12 @@ export function CardStudio({
         }
       } catch (e) {
         if (key !== latest.current) return
-        setPreviewing(false)
+        setPreviewState({ query: ast, previewing: false })
         setPreviewError(e instanceof Error ? e.message : 'Preview failed to run.')
       }
     }, 500)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [astKey, vizTouched])
+  }, [ast, vizTouched])
 
   // Ask AI: NL prompt → BHQL, hydrated into builder state via the same decoder
   // edit-mode uses. The query is left fully editable; the live preview re-runs

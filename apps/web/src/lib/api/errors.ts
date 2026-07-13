@@ -3,14 +3,18 @@
 // are consistent and documented in the OpenAPI spec (ApiError schema).
 
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 
-export type ApiErrorCode =
+type ApiErrorCode =
   | 'unauthorized'
   | 'forbidden'
   | 'not_found'
   | 'invalid_request'
   | 'method_not_allowed'
   | 'rate_limited'
+  | 'conflict'
+  | 'payload_too_large'
+  | 'unavailable'
   | 'internal'
 
 export class ApiError extends Error {
@@ -19,6 +23,7 @@ export class ApiError extends Error {
     readonly code: ApiErrorCode,
     message: string,
     readonly details?: unknown,
+    readonly headers?: Record<string, string>,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -39,9 +44,24 @@ export class ApiError extends Error {
   static methodNotAllowed(message: string) {
     return new ApiError(405, 'method_not_allowed', message)
   }
+  static rateLimited(retryAfterSeconds: number, headers: Record<string, string> = {}) {
+    return new ApiError(429, 'rate_limited', 'API rate limit exceeded', undefined, {
+      'Retry-After': String(Math.max(1, retryAfterSeconds)),
+      ...headers,
+    })
+  }
+  static conflict(message: string) {
+    return new ApiError(409, 'conflict', message)
+  }
+  static tooLarge(message = 'Request body is too large') {
+    return new ApiError(413, 'payload_too_large', message)
+  }
+  static unavailable(message = 'API temporarily unavailable') {
+    return new ApiError(503, 'unavailable', message, undefined, { 'Retry-After': '30' })
+  }
 }
 
-export type ApiErrorBody = {
+type ApiErrorBody = {
   error: { code: ApiErrorCode; message: string; details?: unknown }
 }
 
@@ -50,7 +70,7 @@ export function errorResponse(err: unknown): NextResponse<ApiErrorBody> {
   if (err instanceof ApiError) {
     const body: ApiErrorBody = { error: { code: err.code, message: err.message } }
     if (typeof err.details !== 'undefined') body.error.details = err.details
-    return NextResponse.json(body, { status: err.status, headers: noStore() })
+    return NextResponse.json(body, { status: err.status, headers: noStore(err.headers) })
   }
   // Never leak internals; the real error is logged server-side by the caller.
   return NextResponse.json(
@@ -60,6 +80,12 @@ export function errorResponse(err: unknown): NextResponse<ApiErrorBody> {
 }
 
 /** API responses are per-request and key-scoped — never cache them. */
-export function noStore(): Record<string, string> {
-  return { 'Cache-Control': 'no-store' }
+export function noStore(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    'Cache-Control': 'no-store',
+    Vary: 'Authorization',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Request-ID': randomUUID(),
+    ...extra,
+  }
 }

@@ -11,7 +11,7 @@ import type { ObligationKind } from './_meta'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
-export type ObligationRow = {
+type ObligationRow = {
   kind: ObligationKind
   id: string
   title: string
@@ -29,7 +29,7 @@ export function cadenceLabel(rec: ComplianceRecurrence | null | undefined): stri
   return rec.kind
 }
 
-export type ObligationListResult = { rows: ObligationRow[]; total: number }
+type ObligationListResult = { rows: ObligationRow[]; total: number }
 
 export async function listObligations(
   ctx: Ctx,
@@ -94,7 +94,7 @@ export async function listObligations(
   })
 }
 
-export async function getObligationWithAudience(ctx: Ctx, id: string) {
+async function getObligationWithAudience(ctx: Ctx, id: string) {
   return ctx.db(async (tx) => {
     const [ob] = await tx
       .select()

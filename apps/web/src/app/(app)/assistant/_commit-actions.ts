@@ -11,12 +11,12 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { assertNotImpersonating, can } from '@beaconhs/tenant'
-import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
 import { recordVisibilityWhere } from '@/lib/visibility'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { verifyProposal, type CaPreview, type IncidentPreview } from '@/lib/assistant/proposals'
 
 export type CommitResult =
@@ -78,6 +78,32 @@ export async function commitCorrectiveAction(input: {
         ownerTenantUserId: ctx.membership?.id,
       })
       .returning({ id: correctiveActions.id, reference: correctiveActions.reference })
+    if (r) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.created',
+        subjectId: r.id,
+        dedupKey: `corrective_action.created:${r.id}`,
+        payload: {
+          notification: { kind: 'corrective_action_assigned', caId: r.id },
+          integration: correctiveActionCreatedEvent(ctx.tenantId, {
+            id: r.id,
+            reference: r.reference,
+            title: p.title,
+            status: 'open',
+            severity: p.severity,
+            source: p.source,
+            dueOn: p.dueOn,
+            assignedOn: new Date().toISOString().slice(0, 10),
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: r.id,
+            moduleKey: 'corrective-actions',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
     return r!
   })
 
@@ -88,16 +114,6 @@ export async function commitCorrectiveAction(input: {
     summary: `Created ${row.reference} via assistant: ${p.title}`,
     metadata: { via: 'assistant' },
     after: { reference: row.reference, severity: p.severity, source: p.source, dueOn: p.dueOn },
-  })
-  await emitCorrectiveActionAssigned(ctx, {
-    caId: row.id,
-    assigneeUserId: null,
-    assignerUserId: null,
-  })
-  await runModuleFlows(ctx, {
-    moduleKey: 'corrective-actions',
-    event: 'on_create',
-    subjectId: row.id,
   })
   revalidatePath('/corrective-actions')
   return { ok: true, id: row.id, reference: row.reference, href: `/corrective-actions/${row.id}` }
@@ -138,6 +154,33 @@ export async function commitIncident(input: {
         reportedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: incidents.id, reference: incidents.reference })
+    if (r) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'incident.created',
+        subjectId: r.id,
+        dedupKey: `incident.created:${r.id}`,
+        payload: {
+          notification: { kind: 'incident_reported', incidentId: r.id },
+          integration: incidentCreatedEvent(ctx.tenantId, {
+            id: r.id,
+            reference: r.reference,
+            type: p.type,
+            severity: p.severity,
+            status: 'reported',
+            title: p.title,
+            description: p.description,
+            occurredAt,
+            location: p.location,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: r.id,
+            moduleKey: 'incidents',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
     return r!
   })
 
@@ -149,8 +192,6 @@ export async function commitIncident(input: {
     metadata: { via: 'assistant' },
     after: { reference: row.reference, type: p.type, severity: p.severity },
   })
-  await emitIncidentReported(ctx, { incidentId: row.id })
-  await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
   revalidatePath('/incidents')
   return { ok: true, id: row.id, reference: row.reference, href: `/incidents/${row.id}` }
 }

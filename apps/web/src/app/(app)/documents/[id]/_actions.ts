@@ -7,25 +7,18 @@
 // documents.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNotNull, isNull, or } from 'drizzle-orm'
-import { attachments, documentVersions, documents, tenantUsers, user } from '@beaconhs/db/schema'
-import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import {
-  getObject,
-  newAttachmentKey,
-  presignExistingGet,
-  publicUrl,
-  putObject,
-} from '@beaconhs/storage'
-import { ForbiddenError, assertCan, can } from '@beaconhs/tenant'
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
+import { presignExistingGet } from '@beaconhs/storage'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 
-export type SaveDraftResult = { ok: true; updatedAt: string } | { ok: false; error: string }
+type SaveDraftResult = { ok: true; updatedAt: string } | { ok: false; error: string }
 
 // ---- Document metadata -----------------------------------------------------
 
-export async function renameDocument(input: {
+async function renameDocument(input: {
   documentId: string
   title: string
 }): Promise<{ ok: boolean; error?: string }> {
@@ -41,7 +34,7 @@ export async function renameDocument(input: {
   return { ok: true }
 }
 
-export type DocumentPdfUrlResult =
+type DocumentPdfUrlResult =
   | { ok: true; url: string }
   // reason 'no_source' = the document simply has no PDF yet (nothing uploaded,
   // nothing published) — the pane shows the centered upload state for it.
@@ -241,7 +234,7 @@ export async function attachFileVersion(input: {
 
 // ---- Comments --------------------------------------------------------------
 
-export type DocumentCommentRow = {
+type DocumentCommentRow = {
   id: string
   anchorId: string | null
   quotedText: string | null

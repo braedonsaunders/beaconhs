@@ -8,7 +8,7 @@
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { eq } from 'drizzle-orm'
-import { auth } from '@beaconhs/auth'
+import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { attachments, people, users } from '@beaconhs/db/schema'
 import { assertNotImpersonating } from '@beaconhs/tenant'
@@ -47,20 +47,37 @@ export async function updateProfile(_prev: Result | null, formData: FormData): P
 
   // `users` is a global identity table — write it on the super pool, matching
   // how /platform/users and getRequestContext read/write it.
-  await withSuperAdmin(db, (tx) =>
-    tx
+  const before = await withSuperAdmin(db, async (tx) => {
+    const [existing] = await tx
+      .select({ name: users.name, timezone: users.timezone, locale: users.locale })
+      .from(users)
+      .where(eq(users.id, ctx.userId))
+      .limit(1)
+    if (!existing) return null
+    await tx
       .update(users)
       .set({ name, timezone, locale, updatedAt: new Date() })
-      .where(eq(users.id, ctx.userId)),
-  )
+      .where(eq(users.id, ctx.userId))
+    return existing
+  })
+  if (!before) return { error: 'Your account could not be found.' }
 
   // Sync Better-Auth's session copy of the name so the header + account menu
   // reflect it immediately (its 5-min cookie cache would otherwise lag).
   try {
-    await auth.api.updateUser({ body: { name }, headers: await reqHeaders() })
+    await getAuth().api.updateUser({ body: { name }, headers: await reqHeaders() })
   } catch {
     // The DB row is the source of truth; a Better-Auth sync hiccup isn't fatal.
   }
+
+  await recordAudit(ctx, {
+    entityType: 'user',
+    entityId: ctx.userId,
+    action: 'update',
+    summary: 'Updated own account profile',
+    before,
+    after: { name, timezone, locale },
+  })
 
   revalidatePath('/', 'layout')
   revalidatePath('/account')
@@ -81,13 +98,20 @@ export async function changePassword(_prev: Result | null, formData: FormData): 
     return { error: 'Choose a password different from the current one.' }
 
   try {
-    await auth.api.changePassword({
+    await getAuth().api.changePassword({
       body: { newPassword, currentPassword, revokeOtherSessions },
       headers: await reqHeaders(),
     })
   } catch {
     return { error: 'Your current password is incorrect.' }
   }
+  await recordAudit(ctx, {
+    entityType: 'user',
+    entityId: ctx.userId,
+    action: 'update',
+    summary: 'Changed own account password',
+    metadata: { revokedOtherSessions: revokeOtherSessions },
+  })
   return { ok: true }
 }
 
@@ -112,7 +136,7 @@ export async function saveMySignature(dataUrl: string): Promise<Result> {
 
   const filename = 'signature.png'
   const key = newAttachmentKey({ tenantId: ctx.tenantId, kind: 'signature', filename })
-  await putObject({ key, body, contentType })
+  await putObject({ key, body, contentType, contentDisposition: 'inline' })
 
   await ctx.db(async (tx) => {
     const [att] = await tx
@@ -174,7 +198,7 @@ export async function sendPasswordResetEmail(): Promise<Result> {
   const sessionUser = await getSessionUser()
   if (!sessionUser?.email) return { error: 'No email is on file for your account.' }
   try {
-    await auth.api.requestPasswordReset({
+    await getAuth().api.requestPasswordReset({
       body: { email: sessionUser.email, redirectTo: '/reset-password' },
       headers: await reqHeaders(),
     })

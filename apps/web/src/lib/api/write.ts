@@ -5,7 +5,7 @@
 // entity = add a handler here; `WRITABLE_ENTITY_KEYS` and OpenAPI are derived
 // from this map, so docs and runtime permissions stay in sync.
 
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { and, eq, isNull } from 'drizzle-orm'
@@ -41,17 +41,16 @@ import {
   trainingRecords,
   trainingRecordSource,
 } from '@beaconhs/db/schema'
-import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
-import { emitCorrectiveActionCreated, emitIncidentCreated } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { findIncompleteCriteria, materialiseCriteriaForRecord } from '@/app/(app)/inspections/_lib'
 import { nextReference } from '@/lib/reference'
 import { ApiError } from './errors'
 
 type Json = Record<string, unknown>
-export type WriteResult = { id: string; [k: string]: unknown }
+type WriteResult = { id: string; [k: string]: unknown }
 type WriteHandler = (ctx: RequestContext, body: unknown) => Promise<WriteResult>
 type PatchHandler = (ctx: RequestContext, id: string, body: unknown) => Promise<WriteResult>
 type DeleteHandler = (ctx: RequestContext, id: string) => Promise<WriteResult>
@@ -196,10 +195,11 @@ const incidentCreate = z.object({
   ppeWorn: z.string().max(1000).nullish(),
   criticalInjury: z.boolean().default(false),
   ministryOfLabourNotified: z.boolean().default(false),
-  emsNotified: z.boolean().default(false),
-  firstAidReceived: z.boolean().default(false),
+  emsCalled: z.boolean().default(false),
+  firstAidGiven: z.boolean().default(false),
   firstAidProvider: z.string().max(200).nullish(),
   medicalAttentionReceived: z.boolean().default(false),
+  hospitalName: z.string().max(300).nullish(),
   actualSeverity: z.number().int().min(1).max(5).nullish(),
   potentialSeverity: z.number().int().min(1).max(5).nullish(),
   severityRating: z.number().int().min(1).max(5).nullish(),
@@ -251,15 +251,43 @@ async function createIncident(ctx: RequestContext, raw: unknown): Promise<WriteR
         ppeWorn: stripEmpty(b.ppeWorn),
         criticalInjury: b.criticalInjury,
         ministryOfLabourNotified: b.ministryOfLabourNotified,
-        emsNotified: b.emsNotified,
-        firstAidReceived: b.firstAidReceived,
+        emsCalled: b.emsCalled,
+        firstAidGiven: b.firstAidGiven,
         firstAidProvider: stripEmpty(b.firstAidProvider),
         medicalAttentionReceived: b.medicalAttentionReceived,
+        hospitalName: stripEmpty(b.hospitalName),
         actualSeverity: b.actualSeverity ?? null,
         potentialSeverity: b.potentialSeverity ?? null,
         severityRating: b.severityRating ?? null,
       })
       .returning()
+    if (created) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'incident.created',
+        subjectId: created.id,
+        dedupKey: `incident.created:${created.id}`,
+        payload: {
+          notification: { kind: 'incident_reported', incidentId: created.id },
+          integration: incidentCreatedEvent(ctx.tenantId, {
+            id: created.id,
+            reference: created.reference,
+            type: created.type,
+            severity: created.severity,
+            status: created.status,
+            title: created.title,
+            description: created.description,
+            occurredAt: created.occurredAt,
+            location: created.location,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: created.id,
+            moduleKey: 'incidents',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
     return created
   })
 
@@ -277,19 +305,6 @@ async function createIncident(ctx: RequestContext, raw: unknown): Promise<WriteR
       siteOrgUnitId: row.siteOrgUnitId,
     },
   })
-  await emitIncidentReported(ctx, { incidentId: row.id })
-  await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
-  await emitIncidentCreated(ctx, {
-    id: row.id,
-    reference: row.reference,
-    type: row.type,
-    severity: row.severity,
-    status: row.status,
-    title: row.title,
-    description: row.description,
-    occurredAt: row.occurredAt,
-    location: row.location,
-  }).catch(() => {})
   revalidatePath('/incidents')
 
   return incidentResult(row)
@@ -365,12 +380,13 @@ async function updateIncident(ctx: RequestContext, id: string, raw: unknown): Pr
     if (hasOwn(b, 'ministryOfLabourNotified')) {
       patch.ministryOfLabourNotified = b.ministryOfLabourNotified
     }
-    if (hasOwn(b, 'emsNotified')) patch.emsNotified = b.emsNotified
-    if (hasOwn(b, 'firstAidReceived')) patch.firstAidReceived = b.firstAidReceived
+    if (hasOwn(b, 'emsCalled')) patch.emsCalled = b.emsCalled
+    if (hasOwn(b, 'firstAidGiven')) patch.firstAidGiven = b.firstAidGiven
     if (hasOwn(b, 'firstAidProvider')) patch.firstAidProvider = stripEmpty(b.firstAidProvider)
     if (hasOwn(b, 'medicalAttentionReceived')) {
       patch.medicalAttentionReceived = b.medicalAttentionReceived
     }
+    if (hasOwn(b, 'hospitalName')) patch.hospitalName = stripEmpty(b.hospitalName)
     if (hasOwn(b, 'actualSeverity')) patch.actualSeverity = b.actualSeverity ?? null
     if (hasOwn(b, 'potentialSeverity')) patch.potentialSeverity = b.potentialSeverity ?? null
     if (hasOwn(b, 'severityRating')) patch.severityRating = b.severityRating ?? null
@@ -450,10 +466,11 @@ const INCIDENT_BODY: Json = {
     ppeWorn: { type: 'string' },
     criticalInjury: { type: 'boolean', default: false },
     ministryOfLabourNotified: { type: 'boolean', default: false },
-    emsNotified: { type: 'boolean', default: false },
-    firstAidReceived: { type: 'boolean', default: false },
+    emsCalled: { type: 'boolean', default: false },
+    firstAidGiven: { type: 'boolean', default: false },
     firstAidProvider: { type: 'string' },
     medicalAttentionReceived: { type: 'boolean', default: false },
+    hospitalName: { type: 'string' },
     actualSeverity: { type: 'integer', minimum: 1, maximum: 5 },
     potentialSeverity: { type: 'integer', minimum: 1, maximum: 5 },
     severityRating: { type: 'integer', minimum: 1, maximum: 5 },
@@ -534,6 +551,35 @@ async function createCorrectiveAction(ctx: RequestContext, raw: unknown): Promis
         metadata: b.metadata,
       })
       .returning()
+    if (created) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.created',
+        subjectId: created.id,
+        dedupKey: `corrective_action.created:${created.id}`,
+        payload: {
+          notification: {
+            kind: 'corrective_action_assigned',
+            caId: created.id,
+          },
+          integration: correctiveActionCreatedEvent(ctx.tenantId, {
+            id: created.id,
+            reference: created.reference,
+            title: created.title,
+            status: created.status,
+            severity: created.severity,
+            source: created.source,
+            dueOn: created.dueOn,
+            assignedOn: created.assignedOn,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: created.id,
+            moduleKey: 'corrective-actions',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
     return created
   })
 
@@ -551,26 +597,6 @@ async function createCorrectiveAction(ctx: RequestContext, raw: unknown): Promis
       siteOrgUnitId: row.siteOrgUnitId,
     },
   })
-  await emitCorrectiveActionAssigned(ctx, {
-    caId: row.id,
-    assigneeUserId: null,
-    assignerUserId: null,
-  })
-  await runModuleFlows(ctx, {
-    moduleKey: 'corrective-actions',
-    event: 'on_create',
-    subjectId: row.id,
-  })
-  await emitCorrectiveActionCreated(ctx, {
-    id: row.id,
-    reference: row.reference,
-    title: row.title,
-    status: row.status,
-    severity: row.severity,
-    source: row.source,
-    dueOn: row.dueOn,
-    assignedOn: row.assignedOn,
-  }).catch(() => {})
   revalidatePath('/corrective-actions')
 
   return correctiveActionResult(row)
@@ -665,6 +691,15 @@ async function updateCorrectiveAction(
       .set(patch)
       .where(eq(correctiveActions.id, id))
       .returning()
+    if (updated && before.status !== updated.status) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'corrective-actions',
+        event: 'status_change',
+        toStatus: updated.status,
+        occurrenceKey: randomUUID(),
+      })
+    }
     return { before, updated }
   })
 
@@ -687,14 +722,6 @@ async function updateCorrectiveAction(
       ownerTenantUserId: result.updated.ownerTenantUserId,
     },
   })
-  if (result.before.status !== result.updated.status) {
-    await runModuleFlows(ctx, {
-      moduleKey: 'corrective-actions',
-      event: 'status_change',
-      subjectId: id,
-      toStatus: result.updated.status,
-    })
-  }
   revalidatePath('/corrective-actions')
   revalidatePath(`/corrective-actions/${id}`)
   return correctiveActionResult(result.updated)
@@ -846,6 +873,14 @@ async function createInspection(ctx: RequestContext, raw: unknown): Promise<Writ
         metadata: b.metadata,
       })
       .returning()
+    if (created) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: created.id,
+        moduleKey: 'inspections',
+        event: 'on_create',
+        occurrenceKey: randomUUID(),
+      })
+    }
     return created
   })
 
@@ -863,7 +898,6 @@ async function createInspection(ctx: RequestContext, raw: unknown): Promise<Writ
       siteOrgUnitId: row.siteOrgUnitId,
     },
   })
-  await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_create', subjectId: row.id })
   revalidatePath('/inspections/records')
   return inspectionResult(row)
 }
@@ -970,6 +1004,24 @@ async function updateInspection(
       .set(patch)
       .where(eq(inspectionRecords.id, id))
       .returning()
+    if (updated && before.status !== updated.status) {
+      const occurrenceKey = randomUUID()
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'inspections',
+        event: 'status_change',
+        toStatus: updated.status,
+        occurrenceKey,
+      })
+      if (updated.status === 'submitted') {
+        await recordModuleFlowEvent(tx, ctx, {
+          subjectId: id,
+          moduleKey: 'inspections',
+          event: 'on_submit',
+          occurrenceKey,
+        })
+      }
+    }
     return { before, updated }
   })
 
@@ -990,17 +1042,6 @@ async function updateInspection(
       siteOrgUnitId: result.updated.siteOrgUnitId,
     },
   })
-  if (result.before.status !== result.updated.status) {
-    await runModuleFlows(ctx, {
-      moduleKey: 'inspections',
-      event: 'status_change',
-      subjectId: id,
-      toStatus: result.updated.status,
-    })
-    if (result.updated.status === 'submitted') {
-      await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_submit', subjectId: id })
-    }
-  }
   revalidatePath('/inspections/records')
   revalidatePath(`/inspections/records/${id}`)
   return inspectionResult(result.updated)
@@ -1077,7 +1118,6 @@ const documentCreate = z.object({
   title: z.string().trim().min(1).max(240),
   key: z.string().trim().max(160).nullish(),
   description: z.string().max(5000).nullish(),
-  category: z.string().max(200).nullish(),
   typeId: uuid.nullish(),
   categoryId: uuid.nullish(),
   ownerTenantUserId: uuid.nullish(),
@@ -1129,7 +1169,6 @@ function documentResult(row: typeof documents.$inferSelect): WriteResult {
     key: row.key,
     title: row.title,
     description: row.description,
-    category: row.category,
     type_id: row.typeId,
     category_id: row.categoryId,
     status: row.status,
@@ -1159,7 +1198,6 @@ async function createDocument(ctx: RequestContext, raw: unknown): Promise<WriteR
         key,
         title: b.title,
         description: stripEmpty(b.description),
-        category: stripEmpty(b.category),
         typeId: b.typeId ?? null,
         categoryId: b.categoryId ?? null,
         status: 'draft',
@@ -1212,7 +1250,6 @@ async function updateDocument(ctx: RequestContext, id: string, raw: unknown): Pr
       if (key) patch.key = key
     }
     if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
-    if (hasOwn(b, 'category')) patch.category = stripEmpty(b.category)
     if (hasOwn(b, 'typeId')) patch.typeId = b.typeId ?? null
     if (hasOwn(b, 'categoryId')) patch.categoryId = b.categoryId ?? null
     if (hasOwn(b, 'status')) patch.status = b.status
@@ -2215,7 +2252,7 @@ const WRITES: Record<string, WriteRegistration> = {
 }
 
 /** Entity keys that accept POST creates — the single source of truth. */
-export const WRITABLE_ENTITY_KEYS = Object.keys(WRITES)
+const WRITABLE_ENTITY_KEYS = Object.keys(WRITES)
 
 export function isWritable(entityKey: string): boolean {
   return entityKey in WRITES

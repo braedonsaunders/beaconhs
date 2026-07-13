@@ -10,7 +10,6 @@ import { Button, type ButtonProps } from '@beaconhs/ui'
 export function CredentialDownloadButton({
   endpoint,
   outputId,
-  format,
   action = 'open',
   children,
   pendingLabel: _pendingLabel,
@@ -18,7 +17,6 @@ export function CredentialDownloadButton({
 }: {
   endpoint: string
   outputId?: string
-  format?: 'cert' | 'wallet'
   action?: 'open' | 'print'
   children: React.ReactNode
   pendingLabel?: string
@@ -26,7 +24,6 @@ export function CredentialDownloadButton({
   function credentialUrl() {
     const url = new URL(endpoint, window.location.origin)
     if (outputId) url.searchParams.set('output', outputId)
-    else if (format) url.searchParams.set('format', format)
     return url
   }
 

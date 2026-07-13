@@ -4,7 +4,7 @@
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 
-export type LocationsNavSection = 'locations' | 'units' | 'custom-fields'
+type LocationsNavSection = 'locations' | 'units' | 'custom-fields'
 
 export function LocationsSubNav({ active }: { active: LocationsNavSection }) {
   return <ModuleNav moduleKey="locations" active={active} />

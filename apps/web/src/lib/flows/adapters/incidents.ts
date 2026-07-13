@@ -7,6 +7,7 @@ import {
   attachments,
   departments,
   incidentAttachments,
+  incidentClassifications,
   incidentContributingFactors,
   incidentEvents,
   incidentInjuries,
@@ -19,7 +20,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
@@ -59,6 +60,8 @@ export function createIncidentFlowAdapter(
             supLast: people.lastName,
             supFormal: people.formalName,
             reportedByName: users.name,
+            classificationName: incidentClassifications.name,
+            classificationCode: incidentClassifications.code,
           })
           .from(incidents)
           .leftJoin(orgUnits, eq(orgUnits.id, incidents.siteOrgUnitId))
@@ -66,6 +69,10 @@ export function createIncidentFlowAdapter(
           .leftJoin(people, eq(people.id, incidents.supervisorPersonId))
           .leftJoin(tenantUsers, eq(tenantUsers.id, incidents.reportedByTenantUserId))
           .leftJoin(users, eq(users.id, tenantUsers.userId))
+          .leftJoin(
+            incidentClassifications,
+            eq(incidentClassifications.id, incidents.classificationId),
+          )
           .where(eq(incidents.id, incidentId))
           .limit(1),
       )
@@ -178,21 +185,18 @@ export function createIncidentFlowAdapter(
         foreman_text: i.foremanText ?? '',
         external_people_involved: i.externalPeopleInvolved ?? '',
         witnesses: i.witnesses ?? '',
-        // Tenant classification chips ("Kind: Value; …") — same set the bespoke
-        // incident PDF prints from the classification JSON.
-        classification_labels: Object.entries(i.classification ?? {})
-          .filter(([, v]) => v)
-          .map(([k, v]) => `${k}: ${v}`)
-          .join('; '),
+        classification_labels: head.classificationName
+          ? [head.classificationCode, head.classificationName].filter(Boolean).join(' — ')
+          : '',
         // Medical / regulatory flags — raw booleans so templates can gate
         // sections with {{#if …}} (falsy = false, per the block engine).
         critical_injury: i.criticalInjury ?? false,
         ministry_of_labour_notified: i.ministryOfLabourNotified ?? false,
-        ems_notified: i.emsNotified ?? false,
-        first_aid_received: i.firstAidReceived ?? false,
+        ems_notified: i.emsCalled ?? false,
+        first_aid_received: i.firstAidGiven ?? false,
         first_aid_provider: i.firstAidProvider ?? '',
         medical_attention_received: i.medicalAttentionReceived ?? false,
-        treated_at_hospital: i.treatedAtHospital ?? '',
+        treated_at_hospital: i.hospitalName ?? '',
         treated_in_city: i.treatedInCity ?? '',
         transportation: i.transportation ?? '',
         lost_time: i.lostTime ?? false,
@@ -263,7 +267,12 @@ export function createIncidentFlowAdapter(
           target_date: fmtDate(s.targetDate),
           status: titleize(s.status),
         })),
-        photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
+        photos: await Promise.all(
+          photos.map(async (p) => ({
+            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
+            caption: p.caption ?? '',
+          })),
+        ),
       }
     },
 
@@ -302,6 +311,7 @@ export function createIncidentFlowAdapter(
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        flowExecutionKey: i.flowExecutionKey,
       }),
   }
 }

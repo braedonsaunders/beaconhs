@@ -3,11 +3,13 @@
 // @beaconhs/forms-core; this owns persistence (delete+reinsert on submit) and
 // the per-person transcript read used by the people page + /apps/transcripts.
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, sql, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { formResponseParticipants, formResponses, formTemplates, people } from '@beaconhs/db/schema'
 import { extractParticipants, type FormSchemaV1 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { templateAccessWhere } from './access'
 
 /** First top-level `date` field value, else the submit date — as YYYY-MM-DD. */
 function resolvePrimaryDate(
@@ -91,7 +93,7 @@ export async function repopulateParticipants(
   return rows.length
 }
 
-export type TranscriptRow = {
+type TranscriptRow = {
   participantId: string
   responseId: string
   templateName: string
@@ -101,17 +103,74 @@ export type TranscriptRow = {
   signed: boolean
 }
 
-export type PersonTranscript = {
+type PersonTranscript = {
   rows: TranscriptRow[]
+  total: number
   totals: { responses: number; signed: number; byCategory: Record<string, number> }
+}
+
+type PersonTranscriptListOptions = {
+  q?: string
+  status?: (typeof formResponses.$inferSelect)['status']
+  sort?: 'date' | 'form' | 'category' | 'status'
+  dir?: 'asc' | 'desc'
+  page?: number
+  perPage?: number
 }
 
 /** Every form response a person participated in / signed, newest first. */
 export async function loadPersonTranscript(
   ctx: RequestContext,
   personId: string,
+  options: PersonTranscriptListOptions = {},
 ): Promise<PersonTranscript> {
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   return ctx.db(async (tx) => {
+    const requestedPage = Math.max(1, Math.min(10_000, Math.trunc(options.page ?? 1)))
+    const perPage = Math.max(5, Math.min(100, Math.trunc(options.perPage ?? 25)))
+    const baseConditions: SQL<unknown>[] = [
+      eq(formResponseParticipants.personId, personId),
+      isNull(formResponses.deletedAt),
+      templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
+    ]
+    const filteredConditions = [...baseConditions]
+    if (options.status) filteredConditions.push(eq(formResponses.status, options.status))
+    if (options.q?.trim()) {
+      const term = `%${options.q.trim()}%`
+      filteredConditions.push(
+        sql`concat_ws(' ', ${formTemplates.name}, coalesce(${formResponseParticipants.category}, ''), ${formResponses.status}::text, coalesce(${formResponseParticipants.occurredOn}::text, '')) ilike ${term}`,
+      )
+    }
+    const baseWhere = and(...baseConditions)
+    const filteredWhere = and(...filteredConditions)
+    const direction = options.dir === 'asc' ? asc : desc
+    const orderBy =
+      options.sort === 'form'
+        ? [direction(formTemplates.name), asc(formResponseParticipants.id)]
+        : options.sort === 'category'
+          ? [
+              options.dir === 'asc'
+                ? sql`${formResponseParticipants.category} asc nulls last`
+                : sql`${formResponseParticipants.category} desc nulls last`,
+              asc(formResponseParticipants.id),
+            ]
+          : options.sort === 'status'
+            ? [direction(formResponses.status), asc(formResponseParticipants.id)]
+            : [
+                options.dir === 'asc'
+                  ? sql`${formResponseParticipants.occurredOn} asc nulls last`
+                  : sql`${formResponseParticipants.occurredOn} desc nulls last`,
+                asc(formResponseParticipants.id),
+              ]
+
+    const [filteredTotal] = await tx
+      .select({ c: count() })
+      .from(formResponseParticipants)
+      .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
+      .where(filteredWhere)
+    const total = Number(filteredTotal?.c ?? 0)
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / perPage)))
     const rows = await tx
       .select({
         participantId: formResponseParticipants.id,
@@ -125,29 +184,90 @@ export async function loadPersonTranscript(
       .from(formResponseParticipants)
       .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
       .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
-      .where(and(eq(formResponseParticipants.personId, personId), isNull(formResponses.deletedAt)))
-      .orderBy(desc(formResponseParticipants.occurredOn))
-      .limit(500)
+      .where(filteredWhere)
+      .orderBy(...orderBy)
+      .limit(perPage)
+      .offset((page - 1) * perPage)
 
-    const byCategory: Record<string, number> = {}
-    let signed = 0
-    for (const r of rows) {
-      const key = r.category ?? 'other'
-      byCategory[key] = (byCategory[key] ?? 0) + 1
-      if (r.signed) signed += 1
-    }
+    const [summary] = await tx
+      .select({
+        responses: count(),
+        signed: sql<number>`count(*) filter (where ${formResponseParticipants.signed})`.mapWith(
+          Number,
+        ),
+      })
+      .from(formResponseParticipants)
+      .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
+      .where(baseWhere)
+    const categoryRows = await tx
+      .select({
+        category: sql<string>`coalesce(${formResponseParticipants.category}, 'other')`,
+        c: count(),
+      })
+      .from(formResponseParticipants)
+      .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
+      .where(baseWhere)
+      .groupBy(sql`coalesce(${formResponseParticipants.category}, 'other')`)
+
     return {
       rows: rows.map((r) => ({ ...r, status: String(r.status) })),
-      totals: { responses: rows.length, signed, byCategory },
+      total,
+      totals: {
+        responses: Number(summary?.responses ?? 0),
+        signed: Number(summary?.signed ?? 0),
+        byCategory: Object.fromEntries(categoryRows.map((row) => [row.category, Number(row.c)])),
+      },
     }
   })
+}
+
+type TranscriptPeopleListOptions = {
+  q?: string
+  sort?: 'count' | 'name'
+  dir?: 'asc' | 'desc'
+  page?: number
+  perPage?: number
 }
 
 /** People with a participation count, for the /apps/transcripts index. */
 export async function listTranscriptPeople(
   ctx: RequestContext,
-): Promise<Array<{ personId: string; name: string; count: number }>> {
+  options: TranscriptPeopleListOptions = {},
+): Promise<{
+  rows: Array<{ personId: string; name: string; count: number }>
+  total: number
+}> {
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   return ctx.db(async (tx) => {
+    const requestedPage = Math.max(1, Math.min(10_000, Math.trunc(options.page ?? 1)))
+    const perPage = Math.max(5, Math.min(100, Math.trunc(options.perPage ?? 25)))
+    const conditions: SQL<unknown>[] = [
+      isNull(formResponses.deletedAt),
+      isNull(people.deletedAt),
+      templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
+    ]
+    if (options.q?.trim()) {
+      const term = `%${options.q.trim()}%`
+      conditions.push(
+        sql`concat_ws(' ', ${people.firstName}, ${people.lastName}, ${people.lastName}, ${people.firstName}) ilike ${term}`,
+      )
+    }
+    const whereClause = and(...conditions)
+    const [totalRow] = await tx
+      .select({
+        c: sql<number>`count(distinct ${formResponseParticipants.personId})`.mapWith(Number),
+      })
+      .from(formResponseParticipants)
+      .innerJoin(people, eq(people.id, formResponseParticipants.personId))
+      .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
+      .where(whereClause)
+    const total = Number(totalRow?.c ?? 0)
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / perPage)))
+
+    const direction = options.dir === 'asc' ? asc : desc
     const rows = await tx
       .select({
         personId: formResponseParticipants.personId,
@@ -158,15 +278,25 @@ export async function listTranscriptPeople(
       .from(formResponseParticipants)
       .innerJoin(people, eq(people.id, formResponseParticipants.personId))
       .innerJoin(formResponses, eq(formResponses.id, formResponseParticipants.responseId))
-      .where(and(isNull(formResponses.deletedAt), isNull(people.deletedAt)))
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponseParticipants.templateId))
+      .where(whereClause)
       .groupBy(formResponseParticipants.personId, people.firstName, people.lastName)
-      .orderBy(desc(sql`count(*)`))
-      .limit(500)
-    return rows.map((r) => ({
-      personId: r.personId,
-      name:
-        `${r.lastName ?? ''}${r.lastName ? ', ' : ''}${r.firstName ?? ''}`.trim() || '(unnamed)',
-      count: Number(r.count),
-    }))
+      .orderBy(
+        ...(options.sort === 'name'
+          ? [direction(people.lastName), direction(people.firstName)]
+          : [direction(sql`count(*)`), asc(people.lastName), asc(people.firstName)]),
+        asc(formResponseParticipants.personId),
+      )
+      .limit(perPage)
+      .offset((page - 1) * perPage)
+    return {
+      rows: rows.map((r) => ({
+        personId: r.personId,
+        name:
+          `${r.lastName ?? ''}${r.lastName ? ', ' : ''}${r.firstName ?? ''}`.trim() || '(unnamed)',
+        count: Number(r.count),
+      })),
+      total,
+    }
   })
 }

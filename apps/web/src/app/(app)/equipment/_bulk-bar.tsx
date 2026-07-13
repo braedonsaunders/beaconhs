@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, MapPin, Square, ToggleRight, UserCog, X } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   bulkTransferEquipmentToSite,
   type EquipmentStatus,
 } from './_actions'
+import { useHydrated } from '@/lib/use-hydrated'
 
 export type SiteOption = { id: string; name: string }
 export type HolderOption = { id: string; name: string; employeeNo: string | null }
@@ -46,8 +47,7 @@ export function BulkEquipmentBar({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   // Portal target only exists after mount (SSR renders nothing here).
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   const label = useMemo(
     () => `${selectedIds.length} item${selectedIds.length === 1 ? '' : 's'} selected`,

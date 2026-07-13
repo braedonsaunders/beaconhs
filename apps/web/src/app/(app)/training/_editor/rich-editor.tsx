@@ -8,7 +8,7 @@ import { useEffect } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { buildLessonExtensions } from './extensions'
 
-export type RichChange = { json: unknown; html: string }
+type RichChange = { json: unknown; html: string }
 
 export function RichEditor({
   initialJson,

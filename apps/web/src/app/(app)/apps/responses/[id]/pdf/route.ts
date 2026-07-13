@@ -8,6 +8,8 @@ import { formResponses } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { renderFormResponsePdfResponse } from '@/lib/module-pdf'
+import { recordAudit } from '@/lib/audit'
+import { canAccessResponseTemplate } from '../../../_lib/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +22,7 @@ export async function GET(
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
+  if (!(await canAccessResponseTemplate(ctx, id, 'browse-records'))) notFound()
 
   // Per-user record visibility — mirror the HTML detail page so the PDF can't be
   // pulled for a response the caller isn't allowed to see (read.all → any;
@@ -50,5 +53,15 @@ export async function GET(
     notFound()
   }
 
-  return renderFormResponsePdfResponse(ctx, id)
+  const response = await renderFormResponsePdfResponse(ctx, id)
+  if (response.ok) {
+    await recordAudit(ctx, {
+      entityType: 'form_response',
+      entityId: id,
+      action: 'export',
+      summary: 'Exported form response to PDF',
+      metadata: { format: 'pdf' },
+    })
+  }
+  return response
 }

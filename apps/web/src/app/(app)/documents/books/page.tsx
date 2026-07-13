@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
-import { documentBookItems, documentBooks } from '@beaconhs/db/schema'
+import { documentBookItems, documentBooks, documentCategories } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -72,7 +72,7 @@ export default async function DocumentBooksPage({
 
     const orderBy =
       params.sort === 'category'
-        ? [params.dir === 'asc' ? asc(documentBooks.category) : desc(documentBooks.category)]
+        ? [params.dir === 'asc' ? asc(documentCategories.name) : desc(documentCategories.name)]
         : params.sort === 'status'
           ? [params.dir === 'asc' ? asc(documentBooks.status) : desc(documentBooks.status)]
           : params.sort === 'updated_at'
@@ -81,8 +81,9 @@ export default async function DocumentBooksPage({
 
     const [tot] = await tx.select({ c: count() }).from(documentBooks).where(whereClause)
     const data = await tx
-      .select()
+      .select({ book: documentBooks, categoryName: documentCategories.name })
       .from(documentBooks)
+      .leftJoin(documentCategories, eq(documentCategories.id, documentBooks.categoryId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -99,13 +100,13 @@ export default async function DocumentBooksPage({
             .from(documentBookItems)
             .where(
               sql`${documentBookItems.bookId} IN (${sql.join(
-                data.map((r) => sql`${r.id}::uuid`),
+                data.map((r) => sql`${r.book.id}::uuid`),
                 sql`, `,
               )})`,
             )
             .groupBy(documentBookItems.bookId)
     return {
-      rows: data,
+      rows: data.map(({ book, categoryName }) => ({ ...book, categoryName })),
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
       memberCounts: Object.fromEntries(mc.map((x) => [x.bookId, Number(x.c)])),
@@ -114,9 +115,9 @@ export default async function DocumentBooksPage({
 
   const bookCards = rows.map((b) => ({
     id: b.id,
-    title: b.title || b.name || '(untitled)',
+    title: b.title || '(untitled)',
     description: b.description,
-    category: b.category,
+    category: b.categoryName,
     documentCount: memberCounts[b.id] ?? 0,
   }))
 
@@ -212,7 +213,7 @@ export default async function DocumentBooksPage({
             <TableBody>
               {rows.map((b) => {
                 const memberCount = memberCounts[b.id] ?? 0
-                const display = b.title || b.name || '(untitled)'
+                const display = b.title || '(untitled)'
                 return (
                   <TableRow key={b.id}>
                     <TableCell>
@@ -224,7 +225,7 @@ export default async function DocumentBooksPage({
                       </Link>
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {b.category ?? '—'}
+                      {b.categoryName ?? '—'}
                     </TableCell>
                     <TableCell>
                       <Badge variant={b.status === 'published' ? 'success' : 'secondary'}>

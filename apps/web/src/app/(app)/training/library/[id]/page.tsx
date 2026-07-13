@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { and, count, eq, inArray, isNull } from 'drizzle-orm'
 import { DetailHeader } from '@beaconhs/ui'
 import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ContentItemEditor } from './_editor'
@@ -82,7 +82,8 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
           durationMinutes: data.it.durationMinutes,
           attachmentId: data.it.attachmentId,
           embedUrl: data.it.embedUrl,
-          contentBlocks: data.it.contentBlocks ?? [],
+          contentJson: data.it.contentJson,
+          contentHtml: data.it.contentHtml,
           slides: data.it.slides ?? [],
           importStatus: data.it.importStatus,
           importError: data.it.importError,
@@ -93,7 +94,7 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
         }}
         usedCount={data.used}
         attachmentUrls={Object.fromEntries(
-          data.atts.map((a) => [a.id, a.key ? publicUrl(a.key) : null]),
+          data.atts.map((a) => [a.id, a.key ? attachmentUrl(a.id) : null]),
         )}
       />
     </DetailPageLayout>

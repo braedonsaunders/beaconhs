@@ -1,27 +1,17 @@
-// Insights permission gates. View falls back to the legacy reports/dashboards
-// permissions so existing roles aren't locked out; create/publish fall back to
-// reports.builder so existing safety managers can build Cards with no role
-// backfill. Super-admin bypasses everything.
+// Canonical Insights permission gates. Built-in roles are converged by the
+// migration-time permission backfill; custom roles opt into these capabilities
+// explicitly.
 
 import { can, type RequestContext } from '@beaconhs/tenant'
 
 export function canViewInsights(ctx: RequestContext): boolean {
-  return (
-    ctx.isSuperAdmin ||
-    can(ctx, 'insights.read') ||
-    can(ctx, 'reports.read') ||
-    can(ctx, 'dashboards.read')
-  )
+  return ctx.isSuperAdmin || can(ctx, 'insights.read')
 }
 
 export function canCreateInsights(ctx: RequestContext): boolean {
-  return ctx.isSuperAdmin || can(ctx, 'insights.create') || can(ctx, 'reports.builder')
+  return ctx.isSuperAdmin || can(ctx, 'insights.create')
 }
 
 export function canPublishInsights(ctx: RequestContext): boolean {
-  return ctx.isSuperAdmin || can(ctx, 'insights.publish') || can(ctx, 'reports.builder')
-}
-
-export function canManageInsights(ctx: RequestContext): boolean {
-  return ctx.isSuperAdmin || can(ctx, 'insights.manage')
+  return ctx.isSuperAdmin || can(ctx, 'insights.publish')
 }

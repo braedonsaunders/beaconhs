@@ -13,7 +13,7 @@ import {
   trainingLessonProgress,
   trainingLessons,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -106,40 +106,40 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           .where(inArray(trainingContentItems.id, itemIds))
       : []
 
-    // Resolve media URLs for image/video/file blocks + media lessons + library
-    // items + slide decks (page images and region blocks).
+    // Resolve media URLs for media lessons, library items, and slide decks.
     const attIds = new Set<string>()
-    const collectBlockAtts = (blocks: (typeof lessons)[number]['contentBlocks'] | null) => {
-      for (const b of blocks ?? []) {
-        if (
-          (b.type === 'image' || b.type === 'file' || b.type === 'video') &&
-          'attachmentId' in b &&
-          b.attachmentId
-        ) {
-          attIds.add(b.attachmentId)
-        }
-      }
-    }
     const collectSlideAtts = (slides: (typeof lessons)[number]['slides'] | null) => {
       for (const s of slides ?? []) {
         if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
         for (const el of s.elements ?? []) {
           if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
         }
-        collectBlockAtts(Array.isArray(s.body) ? s.body : null)
-        collectBlockAtts(Array.isArray(s.left) ? s.left : null)
-        collectBlockAtts(Array.isArray(s.right) ? s.right : null)
+        for (const region of [s.body, s.left, s.right]) {
+          if (!Array.isArray(region)) continue
+          for (const block of region) {
+            if (
+              (block.type === 'image' || block.type === 'file' || block.type === 'video') &&
+              'attachmentId' in block &&
+              block.attachmentId
+            ) {
+              attIds.add(block.attachmentId)
+            }
+          }
+        }
       }
     }
     for (const l of lessons) {
       if (l.attachmentId) attIds.add(l.attachmentId)
-      collectBlockAtts(l.contentBlocks)
       collectSlideAtts(l.slides)
     }
     for (const it of items) {
       if (it.attachmentId) attIds.add(it.attachmentId)
-      collectBlockAtts(it.contentBlocks)
       collectSlideAtts(it.slides)
+    }
+    for (const row of progress) {
+      if (row.row.evaluationSignatureAttachmentId) {
+        attIds.add(row.row.evaluationSignatureAttachmentId)
+      }
     }
     const atts = attIds.size
       ? await tx
@@ -155,7 +155,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
   const { course, person, mods, lessons, classes, enrollment, progress, atts, items } = data
 
   const attachmentUrls: Record<string, string | null> = Object.fromEntries(
-    atts.map((a) => [a.id, a.key ? publicUrl(a.key) : null]),
+    atts.map((a) => [a.id, a.key ? attachmentUrl(a.id) : null]),
   )
   const classTitleById = new Map(classes.map((c) => [c.id, c.title]))
   const progressByLesson = new Map(progress.map((p) => [p.row.lessonId, p]))
@@ -176,7 +176,6 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           kind: item ? item.kind : l.kind,
           completionRule: l.completionRule,
           isRequired: l.isRequired,
-          blocks: item ? (item.contentBlocks ?? []) : (l.contentBlocks ?? []),
           contentHtml: item ? item.contentHtml : l.contentHtml,
           slides: item ? (item.slides ?? []) : (l.slides ?? []),
           practicalCriteria: l.practicalCriteria ?? [],
@@ -184,7 +183,9 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
             ? {
                 evaluatorName: prog.evaluatorName,
                 notes: prog.row.evaluationNotes,
-                signatureDataUrl: prog.row.evaluationSignatureDataUrl,
+                signatureDataUrl: prog.row.evaluationSignatureAttachmentId
+                  ? (attachmentUrls[prog.row.evaluationSignatureAttachmentId] ?? null)
+                  : null,
                 criteriaResults: prog.row.criteriaResults ?? null,
                 completedAt: prog.row.completedAt?.toISOString() ?? null,
               }
@@ -258,7 +259,6 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
         />
       ) : (
         <CoursePlayer
-          courseName={course.name}
           modules={modules}
           enrollmentId={enrollment.id}
           attachmentUrls={attachmentUrls}

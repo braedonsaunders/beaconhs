@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { cn } from '@beaconhs/ui'
 import { mergeHref } from '@/lib/list-params'
 
-export type TabDef = {
+type TabDef = {
   key: string
   label: string
   count?: number

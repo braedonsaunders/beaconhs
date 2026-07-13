@@ -6,11 +6,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { randomUUID } from 'node:crypto'
 import { and, asc, desc, eq, isNull, max, sql } from 'drizzle-orm'
-import { assertCan, type RequestContext } from '@beaconhs/tenant'
+import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
-  attachments,
   formResponses,
   formTemplateVersions,
   formTemplates,
@@ -35,13 +35,16 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { storeSignatureValue } from '@/lib/signature-storage'
+import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
-import { emitHazardAssessmentCreated } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import { hazardAssessmentCreatedEvent } from '@beaconhs/integrations'
 import { nextReference } from '@/lib/reference'
 import { parseDatetimeLocal } from '@/lib/datetime'
+import { isUuid } from '@/lib/list-params'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { canAccessTemplate, canEditResponsePayload } from '@/app/(app)/apps/_lib/access'
 import { riskRating } from './_risk-scale'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
@@ -164,6 +167,7 @@ async function createAssessmentAppResponse(
 async function createAutoAssessmentApps(
   tx: HazidTx,
   args: {
+    ctx: HazidCtx
     tenantId: string
     assessmentId: string
     assessmentTypeId: string | null
@@ -171,9 +175,22 @@ async function createAutoAssessmentApps(
   },
 ) {
   if (!args.assessmentTypeId) return []
-  const apps = await tx
-    .select()
+  const roleKeys = await getEffectiveRoleKeys(args.ctx, tx)
+  type AutoAssessmentAppRow = {
+    app: typeof hazidAssessmentTypeApps.$inferSelect
+    templateStatus: typeof formTemplates.$inferSelect.status
+    templateAllowedRoles: typeof formTemplates.$inferSelect.allowedRoles
+    templateDeletedAt: typeof formTemplates.$inferSelect.deletedAt
+  }
+  const rows: AutoAssessmentAppRow[] = await tx
+    .select({
+      app: hazidAssessmentTypeApps,
+      templateStatus: formTemplates.status,
+      templateAllowedRoles: formTemplates.allowedRoles,
+      templateDeletedAt: formTemplates.deletedAt,
+    })
     .from(hazidAssessmentTypeApps)
+    .innerJoin(formTemplates, eq(formTemplates.id, hazidAssessmentTypeApps.templateId))
     .where(
       and(
         eq(hazidAssessmentTypeApps.typeId, args.assessmentTypeId),
@@ -182,9 +199,21 @@ async function createAutoAssessmentApps(
       ),
     )
     .orderBy(asc(hazidAssessmentTypeApps.entityOrder))
+  const apps = rows.filter((row) =>
+    canAccessTemplate(
+      args.ctx,
+      {
+        status: row.templateStatus,
+        allowedRoles: row.templateAllowedRoles,
+        deletedAt: row.templateDeletedAt,
+      },
+      roleKeys,
+      'operate',
+    ),
+  )
 
   const links = []
-  for (const app of apps) {
+  for (const { app } of apps) {
     const link = await createAssessmentAppResponse(tx, {
       tenantId: args.tenantId,
       assessmentId: args.assessmentId,
@@ -202,7 +231,7 @@ async function createAutoAssessmentApps(
 // Assessment CRUD
 // ------------------------------------------------------------------
 
-export async function createAssessment(formData: FormData): Promise<{ id: string }> {
+async function createAssessment(formData: FormData): Promise<{ id: string }> {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.create')
   const assessmentTypeId = String(formData.get('assessmentTypeId') ?? '').trim() || null
@@ -449,6 +478,7 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
     }
 
     await createAutoAssessmentApps(tx, {
+      ctx,
       tenantId: ctx.tenantId,
       assessmentId: row.id,
       assessmentTypeId,
@@ -472,6 +502,27 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
       })
     }
 
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'hazard_assessment.created',
+      subjectId: row.id,
+      dedupKey: `hazard_assessment.created:${row.id}`,
+      payload: {
+        integration: hazardAssessmentCreatedEvent(ctx.tenantId, {
+          id: row.id,
+          reference: row.reference,
+          status: 'in_progress',
+          occurredAt: row.occurredAt,
+          locationOnSite: row.locationOnSite,
+        }),
+        web: moduleFlowCommand(ctx, {
+          subjectId: row.id,
+          moduleKey: 'hazid',
+          event: 'on_create',
+        }),
+      },
+    })
+
     return row
   })
 
@@ -482,14 +533,6 @@ export async function createAssessment(formData: FormData): Promise<{ id: string
     summary: `Created ${created.reference}`,
     after: { reference: created.reference, assessmentTypeId, siteOrgUnitId },
   })
-  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_create', subjectId: created.id })
-  await emitHazardAssessmentCreated(ctx, {
-    id: created.id,
-    reference: created.reference,
-    status: 'in_progress',
-    occurredAt: created.occurredAt,
-    locationOnSite: created.locationOnSite,
-  }).catch(() => {})
   revalidatePath('/hazard-assessments')
   return { id: created.id }
 }
@@ -512,7 +555,7 @@ export async function openAssessmentApp(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const typeAppId = String(formData.get('typeAppId') ?? '')
-  if (!assessmentId || !typeAppId) throw new Error('Missing assessment app')
+  if (!isUuid(assessmentId) || !isUuid(typeAppId)) throw new Error('Invalid assessment app')
   await assertCanSeeAssessment(ctx, assessmentId)
 
   const target = await ctx.db(async (tx) => {
@@ -532,6 +575,9 @@ export async function openAssessmentApp(formData: FormData) {
       .select({
         app: hazidAssessmentTypeApps,
         templateName: formTemplates.name,
+        templateStatus: formTemplates.status,
+        templateAllowedRoles: formTemplates.allowedRoles,
+        templateDeletedAt: formTemplates.deletedAt,
       })
       .from(hazidAssessmentTypeApps)
       .innerJoin(formTemplates, eq(formTemplates.id, hazidAssessmentTypeApps.templateId))
@@ -544,6 +590,16 @@ export async function openAssessmentApp(formData: FormData) {
       )
       .limit(1)
     if (!typeApp) throw new Error('Assessment app is not available for this type')
+
+    const roleKeys = await getEffectiveRoleKeys(ctx, tx)
+    const templateAccess = {
+      status: typeApp.templateStatus,
+      allowedRoles: typeApp.templateAllowedRoles,
+      deletedAt: typeApp.templateDeletedAt,
+    }
+    if (!canAccessTemplate(ctx, templateAccess, roleKeys, 'browse-records')) {
+      throw new Error('Assessment app is not available for your active role')
+    }
 
     const [existing] = await tx
       .select({
@@ -562,6 +618,15 @@ export async function openAssessmentApp(formData: FormData) {
 
     let responseId = existing?.response.id ?? null
     let status = existing?.response.status ?? null
+    const preSubmit = status === 'draft' || status === 'in_progress'
+    if (
+      existing &&
+      preSubmit &&
+      (!canAccessTemplate(ctx, templateAccess, roleKeys, 'operate') ||
+        !canEditResponsePayload(ctx, existing.response))
+    ) {
+      throw new Error('You do not have permission to continue this assessment app')
+    }
     // Locked assessments are read-only: submitted responses stay viewable, but
     // pre-submit drafts must not be editable and new responses cannot start.
     if (assessment.locked && existing && (status === 'draft' || status === 'in_progress')) {
@@ -569,6 +634,12 @@ export async function openAssessmentApp(formData: FormData) {
     }
     if (!responseId) {
       if (assessment.locked) throw new Error('Unlock this assessment before starting a new app')
+      if (
+        !can(ctx, 'forms.response.create') ||
+        !canAccessTemplate(ctx, templateAccess, roleKeys, 'operate')
+      ) {
+        throw new Error('You do not have permission to start this assessment app')
+      }
       const link = await createAssessmentAppResponse(tx, {
         tenantId: ctx.tenantId,
         assessmentId,
@@ -676,8 +747,8 @@ export async function lockAssessment(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(hazidAssessments)
       .set({
         locked: true,
@@ -685,15 +756,20 @@ export async function lockAssessment(formData: FormData) {
         lockedAt: new Date(),
         lockedByTenantUserId: ctx.membership?.id ?? null,
       })
-      .where(eq(hazidAssessments.id, id)),
-  )
+      .where(eq(hazidAssessments.id, id))
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'hazid',
+      event: 'on_lock',
+      occurrenceKey: randomUUID(),
+    })
+  })
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',
     entityId: id,
     action: 'update',
     summary: 'Locked',
   })
-  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_lock', subjectId: id })
   revalidateAssessment(id)
 }
 
@@ -715,8 +791,14 @@ export async function unlockAssessment(formData: FormData) {
     // Legacy parity: clear all signatures on unlock so they must be re-collected.
     await tx
       .update(hazidAssessmentSignatures)
-      .set({ signatureDataUrl: null, signedAt: null })
+      .set({ signatureAttachmentId: null, signedAt: null })
       .where(eq(hazidAssessmentSignatures.assessmentId, id))
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'hazid',
+      event: 'on_unlock',
+      occurrenceKey: randomUUID(),
+    })
   })
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',
@@ -724,7 +806,6 @@ export async function unlockAssessment(formData: FormData) {
     action: 'update',
     summary: 'Unlocked (signatures cleared)',
   })
-  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_unlock', subjectId: id })
   revalidateAssessment(id)
 }
 
@@ -734,16 +815,24 @@ export async function deleteAssessment(formData: FormData) {
   assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
-  await ctx.db((tx) =>
-    tx.update(hazidAssessments).set({ deletedAt: new Date() }).where(eq(hazidAssessments.id, id)),
-  )
+  await ctx.db(async (tx) => {
+    await tx
+      .update(hazidAssessments)
+      .set({ deletedAt: new Date() })
+      .where(eq(hazidAssessments.id, id))
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'hazid',
+      event: 'on_delete',
+      occurrenceKey: randomUUID(),
+    })
+  })
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',
     entityId: id,
     action: 'delete',
     summary: 'Soft-deleted assessment',
   })
-  await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_delete', subjectId: id })
   revalidatePath('/hazard-assessments')
   // Deleting from the detail page would otherwise reload into a 404.
   redirect('/hazard-assessments')
@@ -896,6 +985,7 @@ export async function copyAssessment(formData: FormData) {
     }
 
     await createAutoAssessmentApps(tx, {
+      ctx,
       tenantId: ctx.tenantId,
       assessmentId: row.id,
       assessmentTypeId: src.assessmentTypeId,
@@ -1473,25 +1563,35 @@ export async function addSignature(formData: FormData) {
     throw new Error('External signer requires a name')
   await assertAssessmentEditable(ctx, assessmentId)
 
-  // Move the captured signature bytes to object storage; store only the URL.
-  const storedSignature = await storeSignatureValue(ctx.tenantId, signatureDataUrl)
-
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(hazidAssessmentSignatures)
-      .values({
-        tenantId: ctx.tenantId,
-        assessmentId,
-        signatureType,
-        personId,
-        externalName,
-        signatureDataUrl: storedSignature,
-        csEntrant,
-        csAttendant,
-        csRescue,
-        signedAt: storedSignature ? new Date() : null,
-      })
-      .returning(),
+  const row = await withStoredSignatureAttachment(
+    ctx,
+    signatureDataUrl,
+    async (tx, attachmentId) => {
+      const [created] = await tx
+        .insert(hazidAssessmentSignatures)
+        .values({
+          tenantId: ctx.tenantId,
+          assessmentId,
+          signatureType,
+          personId,
+          externalName,
+          signatureAttachmentId: attachmentId,
+          csEntrant,
+          csAttendant,
+          csRescue,
+          signedAt: attachmentId ? new Date() : null,
+        })
+        .returning()
+      if (created?.signatureAttachmentId) {
+        await recordModuleFlowEvent(tx, ctx, {
+          subjectId: assessmentId,
+          moduleKey: 'hazid',
+          event: 'on_sign',
+          occurrenceKey: created.id,
+        })
+      }
+      return created
+    },
   )
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_signature',
@@ -1499,10 +1599,6 @@ export async function addSignature(formData: FormData) {
     action: 'sign',
     summary: `Added ${signatureType} signature`,
   })
-  // Fire "on sign" Flows only when an actual signature was applied.
-  if (storedSignature) {
-    await runModuleFlows(ctx, { moduleKey: 'hazid', event: 'on_sign', subjectId: assessmentId })
-  }
   revalidateAssessment(assessmentId)
 }
 

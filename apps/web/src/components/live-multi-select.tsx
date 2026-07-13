@@ -11,7 +11,7 @@ import { X } from 'lucide-react'
 import { SearchSelect } from '@beaconhs/ui'
 import { SaveDot, useAutoSave } from './live-field'
 
-export type MultiOption = { value: string; label: string; color?: string | null }
+type MultiOption = { value: string; label: string; color?: string | null }
 
 export function LiveMultiSelect({
   id,

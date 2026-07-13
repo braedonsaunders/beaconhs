@@ -27,21 +27,26 @@ export async function recordFlowGate(
     title: string
     assigneeTenantUserId: string | null
     signatureRequired: boolean
+    executionId?: string
   },
 ): Promise<void> {
   await ctx.db((tx) =>
-    tx.insert(flowGates).values({
-      tenantId: ctx.tenantId,
-      subjectType: i.subjectType,
-      subjectKey: i.subjectKey,
-      subjectId: i.subjectId,
-      flowId: i.flowId,
-      nodeId: i.nodeId,
-      title: i.title,
-      assigneeTenantUserId: i.assigneeTenantUserId,
-      status: 'pending',
-      signatureRequired: i.signatureRequired,
-    }),
+    tx
+      .insert(flowGates)
+      .values({
+        tenantId: ctx.tenantId,
+        subjectType: i.subjectType,
+        subjectKey: i.subjectKey,
+        subjectId: i.subjectId,
+        flowId: i.flowId,
+        nodeId: i.nodeId,
+        executionId: i.executionId,
+        title: i.title,
+        assigneeTenantUserId: i.assigneeTenantUserId,
+        status: 'pending',
+        signatureRequired: i.signatureRequired,
+      })
+      .onConflictDoNothing(),
   )
 }
 

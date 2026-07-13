@@ -15,12 +15,11 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { correctiveActions, incidents, orgUnits } from '@beaconhs/db/schema'
-import { emitCorrectiveActionAssigned } from '@beaconhs/events'
-import { emitCorrectiveActionCreated } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { nextReference } from '@/lib/reference'
@@ -55,7 +54,7 @@ async function createCA(formData: FormData) {
 
   const [row] = await ctx.db(async (tx) => {
     const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
-    return tx
+    const created = await tx
       .insert(correctiveActions)
       .values({
         tenantId: ctx.tenantId,
@@ -74,6 +73,34 @@ async function createCA(formData: FormData) {
         ownerTenantUserId: ctx.membership?.id,
       })
       .returning()
+    const correctiveAction = created[0]
+    if (correctiveAction) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.created',
+        subjectId: correctiveAction.id,
+        dedupKey: `corrective_action.created:${correctiveAction.id}`,
+        payload: {
+          notification: { kind: 'corrective_action_assigned', caId: correctiveAction.id },
+          integration: correctiveActionCreatedEvent(ctx.tenantId, {
+            id: correctiveAction.id,
+            reference: correctiveAction.reference,
+            title,
+            status: 'open',
+            severity,
+            source,
+            dueOn,
+            assignedOn,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: correctiveAction.id,
+            moduleKey: 'corrective-actions',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
+    return created
   })
   revalidatePath('/corrective-actions')
   if (row) {
@@ -84,26 +111,6 @@ async function createCA(formData: FormData) {
       summary: `Created ${row.reference}: ${title}`,
       after: { reference: row.reference, severity, source, dueOn, siteOrgUnitId },
     })
-    await emitCorrectiveActionAssigned(ctx, {
-      caId: row.id,
-      assigneeUserId: null,
-      assignerUserId: null,
-    })
-    await runModuleFlows(ctx, {
-      moduleKey: 'corrective-actions',
-      event: 'on_create',
-      subjectId: row.id,
-    })
-    await emitCorrectiveActionCreated(ctx, {
-      id: row.id,
-      reference: row.reference,
-      title,
-      status: 'open',
-      severity,
-      source,
-      dueOn,
-      assignedOn,
-    }).catch(() => {})
     redirect(`/corrective-actions/${row.id}`)
   }
   redirect('/corrective-actions')

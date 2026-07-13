@@ -12,7 +12,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
 import { isAiProvider, type AiConfig, type AiPolicyMode, type AiProvider } from '@beaconhs/ai'
 import type { RequestContext } from '@beaconhs/tenant'
-import { decryptSecret, encryptSecret } from '@beaconhs/crypto'
+import { sealSecret, unsealSecret } from '@beaconhs/crypto'
 
 type RawAi = {
   enabled?: boolean
@@ -54,8 +54,8 @@ function toCommon(ai: RawAi): CommonAiSettings {
   }
 }
 
-export type TenantAiSettings = CommonAiSettings & { autoJournalAi: boolean }
-export type PlatformAiSettings = CommonAiSettings & { mode: AiPolicyMode }
+type TenantAiSettings = CommonAiSettings & { autoJournalAi: boolean }
+type PlatformAiSettings = CommonAiSettings & { mode: AiPolicyMode }
 
 // The mutable, non-secret fields a save action collects from the form.
 export type AiSettingsInput = {
@@ -74,7 +74,7 @@ export type AiSettingsInput = {
 function buildConfig(ai: RawAi, org: { name: string } | null): AiConfig | null {
   if (ai.enabled === false) return null
   if (!ai.keyCiphertext || !ai.keyNonce) return null
-  const apiKey = decryptSecret({ ciphertext: ai.keyCiphertext, nonce: ai.keyNonce })
+  const apiKey = unsealSecret({ ciphertext: ai.keyCiphertext, nonce: ai.keyNonce })
   if (!apiKey) return null
   return {
     provider: normProvider(ai.provider),
@@ -101,7 +101,7 @@ function mergeRaw<T extends RawAi>(prev: T, input: AiSettingsInput, extra: Parti
     keyNonce: prev.keyNonce,
   } as T
   if (input.apiKey && input.apiKey.trim()) {
-    const sealed = encryptSecret(input.apiKey.trim())
+    const sealed = sealSecret(input.apiKey.trim())
     next.keyCiphertext = sealed.ciphertext
     next.keyNonce = sealed.nonce
   }
@@ -177,6 +177,7 @@ export async function saveTenantAiSettings(
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
+      .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (settings.ai && typeof settings.ai === 'object' ? settings.ai : {}) as RawAi
     const next = mergeRaw(prev, input, { autoJournalAi: input.autoJournalAi })
@@ -195,6 +196,7 @@ export async function clearTenantAiKey(ctx: RequestContext): Promise<void> {
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
+      .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (settings.ai && typeof settings.ai === 'object' ? settings.ai : {}) as RawAi
     await tx

@@ -5,7 +5,7 @@
 
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { auth } from '@beaconhs/auth'
+import { getAuth } from '@beaconhs/auth'
 
 export async function submitReset(
   _prev: { error: string } | null,
@@ -20,7 +20,7 @@ export async function submitReset(
   if (password !== confirm) return { error: 'Passwords do not match.' }
 
   try {
-    await auth.api.resetPassword({
+    await getAuth().api.resetPassword({
       body: { newPassword: password, token },
       headers: (await headers()) as unknown as Headers,
     })

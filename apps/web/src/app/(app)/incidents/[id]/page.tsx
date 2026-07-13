@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { randomUUID } from 'node:crypto'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
@@ -73,7 +74,7 @@ import {
 } from './_people-injury-drawers'
 import { IncidentHeaderActions } from './_header-actions'
 import { pickString } from '@/lib/list-params'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { nextReference } from '@/lib/reference'
@@ -81,7 +82,6 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -100,8 +100,8 @@ import {
   LiveSeverityRating,
   LiveToggle,
 } from '@/components/live-field'
-import { emitIncidentStatusChanged } from '@beaconhs/events'
-import { emitIncidentStatusChanged as fireIncidentStatusIntegration } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import { incidentStatusChangedEvent } from '@beaconhs/integrations'
 import { SeverityBadge, StatusBadge } from '../_badges'
 
 export const dynamic = 'force-dynamic'
@@ -164,7 +164,8 @@ async function updateStatus(formData: FormData) {
   const closing = status === 'closed'
   assertCan(ctx, closing ? 'incidents.close' : 'incidents.update')
   await assertCanSeeIncident(ctx, id)
-  const prior = await ctx.db(async (tx) => {
+  const eventKey = randomUUID()
+  const changed = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
         status: incidents.status,
@@ -176,11 +177,9 @@ async function updateStatus(formData: FormData) {
       .from(incidents)
       .where(eq(incidents.id, id))
       .limit(1)
-    return row ?? null
-  })
-  const fromStatus = prior?.status ?? null
-  await ctx.db((tx) =>
-    tx
+      .for('update')
+    if (!row || row.status === status) return null
+    await tx
       .update(incidents)
       .set({
         status: status as any,
@@ -188,8 +187,39 @@ async function updateStatus(formData: FormData) {
         inProgress: !closing,
         locked: closing,
       })
-      .where(eq(incidents.id, id)),
-  )
+      .where(eq(incidents.id, id))
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'incident.status_changed',
+      subjectId: id,
+      dedupKey: `incident.status_changed:${id}:${eventKey}`,
+      payload: {
+        notification: {
+          kind: 'incident_status_changed',
+          incidentId: id,
+          fromStatus: row.status,
+          toStatus: status,
+        },
+        integration: incidentStatusChangedEvent(ctx.tenantId, {
+          id,
+          reference: row.reference,
+          title: row.title,
+          type: row.type,
+          severity: row.severity,
+          fromStatus: row.status,
+          toStatus: status,
+        }),
+        web: moduleFlowCommand(ctx, {
+          subjectId: id,
+          moduleKey: 'incidents',
+          event: 'status_change',
+          toStatus: status,
+        }),
+      },
+    })
+    return true
+  })
+  if (!changed) return
   await recordAudit(ctx, {
     entityType: 'incident',
     entityId: id,
@@ -197,24 +227,6 @@ async function updateStatus(formData: FormData) {
     summary: `Status changed to "${status.replace(/_/g, ' ')}"`,
     after: { status },
   })
-  if (fromStatus && fromStatus !== status) {
-    await emitIncidentStatusChanged(ctx, { incidentId: id, fromStatus, toStatus: status })
-    await runModuleFlows(ctx, {
-      moduleKey: 'incidents',
-      event: 'status_change',
-      subjectId: id,
-      toStatus: status,
-    })
-    await fireIncidentStatusIntegration(ctx, {
-      id,
-      reference: prior?.reference,
-      title: prior?.title,
-      type: prior?.type,
-      severity: prior?.severity,
-      fromStatus,
-      toStatus: status,
-    }).catch(() => {})
-  }
   revalidatePath(`/incidents/${id}`)
   revalidatePath('/incidents')
 }
@@ -226,18 +238,30 @@ async function toggleLock(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
   await assertCanSeeIncident(ctx, id)
-  await ctx.db((tx) => tx.update(incidents).set({ locked: lock }).where(eq(incidents.id, id)))
+  const changed = await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ locked: incidents.locked })
+      .from(incidents)
+      .where(eq(incidents.id, id))
+      .limit(1)
+      .for('update')
+    if (!current || current.locked === lock) return false
+    await tx.update(incidents).set({ locked: lock }).where(eq(incidents.id, id))
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: id,
+      moduleKey: 'incidents',
+      event: lock ? 'on_lock' : 'on_unlock',
+      occurrenceKey: randomUUID(),
+    })
+    return true
+  })
+  if (!changed) return
   await recordAudit(ctx, {
     entityType: 'incident',
     entityId: id,
     action: 'update',
     summary: lock ? 'Locked' : 'Unlocked',
     after: { locked: lock },
-  })
-  await runModuleFlows(ctx, {
-    moduleKey: 'incidents',
-    event: lock ? 'on_lock' : 'on_unlock',
-    subjectId: id,
   })
   revalidatePath(`/incidents/${id}`)
 }
@@ -393,19 +417,10 @@ async function updateTextField(formData: FormData) {
     val = trimmed === '' ? null : value
   }
 
-  // Keep the migrated legacy columns in lockstep with their canonical field.
-  // The UI displays `emsCalled || emsNotified` (etc.) so ETL-migrated rows show
-  // their data, but writes only touch the canonical column — without the sync a
-  // toggled-off value would snap back on from the stale legacy column.
-  const updates: Record<string, unknown> = { [field]: val }
-  if (field === 'emsCalled') updates.emsNotified = val
-  if (field === 'firstAidGiven') updates.firstAidReceived = val
-  if (field === 'hospitalName') updates.treatedAtHospital = null
-
   await ctx.db((tx) =>
     tx
       .update(incidents)
-      .set(updates as any)
+      .set({ [field]: val } as any)
       .where(eq(incidents.id, id)),
   )
   await recordAudit(ctx, {
@@ -1340,7 +1355,7 @@ export default async function IncidentDetailPage({
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
-    url: publicUrl(p.attachment.r2Key),
+    url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
   }))
@@ -1821,7 +1836,7 @@ export default async function IncidentDetailPage({
                   id={id}
                   field="emsCalled"
                   label="EMS called"
-                  initialValue={incident.emsCalled || incident.emsNotified}
+                  initialValue={incident.emsCalled}
                   disabled={locked}
                   updateAction={updateTextField}
                 />
@@ -1829,7 +1844,7 @@ export default async function IncidentDetailPage({
                   id={id}
                   field="firstAidGiven"
                   label="First aid given"
-                  initialValue={incident.firstAidGiven || incident.firstAidReceived}
+                  initialValue={incident.firstAidGiven}
                   disabled={locked}
                   updateAction={updateTextField}
                 />
@@ -1875,7 +1890,7 @@ export default async function IncidentDetailPage({
                 />
               </div>
 
-              {incident.emsCalled || incident.emsNotified ? (
+              {incident.emsCalled ? (
                 <SubBlock title="EMS" tone="rose">
                   <LiveDateTime
                     id={id}
@@ -1890,7 +1905,7 @@ export default async function IncidentDetailPage({
                 </SubBlock>
               ) : null}
 
-              {incident.firstAidGiven || incident.firstAidReceived ? (
+              {incident.firstAidGiven ? (
                 <SubBlock title="First aid" tone="amber">
                   <LiveField
                     id={id}
@@ -1919,7 +1934,7 @@ export default async function IncidentDetailPage({
                     id={id}
                     field="hospitalName"
                     label="Hospital"
-                    initialValue={incident.hospitalName ?? incident.treatedAtHospital}
+                    initialValue={incident.hospitalName}
                     disabled={locked}
                     updateAction={updateTextField}
                   />

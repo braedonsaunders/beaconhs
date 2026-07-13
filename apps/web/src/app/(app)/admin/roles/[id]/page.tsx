@@ -20,10 +20,9 @@ import {
   roleDashboardLayouts,
   roles,
   tenantUsers,
-  user,
+  users as user,
   PERMISSION_CATALOGUE,
   type DashboardLayoutData,
-  type RoleScope,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'

@@ -11,7 +11,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { equipmentItems, people, tenantUsers, user } from '@beaconhs/db/schema'
+import { equipmentItems, people, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'

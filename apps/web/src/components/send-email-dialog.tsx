@@ -19,7 +19,7 @@ import {
   resolveNotificationGroupEmails,
 } from '@/lib/notifications/group-emails-action'
 
-export type SendEmailDialogProps = {
+type SendEmailDialogProps = {
   open: boolean
   title?: string
   description?: string
@@ -38,8 +38,12 @@ export type SendEmailDialogProps = {
   hiddenFields?: Record<string, string>
 }
 
-export function GenericSendEmailDialog({
-  open,
+export function GenericSendEmailDialog({ ...props }: SendEmailDialogProps) {
+  if (!props.open) return null
+  return <SendEmailDialogSession {...props} />
+}
+
+function SendEmailDialogSession({
   title = 'Send email',
   description,
   defaultRecipients = '',
@@ -61,8 +65,6 @@ export function GenericSendEmailDialog({
   const [groupBusy, startGroup] = useTransition()
 
   useEffect(() => {
-    if (!open) return
-    setRecipients(defaultRecipients)
     let cancelled = false
     listNotificationGroups()
       .then((g) => {
@@ -72,8 +74,7 @@ export function GenericSendEmailDialog({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [])
 
   function addGroup(groupId: string) {
     if (!groupId) return
@@ -91,8 +92,6 @@ export function GenericSendEmailDialog({
       })
     })
   }
-
-  if (!open) return null
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">

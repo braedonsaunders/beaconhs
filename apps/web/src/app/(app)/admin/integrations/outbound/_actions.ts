@@ -17,6 +17,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { getDestination } from '@beaconhs/integrations'
 import type { DestinationDef } from '@beaconhs/integrations'
+import { isUuid } from '@/lib/list-params'
 
 const PERM = 'admin.integrations.manage'
 type Sealed = Record<string, { ciphertext: string; nonce: string }>
@@ -37,6 +38,7 @@ function unsealAll(secrets: Sealed | null | undefined): Record<string, string> {
 }
 
 async function loadById(ctx: RequestContext, id: string) {
+  if (!isUuid(id)) return null
   return ctx.db(async (tx) => {
     const [row] = await tx
       .select()
@@ -171,21 +173,22 @@ export async function saveOutbound(formData: FormData): Promise<void> {
 
   // Enable only when fully wired.
   const ready = enabled && !!triggerKey && !!destinationKey
-  await ctx.db((tx) =>
+  const [updated] = await ctx.db((tx) =>
     tx
       .update(tenantIntegrations)
       .set({
         name,
         triggerKey,
         destinationKey,
-        integrationKey: null,
         enabled: ready,
         config,
         secrets,
         status: ready ? 'ready' : 'draft',
       })
-      .where(eq(tenantIntegrations.id, id)),
+      .where(and(eq(tenantIntegrations.id, id), isNull(tenantIntegrations.deletedAt)))
+      .returning({ id: tenantIntegrations.id }),
   )
+  if (!updated) return
   await recordAudit(ctx, {
     entityType: 'tenant_integration',
     entityId: id,
@@ -221,15 +224,26 @@ export async function testOutbound(formData: FormData): Promise<{ ok: boolean; m
 
   // Only status/lastError — lastRunAt means a real delivery and is stamped by
   // the worker's dispatch path, not by connectivity tests.
-  await ctx.db((tx) =>
+  const [updated] = await ctx.db((tx) =>
     tx
       .update(tenantIntegrations)
       .set({
         status: result.ok ? (row.enabled ? 'ready' : 'draft') : 'error',
         lastError: result.ok ? null : (result.error ?? 'Test failed'),
       })
-      .where(eq(tenantIntegrations.id, id)),
+      .where(and(eq(tenantIntegrations.id, id), isNull(tenantIntegrations.deletedAt)))
+      .returning({ id: tenantIntegrations.id }),
   )
+  if (!updated) return { ok: false, message: 'Automation not found.' }
+  await recordAudit(ctx, {
+    entityType: 'tenant_integration',
+    entityId: id,
+    action: 'update',
+    summary: result.ok
+      ? 'Tested outbound automation successfully'
+      : 'Outbound automation test failed',
+    metadata: { destinationKey, ok: result.ok },
+  })
   revalidatePath(`/admin/integrations/outbound/${id}`)
   return {
     ok: result.ok,
@@ -245,13 +259,15 @@ export async function deleteOutbound(formData: FormData): Promise<void> {
   const ctx = await guard()
   if (!ctx) return
   const id = String(formData.get('id') ?? '').trim()
-  if (!id) return
-  await ctx.db((tx) =>
+  if (!isUuid(id)) return
+  const [deleted] = await ctx.db((tx) =>
     tx
       .update(tenantIntegrations)
       .set({ deletedAt: new Date(), enabled: false })
-      .where(eq(tenantIntegrations.id, id)),
+      .where(and(eq(tenantIntegrations.id, id), isNull(tenantIntegrations.deletedAt)))
+      .returning({ id: tenantIntegrations.id }),
   )
+  if (!deleted) return
   await recordAudit(ctx, {
     entityType: 'tenant_integration',
     entityId: id,

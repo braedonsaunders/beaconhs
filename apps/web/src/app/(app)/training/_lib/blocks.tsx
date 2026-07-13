@@ -26,7 +26,7 @@ function inline(escaped: string): string {
 /** Render markdown-lite → safe HTML. Author input is escaped before any tag is
  *  emitted, so stored HTML can never execute. Supports **bold**, *italic*,
  *  [links](https://…), `- ` bullet lists, and paragraphs. */
-export function renderMd(md: string): string {
+function renderMd(md: string): string {
   const lines = escapeHtml(md ?? '').split(/\r?\n/)
   const out: string[] = []
   let listOpen = false

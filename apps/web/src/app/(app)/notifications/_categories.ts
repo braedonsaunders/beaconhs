@@ -109,7 +109,7 @@ const DEFAULT_TINT: Tint = {
   fg: 'text-slate-500 dark:text-slate-300',
 }
 
-export type CategoryMeta = { key: string; label: string; Icon: LucideIcon; bg: string; fg: string }
+type CategoryMeta = { key: string; label: string; Icon: LucideIcon; bg: string; fg: string }
 
 const humanise = (key: string) =>
   key

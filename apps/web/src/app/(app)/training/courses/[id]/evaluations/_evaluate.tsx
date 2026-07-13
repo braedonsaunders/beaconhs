@@ -25,7 +25,7 @@ import { toast } from '@/lib/toast'
 import { evaluatePractical } from './_actions'
 
 export type EvalLesson = { id: string; title: string; criteria: PracticalCriterion[] }
-export type EvalCell = {
+type EvalCell = {
   status: 'not_started' | 'in_progress' | 'completed'
   evaluated: boolean
   evaluatorName: string | null

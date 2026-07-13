@@ -17,6 +17,13 @@ import {
 } from '@/lib/ai-conversations'
 import { buildToolRegistry } from '@/lib/assistant/registry'
 import { assistantSystemPrompt } from '@/lib/assistant/system-prompt'
+import {
+  readBoundedJsonBody,
+  RequestBodyLengthError,
+  RequestBodyParseError,
+  RequestBodyTimeoutError,
+  RequestBodyTooLargeError,
+} from '@/lib/request-body'
 
 export const dynamic = 'force-dynamic'
 // Agent turns run a multi-step tool loop — far longer than a single completion.
@@ -24,6 +31,9 @@ export const maxDuration = 300
 
 const SCOPE = 'assistant'
 const MAX_HISTORY = 40
+const MAX_REQUEST_BYTES = 128 * 1024
+const MAX_PROMPT_LENGTH = 32_000
+const REQUEST_TIMEOUT_MS = 15_000
 
 // Conversation ids are uuid PKs — reject malformed ids before they reach a
 // uuid-typed column comparison (Postgres errors on invalid uuid input).
@@ -52,17 +62,40 @@ export async function POST(req: Request): Promise<Response> {
   if (!ctx) return new Response('Unauthorized', { status: 401 })
   if (!can(ctx, 'assistant.use')) return new Response('Forbidden', { status: 403 })
 
-  let body: { conversationId?: string; prompt?: string }
+  let body: unknown
   try {
-    body = await req.json()
-  } catch {
+    body = await readBoundedJsonBody(req, {
+      maxBytes: MAX_REQUEST_BYTES,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    })
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return new Response('Request too large', { status: 413 })
+    }
+    if (error instanceof RequestBodyTimeoutError) {
+      return new Response('Request timed out', { status: 408 })
+    }
+    if (error instanceof RequestBodyLengthError || error instanceof RequestBodyParseError) {
+      return new Response('Bad request', { status: 400 })
+    }
     return new Response('Bad request', { status: 400 })
   }
-  const prompt = (body.prompt ?? '').trim()
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return new Response('Bad request', { status: 400 })
+  }
+  const input = body as { conversationId?: unknown; prompt?: unknown }
+  if (input.conversationId !== undefined && typeof input.conversationId !== 'string') {
+    return new Response('Bad request', { status: 400 })
+  }
+  if (typeof input.prompt !== 'string') return new Response('Invalid prompt', { status: 400 })
+  if (input.prompt.length > MAX_PROMPT_LENGTH) {
+    return new Response('Prompt too large', { status: 413 })
+  }
+  const prompt = input.prompt.trim()
   if (!prompt) return new Response('Empty prompt', { status: 400 })
 
   // Resolve / create the conversation. Only the OWNER may send a turn.
-  let conversationId = body.conversationId ?? null
+  let conversationId = input.conversationId ?? null
   if (conversationId) {
     if (!UUID.test(conversationId)) return new Response('Bad request', { status: 400 })
     if ((await resolveConversationAccess(conversationId)) !== 'owner') {

@@ -13,7 +13,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
@@ -101,7 +101,12 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
         person_id: r.personId ?? null,
         supervisor_person_id: r.supervisorPersonId ?? null,
         site_org_unit_id: r.siteOrgUnitId ?? null,
-        photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
+        photos: await Promise.all(
+          photos.map(async (p) => ({
+            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
+            caption: p.caption ?? '',
+          })),
+        ),
       }
     },
 
@@ -140,6 +145,7 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        flowExecutionKey: i.flowExecutionKey,
       }),
   }
 }

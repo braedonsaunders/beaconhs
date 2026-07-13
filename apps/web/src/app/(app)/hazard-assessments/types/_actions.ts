@@ -5,7 +5,7 @@
 // attached apps) reuse the existing entity_order column for drag ordering.
 
 import { revalidatePath } from 'next/cache'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import {
   formTemplates,
   hazidAssessmentTypeApps,
@@ -16,6 +16,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 async function manageCtx() {
   const ctx = await requireRequestContext()
@@ -320,12 +321,18 @@ export async function addTypeApp(input: {
   autoCreate: boolean
 }) {
   const ctx = await manageCtx()
-  if (!input.templateId) throw new Error('Pick a published app')
+  if (!isUuid(input.typeId) || !isUuid(input.templateId)) throw new Error('Pick a published app')
   const result = await ctx.db(async (tx) => {
     const [template] = await tx
       .select({ name: formTemplates.name, description: formTemplates.description })
       .from(formTemplates)
-      .where(eq(formTemplates.id, input.templateId))
+      .where(
+        and(
+          eq(formTemplates.id, input.templateId),
+          eq(formTemplates.status, 'published'),
+          isNull(formTemplates.deletedAt),
+        ),
+      )
       .limit(1)
     if (!template) throw new Error('App not found')
     const label = input.label?.trim() || template.name

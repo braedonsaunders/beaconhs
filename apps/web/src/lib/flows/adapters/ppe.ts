@@ -141,6 +141,7 @@ export function createPpeInspectionFlowAdapter(
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        flowExecutionKey: i.flowExecutionKey,
       }),
   }
 }

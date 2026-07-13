@@ -76,7 +76,7 @@ function getDesktopViewport() {
   return typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches
 }
 
-export type StationClientProps = {
+type StationClientProps = {
   surface: 'app' | 'kiosk'
   tenantName: string
   scanMode: 'toggle' | 'explicit'

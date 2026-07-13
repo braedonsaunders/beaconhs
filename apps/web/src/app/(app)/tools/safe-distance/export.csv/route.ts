@@ -1,11 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
+import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { SAFE_DISTANCE_PERMISSION } from '@/lib/safe-distance-access'
 import {
   pressureUnitLabel,
   SAFE_DISTANCE_METHOD_LABELS,
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest) {
   })
   const methodFilter = pickString(sp.method)
   const ctx = await requireExportContext()
+  assertCan(ctx, SAFE_DISTANCE_PERMISSION)
 
   const rows = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(safeDistanceRecords.deletedAt)]

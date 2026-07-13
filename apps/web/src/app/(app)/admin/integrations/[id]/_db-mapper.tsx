@@ -191,13 +191,30 @@ export function DbMapper({
   }
 
   useEffect(() => {
-    for (const list of Object.values(mappings)) {
-      for (const m of list) {
-        if (m.table) void loadColumns(m.localId, { name: m.table, schema: m.schema })
+    let cancelled = false
+    const initial = Object.values(normalizeInitial(initialMappings, entities))
+      .flat()
+      .flatMap((mapping) => (mapping.table ? [{ ...mapping, table: mapping.table }] : []))
+    void Promise.all(
+      initial.map(async (mapping) => ({
+        localId: mapping.localId,
+        result: await introspectTable(connectionId, {
+          name: mapping.table,
+          schema: mapping.schema,
+        }),
+      })),
+    ).then((results) => {
+      if (cancelled) return
+      const loaded: Record<string, Column[]> = {}
+      for (const { localId, result } of results) {
+        if (result.ok) loaded[localId] = result.columns ?? []
       }
+      setColumns(loaded)
+    })
+    return () => {
+      cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [connectionId, entities, initialMappings])
 
   async function browse() {
     setBrowsing(true)

@@ -19,9 +19,55 @@ import { Download, ExternalLink, Loader2, RefreshCw, X } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 
 export type PdfResolveResult = { ok: true; url?: string } | { ok: false; error: string }
-export type PdfResolve = (id: string) => Promise<PdfResolveResult>
+type PdfResolve = (id: string) => Promise<PdfResolveResult>
 
 type Status = 'loading' | 'ready' | 'generating' | 'error'
+type PdfResource = {
+  id: string
+  status: Status
+  url: string | null
+  error: string | null
+}
+type ResolvedPdfResource = Omit<PdfResource, 'id'> & { blobUrl: boolean }
+
+async function resolvePdfResource(id: string, resolve: PdfResolve): Promise<ResolvedPdfResource> {
+  const result = await resolve(id)
+  if (!result.ok) {
+    return { status: 'error', url: null, error: result.error, blobUrl: false }
+  }
+  if (!result.url) {
+    return { status: 'generating', url: null, error: null, blobUrl: false }
+  }
+
+  // Cross-origin presigned URL (uploaded PDF) → render straight in the iframe.
+  if (!result.url.startsWith('/')) {
+    return { status: 'ready', url: result.url, error: null, blobUrl: false }
+  }
+
+  // Same-origin on-demand render route → fetch so render failures are visible.
+  try {
+    const response = await fetch(result.url, { credentials: 'same-origin' })
+    if (!response.ok) {
+      let message = `The PDF could not be generated (HTTP ${response.status}).`
+      try {
+        const body = (await response.json()) as { error?: string }
+        if (body?.error) message = body.error
+      } catch {
+        // Non-JSON error body — keep the status-code message.
+      }
+      return { status: 'error', url: null, error: message, blobUrl: false }
+    }
+    const blob = await response.blob()
+    return { status: 'ready', url: URL.createObjectURL(blob), error: null, blobUrl: true }
+  } catch (error) {
+    return {
+      status: 'error',
+      url: null,
+      error: error instanceof Error ? error.message : 'The PDF could not be loaded.',
+      blobUrl: false,
+    }
+  }
+}
 
 export function ReadOnlyPdfModal({
   id,
@@ -34,12 +80,16 @@ export function ReadOnlyPdfModal({
   resolve: PdfResolve
   onClose: () => void
 }) {
-  const [status, setStatus] = useState<Status>('loading')
+  const [resource, setResource] = useState<PdfResource>({
+    id,
+    status: 'loading',
+    url: null,
+    error: null,
+  })
   // What the <iframe> shows + the download / open-in-new-tab links point at: an
   // object URL for fetched renders, or the presigned URL for uploaded PDFs.
-  const [url, setUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const blobUrlRef = useRef<string | null>(null)
+  const requestSequence = useRef(0)
 
   const revokeBlob = useCallback(() => {
     if (blobUrlRef.current) {
@@ -48,62 +98,43 @@ export function ReadOnlyPdfModal({
     }
   }, [])
 
-  const load = useCallback(async () => {
-    setStatus('loading')
-    setError(null)
-    revokeBlob()
-    setUrl(null)
-
-    const r = await resolve(id)
-    if (!r.ok) {
-      setStatus('error')
-      setError(r.error)
-      return
-    }
-    if (!r.url) {
-      setStatus('generating')
-      return
-    }
-
-    // Cross-origin presigned URL (uploaded PDF) → render straight in the iframe.
-    if (!r.url.startsWith('/')) {
-      setUrl(r.url)
-      setStatus('ready')
-      return
-    }
-
-    // Same-origin on-demand render route → fetch so we surface render failures
-    // and show real progress rather than a silently-blank iframe.
-    setStatus('generating')
-    try {
-      const res = await fetch(r.url, { credentials: 'same-origin' })
-      if (!res.ok) {
-        let message = `The PDF could not be generated (HTTP ${res.status}).`
-        try {
-          const body = (await res.json()) as { error?: string }
-          if (body?.error) message = body.error
-        } catch {
-          // non-JSON error body — keep the status-code message
-        }
-        setStatus('error')
-        setError(message)
+  const applyResult = useCallback(
+    (sequence: number, next: ResolvedPdfResource) => {
+      if (sequence !== requestSequence.current) {
+        if (next.blobUrl && next.url) URL.revokeObjectURL(next.url)
         return
       }
-      const blob = await res.blob()
-      const objectUrl = URL.createObjectURL(blob)
-      blobUrlRef.current = objectUrl
-      setUrl(objectUrl)
-      setStatus('ready')
-    } catch (e) {
-      setStatus('error')
-      setError(e instanceof Error ? e.message : 'The PDF could not be loaded.')
-    }
-  }, [id, resolve, revokeBlob])
+      if (next.blobUrl) blobUrlRef.current = next.url
+      setResource({ id, status: next.status, url: next.url, error: next.error })
+    },
+    [id],
+  )
+
+  const requestPdf = useCallback(() => {
+    const sequence = ++requestSequence.current
+    revokeBlob()
+    return resolvePdfResource(id, resolve).then((next) => applyResult(sequence, next))
+  }, [applyResult, id, resolve, revokeBlob])
 
   useEffect(() => {
-    void load()
-    return revokeBlob
-  }, [load, revokeBlob])
+    void requestPdf()
+    return () => {
+      requestSequence.current += 1
+      revokeBlob()
+    }
+  }, [requestPdf, revokeBlob])
+
+  const current =
+    resource.id === id
+      ? resource
+      : ({ id, status: 'loading', url: null, error: null } satisfies PdfResource)
+  const { status, url, error } = current
+
+  function retry() {
+    revokeBlob()
+    setResource({ id, status: 'loading', url: null, error: null })
+    void requestPdf()
+  }
 
   const linkCls =
     'inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60'
@@ -155,7 +186,7 @@ export function ReadOnlyPdfModal({
           ) : status === 'error' ? (
             <Centered>
               <p className="text-sm text-rose-600">{error ?? 'Could not load the PDF.'}</p>
-              <Button variant="outline" onClick={load}>
+              <Button variant="outline" onClick={retry}>
                 <RefreshCw size={14} /> Retry
               </Button>
             </Centered>

@@ -22,6 +22,7 @@ const GROUP_LABELS: Record<string, string> = {
   reports: 'Reports',
   dashboards: 'Dashboards',
   insights: 'Insights',
+  tools: 'Field tools',
   assistant: 'AI Assistant',
   admin: 'Administration',
 }
@@ -116,7 +117,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'insights.read': 'View insights',
   'insights.create': 'Build insights',
   'insights.publish': 'Publish to library',
-  'insights.manage': "Manage others' insights",
+  'tools.safe-distance.use': 'Use Safe Distance',
 
   'assistant.use': 'Use the assistant',
   'assistant.write': 'Draft changes with the assistant',
@@ -143,7 +144,7 @@ export function permissionLabel(key: string): string {
   return PERMISSION_LABELS[key] ?? humanize(key)
 }
 
-export function permissionGroupKey(key: string): string {
+function permissionGroupKey(key: string): string {
   return key.split('.')[0] ?? 'other'
 }
 
@@ -152,8 +153,8 @@ export function permissionGroupLabel(key: string): string {
   return GROUP_LABELS[g] ?? humanize(g)
 }
 
-export type PermissionItem = { key: CataloguePermission; label: string }
-export type PermissionGroup = { key: string; label: string; permissions: PermissionItem[] }
+type PermissionItem = { key: CataloguePermission; label: string }
+type PermissionGroup = { key: string; label: string; permissions: PermissionItem[] }
 
 /**
  * The full catalogue bucketed into labelled groups, preserving the catalogue's

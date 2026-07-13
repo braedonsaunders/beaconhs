@@ -341,7 +341,8 @@ function SqlMapping({
         </Field>
         <Field
           label="Identity column"
-          help="Set to enable idempotent re-posting. Blank = always insert."
+          help="Required. BeaconHS records returned IDs so a partial retry can remove completed inserts before trying again."
+          required
         >
           <Input
             name="map-idColumn"

@@ -16,6 +16,8 @@ import { ListPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
 import { TableToolbar } from '@/components/table-toolbar'
 import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortableTh } from '@/components/sortable-th'
 import { ComplianceSubNav } from '../_sub-nav'
 import {
   SIGNAL_MODULE_LABELS,
@@ -29,6 +31,7 @@ export const metadata = { title: 'Compliance · Due & expiring' }
 export const dynamic = 'force-dynamic'
 
 const BASE = '/compliance/expiring'
+const SORTS = ['module', 'item', 'person', 'due', 'status'] as const
 
 const STATUS_OPTIONS = [
   { value: 'overdue', label: 'Overdue' },
@@ -56,28 +59,41 @@ export default async function ExpiringPage({
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
-  const moduleFilter = pickString(sp.module) as SignalModule | undefined
-  const statusFilter = pickString(sp.status) as SignalStatus | undefined
-  const params = parseListParams(sp, { sort: 'due', allowedSorts: ['due'] as const, perPage: 50 })
+  const moduleParam = pickString(sp.module)
+  const moduleFilter = MODULE_OPTIONS.find((option) => option.value === moduleParam)?.value
+  const statusParam = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.find((option) => option.value === statusParam)?.value as
+    | SignalStatus
+    | undefined
+  const params = parseListParams(sp, {
+    sort: 'status',
+    dir: 'asc',
+    allowedSorts: SORTS,
+    perPage: 50,
+  })
 
-  const all = await listDueSignals(ctx)
-  const filtered = all.filter(
-    (s) =>
-      (!moduleFilter || s.module === moduleFilter) && (!statusFilter || s.status === statusFilter),
-  )
-
-  // Summary cards reflect the whole picture (unfiltered); the table is filtered + paged.
-  const counts = {
-    overdue: all.filter((s) => s.status === 'overdue').length,
-    expired: all.filter((s) => s.status === 'expired').length,
-    due_soon: all.filter((s) => s.status === 'due_soon').length,
-    open: all.filter((s) => s.status === 'open').length,
+  const request = {
+    q: params.q,
+    module: moduleFilter,
+    status: statusFilter,
+    sort: params.sort,
+    dir: params.dir,
+    page: params.page,
+    perPage: params.perPage,
   }
-
-  const total = filtered.length
+  let result = await listDueSignals(ctx, request)
+  // A stale shared URL can point beyond the last page after filters change.
+  // Re-read the actual last page rather than rendering an empty phantom page.
+  const requestedPageCount = Math.max(1, Math.ceil(result.total / params.perPage))
+  if (result.rows.length === 0 && result.total > 0 && params.page > requestedPageCount) {
+    result = await listDueSignals(ctx, { ...request, page: requestedPageCount })
+  }
+  const counts = result.counts
+  const total = result.total
   const pageCount = Math.max(1, Math.ceil(total / params.perPage))
   const page = Math.min(params.page, pageCount)
-  const rows = filtered.slice((page - 1) * params.perPage, page * params.perPage)
+  const rows = result.rows
+  const allCount = counts.overdue + counts.expired + counts.due_soon + counts.open
 
   return (
     <ListPageLayout
@@ -89,6 +105,7 @@ export default async function ExpiringPage({
           />
           <ComplianceSubNav active="expiring" />
           <TableToolbar>
+            <SearchInput placeholder="Search item, person, module, or status…" />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
@@ -117,7 +134,7 @@ export default async function ExpiringPage({
 
         {total === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-            {all.length === 0
+            {allCount === 0
               ? 'Nothing due or expiring in the next 30 days — nice work.'
               : 'No items match these filters.'}
           </div>
@@ -126,12 +143,52 @@ export default async function ExpiringPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Module</TableHead>
+                  <SortableTh
+                    basePath={BASE}
+                    currentParams={sp}
+                    dir={params.dir}
+                    column="module"
+                    active={params.sort === 'module'}
+                  >
+                    Module
+                  </SortableTh>
                   <TableHead>Type</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Person</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableTh
+                    basePath={BASE}
+                    currentParams={sp}
+                    dir={params.dir}
+                    column="item"
+                    active={params.sort === 'item'}
+                  >
+                    Item
+                  </SortableTh>
+                  <SortableTh
+                    basePath={BASE}
+                    currentParams={sp}
+                    dir={params.dir}
+                    column="person"
+                    active={params.sort === 'person'}
+                  >
+                    Person
+                  </SortableTh>
+                  <SortableTh
+                    basePath={BASE}
+                    currentParams={sp}
+                    dir={params.dir}
+                    column="due"
+                    active={params.sort === 'due'}
+                  >
+                    Due
+                  </SortableTh>
+                  <SortableTh
+                    basePath={BASE}
+                    currentParams={sp}
+                    dir={params.dir}
+                    column="status"
+                    active={params.sort === 'status'}
+                  >
+                    Status
+                  </SortableTh>
                 </TableRow>
               </TableHeader>
               <TableBody>

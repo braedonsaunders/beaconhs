@@ -64,8 +64,8 @@ import {
 import { generateFlowDraft } from '../../../_ai-actions'
 import { compileEmailDesign } from '@/lib/flows/email-design-actions'
 
-export type EmailTemplateOption = { id: string; name: string }
-export type PdfTemplateOption = { id: string; name: string }
+type EmailTemplateOption = { id: string; name: string }
+type PdfTemplateOption = { id: string; name: string }
 
 // Pickable people / roles / departments for the send_email recipient editor.
 export type RecipientOptions = {
@@ -840,7 +840,7 @@ export function FlowsCanvas({
       }
       captureCurrent()
       graphs.current.set(res.id, emptyAutomationGraph())
-      setFlowList((l) => [...l, { id: res.id!, name: 'New flow', enabled: true }])
+      setFlowList((l) => [...l, { id: res.id!, name: 'New flow', enabled: false }])
       loadFlow(res.id)
       toast.success('Flow created')
     })
@@ -849,7 +849,13 @@ export function FlowsCanvas({
   const toggleEnabled = (id: string, enabled: boolean) => {
     setFlowList((l) => l.map((f) => (f.id === id ? { ...f, enabled } : f)))
     start(async () => {
-      await setFlowEnabled(id, enabled)
+      const result = await setFlowEnabled(id, enabled)
+      if (!result.ok) {
+        setFlowList((list) =>
+          list.map((flow) => (flow.id === id ? { ...flow, enabled: !enabled } : flow)),
+        )
+        toast.error(enabled ? 'Save a valid flow before enabling it' : 'Could not disable the flow')
+      }
     })
   }
 
@@ -1383,7 +1389,7 @@ function NodeInspector({
               onChange={(e) =>
                 onChange({
                   kind: 'trigger',
-                  trigger: { trigger: 'scheduled', cron: e.target.value },
+                  trigger: { ...t, cron: e.target.value },
                 })
               }
             />

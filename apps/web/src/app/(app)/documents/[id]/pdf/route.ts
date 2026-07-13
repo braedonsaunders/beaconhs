@@ -9,6 +9,7 @@ import { documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
+import { recordAudit } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -33,9 +34,19 @@ export async function GET(
     return NextResponse.json({ error: 'This document has no Word file to render' }, { status: 400 })
   }
 
-  return renderOnDemandPdfResponse({
+  const response = await renderOnDemandPdfResponse({
     kind: 'document_master_pdf',
     tenantId: ctx.tenantId,
     documentId: id,
   })
+  if (response.ok) {
+    await recordAudit(ctx, {
+      entityType: 'document',
+      entityId: id,
+      action: 'export',
+      summary: 'Exported working document master to PDF',
+      metadata: { format: 'pdf', sourceAttachmentId: doc.sourceAttachmentId },
+    })
+  }
+  return response
 }

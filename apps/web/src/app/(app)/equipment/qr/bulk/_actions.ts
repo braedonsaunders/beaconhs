@@ -13,6 +13,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 const MAX_SHEET = 500
 
@@ -20,13 +21,19 @@ export async function generateBulkQrSheet(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.read.site')
 
-  const ids = formData
+  const requestedIds = formData
     .getAll('ids')
     .flatMap((v) => String(v).split(','))
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, MAX_SHEET)
-  if (ids.length === 0) redirect('/equipment/qr/bulk')
+  if (
+    requestedIds.length === 0 ||
+    requestedIds.length > MAX_SHEET ||
+    requestedIds.some((id) => !isUuid(id))
+  ) {
+    redirect('/equipment/qr/bulk?error=invalid-selection')
+  }
+  const ids = Array.from(new Set(requestedIds))
 
   const bulkToken = randomBytes(8).toString('base64url')
 

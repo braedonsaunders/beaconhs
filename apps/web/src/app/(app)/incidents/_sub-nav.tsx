@@ -6,7 +6,7 @@
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 
-export type IncidentsSubNavKey = 'records' | 'classifications' | 'injury-types' | 'hours'
+type IncidentsSubNavKey = 'records' | 'classifications' | 'injury-types' | 'hours'
 
 export function IncidentsSubNav({ active }: { active: IncidentsSubNavKey }) {
   return <ModuleNav moduleKey="incidents" active={active} />

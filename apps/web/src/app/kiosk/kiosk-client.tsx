@@ -6,8 +6,6 @@ import { Select } from '@beaconhs/ui'
 import { recordKioskScan, unlockKiosk, type KioskDirectory } from './actions'
 
 type Person = { id: string; firstName: string; lastName: string; jobTitle: string | null }
-type Site = { id: string; name: string }
-type Crew = { id: string; name: string }
 
 type Stage =
   | { kind: 'pin' }

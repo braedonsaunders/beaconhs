@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Download, Layers, Square, ToggleRight, Users, X } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   bulkSetPeopleStatus,
   type PeopleStatus,
 } from './_actions/bulk'
+import { useHydrated } from '@/lib/use-hydrated'
 
 export type GroupOption = { id: string; name: string }
 export type DepartmentOption = { id: string; name: string }
@@ -56,8 +57,7 @@ export function BulkPeopleBar({
   // position:fixed inside the animated page shell pins to the transformed
   // ancestor, not the viewport — portal to document.body like every other
   // viewport-pinned overlay. document.body only exists after mount.
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useHydrated()
 
   const label = useMemo(
     () => `${selectedIds.length} person${selectedIds.length === 1 ? '' : 's'} selected`,

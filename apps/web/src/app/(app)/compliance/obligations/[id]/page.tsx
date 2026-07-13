@@ -12,7 +12,12 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
-import { pickString } from '@/lib/list-params'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortableTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
+import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { EVERYONE_KEY, type AudienceItem } from '@/components/audience-picker'
 import { recurrenceValueFromStored } from '@/components/recurrence'
 import { StatusBadge, SummaryStrip } from '../../_shared'
@@ -24,6 +29,15 @@ import { ObligationEditDrawer, type ObligationEditData } from './_edit-drawer'
 
 export const metadata = { title: 'Obligation' }
 export const dynamic = 'force-dynamic'
+
+const SORTS = ['subject', 'status', 'due', 'completed', 'count'] as const
+const STATUS_OPTIONS = [
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'expiring', label: 'Expiring' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'completed', label: 'Completed' },
+] as const
 
 export default async function ObligationDetailPage({
   params,
@@ -57,6 +71,56 @@ export default async function ObligationDetailPage({
   // ETL-only source modules); such obligations stay manageable (pause/delete).
   const editable = canManage && ob.sourceModule in KIND_META
   const basePath = `/compliance/obligations/${ob.id}`
+  const statusParam = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.find((option) => option.value === statusParam)?.value
+  const listParams = parseListParams(sp, {
+    sort: 'status',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const query = listParams.q?.toLowerCase()
+  const subjectRows = result.rows.filter((row) => {
+    if (statusFilter && row.status !== statusFilter) return false
+    if (!query) return true
+    return [row.label, row.status, row.dueOn ?? '', row.completedOn ?? '']
+      .join(' ')
+      .toLowerCase()
+      .includes(query)
+  })
+  const statusRank = (status: string) =>
+    status === 'overdue'
+      ? 0
+      : status === 'expiring'
+        ? 1
+        : status === 'pending'
+          ? 2
+          : status === 'in_progress'
+            ? 3
+            : 4
+  const mult = listParams.dir === 'asc' ? 1 : -1
+  subjectRows.sort((a, b) => {
+    const comparison =
+      listParams.sort === 'subject'
+        ? a.label.localeCompare(b.label)
+        : listParams.sort === 'due'
+          ? (a.dueOn ?? '9999-12-31').localeCompare(b.dueOn ?? '9999-12-31')
+          : listParams.sort === 'completed'
+            ? (a.completedOn ?? '9999-12-31').localeCompare(b.completedOn ?? '9999-12-31')
+            : listParams.sort === 'count'
+              ? (a.count ?? 0) - (b.count ?? 0)
+              : statusRank(a.status) - statusRank(b.status)
+    return comparison * mult || a.label.localeCompare(b.label)
+  })
+  const pageCount = Math.max(1, Math.ceil(subjectRows.length / listParams.perPage))
+  const page = Math.min(listParams.page, pageCount)
+  const rows = subjectRows.slice((page - 1) * listParams.perPage, page * listParams.perPage)
+  const statusCounts = Object.fromEntries(
+    STATUS_OPTIONS.map((option) => [
+      option.value,
+      result.rows.filter((row) => row.status === option.value).length,
+    ]),
+  )
 
   // Edit flyout — opened via ?drawer=edit. Reuses the audience already loaded
   // for the compliance evaluation; the picker uses the EVERYONE_KEY sentinel
@@ -100,6 +164,7 @@ export default async function ObligationDetailPage({
               enabled={ob.status === 'active'}
               canManage={canManage}
               canEdit={editable}
+              editHref={mergeHref(basePath, sp, { drawer: 'edit' })}
             />
           }
         />
@@ -115,31 +180,89 @@ export default async function ObligationDetailPage({
 
         <SummaryStrip percent={result.percent} totals={result.totals} title="Compliance" />
 
-        {result.rows.length === 0 ? (
+        <TableToolbar>
+          <SearchInput placeholder={`Search ${subjectNoun.toLowerCase()}s…`} />
+          <FilterChips
+            basePath={basePath}
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={STATUS_OPTIONS.map((option) => ({
+              ...option,
+              count: statusCounts[option.value] ?? 0,
+            }))}
+          />
+        </TableToolbar>
+
+        {rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-            No subjects resolved for this obligation.
+            {result.rows.length === 0
+              ? 'No subjects resolved for this obligation.'
+              : 'No subjects match the search or status filter.'}
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12">#</TableHead>
-                <TableHead>{subjectNoun}</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Completed</TableHead>
+                <SortableTh
+                  basePath={basePath}
+                  currentParams={sp}
+                  dir={listParams.dir}
+                  column="subject"
+                  active={listParams.sort === 'subject'}
+                >
+                  {subjectNoun}
+                </SortableTh>
+                <SortableTh
+                  basePath={basePath}
+                  currentParams={sp}
+                  dir={listParams.dir}
+                  column="status"
+                  active={listParams.sort === 'status'}
+                >
+                  Status
+                </SortableTh>
+                <SortableTh
+                  basePath={basePath}
+                  currentParams={sp}
+                  dir={listParams.dir}
+                  column="due"
+                  active={listParams.sort === 'due'}
+                >
+                  Due
+                </SortableTh>
+                <SortableTh
+                  basePath={basePath}
+                  currentParams={sp}
+                  dir={listParams.dir}
+                  column="completed"
+                  active={listParams.sort === 'completed'}
+                >
+                  Completed
+                </SortableTh>
                 {hasCounts ? (
                   <>
-                    <TableHead>Count</TableHead>
+                    <SortableTh
+                      basePath={basePath}
+                      currentParams={sp}
+                      dir={listParams.dir}
+                      column="count"
+                      active={listParams.sort === 'count'}
+                    >
+                      Count
+                    </SortableTh>
                     <TableHead>Expected</TableHead>
                   </>
                 ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.rows.map((r, i) => (
+              {rows.map((r, i) => (
                 <TableRow key={r.key}>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{i + 1}</TableCell>
+                  <TableCell className="text-slate-500 dark:text-slate-400">
+                    {(page - 1) * listParams.perPage + i + 1}
+                  </TableCell>
                   <TableCell className="text-slate-900 dark:text-slate-100">{r.label}</TableCell>
                   <TableCell>
                     <StatusBadge status={r.status} />
@@ -166,7 +289,18 @@ export default async function ObligationDetailPage({
           </Table>
         )}
 
-        <ObligationEditDrawer edit={edit} closeHref={basePath} />
+        <Pagination
+          basePath={basePath}
+          currentParams={sp}
+          total={subjectRows.length}
+          page={page}
+          perPage={listParams.perPage}
+        />
+
+        <ObligationEditDrawer
+          edit={edit}
+          closeHref={mergeHref(basePath, sp, { drawer: undefined })}
+        />
       </div>
     </PageContainer>
   )

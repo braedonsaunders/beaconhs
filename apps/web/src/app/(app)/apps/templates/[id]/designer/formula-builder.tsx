@@ -1,7 +1,7 @@
 'use client'
 
 // Guided builder for a FormulaExpression tree. Used by the designer's "Calc"
-// tab on formula / calc fields. Renders a small recursive editor that lets
+// tab on formula fields. Renders a small recursive editor that lets
 // the user pick an operator, then either literals, field refs, repeating-row
 // sums, or nested sub-expressions.
 //
@@ -24,7 +24,7 @@ import { LogicBuilder } from './logic-builder'
 
 // Designer-facing description of a single-entity picker field in the
 // template. Used to populate the `entity_attr` operator picker.
-export type PickerFieldDesc = { id: string; label: string; kind: EntityKind }
+type PickerFieldDesc = { id: string; label: string; kind: EntityKind }
 
 // Each entry in this list is one supported operator. The shape carries enough
 // metadata for the picker UI to render the right input affordance.

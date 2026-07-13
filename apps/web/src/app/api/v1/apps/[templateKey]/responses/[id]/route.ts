@@ -3,6 +3,7 @@
 
 import { NextResponse } from 'next/server'
 import { authenticateApiKey } from '@/lib/api/auth'
+import { readApiJsonBody } from '@/lib/api/body'
 import {
   BUILDER_APP_DELETE_PERMISSION,
   BUILDER_APP_READ_PERMISSION,
@@ -14,6 +15,7 @@ import {
 } from '@/lib/api/builder-apps'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { keyHasPermission } from '@/lib/api/permissions'
+import { runIdempotentMutation } from '@/lib/api/idempotency'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,10 +32,13 @@ export async function GET(
       )
     }
     const { templateKey, id } = await params
-    const app = await resolveBuilderApp(ctx, templateKey)
+    const app = await resolveBuilderApp(ctx, templateKey, key.builderTemplateIds)
     const response = await getBuilderAppResponse(ctx, app, id)
     if (!response) throw ApiError.notFound(`No response with id ${id}`)
-    return NextResponse.json({ app: app.key, data: response }, { headers: noStore() })
+    return NextResponse.json(
+      { app: app.key, data: response },
+      { headers: noStore(key.rateLimitHeaders) },
+    )
   } catch (err) {
     if (!(err instanceof ApiError)) {
       console.error('[api/v1/apps/{templateKey}/responses/{id}] unhandled error', err)
@@ -47,22 +52,26 @@ export async function PATCH(
   { params }: { params: Promise<{ templateKey: string; id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { ctx, key } = await authenticateApiKey(req)
+    const auth = await authenticateApiKey(req)
+    const { ctx, key } = auth
     if (!keyHasPermission(key.permissions, BUILDER_APP_UPDATE_PERMISSION)) {
       throw ApiError.forbidden(
         `This key cannot update Builder app responses — grant permission ${BUILDER_APP_UPDATE_PERMISSION}.`,
       )
     }
     const { templateKey, id } = await params
-    const app = await resolveBuilderApp(ctx, templateKey)
-    let body: unknown
-    try {
-      body = await req.json()
-    } catch {
-      throw ApiError.invalid('Request body must be valid JSON')
-    }
-    const response = await updateBuilderAppResponse(ctx, app, id, body)
-    return NextResponse.json({ app: app.key, data: response }, { headers: noStore() })
+    const app = await resolveBuilderApp(ctx, templateKey, key.builderTemplateIds)
+    const body = await readApiJsonBody(req)
+    const result = await runIdempotentMutation(auth, req, body, async () => ({
+      body: { app: app.key, data: await updateBuilderAppResponse(ctx, app, id, body) },
+      status: 200,
+    }))
+    return NextResponse.json(result.body, {
+      headers: noStore({
+        ...key.rateLimitHeaders,
+        'Idempotency-Replayed': String(result.replayed),
+      }),
+    })
   } catch (err) {
     if (!(err instanceof ApiError)) {
       console.error('[api/v1/apps/{templateKey}/responses/{id}] unhandled error', err)
@@ -76,16 +85,25 @@ export async function DELETE(
   { params }: { params: Promise<{ templateKey: string; id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { ctx, key } = await authenticateApiKey(req)
+    const auth = await authenticateApiKey(req)
+    const { ctx, key } = auth
     if (!keyHasPermission(key.permissions, BUILDER_APP_DELETE_PERMISSION)) {
       throw ApiError.forbidden(
         `This key cannot delete Builder app responses — grant permission ${BUILDER_APP_DELETE_PERMISSION}.`,
       )
     }
     const { templateKey, id } = await params
-    const app = await resolveBuilderApp(ctx, templateKey)
-    const deleted = await deleteBuilderAppResponse(ctx, app, id)
-    return NextResponse.json({ app: app.key, data: deleted }, { headers: noStore() })
+    const app = await resolveBuilderApp(ctx, templateKey, key.builderTemplateIds)
+    const result = await runIdempotentMutation(auth, req, null, async () => ({
+      body: { app: app.key, data: await deleteBuilderAppResponse(ctx, app, id) },
+      status: 200,
+    }))
+    return NextResponse.json(result.body, {
+      headers: noStore({
+        ...key.rateLimitHeaders,
+        'Idempotency-Replayed': String(result.replayed),
+      }),
+    })
   } catch (err) {
     if (!(err instanceof ApiError)) {
       console.error('[api/v1/apps/{templateKey}/responses/{id}] unhandled error', err)

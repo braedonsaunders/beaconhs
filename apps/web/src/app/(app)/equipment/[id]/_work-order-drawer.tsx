@@ -19,7 +19,7 @@ type CreateWorkOrderInput = {
   reportedByPersonId: string | null
 }
 
-export type CreateWorkOrderAction = (
+type CreateWorkOrderAction = (
   input: CreateWorkOrderInput,
 ) => Promise<{ ok: boolean; error?: string }>
 

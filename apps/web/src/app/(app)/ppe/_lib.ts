@@ -25,9 +25,9 @@ import {
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
 
-export type PpeInspectionKind = 'pre_use' | 'annual'
-export type PpeCriterionAnswer = 'pass' | 'fail' | 'n_a'
-export type PpeSeverity = 'low' | 'medium' | 'high' | 'critical'
+type PpeInspectionKind = 'pre_use' | 'annual'
+type PpeCriterionAnswer = 'pass' | 'fail' | 'n_a'
+type PpeSeverity = 'low' | 'medium' | 'high' | 'critical'
 
 /**
  * Spec: severity ≥ high on a fail → spawn a CA. Same rule as inspections.
@@ -253,16 +253,4 @@ export function daysUntil(iso: string | null | undefined): number | null {
  */
 export function deriveAnnualYear(inspectedOn: string): string {
   return inspectedOn.slice(0, 4)
-}
-
-// Re-export the schema imports so callers can do `from '@/app/(app)/ppe/_lib'`
-// without having to also import the schema barrel in components that only
-// touch the helpers above.
-export {
-  ppeAnnualRecords,
-  ppeInspections,
-  ppeIssues,
-  ppeItems,
-  ppeTypeInspectionCriteria,
-  ppeTypes,
 }

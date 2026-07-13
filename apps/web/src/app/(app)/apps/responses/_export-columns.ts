@@ -40,7 +40,7 @@ type ResponseExportContext = {
 
 const DISPLAY_ONLY_FIELD_TYPES = new Set<FieldType>(['heading', 'paragraph', 'image', 'divider'])
 
-export const RESPONSE_EXPORT_BASE_COLUMNS: ResponseExportColumn[] = [
+const RESPONSE_EXPORT_BASE_COLUMNS: ResponseExportColumn[] = [
   { key: 'response_id', label: 'Response ID', source: 'response' },
   { key: 'app', label: 'App', source: 'response' },
   { key: 'category', label: 'Category', source: 'response' },

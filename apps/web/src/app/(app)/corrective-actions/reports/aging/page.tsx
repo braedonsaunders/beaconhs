@@ -2,14 +2,23 @@ import Link from 'next/link'
 import { Hourglass } from 'lucide-react'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
-import { correctiveActions, orgUnits, tenantUsers, user } from '@beaconhs/db/schema'
+import { correctiveActions, orgUnits, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Corrective action aging' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/corrective-actions/reports/aging'
+const SORTS = ['age', 'reference', 'title', 'severity', 'status', 'owner', 'site'] as const
 
 type Bucket = '<7d' | '7-30d' | '30-60d' | '60+d'
 
@@ -67,7 +76,28 @@ function bucketForAge(days: number): Bucket {
  * show the counts per bucket; the table is grouped per bucket so the
  * "60+ days" stuff is front-and-centre.
  */
-export default async function AgingReport() {
+export default async function AgingReport({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const params = parseListParams(sp, {
+    sort: 'age',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const bucketParam = pickString(sp.bucket)
+  const bucketFilter = BUCKETS.find((bucket) => bucket.key === bucketParam)?.key
+  const severityParam = pickString(sp.severity)
+  const severityFilter = ['low', 'medium', 'high', 'critical'].find(
+    (severity) => severity === severityParam,
+  ) as Row['severity'] | undefined
+  const statusParam = pickString(sp.status)
+  const statusFilter = ['open', 'in_progress', 'pending_verification'].find(
+    (status) => status === statusParam,
+  ) as Row['status'] | undefined
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
 
@@ -105,7 +135,7 @@ export default async function AgingReport() {
       ? Date.parse(r.ca.assignedOn)
       : r.ca.createdAt
         ? new Date(r.ca.createdAt).getTime()
-        : Date.now()
+        : Date.parse(today)
     const ageDays = Math.max(0, Math.round((Date.parse(today) - baseline) / 86_400_000))
     return {
       id: r.ca.id,
@@ -124,17 +154,46 @@ export default async function AgingReport() {
 
   const counts: Record<Bucket, number> = { '<7d': 0, '7-30d': 0, '30-60d': 0, '60+d': 0 }
   for (const r of enriched) counts[r.bucket]++
-  const grouped: Record<Bucket, Row[]> = {
-    '<7d': [],
-    '7-30d': [],
-    '30-60d': [],
-    '60+d': [],
-  }
-  for (const r of enriched) grouped[r.bucket].push(r)
-  // Within each bucket sort oldest-first so the worst rows are at the top.
-  for (const k of Object.keys(grouped) as Bucket[]) {
-    grouped[k].sort((a, b) => b.ageDays - a.ageDays)
-  }
+  const query = params.q?.toLowerCase()
+  const filtered = enriched.filter((row) => {
+    if (bucketFilter && row.bucket !== bucketFilter) return false
+    if (severityFilter && row.severity !== severityFilter) return false
+    if (statusFilter && row.status !== statusFilter) return false
+    if (!query) return true
+    return [
+      row.reference,
+      row.title,
+      row.severity,
+      row.status,
+      row.ownerName ?? '',
+      row.siteName ?? '',
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(query)
+  })
+  const severityRank: Record<Row['severity'], number> = { low: 0, medium: 1, high: 2, critical: 3 }
+  const mult = params.dir === 'asc' ? 1 : -1
+  filtered.sort((a, b) => {
+    const comparison =
+      params.sort === 'reference'
+        ? a.reference.localeCompare(b.reference)
+        : params.sort === 'title'
+          ? a.title.localeCompare(b.title)
+          : params.sort === 'severity'
+            ? severityRank[a.severity] - severityRank[b.severity]
+            : params.sort === 'status'
+              ? a.status.localeCompare(b.status)
+              : params.sort === 'owner'
+                ? (a.ownerName ?? '').localeCompare(b.ownerName ?? '')
+                : params.sort === 'site'
+                  ? (a.siteName ?? '').localeCompare(b.siteName ?? '')
+                  : a.ageDays - b.ageDays
+    return comparison * mult || b.ageDays - a.ageDays
+  })
+  const pageCount = Math.max(1, Math.ceil(filtered.length / params.perPage))
+  const page = Math.min(params.page, pageCount)
+  const pageRows = filtered.slice((page - 1) * params.perPage, page * params.perPage)
 
   return (
     <ListPageLayout
@@ -164,103 +223,194 @@ export default async function AgingReport() {
               </div>
             ))}
           </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search ref, title, owner, or site…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="bucket"
+              label="Age"
+              options={BUCKETS.map((bucket) => ({
+                value: bucket.key,
+                label: bucket.label,
+                count: counts[bucket.key],
+              }))}
+            />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="severity"
+              label="Severity"
+              options={['low', 'medium', 'high', 'critical'].map((severity) => ({
+                value: severity,
+                label: severity,
+                count: enriched.filter((row) => row.severity === severity).length,
+              }))}
+            />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={['open', 'in_progress', 'pending_verification'].map((status) => ({
+                value: status,
+                label: status.replace('_', ' '),
+                count: enriched.filter((row) => row.status === status).length,
+              }))}
+            />
+          </TableToolbar>
         </>
       }
     >
-      {enriched.length === 0 ? (
+      {pageRows.length === 0 ? (
         <EmptyState
           icon={<Hourglass size={32} />}
-          title="No open corrective actions"
-          description="Nothing to age — the backlog is empty."
+          title={enriched.length === 0 ? 'No open corrective actions' : 'No matching actions'}
+          description={
+            enriched.length === 0
+              ? 'Nothing to age — the backlog is empty.'
+              : 'Adjust the search or filters.'
+          }
         />
       ) : (
-        <div className="space-y-5">
-          {BUCKETS.map((b) => {
-            const rowsInBucket = grouped[b.key]
-            if (rowsInBucket.length === 0) return null
-            return (
-              <section
-                key={b.key}
-                className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-              >
-                <header className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/80">
-                  <div className="flex items-center gap-2">
-                    <Badge className={b.tone} variant="default">
-                      {b.label}
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+                <th className="px-4 py-2">Age bucket</th>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="reference"
+                >
+                  Ref
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="title"
+                >
+                  Title
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="severity"
+                >
+                  Severity
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="status"
+                >
+                  Status
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="owner"
+                >
+                  Owner
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="site"
+                >
+                  Site
+                </SortTh>
+                <th className="px-4 py-2">Assigned</th>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="age"
+                  align="right"
+                  className="text-right"
+                >
+                  Age (days)
+                </SortTh>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {pageRows.map((r) => (
+                <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
+                  <td className="px-4 py-2">
+                    <Badge
+                      className={BUCKETS.find((bucket) => bucket.key === r.bucket)?.tone}
+                      variant="default"
+                    >
+                      {BUCKETS.find((bucket) => bucket.key === r.bucket)?.label}
                     </Badge>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{b.help}</span>
-                  </div>
-                  <Badge variant="secondary">{rowsInBucket.length} open</Badge>
-                </header>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                      <th className="px-4 py-2">Ref</th>
-                      <th className="px-4 py-2">Title</th>
-                      <th className="px-4 py-2">Severity</th>
-                      <th className="px-4 py-2">Status</th>
-                      <th className="px-4 py-2">Owner</th>
-                      <th className="px-4 py-2">Site</th>
-                      <th className="px-4 py-2">Assigned</th>
-                      <th className="px-4 py-2 text-right">Age (days)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {rowsInBucket.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                        <td className="px-4 py-2 font-mono text-xs">
-                          <Link
-                            href={`/corrective-actions/${r.id}` as any}
-                            className="hover:underline"
-                          >
-                            {r.reference}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Link
-                            href={`/corrective-actions/${r.id}` as any}
-                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                          >
-                            {r.title}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge
-                            variant={
-                              r.severity === 'critical' || r.severity === 'high'
-                                ? 'destructive'
-                                : r.severity === 'medium'
-                                  ? 'warning'
-                                  : 'secondary'
-                            }
-                          >
-                            {r.severity}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
-                        </td>
-                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                          {r.ownerName ?? '—'}
-                        </td>
-                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                          {r.siteName ?? '—'}
-                        </td>
-                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                          {r.assignedOn ?? '—'}
-                        </td>
-                        <td className="px-4 py-2 text-right font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
-                          {r.ageDays}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            )
-          })}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs">
+                    <Link href={`/corrective-actions/${r.id}` as any} className="hover:underline">
+                      {r.reference}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2">
+                    <Link
+                      href={`/corrective-actions/${r.id}` as any}
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                    >
+                      {r.title}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2">
+                    <Badge
+                      variant={
+                        r.severity === 'critical' || r.severity === 'high'
+                          ? 'destructive'
+                          : r.severity === 'medium'
+                            ? 'warning'
+                            : 'secondary'
+                      }
+                    >
+                      {r.severity}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-2">
+                    <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                    {r.ownerName ?? '—'}
+                  </td>
+                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                    {r.siteName ?? '—'}
+                  </td>
+                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                    {r.assignedOn ?? '—'}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
+                    {r.ageDays}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={filtered.length}
+        page={page}
+        perPage={params.perPage}
+      />
     </ListPageLayout>
   )
 }

@@ -12,9 +12,9 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { addMonthsIso, isoToday } from '../_lib/dates'
 import { gradeAnswer, type QuestionKind } from '../_lib/grading'
@@ -188,6 +188,13 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
       })
       .where(eq(trainingAssessments.id, attemptId))
 
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: attemptId,
+      moduleKey: 'training',
+      event: 'on_submit',
+      occurrenceKey: attemptId,
+    })
+
     // Compliance is computed by the unified engine (the training adapter reads
     // training_records / training_assessments directly); no legacy recompute.
     return { score, passed, pointsAwarded, pointsPossible, trainingRecordId }
@@ -200,7 +207,6 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
     summary: `Submitted assessment ${attemptId} (${summary.score}%, ${summary.passed ? 'pass' : 'fail'})`,
     after: { ...summary },
   })
-  await runModuleFlows(ctx, { moduleKey: 'training', event: 'on_submit', subjectId: attemptId })
   revalidatePath(`/training/assessments/${attemptId}`)
   revalidatePath('/training/assessments')
 }

@@ -2,34 +2,36 @@
 
 // Server actions behind /admin/users — membership lifecycle (invite, status,
 // remove), role assignment + per-assignment data scope, per-user permission
-// overrides, and the global super-admin flag. Every mutating action gates on
-// `admin.users.manage` (super-admin toggle additionally requires the actor to
-// be a super-admin), writes an audit entry, and revalidates the affected pages.
+// overrides, and impersonation. Every mutating action gates on the relevant
+// permission, writes an audit entry, and revalidates the affected pages.
 //
 // Convention: success paths revalidate and (where a new record is created)
 // redirect; expected user errors redirect back with `?error=` so the target
 // page can surface an Alert. Guard violations that the UI shouldn't allow throw.
 
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { auth } from '@beaconhs/auth'
+import { getAuth } from '@beaconhs/auth'
+import { nextInviteGenerationDate } from '@beaconhs/auth/invites'
 import {
-  account,
+  auditLog,
   people,
   PERMISSION_CATALOGUE,
   roleAssignments,
   roles,
   sessions,
+  tenants,
   tenantUsers,
   userPermissionOverrides,
   users,
 } from '@beaconhs/db/schema'
-import { assertCan, assertNotImpersonating, ForbiddenError } from '@beaconhs/tenant'
+import { assertCan, assertNotImpersonating } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { IMPERSONATION_TTL_MS } from '@/lib/impersonation'
+import { sendMembershipInviteEmail } from '@/lib/invite-email'
 import { parseRoleScope } from './_scope-data'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
@@ -64,13 +66,22 @@ function canActOn(ctx: Ctx, acct: { isSuperAdmin: boolean }): boolean {
   return ctx.isSuperAdmin || !acct.isSuperAdmin
 }
 
+/** Access administration must always run as the real administrator. */
+async function requireUserAdmin(action: string): Promise<Ctx> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'admin.users.manage')
+  assertNotImpersonating(ctx, action)
+  return ctx
+}
+
 /** Load a membership + its account, or redirect back with an error. */
 async function loadMember(ctx: Ctx, membershipId: string) {
   const row = await ctx.db(async (tx) => {
     const [m] = await tx
-      .select({ membership: tenantUsers, account: users })
+      .select({ membership: tenantUsers, account: users, tenantStatus: tenants.status })
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
+      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
       .where(eq(tenantUsers.id, membershipId))
       .limit(1)
     return m ?? null
@@ -81,8 +92,7 @@ async function loadMember(ctx: Ctx, membershipId: string) {
 // --- invite --------------------------------------------------------------
 
 export async function inviteUser(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('invite members')
 
   const email = String(formData.get('email') ?? '')
     .trim()
@@ -96,29 +106,45 @@ export async function inviteUser(formData: FormData): Promise<void> {
   }
 
   const result = await ctx.db(async (tx) => {
+    const [tenant] = await tx
+      .select({ id: tenants.id, name: tenants.name, status: tenants.status })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId))
+      .limit(1)
+    if (!tenant || tenant.status !== 'active') {
+      return { error: 'Invitations are disabled while this tenant is not active.' } as const
+    }
+
     const [existingUser] = await tx.select().from(users).where(eq(users.email, email)).limit(1)
     let userId = existingUser?.id
-    let createdUser = false
     if (!userId) {
-      userId = crypto.randomUUID()
-      await tx.insert(users).values({
-        id: userId,
-        email,
-        name: name || email.split('@')[0] || email,
-        emailVerified: false,
-      })
-      createdUser = true
+      const candidateId = crypto.randomUUID()
+      const [created] = await tx
+        .insert(users)
+        .values({
+          id: candidateId,
+          email,
+          name: name || email.split('@')[0] || email,
+          emailVerified: false,
+        })
+        .onConflictDoNothing({ target: users.email })
+        .returning({ id: users.id })
+      if (created) userId = created.id
+      else {
+        // A concurrent administrator inserted this global identity after our
+        // first read. The unique email remains authoritative; reload it rather
+        // than surfacing a unique-violation 500.
+        const [concurrent] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1)
+        userId = concurrent?.id
+      }
     }
+    if (!userId) return { error: 'Could not create or resolve this user identity.' } as const
 
-    const [existingMember] = await tx
-      .select()
-      .from(tenantUsers)
-      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.userId, userId)))
-      .limit(1)
-    if (existingMember) {
-      return { membershipId: existingMember.id, already: true as const }
-    }
-
+    const invitedAt = new Date()
     const [m] = await tx
       .insert(tenantUsers)
       .values({
@@ -126,13 +152,27 @@ export async function inviteUser(formData: FormData): Promise<void> {
         userId,
         displayName: name || null,
         status: 'invited',
-        invitedAt: new Date(),
+        invitedAt,
         invitedBy: ctx.userId,
       })
+      .onConflictDoNothing({ target: [tenantUsers.tenantId, tenantUsers.userId] })
       .returning()
+    if (!m) {
+      // The insert waits for a concurrent conflicting transaction, so at READ
+      // COMMITTED the winning membership is visible to this reload.
+      const [existingMember] = await tx
+        .select({ id: tenantUsers.id })
+        .from(tenantUsers)
+        .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.userId, userId)))
+        .limit(1)
+      if (existingMember) {
+        return { membershipId: existingMember.id, already: true as const }
+      }
+      return { error: 'Could not create or resolve this tenant membership.' } as const
+    }
 
     // Optional initial role — only if the role belongs to this tenant.
-    if (roleId && m) {
+    if (roleId) {
       const [role] = await tx
         .select({ id: roles.id })
         .from(roles)
@@ -147,49 +187,103 @@ export async function inviteUser(formData: FormData): Promise<void> {
         })
       }
     }
-    return { membershipId: m!.id, already: false as const, createdUser }
+
+    await tx.insert(auditLog).values({
+      tenantId: ctx.tenantId,
+      actorUserId: ctx.userId,
+      entityType: 'tenant_user',
+      entityId: m.id,
+      action: 'invite',
+      summary: `Invited ${email}`,
+    })
+    return {
+      membershipId: m.id,
+      already: false as const,
+      userId,
+      invitedAt,
+      tenantName: tenant.name,
+    }
   })
+
+  if ('error' in result && result.error) {
+    redirect(`/admin/users/invite?error=${encodeURIComponent(result.error)}`)
+  }
 
   if (result.already) {
     backToDetail(result.membershipId, 'That person is already a member of this tenant.')
   }
 
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: result.membershipId,
-    action: 'invite',
-    summary: `Invited ${email}`,
-  })
-
-  // Best-effort magic-link email. Failure (e.g. no mail server) shouldn't block
-  // the invite — the member still exists and the admin can resend.
+  let deliveryError = false
   try {
-    await auth.api.signInMagicLink({
-      body: { email, name: name || undefined, callbackURL: '/dashboard' },
-      headers: (await headers()) as unknown as Headers,
+    await sendMembershipInviteEmail({
+      membershipId: result.membershipId,
+      tenantId: ctx.tenantId,
+      tenantName: result.tenantName,
+      userId: result.userId,
+      email,
+      invitedAt: result.invitedAt,
+      name,
     })
   } catch {
-    // swallow — surfaced as a notice on the detail page below
+    deliveryError = true
   }
 
   revalidatePath('/admin/users')
+  if (deliveryError) {
+    backToDetail(
+      result.membershipId,
+      'The membership was created, but the invite email could not be sent. Check mail configuration, then resend it.',
+    )
+  }
   redirect(detailPath(result.membershipId))
 }
 
 export async function resendInvite(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('resend membership invitations')
   const membershipId = String(formData.get('membershipId') ?? '')
   if (!membershipId) return
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
-  }
+  const invite = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select({ membership: tenantUsers, account: users, tenant: tenants })
+      .from(tenantUsers)
+      .innerJoin(users, eq(users.id, tenantUsers.userId))
+      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+      .where(eq(tenantUsers.id, membershipId))
+      .limit(1)
+      .for('update')
+    if (!row) return { error: 'Membership not found.' } as const
+    if (!canActOn(ctx, row.account)) {
+      return { error: 'Only a super-admin can change a super-admin account.' } as const
+    }
+    if (row.membership.status !== 'invited') {
+      return { error: 'Only pending invitations can be resent.' } as const
+    }
+    if (row.tenant.status !== 'active') {
+      return { error: 'Invitations are disabled while this tenant is not active.' } as const
+    }
+
+    // Lock + monotonic rotation makes the newest email the only valid invite,
+    // even when administrators click resend concurrently in the same ms.
+    const invitedAt = nextInviteGenerationDate(row.membership.invitedAt)
+    const [rotated] = await tx
+      .update(tenantUsers)
+      .set({ invitedAt, updatedAt: new Date() })
+      .where(and(eq(tenantUsers.id, membershipId), eq(tenantUsers.status, 'invited')))
+      .returning({ id: tenantUsers.id })
+    if (!rotated) return { error: 'The invitation changed. Refresh and try again.' } as const
+    return { row, invitedAt } as const
+  })
+  if ('error' in invite && invite.error) backToDetail(membershipId, invite.error)
+
   try {
-    await auth.api.signInMagicLink({
-      body: { email: member.account.email, callbackURL: '/dashboard' },
-      headers: (await headers()) as unknown as Headers,
+    await sendMembershipInviteEmail({
+      membershipId,
+      tenantId: ctx.tenantId,
+      tenantName: invite.row.tenant.name,
+      userId: invite.row.account.id,
+      email: invite.row.account.email,
+      invitedAt: invite.invitedAt,
+      name: invite.row.membership.displayName ?? invite.row.account.name,
     })
   } catch {
     backToDetail(membershipId, "Couldn't send the invite email — check the mail configuration.")
@@ -198,7 +292,7 @@ export async function resendInvite(formData: FormData): Promise<void> {
     entityType: 'tenant_user',
     entityId: membershipId,
     action: 'invite',
-    summary: `Resent invite to ${member.account.email}`,
+    summary: `Resent invite to ${invite.row.account.email}`,
   })
   revalidatePath(detailPath(membershipId))
 }
@@ -206,8 +300,7 @@ export async function resendInvite(formData: FormData): Promise<void> {
 // --- membership profile + status ----------------------------------------
 
 export async function updateMemberDisplayName(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('update member display names')
   const membershipId = String(formData.get('membershipId') ?? '')
   const displayName = String(formData.get('displayName') ?? '').trim() || null
   if (!membershipId) return
@@ -226,38 +319,72 @@ export async function updateMemberDisplayName(formData: FormData): Promise<void>
 }
 
 export async function setMemberStatus(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('change membership status')
   const membershipId = String(formData.get('membershipId') ?? '')
   const status = String(formData.get('status') ?? '')
   if (!membershipId || (status !== 'active' && status !== 'suspended')) return
 
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (member.membership.userId === ctx.userId) {
-    backToDetail(membershipId, "You can't change your own status.")
-  }
-  if (member.account.isSuperAdmin && !ctx.isSuperAdmin) {
-    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
-  }
+  const result = await ctx.db(async (tx) => {
+    const [member] = await tx
+      .select({ membership: tenantUsers, account: users })
+      .from(tenantUsers)
+      .innerJoin(users, eq(users.id, tenantUsers.userId))
+      .where(eq(tenantUsers.id, membershipId))
+      .limit(1)
+      .for('update')
+    if (!member) return { error: 'Membership not found.' } as const
+    if (member.membership.userId === ctx.userId) {
+      return { error: "You can't change your own status." } as const
+    }
+    if (member.account.isSuperAdmin && !ctx.isSuperAdmin) {
+      return { error: 'Only a super-admin can change a super-admin account.' } as const
+    }
+    if (member.membership.status === 'invited') {
+      return {
+        error: 'Pending invitations activate only when the member accepts the email link.',
+      } as const
+    }
+    if (
+      (status === 'suspended' && member.membership.status !== 'active') ||
+      (status === 'active' && member.membership.status !== 'suspended')
+    ) {
+      return {
+        error: 'That membership status has already changed. Refresh and try again.',
+      } as const
+    }
 
-  const patch: { status: 'active' | 'suspended'; joinedAt?: Date } = { status }
-  if (status === 'active' && !member.membership.joinedAt) patch.joinedAt = new Date()
-
-  await ctx.db((tx) => tx.update(tenantUsers).set(patch).where(eq(tenantUsers.id, membershipId)))
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: status === 'suspended' ? 'archive' : 'update',
-    summary: status === 'suspended' ? 'Suspended member' : 'Reactivated member',
+    const changedAt = new Date()
+    const [updated] = await tx
+      .update(tenantUsers)
+      .set({ status, updatedAt: changedAt })
+      .where(
+        and(eq(tenantUsers.id, membershipId), eq(tenantUsers.status, member.membership.status)),
+      )
+      .returning({ id: tenantUsers.id })
+    if (!updated) {
+      return {
+        error: 'That membership status changed before it could be saved. Refresh and try again.',
+      } as const
+    }
+    await tx.insert(auditLog).values({
+      tenantId: ctx.tenantId,
+      actorUserId: ctx.userId,
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: status === 'suspended' ? 'archive' : 'update',
+      summary: status === 'suspended' ? 'Suspended member' : 'Reactivated member',
+      before: { status: member.membership.status },
+      after: { status },
+    })
+    return { ok: true } as const
   })
+  if ('error' in result && result.error) backToDetail(membershipId, result.error)
   revalidatePath(detailPath(membershipId))
   revalidatePath('/admin/users')
 }
 
 export async function removeMember(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('remove tenant memberships')
   const membershipId = String(formData.get('membershipId') ?? '')
   if (!membershipId) return
 
@@ -285,14 +412,19 @@ export async function removeMember(formData: FormData): Promise<void> {
 // --- role assignments ----------------------------------------------------
 
 export async function assignRole(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('assign member roles')
   const membershipId = String(formData.get('membershipId') ?? '')
   const roleId = String(formData.get('roleId') ?? '').trim()
   const scope = parseRoleScope(String(formData.get('scope') ?? ''))
   if (!membershipId || !roleId) return
 
   await ctx.db(async (tx) => {
+    const [membership] = await tx
+      .select({ id: tenantUsers.id })
+      .from(tenantUsers)
+      .where(eq(tenantUsers.id, membershipId))
+      .limit(1)
+    if (!membership) return
     const [role] = await tx
       .select({ id: roles.id, name: roles.name })
       .from(roles)
@@ -330,12 +462,17 @@ export async function assignRole(formData: FormData): Promise<void> {
 }
 
 export async function removeAssignment(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('remove member roles')
   const membershipId = String(formData.get('membershipId') ?? '')
   const assignmentId = String(formData.get('assignmentId') ?? '')
   if (!assignmentId) return
-  await ctx.db((tx) => tx.delete(roleAssignments).where(eq(roleAssignments.id, assignmentId)))
+  await ctx.db((tx) =>
+    tx
+      .delete(roleAssignments)
+      .where(
+        and(eq(roleAssignments.id, assignmentId), eq(roleAssignments.tenantUserId, membershipId)),
+      ),
+  )
   await recordAudit(ctx, {
     entityType: 'tenant_user',
     entityId: membershipId,
@@ -350,23 +487,30 @@ export async function removeAssignment(formData: FormData): Promise<void> {
 // --- per-user permission overrides --------------------------------------
 
 export async function setPermissionOverride(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('change member permission overrides')
   const membershipId = String(formData.get('membershipId') ?? '')
   const permission = String(formData.get('permission') ?? '').trim()
   const effect = String(formData.get('effect') ?? '')
   if (!membershipId || !PERMISSIONS.has(permission) || (effect !== 'grant' && effect !== 'deny')) {
     return
   }
-  await ctx.db((tx) =>
-    tx
+  const applied = await ctx.db(async (tx) => {
+    const [membership] = await tx
+      .select({ id: tenantUsers.id })
+      .from(tenantUsers)
+      .where(eq(tenantUsers.id, membershipId))
+      .limit(1)
+    if (!membership) return false
+    await tx
       .insert(userPermissionOverrides)
       .values({ tenantId: ctx.tenantId, tenantUserId: membershipId, permission, effect })
       .onConflictDoUpdate({
         target: [userPermissionOverrides.tenantUserId, userPermissionOverrides.permission],
         set: { effect, updatedAt: new Date() },
-      }),
-  )
+      })
+    return true
+  })
+  if (!applied) return
   await recordAudit(ctx, {
     entityType: 'tenant_user',
     entityId: membershipId,
@@ -378,8 +522,7 @@ export async function setPermissionOverride(formData: FormData): Promise<void> {
 }
 
 export async function clearPermissionOverride(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
+  const ctx = await requireUserAdmin('clear member permission overrides')
   const membershipId = String(formData.get('membershipId') ?? '')
   const permission = String(formData.get('permission') ?? '').trim()
   if (!membershipId || !permission) return
@@ -403,33 +546,9 @@ export async function clearPermissionOverride(formData: FormData): Promise<void>
   revalidatePath(detailPath(membershipId))
 }
 
-// --- global super-admin flag --------------------------------------------
-
-export async function setSuperAdmin(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  // Granting platform-wide super-admin is reserved for existing super-admins.
-  if (!ctx.isSuperAdmin) throw new ForbiddenError('admin.super-admin')
-  const userId = String(formData.get('userId') ?? '')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  const value = String(formData.get('value') ?? '') === 'on'
-  if (!userId) return
-  if (userId === ctx.userId && !value) {
-    backToDetail(membershipId, "You can't revoke your own super-admin access.")
-  }
-  await ctx.db((tx) => tx.update(users).set({ isSuperAdmin: value }).where(eq(users.id, userId)))
-  await recordAudit(ctx, {
-    entityType: 'user',
-    entityId: userId,
-    action: 'update',
-    summary: value ? 'Granted super-admin' : 'Revoked super-admin',
-  })
-  revalidatePath(detailPath(membershipId))
-  revalidatePath('/admin/users')
-}
-
 // --- linked person (employee) record ------------------------------------
 
-export type LinkablePerson = {
+type LinkablePerson = {
   id: string
   name: string
   hint: string | null
@@ -480,11 +599,7 @@ export async function loadPersonLinkData(
  * already tied to another account is rejected.
  */
 export async function setUserPersonLink(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  // Binding an employee record to a login is an identity change — never do it
-  // under an impersonation overlay.
-  assertNotImpersonating(ctx, 'link person record')
+  const ctx = await requireUserAdmin('link person records')
   const membershipId = String(formData.get('membershipId') ?? '')
   const personId = String(formData.get('personId') ?? '').trim() || null
   if (!membershipId) return
@@ -603,245 +718,6 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
   })
 }
 
-// --- account: name + email ----------------------------------------------
-
-export async function updateAccountName(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!membershipId || !name) return
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
-  }
-  await ctx.db((tx) =>
-    tx.update(users).set({ name, updatedAt: new Date() }).where(eq(users.id, member.account.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: 'Updated account name',
-    after: { name },
-  })
-  revalidatePath(detailPath(membershipId))
-  revalidatePath('/admin/users')
-}
-
-export async function updateMemberEmail(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  const email = String(formData.get('email') ?? '')
-    .trim()
-    .toLowerCase()
-  if (!membershipId) return
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToTab(membershipId, 'security', {
-      error: 'Only a super-admin can change a super-admin account.',
-    })
-  }
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    backToTab(membershipId, 'security', { error: 'Enter a valid email address.' })
-  }
-  if (email === member.account.email) {
-    backToTab(membershipId, 'security', { notice: 'Email unchanged.' })
-  }
-  // Email is globally unique across accounts — block collisions.
-  const taken = await ctx.db(async (tx) => {
-    const [u] = await tx.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
-    return Boolean(u && u.id !== member.account.id)
-  })
-  if (taken) {
-    backToTab(membershipId, 'security', {
-      error: 'That email is already in use by another account.',
-    })
-  }
-  // The new address hasn't been confirmed, so it reverts to unverified.
-  await ctx.db((tx) =>
-    tx
-      .update(users)
-      .set({ email, emailVerified: false, updatedAt: new Date() })
-      .where(eq(users.id, member.account.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: `Changed email to ${email}`,
-    before: { email: member.account.email },
-    after: { email },
-  })
-  revalidatePath(detailPath(membershipId))
-  revalidatePath('/admin/users')
-  backToTab(membershipId, 'security', { notice: 'Email updated.' })
-}
-
-export async function setEmailVerified(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  const value = String(formData.get('value') ?? '') === 'on'
-  if (!membershipId) return
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToTab(membershipId, 'security', {
-      error: 'Only a super-admin can change a super-admin account.',
-    })
-  }
-  await ctx.db((tx) =>
-    tx.update(users).set({ emailVerified: value }).where(eq(users.id, member.account.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: value ? 'Marked email verified' : 'Marked email unverified',
-  })
-  revalidatePath(detailPath(membershipId))
-  backToTab(membershipId, 'security', {
-    notice: value ? 'Email marked as verified.' : 'Email marked as unverified.',
-  })
-}
-
-// --- account: password + sessions ---------------------------------------
-
-export async function setMemberPassword(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  const password = String(formData.get('password') ?? '')
-  const confirm = String(formData.get('confirmPassword') ?? '')
-  const signOut = String(formData.get('revokeSessions') ?? '') === 'on'
-  if (!membershipId) return
-
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToTab(membershipId, 'security', {
-      error: 'Only a super-admin can change a super-admin account.',
-    })
-  }
-  if (password.length < 8) {
-    backToTab(membershipId, 'security', { error: 'Password must be at least 8 characters.' })
-  }
-  if (password !== confirm) {
-    backToTab(membershipId, 'security', { error: 'Passwords do not match.' })
-  }
-
-  // Hash with Better-Auth's own hasher so the credential verifies on sign-in.
-  const authCtx = await auth.$context
-  const hashed = await authCtx.password.hash(password)
-
-  await ctx.db(async (tx) => {
-    const [cred] = await tx
-      .select({ id: account.id })
-      .from(account)
-      .where(and(eq(account.userId, member.account.id), eq(account.providerId, 'credential')))
-      .limit(1)
-    if (cred) {
-      await tx
-        .update(account)
-        .set({ password: hashed, updatedAt: new Date() })
-        .where(eq(account.id, cred.id))
-    } else {
-      // Invited / magic-link users have no credential account yet — create one.
-      await tx.insert(account).values({
-        id: crypto.randomUUID(),
-        userId: member.account.id,
-        accountId: member.account.id,
-        providerId: 'credential',
-        password: hashed,
-      })
-    }
-    if (signOut) await tx.delete(sessions).where(eq(sessions.userId, member.account.id))
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: signOut ? 'Set password and signed out all sessions' : 'Set password',
-  })
-  revalidatePath(detailPath(membershipId))
-  backToTab(membershipId, 'security', {
-    notice: signOut
-      ? 'Password updated. All active sessions were signed out.'
-      : 'Password updated. Share it with the member over a secure channel.',
-  })
-}
-
-export async function sendPasswordReset(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  if (!membershipId) return
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToTab(membershipId, 'security', {
-      error: 'Only a super-admin can change a super-admin account.',
-    })
-  }
-  try {
-    await auth.api.requestPasswordReset({
-      body: { email: member.account.email, redirectTo: '/reset-password' },
-      headers: (await headers()) as unknown as Headers,
-    })
-  } catch {
-    backToTab(membershipId, 'security', {
-      error: "Couldn't send the reset email — check the mail configuration.",
-    })
-  }
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: `Sent password reset link to ${member.account.email}`,
-  })
-  revalidatePath(detailPath(membershipId))
-  backToTab(membershipId, 'security', { notice: `Reset link sent to ${member.account.email}.` })
-}
-
-export async function revokeMemberSessions(formData: FormData): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'admin.users.manage')
-  const membershipId = String(formData.get('membershipId') ?? '')
-  if (!membershipId) return
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToTab(membershipId, 'security', {
-      error: 'Only a super-admin can change a super-admin account.',
-    })
-  }
-  const deleted = await ctx.db(async (tx) => {
-    const rows = await tx
-      .delete(sessions)
-      .where(eq(sessions.userId, member.account.id))
-      .returning({ id: sessions.id })
-    return rows.length
-  })
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: `Signed out all sessions (${deleted})`,
-  })
-  revalidatePath(detailPath(membershipId))
-  backToTab(membershipId, 'security', {
-    notice:
-      deleted > 0
-        ? `Signed out ${deleted} session${deleted === 1 ? '' : 's'}.`
-        : 'No active sessions to sign out.',
-  })
-}
-
 // --- impersonation ("view as") ------------------------------------------
 
 /**
@@ -877,10 +753,13 @@ export async function startImpersonation(formData: FormData): Promise<void> {
   if (member.membership.status !== 'active') {
     backToDetail(membershipId, 'Only active members can be impersonated.')
   }
+  if (member.tenantStatus !== 'active') {
+    backToDetail(membershipId, 'Restore this workspace before impersonating a member.')
+  }
 
   // The pointer is keyed by the actor's current session token (the cookie is
   // never swapped, so this stays the admin's session for the whole overlay).
-  const authSession = await auth.api.getSession({
+  const authSession = await getAuth().api.getSession({
     headers: (await headers()) as unknown as Headers,
   })
   const token = authSession?.session?.token

@@ -9,14 +9,29 @@ import 'server-only'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { insightCards, type BhqlQuery } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { validateTrustedSystemBhql } from '@beaconhs/analytics/server'
 import { BUILTIN_QUERIES, INSIGHT_WIDGET_MAP } from './_widgets'
 
-export type SystemCard = {
+type SystemCard = {
   id: string
   name: string
   query: BhqlQuery
   vizType: string
   vizSettings: Record<string, unknown>
+  trustedSystemCard: true
+}
+
+export function isTrustedSystemCard(card: {
+  name: string
+  query: BhqlQuery
+  createdBy?: string | null
+}): boolean {
+  if (card.createdBy !== null) return false
+  return Object.entries(BUILTIN_QUERIES).some(
+    ([key, builtin]) =>
+      INSIGHT_WIDGET_MAP.get(key)?.label === card.name &&
+      JSON.stringify(builtin.query) === JSON.stringify(card.query),
+  )
 }
 
 /** Ensure the BHQL built-ins exist as published Cards for this tenant. Returns
@@ -26,7 +41,7 @@ export async function ensureSystemCards(ctx: RequestContext): Promise<Map<string
     key,
     name: INSIGHT_WIDGET_MAP.get(key)?.label ?? key,
     description: INSIGHT_WIDGET_MAP.get(key)?.description ?? null,
-    query: b.query,
+    query: validateTrustedSystemBhql(b.query),
     vizType: b.vizType,
     vizSettings: b.vizSettings ?? {},
   }))
@@ -130,6 +145,7 @@ export async function ensureSystemCards(ctx: RequestContext): Promise<Map<string
         query: c.query,
         vizType: c.vizType,
         vizSettings: (c.vizSettings ?? {}) as Record<string, unknown>,
+        trustedSystemCard: true,
       })
     }
   }

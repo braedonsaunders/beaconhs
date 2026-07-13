@@ -25,7 +25,7 @@ export async function loadTenantEmailTemplate(
   return t ?? null
 }
 
-export type EmailTemplateOption = {
+type EmailTemplateOption = {
   id: string
   name: string
   key: string

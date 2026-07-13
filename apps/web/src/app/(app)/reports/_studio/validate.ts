@@ -3,10 +3,9 @@
 // whitelists, the filter tree is depth/size-capped, and aggregation specs are
 // normalised. Shared by create, update, and preview actions.
 //
-// The entity whitelist is the DISCOVERED catalog (every tenant-scoped table,
-// from @beaconhs/analytics/server) unioned with the legacy static registry for
-// back-compat — so any table the builder offers is queryable, and old saved
-// reports keep resolving.
+// The entity whitelist is the permission-filtered discovered catalog from
+// @beaconhs/analytics/server, so every source the builder offers is queryable
+// and no hidden/static source can bypass authorization.
 
 import {
   REPORT_AGG_FNS,
@@ -19,20 +18,13 @@ import {
   type ReportRule,
   type ReportRuleGroup,
 } from '@beaconhs/db/schema'
-import { REPORT_ENTITY_MAP, resolveReportLayout, type ReportEntity } from '@beaconhs/reports'
+import { resolveReportLayout, type ReportEntity } from '@beaconhs/reports'
 import { discoverEntityMap } from '@beaconhs/analytics/server'
 
 const MAX_DEPTH = 5
 const MAX_RULES = 60
 const MAX_BREAKOUTS = 6
 const MAX_MEASURES = 8
-
-/** Resolve an entity key against the provided catalog (the caller may pass a
- *  catalog already augmented with tenant custom-field columns), falling back to
- *  the discovered catalog then the static registry for legacy keys. */
-function resolveEntity(key: string, entityMap: Record<string, ReportEntity>): ReportEntity | null {
-  return entityMap[key] ?? REPORT_ENTITY_MAP[key] ?? null
-}
 
 /**
  * @param entityMap Catalog to validate columns against. Pass a catalog
@@ -48,7 +40,7 @@ export function validateCustomQuery(
   }
   const q = raw as Record<string, unknown>
   const entity = String(q.entity ?? '')
-  const entityMeta = resolveEntity(entity, entityMap)
+  const entityMeta = entityMap[entity] ?? null
   if (!entityMeta) {
     throw new Error(`Invalid entity: ${entity}`)
   }
@@ -103,43 +95,29 @@ export function validateCustomQuery(
     measures = [{ fn: 'count' }]
   }
 
-  // v1 flat filters (kept for backwards compatibility with older clients).
-  const filters = Array.isArray(q.filters)
-    ? (q.filters as unknown[]).flatMap((f) => {
-        if (!f || typeof f !== 'object') return []
-        const o = f as Record<string, unknown>
-        if (!validColumn(o.column)) return []
-        const op = String(o.op ?? '')
-        if (!REPORT_FILTER_OPERATORS.includes(op as never)) return []
-        return [
-          {
-            column: o.column,
-            op: op as ReportRule['op'],
-            value: sanitizeValue(o.value),
-          },
-        ]
-      })
-    : []
-
-  // v2 nested tree.
+  // Canonical nested filter tree.
   let ruleCount = 0
-  function sanitizeGroup(g: unknown, depth: number): ReportRuleGroup | null {
-    if (!g || typeof g !== 'object' || depth > MAX_DEPTH) return null
+  function sanitizeGroup(g: unknown, depth: number): ReportRuleGroup {
+    if (!g || typeof g !== 'object') throw new Error('Invalid filter group')
+    if (depth > MAX_DEPTH) throw new Error('Filter tree is too deep')
     const o = g as Record<string, unknown>
-    if (!Array.isArray(o.rules)) return null
+    if (!Array.isArray(o.rules)) throw new Error('Invalid filter group rules')
     const rules: (ReportRule | ReportRuleGroup)[] = []
     for (const r of o.rules) {
-      if (!r || typeof r !== 'object') continue
+      if (!r || typeof r !== 'object') throw new Error('Invalid filter rule')
       if (++ruleCount > MAX_RULES) throw new Error('Too many filter rules')
       const ro = r as Record<string, unknown>
       if (Array.isArray(ro.rules)) {
         const sub = sanitizeGroup(ro, depth + 1)
-        if (sub && sub.rules.length) rules.push(sub)
+        if (sub.rules.length) rules.push(sub)
         continue
       }
       const field = ro.field
       const op = String(ro.op ?? ro.operator ?? '')
-      if (!validColumn(field) || !REPORT_FILTER_OPERATORS.includes(op as never)) continue
+      if (!validColumn(field)) throw new Error(`Invalid filter field: ${String(field ?? '')}`)
+      if (!REPORT_FILTER_OPERATORS.includes(op as never)) {
+        throw new Error(`Invalid filter operator: ${op}`)
+      }
       rules.push({ field, op: op as ReportRule['op'], value: sanitizeValue(ro.value) })
     }
     return {
@@ -148,8 +126,8 @@ export function validateCustomQuery(
       rules,
     }
   }
-  const filtersV2 = q.filtersV2 ? sanitizeGroup(q.filtersV2, 1) : null
-  const filtersV2Final = filtersV2 && filtersV2.rules.length ? filtersV2 : null
+  const filters = q.filters == null ? null : sanitizeGroup(q.filters, 1)
+  const filtersFinal = filters && filters.rules.length ? filters : null
 
   const groupBy = validColumn(q.groupBy) ? q.groupBy : null
   const sort =
@@ -173,8 +151,7 @@ export function validateCustomQuery(
     columns,
     breakouts,
     measures,
-    filters,
-    filtersV2: filtersV2Final,
+    filters: filtersFinal,
     groupBy,
     sort,
     limit,

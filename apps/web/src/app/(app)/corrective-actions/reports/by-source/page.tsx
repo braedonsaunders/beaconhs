@@ -7,9 +7,18 @@ import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Corrective actions by source' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/corrective-actions/reports/by-source'
+const SORTS = ['type', 'source', 'total', 'open', 'closed', 'cost'] as const
 
 type SourceRow = {
   sourceEntityType: string
@@ -28,7 +37,18 @@ type SourceRow = {
  * fix-its. Incident sources resolve to their reference + link; other
  * source types fall back to the raw ID.
  */
-export default async function BySourceReport() {
+export default async function BySourceReport({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const params = parseListParams(sp, {
+    sort: 'total',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const ctx = await requireRequestContext()
 
   const grouped = await ctx.db(async (tx) => {
@@ -118,6 +138,33 @@ export default async function BySourceReport() {
   for (const r of rows) {
     typeTotals.set(r.sourceEntityType, (typeTotals.get(r.sourceEntityType) ?? 0) + r.total)
   }
+  const sourceTypeParam = pickString(sp.sourceType)
+  const sourceTypeFilter = typeTotals.has(sourceTypeParam ?? '') ? sourceTypeParam : undefined
+  const query = params.q?.toLowerCase()
+  const filtered = rows.filter((row) => {
+    if (sourceTypeFilter && row.sourceEntityType !== sourceTypeFilter) return false
+    if (!query) return true
+    return [row.sourceEntityType, row.sourceLabel].join(' ').toLowerCase().includes(query)
+  })
+  const mult = params.dir === 'asc' ? 1 : -1
+  filtered.sort((a, b) => {
+    const comparison =
+      params.sort === 'type'
+        ? a.sourceEntityType.localeCompare(b.sourceEntityType)
+        : params.sort === 'source'
+          ? a.sourceLabel.localeCompare(b.sourceLabel)
+          : params.sort === 'open'
+            ? a.open - b.open
+            : params.sort === 'closed'
+              ? a.closed - b.closed
+              : params.sort === 'cost'
+                ? a.costImpact - b.costImpact
+                : a.total - b.total
+    return comparison * mult || a.sourceLabel.localeCompare(b.sourceLabel)
+  })
+  const pageCount = Math.max(1, Math.ceil(filtered.length / params.perPage))
+  const page = Math.min(params.page, pageCount)
+  const pageRows = filtered.slice((page - 1) * params.perPage, page * params.perPage)
 
   return (
     <ListPageLayout
@@ -138,30 +185,104 @@ export default async function BySourceReport() {
                 </Badge>
               ))}
           </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search source type or record…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="sourceType"
+              label="Source type"
+              options={Array.from(typeTotals.entries()).map(([type, total]) => ({
+                value: type,
+                label: type.replace(/_/g, ' '),
+                count: total,
+              }))}
+            />
+          </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
+      {pageRows.length === 0 ? (
         <EmptyState
           icon={<ListChecks size={32} />}
-          title="No source-linked corrective actions"
-          description="CAs created without a source record won't appear here."
+          title={rows.length === 0 ? 'No source-linked corrective actions' : 'No matching sources'}
+          description={
+            rows.length === 0
+              ? "CAs created without a source record won't appear here."
+              : 'Adjust the search or source-type filter.'
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                <th className="px-4 py-2">Source type</th>
-                <th className="px-4 py-2">Source</th>
-                <th className="px-4 py-2 text-right">Total</th>
-                <th className="px-4 py-2 text-right">Open</th>
-                <th className="px-4 py-2 text-right">Closed</th>
-                <th className="px-4 py-2 text-right">Cost impact</th>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="type"
+                >
+                  Source type
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="source"
+                >
+                  Source
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="total"
+                  align="right"
+                  className="text-right"
+                >
+                  Total
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="open"
+                  align="right"
+                  className="text-right"
+                >
+                  Open
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="closed"
+                  align="right"
+                  className="text-right"
+                >
+                  Closed
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="cost"
+                  align="right"
+                  className="text-right"
+                >
+                  Cost impact
+                </SortTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {rows.map((r) => (
+              {pageRows.map((r) => (
                 <tr
                   key={`${r.sourceEntityType}:${r.sourceEntityId ?? '_'}`}
                   className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
@@ -198,6 +319,13 @@ export default async function BySourceReport() {
           </table>
         </div>
       )}
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={filtered.length}
+        page={page}
+        perPage={params.perPage}
+      />
     </ListPageLayout>
   )
 }

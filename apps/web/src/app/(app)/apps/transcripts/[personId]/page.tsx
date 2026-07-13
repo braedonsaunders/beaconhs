@@ -20,13 +20,26 @@ import { DetailPageLayout } from '@/components/page-layout'
 import { Section } from '@/components/section'
 import { DetailGrid } from '@/components/detail-grid'
 import { SortableTh } from '@/components/sortable-th'
-import { parseListParams } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { TableToolbar } from '@/components/table-toolbar'
 import { formCategoryLabel } from '../../_lib/category-label'
 import { loadPersonTranscript } from '../../_lib/participants'
 
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['date', 'form', 'category', 'status'] as const
+const STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'non_compliant', label: 'Non-compliant' },
+  { value: 'in_review', label: 'In review' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'rejected', label: 'Rejected' },
+] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ personId: string }> }) {
   const { personId } = await params
@@ -41,8 +54,16 @@ export default async function FormTranscriptPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { personId } = await params
+  if (!isUuid(personId)) notFound()
   const sp = await searchParams
-  const listParams = parseListParams(sp, { sort: 'date', dir: 'desc', allowedSorts: SORTS })
+  const listParams = parseListParams(sp, {
+    sort: 'date',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const rawStatus = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.find((option) => option.value === rawStatus)?.value
   const ctx = await requireRequestContext()
 
   // A transcript is a person's ENTIRE cross-record form history, so it needs
@@ -62,20 +83,15 @@ export default async function FormTranscriptPage({
   if (!data) notFound()
   const person = data
 
-  const transcript = await loadPersonTranscript(ctx, personId)
-  const { totals } = transcript
-  const dir = listParams.dir === 'asc' ? 1 : -1
-  const rows = [...transcript.rows].sort((a, b) => {
-    const cmp =
-      listParams.sort === 'form'
-        ? a.templateName.localeCompare(b.templateName)
-        : listParams.sort === 'category'
-          ? (a.category ?? '').localeCompare(b.category ?? '')
-          : listParams.sort === 'status'
-            ? a.status.localeCompare(b.status)
-            : (a.occurredOn ?? '').localeCompare(b.occurredOn ?? '')
-    return cmp * dir
+  const transcript = await loadPersonTranscript(ctx, personId, {
+    q: listParams.q,
+    status: statusFilter,
+    sort: listParams.sort,
+    dir: listParams.dir,
+    page: listParams.page,
+    perPage: listParams.perPage,
   })
+  const { rows, total, totals } = transcript
   const categories = Object.entries(totals.byCategory)
     .map(([k, n]) => `${formCategoryLabel(k)} (${n})`)
     .join(', ')
@@ -110,65 +126,96 @@ export default async function FormTranscriptPage({
           />
         </Section>
 
-        <Section title={`Forms (${rows.length})`}>
+        <Section title={`Forms (${total})`}>
+          <TableToolbar>
+            <SearchInput placeholder="Search form, category, status, or date…" />
+            <FilterChips
+              basePath={`/apps/transcripts/${personId}`}
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={[...STATUS_OPTIONS]}
+            />
+          </TableToolbar>
           {rows.length === 0 ? (
             <EmptyState
               icon={<FileText size={24} />}
-              title="No form participation"
-              description="This person has not appeared on a submitted form."
+              title={
+                listParams.q || statusFilter
+                  ? 'No forms match these filters'
+                  : 'No form participation'
+              }
+              description={
+                listParams.q || statusFilter
+                  ? 'Clear or change the current search and status filter.'
+                  : 'This person has not appeared on a submitted form.'
+              }
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTh {...sortProps} column="date" active={listParams.sort === 'date'}>
-                    Date
-                  </SortableTh>
-                  <SortableTh {...sortProps} column="form" active={listParams.sort === 'form'}>
-                    Form
-                  </SortableTh>
-                  <SortableTh
-                    {...sortProps}
-                    column="category"
-                    active={listParams.sort === 'category'}
-                  >
-                    Category
-                  </SortableTh>
-                  <SortableTh {...sortProps} column="status" active={listParams.sort === 'status'}>
-                    Status
-                  </SortableTh>
-                  <TableHead>Signed</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.participantId}>
-                    <TableCell>{r.occurredOn ?? '—'}</TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/apps/responses/${r.responseId}`}
-                        className="font-medium hover:underline"
-                      >
-                        {r.templateName}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {r.category ? formCategoryLabel(r.category) : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {r.status.replace('_', ' ')}
-                    </TableCell>
-                    <TableCell>
-                      {r.signed ? (
-                        <Badge variant="success">Yes</Badge>
-                      ) : (
-                        <Badge variant="secondary">No</Badge>
-                      )}
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="date" active={listParams.sort === 'date'}>
+                      Date
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="form" active={listParams.sort === 'form'}>
+                      Form
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="category"
+                      active={listParams.sort === 'category'}
+                    >
+                      Category
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="status"
+                      active={listParams.sort === 'status'}
+                    >
+                      Status
+                    </SortableTh>
+                    <TableHead>Signed</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => (
+                    <TableRow key={r.participantId}>
+                      <TableCell>{r.occurredOn ?? '—'}</TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/apps/responses/${r.responseId}`}
+                          className="font-medium hover:underline"
+                        >
+                          {r.templateName}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {r.category ? formCategoryLabel(r.category) : '—'}
+                      </TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-400">
+                        {r.status.replace('_', ' ')}
+                      </TableCell>
+                      <TableCell>
+                        {r.signed ? (
+                          <Badge variant="success">Yes</Badge>
+                        ) : (
+                          <Badge variant="secondary">No</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={`/apps/transcripts/${personId}`}
+                currentParams={sp}
+                total={total}
+                page={Math.min(listParams.page, Math.max(1, Math.ceil(total / listParams.perPage)))}
+                perPage={listParams.perPage}
+              />
+            </>
           )}
         </Section>
       </div>

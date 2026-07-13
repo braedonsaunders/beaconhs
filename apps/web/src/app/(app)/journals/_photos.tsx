@@ -7,6 +7,7 @@ import { useTransition } from 'react'
 import { Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { RawImage } from '@/components/raw-image'
 import { toast } from 'sonner'
 import { attachJournalPhotos, describeJournalPhoto, removeJournalPhoto } from './_actions'
 import type { JournalPhoto } from './_types'
@@ -79,9 +80,12 @@ export function Photos({
               key={p.id}
               className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               {p.url ? (
-                <img src={p.url} alt={p.caption ?? ''} className="h-full w-full object-cover" />
+                <RawImage
+                  src={p.url}
+                  alt={p.caption ?? ''}
+                  className="h-full w-full object-cover"
+                />
               ) : null}
 
               {p.caption ? (

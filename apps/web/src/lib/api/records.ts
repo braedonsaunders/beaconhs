@@ -4,7 +4,7 @@
 
 import { REPORT_ENTITIES, type ReportEntity } from '@beaconhs/reports'
 
-export const ID_COLUMN = 'id'
+const ID_COLUMN = 'id'
 
 const RECORDABLE = new Set(
   REPORT_ENTITIES.filter((e) => !e.table.startsWith('report_')).map((e) => e.key),

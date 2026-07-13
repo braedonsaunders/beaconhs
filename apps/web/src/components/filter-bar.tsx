@@ -6,7 +6,7 @@ import { Check, ChevronDown } from 'lucide-react'
 import { cn, Popover } from '@beaconhs/ui'
 import { mergeHref } from '@/lib/list-params'
 
-export type FilterOption = { value: string; label: string; count?: number }
+type FilterOption = { value: string; label: string; count?: number }
 
 /**
  * Single-select filter rendered as a compact dropdown button. Collapses a
@@ -23,6 +23,8 @@ export function FilterChips({
   options,
   allLabel = 'All',
   defaultValue,
+  pageParamKey = 'page',
+  hideAll = false,
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
@@ -37,6 +39,10 @@ export function FilterChips({
    * param) so the page can tell "show everything" apart from the default.
    */
   defaultValue?: string
+  /** Pagination parameter reset when this filter changes. */
+  pageParamKey?: string
+  /** Hide the generic All option for controls such as sort selectors. */
+  hideAll?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const raw =
@@ -45,7 +51,7 @@ export function FilterChips({
   const active = options.find((o) => o.value === current)
   const allHref = mergeHref(basePath, currentParams, {
     [paramKey]: defaultValue ? 'all' : undefined,
-    page: 1,
+    [pageParamKey]: 1,
   })
   const allActive = defaultValue ? current === 'all' : !current
 
@@ -89,13 +95,18 @@ export function FilterChips({
       }
     >
       <div className="max-h-72 overflow-auto" role="listbox">
-        <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
-          {allLabel}
-        </FilterItem>
+        {!hideAll ? (
+          <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
+            {allLabel}
+          </FilterItem>
+        ) : null}
         {options.map((opt) => (
           <FilterItem
             key={opt.value}
-            href={mergeHref(basePath, currentParams, { [paramKey]: opt.value, page: 1 })}
+            href={mergeHref(basePath, currentParams, {
+              [paramKey]: opt.value,
+              [pageParamKey]: 1,
+            })}
             active={current === opt.value}
             count={opt.count}
             onSelect={() => setOpen(false)}

@@ -1,13 +1,16 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, count, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import { Badge, Button, DetailHeader, EmptyState } from '@beaconhs/ui'
-import { roleAssignments, roles, tenantUsers, user } from '@beaconhs/db/schema'
+import { roleAssignments, roles, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
-import { parseListParams } from '@/lib/list-params'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { loadScopeOptions } from '../users/_scope-data'
 import { BulkRoleAssignmentForm } from './_components/bulk-role-assignment-form'
 
@@ -15,6 +18,7 @@ export const metadata = { title: 'Roles' }
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'permissions', 'members'] as const
+const BASE = '/admin/roles'
 
 export default async function AdminRolesPage({
   searchParams,
@@ -24,19 +28,70 @@ export default async function AdminRolesPage({
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.roles.manage')) redirect('/admin')
   const sp = await searchParams
-  const { sort, dir } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
+  const listParams = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const { sort, dir } = listParams
+  const typeParam = pickString(sp.type)
+  const typeFilter = typeParam === 'built_in' || typeParam === 'custom' ? typeParam : undefined
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const notice = typeof sp.notice === 'string' ? sp.notice : undefined
   const canBulkManageRoles = can(ctx, 'admin.users.manage')
 
   const data = await ctx.db(async (tx) => {
-    const roleRows = await tx.select().from(roles).orderBy(asc(roles.name))
-    const counts = await tx
-      .select({ roleId: roleAssignments.roleId, n: count() })
-      .from(roleAssignments)
-      .innerJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
-      .where(eq(tenantUsers.status, 'active'))
-      .groupBy(roleAssignments.roleId)
+    const search: SQL<unknown> | undefined = listParams.q
+      ? or(ilike(roles.name, `%${listParams.q}%`), ilike(roles.description, `%${listParams.q}%`))
+      : undefined
+    const type =
+      typeFilter === 'built_in'
+        ? eq(roles.isBuiltIn, true)
+        : typeFilter === 'custom'
+          ? eq(roles.isBuiltIn, false)
+          : undefined
+    const where = and(search, type)
+    const permissionCount = sql<number>`coalesce(array_length(${roles.permissions}, 1), 0)`
+    const memberCount = sql<number>`count(${roleAssignments.id}) filter (where ${tenantUsers.status} = 'active')`
+    const dirFn = dir === 'asc' ? asc : desc
+    const orderBy =
+      sort === 'permissions'
+        ? [dirFn(permissionCount), asc(roles.name)]
+        : sort === 'members'
+          ? [dirFn(memberCount), asc(roles.name)]
+          : [dirFn(roles.name)]
+    const [totalRow, typeRows, roleRows, allRoleOptions] = await Promise.all([
+      tx.select({ c: count() }).from(roles).where(where),
+      tx
+        .select({ isBuiltIn: roles.isBuiltIn, c: count() })
+        .from(roles)
+        .where(search)
+        .groupBy(roles.isBuiltIn),
+      tx
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          isBuiltIn: roles.isBuiltIn,
+          permissionCount,
+          memberCount,
+        })
+        .from(roles)
+        .leftJoin(roleAssignments, eq(roleAssignments.roleId, roles.id))
+        .leftJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
+        .where(where)
+        .groupBy(roles.id)
+        .orderBy(...orderBy)
+        .limit(listParams.perPage)
+        .offset((listParams.page - 1) * listParams.perPage),
+      canBulkManageRoles
+        ? tx
+            .select({ id: roles.id, name: roles.name, isBuiltIn: roles.isBuiltIn })
+            .from(roles)
+            .orderBy(asc(roles.name))
+        : Promise.resolve([]),
+    ])
     const memberRows = canBulkManageRoles
       ? await tx
           .select({
@@ -63,16 +118,17 @@ export default async function AdminRolesPage({
           .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
           .orderBy(asc(roles.name))
       : []
-    const countByRole = new Map(counts.map((c) => [c.roleId, Number(c.n)]))
     return {
       roles: roleRows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        description: r.description,
-        isBuiltIn: r.isBuiltIn,
-        permissionCount: r.permissions.length,
-        memberCount: countByRole.get(r.id) ?? 0,
+        ...r,
+        permissionCount: Number(r.permissionCount),
+        memberCount: Number(r.memberCount),
       })),
+      allRoleOptions,
+      total: Number(totalRow[0]?.c ?? 0),
+      typeCounts: Object.fromEntries(
+        typeRows.map((row) => [row.isBuiltIn ? 'built_in' : 'custom', Number(row.c)]),
+      ),
       members: memberRows.map((m) => ({
         id: m.membershipId,
         name: m.name,
@@ -89,20 +145,7 @@ export default async function AdminRolesPage({
   const rows = data.roles
   const scopeOptions = canBulkManageRoles ? await loadScopeOptions(ctx) : null
 
-  const sorted = [...rows].sort((a, b) => {
-    const mult = dir === 'asc' ? 1 : -1
-    switch (sort) {
-      case 'permissions':
-        return (a.permissionCount - b.permissionCount) * mult
-      case 'members':
-        return (a.memberCount - b.memberCount) * mult
-      default:
-        return a.name.localeCompare(b.name) * mult
-    }
-  })
-
-  const basePath = '/admin/roles'
-  const sortProps = { basePath, currentParams: sp, sort, dir }
+  const sortProps = { basePath: BASE, currentParams: sp, sort, dir }
 
   return (
     <PageContainer>
@@ -115,11 +158,7 @@ export default async function AdminRolesPage({
             <div className="flex items-center gap-2 whitespace-nowrap">
               {scopeOptions ? (
                 <BulkRoleAssignmentForm
-                  roles={rows.map((role) => ({
-                    id: role.id,
-                    name: role.name,
-                    isBuiltIn: role.isBuiltIn,
-                  }))}
+                  roles={data.allRoleOptions}
                   members={data.members}
                   scopeOptions={scopeOptions}
                 />
@@ -142,8 +181,29 @@ export default async function AdminRolesPage({
           </div>
         ) : null}
 
-        {sorted.length === 0 ? (
-          <EmptyState title="No roles" description="Create a role to start assigning access." />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SearchInput placeholder="Search role name or description…" />
+          <FilterChips
+            basePath={BASE}
+            currentParams={sp}
+            paramKey="type"
+            label="Type"
+            options={[
+              { value: 'built_in', label: 'Built-in', count: data.typeCounts.built_in ?? 0 },
+              { value: 'custom', label: 'Custom', count: data.typeCounts.custom ?? 0 },
+            ]}
+          />
+        </div>
+
+        {rows.length === 0 ? (
+          <EmptyState
+            title={!listParams.q && !typeFilter ? 'No roles' : 'No matching roles'}
+            description={
+              !listParams.q && !typeFilter
+                ? 'Create a role to start assigning access.'
+                : 'Adjust the search or type filter.'
+            }
+          />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <table className="w-full text-sm">
@@ -163,7 +223,7 @@ export default async function AdminRolesPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {sorted.map((r) => (
+                {rows.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
                     <td className="px-3 py-2">
                       <Link
@@ -195,6 +255,13 @@ export default async function AdminRolesPage({
             </table>
           </div>
         )}
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={data.total}
+          page={listParams.page}
+          perPage={listParams.perPage}
+        />
       </div>
     </PageContainer>
   )

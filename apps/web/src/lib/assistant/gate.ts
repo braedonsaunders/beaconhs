@@ -5,7 +5,7 @@ import { can } from '@beaconhs/tenant'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { AssistantToolDef, PermissionRule } from './types'
 
-export function passesGate(ctx: RequestContext, gate: PermissionRule): boolean {
+function passesGate(ctx: RequestContext, gate: PermissionRule): boolean {
   switch (gate.mode) {
     case 'public':
       return true

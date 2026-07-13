@@ -36,7 +36,7 @@ import {
   inspectionTypes,
   orgUnits,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'

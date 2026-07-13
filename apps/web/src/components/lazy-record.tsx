@@ -17,7 +17,7 @@
 import { createContext, useCallback, useContext, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-export type LazyRecord = {
+type LazyRecord = {
   /** Resolve the record id, creating the draft row on first call. Null on failure. */
   ensureId: () => Promise<string | null>
   /** Called after a successful save; navigates to the real record after the first one. */

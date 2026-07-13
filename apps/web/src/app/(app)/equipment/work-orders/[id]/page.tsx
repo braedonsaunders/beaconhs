@@ -1,15 +1,22 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { asc, eq } from 'drizzle-orm'
 import { FileText, Mail } from 'lucide-react'
 import { Badge, Button, DetailHeader, Input, Label, Select, Textarea } from '@beaconhs/ui'
-import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
+import {
+  equipmentItems,
+  equipmentWorkOrders,
+  people,
+  tenantUsers,
+  users as user,
+} from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { pickString } from '@/lib/list-params'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { DetailGrid } from '@/components/detail-grid'
@@ -77,6 +84,7 @@ async function updateOverview(formData: FormData) {
       .from(equipmentWorkOrders)
       .where(eq(equipmentWorkOrders.id, id))
       .limit(1)
+      .for('update')
     await tx
       .update(equipmentWorkOrders)
       .set({
@@ -134,18 +142,30 @@ async function updateStatus(formData: FormData) {
   const status = String(formData.get('status') ?? '') as (typeof STATUSES)[number]
   if (!id || !STATUSES.includes(status)) return
   const closing = status === 'closed' || status === 'cancelled'
-  const itemId = await ctx.db(async (tx) => {
+  const result = await ctx.db(async (tx) => {
     const [existing] = await tx
       .select({ itemId: equipmentWorkOrders.itemId, status: equipmentWorkOrders.status })
       .from(equipmentWorkOrders)
       .where(eq(equipmentWorkOrders.id, id))
       .limit(1)
+      .for('update')
     await tx
       .update(equipmentWorkOrders)
       .set({ status, closedAt: closing ? new Date() : null })
       .where(eq(equipmentWorkOrders.id, id))
-    return existing?.itemId
+    const changed = Boolean(existing && existing.status !== status)
+    if (changed) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'equipment',
+        event: 'status_change',
+        toStatus: status,
+        occurrenceKey: randomUUID(),
+      })
+    }
+    return { itemId: existing?.itemId, changed }
   })
+  if (!result.changed) return
   await recordAudit(ctx, {
     entityType: 'equipment_work_order',
     entityId: id,
@@ -153,13 +173,7 @@ async function updateStatus(formData: FormData) {
     summary: `Status moved to "${statusLabel(status)}"`,
     after: { status },
   })
-  await runModuleFlows(ctx, {
-    moduleKey: 'equipment',
-    event: 'status_change',
-    subjectId: id,
-    toStatus: status,
-  })
-  if (itemId) revalidatePath(`/equipment/${itemId}`)
+  if (result.itemId) revalidatePath(`/equipment/${result.itemId}`)
   revalidatePath(`/equipment/work-orders/${id}`)
   revalidatePath('/equipment/work-orders')
 }

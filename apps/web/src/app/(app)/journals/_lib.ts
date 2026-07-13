@@ -54,7 +54,7 @@ export function journalScopeWhere(
 
 /** A specific author's entries (by subject person and/or the tenant_user who
  *  created them). `false` when neither is known. */
-export function journalByAuthorWhere(personId: string | null, tenantUserId: string | null): SQL {
+function journalByAuthorWhere(personId: string | null, tenantUserId: string | null): SQL {
   const conds: SQL[] = []
   if (personId) conds.push(eq(journalEntries.personId, personId))
   if (tenantUserId) conds.push(eq(journalEntries.createdByTenantUserId, tenantUserId))

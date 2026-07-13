@@ -7,7 +7,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { NavIcon } from '@/components/sidebar-nav'
 
-export type AdminTile = {
+type AdminTile = {
   key: string
   label: string
   href: string

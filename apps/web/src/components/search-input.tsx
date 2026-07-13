@@ -18,12 +18,10 @@ export function SearchInput({
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
-  const [value, setValue] = useState(search.get(paramKey) ?? '')
+  const urlValue = search.get(paramKey) ?? ''
+  const [edit, setEdit] = useState({ source: urlValue, value: urlValue })
+  const value = edit.source === urlValue ? edit.value : urlValue
   const [, startTransition] = useTransition()
-
-  useEffect(() => {
-    setValue(search.get(paramKey) ?? '')
-  }, [search, paramKey])
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -47,8 +45,7 @@ export function SearchInput({
       })
     }, 250)
     return () => clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
+  }, [pageParamKey, paramKey, pathname, router, search, startTransition, value])
 
   return (
     <div className="relative w-full sm:w-72">
@@ -60,7 +57,7 @@ export function SearchInput({
         type="search"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => setEdit({ source: urlValue, value: e.target.value })}
         // Hide the browser's native search clear (×) — we render our own below,
         // so the native one would show a duplicate clear button.
         className="h-8 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
@@ -69,7 +66,7 @@ export function SearchInput({
         <button
           type="button"
           aria-label="Clear search"
-          onClick={() => setValue('')}
+          onClick={() => setEdit({ source: urlValue, value: '' })}
           className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
         >
           <X size={16} />

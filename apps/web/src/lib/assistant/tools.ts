@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { and, count, desc, eq, gte, ilike, inArray, isNull, lt, or, type SQL } from 'drizzle-orm'
 import {
   correctiveActions,
+  documentCategories,
   documents,
   incidents,
   people,
@@ -362,11 +363,12 @@ const findDocuments: AssistantToolDef = {
             id: documents.id,
             key: documents.key,
             title: documents.title,
-            category: documents.category,
+            category: documentCategories.name,
             status: documents.status,
             nextReviewOn: documents.nextReviewOn,
           })
           .from(documents)
+          .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
           .where(where)
           .orderBy(documents.title)
           .limit(limit),

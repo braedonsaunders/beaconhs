@@ -25,7 +25,15 @@ import { useTheme } from '@/components/theme-provider'
 
 export type CollaboraSession =
   | { ok: true; actionUrl: string; accessToken: string; accessTokenTtl: number }
-  | { ok: false; error: 'not_configured' | 'no_master' | 'unknown_target' }
+  | {
+      ok: false
+      error:
+        | 'not_configured'
+        | 'no_master'
+        | 'unknown_target'
+        | 'workspace_unavailable'
+        | 'impersonation_blocked'
+    }
 
 export type CollaboraHandle = {
   /** Insert plain text at the current cursor position. */
@@ -199,12 +207,20 @@ export const CollaboraEmbed = forwardRef<
             <Presentation size={15} />
             {session.error === 'not_configured'
               ? 'In-browser editing is not configured'
-              : 'This item has no source file yet'}
+              : session.error === 'workspace_unavailable'
+                ? 'This workspace is unavailable'
+                : session.error === 'impersonation_blocked'
+                  ? 'Editing is blocked while viewing as another user'
+                  : 'This item has no source file yet'}
           </p>
           <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
             {session.error === 'not_configured'
               ? 'The editor server did not respond. Published content and downloads keep working.'
-              : 'Import a file or start a blank one to begin.'}
+              : session.error === 'workspace_unavailable'
+                ? 'Ask a platform administrator to restore the workspace before opening the editor.'
+                : session.error === 'impersonation_blocked'
+                  ? 'Exit the impersonation session, then open the editor as yourself.'
+                  : 'Import a file or start a blank one to begin.'}
           </p>
           {session.error === 'not_configured' ? (
             <button

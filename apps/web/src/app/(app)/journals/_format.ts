@@ -25,7 +25,7 @@ export function formatLongDate(iso: string): string {
   })
 }
 
-export function weekdayShort(iso: string): string {
+function weekdayShort(iso: string): string {
   return WD[parse(iso).getDay()] ?? ''
 }
 

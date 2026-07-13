@@ -17,7 +17,7 @@ import {
   renderDesignDocumentPdf,
   renderWalletCardPdf,
 } from '@beaconhs/forms-pdf'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { appBaseUrl } from '@/lib/app-base-url'
 import {
@@ -26,8 +26,6 @@ import {
   resolveCredentialOutput,
   type CredentialOutputRequest,
 } from '@/lib/credential-designs'
-
-export type CredentialPdfFormat = 'cert' | 'wallet'
 
 export type RenderedCredentialPdf = {
   bytes: Buffer
@@ -56,7 +54,7 @@ async function photoUrlForPerson(ctx: RequestContext, photoAttachmentId: string 
       .from(attachments)
       .where(eq(attachments.id, photoAttachmentId))
       .limit(1)
-    return photo ? publicUrl(photo.r2Key) : null
+    return photo ? presignGet({ key: photo.r2Key, expiresInSeconds: 900 }) : null
   })
 }
 

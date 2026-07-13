@@ -6,7 +6,7 @@ import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field
 // assignment page. "New skill" creates the row immediately (default
 // person/skill type) and lands here, where every field edits inline.
 
-export type SkillFieldValues = {
+type SkillFieldValues = {
   personId: string
   skillTypeId: string
   grantedOn: string
@@ -14,7 +14,7 @@ export type SkillFieldValues = {
   notes: string | null
 }
 
-export type SkillFieldOptions = {
+type SkillFieldOptions = {
   people: { id: string; firstName: string; lastName: string; employeeNo: string | null }[]
   skillTypes: { id: string; name: string; code: string | null; authorityName: string }[]
 }

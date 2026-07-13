@@ -20,15 +20,16 @@
 // `?error=`; the page surfaces them as an Alert.
 
 import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
-import { auth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { auditLog, roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
+import { assertNotImpersonating } from '@beaconhs/tenant'
+import { nextInviteGenerationDate } from '@beaconhs/auth/invites'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { setActiveTenant } from '@/lib/actions'
+import { sendMembershipInviteEmail } from '@/lib/invite-email'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -38,6 +39,7 @@ const LOCALES = new Set(['en', 'fr', 'es'])
 /** Platform actions are reserved for super-admins — no tenant permission applies. */
 async function gate(): Promise<Ctx> {
   const ctx = await requireRequestContext()
+  assertNotImpersonating(ctx, 'platform identity administration')
   if (!ctx.isSuperAdmin) throw new Error('Only platform super-admins can manage global users.')
   return ctx
 }
@@ -56,14 +58,16 @@ function backToUser(userId: string, msg: { error?: string; notice?: string } = {
 }
 
 /** A membership joined to its account + tenant, or null. */
-async function loadMembership(tx: Database, membershipId: string) {
-  const [row] = await tx
+async function loadMembership(tx: Database, membershipId: string, lock = false) {
+  let query = tx
     .select({ membership: tenantUsers, account: users, tenant: tenants })
     .from(tenantUsers)
     .innerJoin(users, eq(users.id, tenantUsers.userId))
     .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
     .where(eq(tenantUsers.id, membershipId))
     .limit(1)
+  if (lock) query = query.for('update') as typeof query
+  const [row] = await query
   return row ?? null
 }
 
@@ -162,7 +166,17 @@ export async function setSuperAdmin(formData: FormData): Promise<void> {
 // --- memberships ----------------------------------------------------------
 
 type AddResult =
-  | { ok: true; email: string; tenantName: string; mode: 'invite' | 'active' }
+  | {
+      ok: true
+      email: string
+      tenantName: string
+      mode: 'invite' | 'active'
+      membershipId: string
+      tenantId: string
+      userId: string
+      invitedAt: Date
+      name: string
+    }
   | { ok: false; error: string }
 
 export async function addMembership(formData: FormData): Promise<void> {
@@ -179,21 +193,16 @@ export async function addMembership(formData: FormData): Promise<void> {
     const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1)
     if (!u) return { ok: false, error: 'User not found.' }
     const [t] = await tx
-      .select({ id: tenants.id, name: tenants.name })
+      .select({ id: tenants.id, name: tenants.name, status: tenants.status })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1)
     if (!t) return { ok: false, error: 'Tenant not found.' }
+    if (t.status !== 'active') {
+      return { ok: false, error: 'Users cannot be added while that tenant is not active.' }
+    }
 
-    // The (tenantId, userId) unique index would reject a duplicate anyway, but a
-    // friendly message beats a 500.
-    const [existing] = await tx
-      .select({ id: tenantUsers.id })
-      .from(tenantUsers)
-      .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.userId, userId)))
-      .limit(1)
-    if (existing) return { ok: false, error: `${u.email} is already a member of ${t.name}.` }
-
+    const invitedAt = new Date()
     const [m] = await tx
       .insert(tenantUsers)
       .values({
@@ -201,14 +210,18 @@ export async function addMembership(formData: FormData): Promise<void> {
         userId,
         displayName: null,
         status: mode === 'active' ? 'active' : 'invited',
-        invitedAt: new Date(),
+        invitedAt,
         invitedBy: ctx.userId,
-        joinedAt: mode === 'active' ? new Date() : null,
+        joinedAt: mode === 'active' ? invitedAt : null,
       })
+      .onConflictDoNothing({ target: [tenantUsers.tenantId, tenantUsers.userId] })
       .returning()
+    if (!m) {
+      return { ok: false, error: `${u.email} is already a member of ${t.name}.` }
+    }
 
     // Optional initial role — only if it actually belongs to the target tenant.
-    if (roleId && m) {
+    if (roleId) {
       const [role] = await tx
         .select({ id: roles.id })
         .from(roles)
@@ -228,7 +241,7 @@ export async function addMembership(formData: FormData): Promise<void> {
       tenantId,
       actorUserId: ctx.userId,
       entityType: 'tenant_user',
-      entityId: m!.id,
+      entityId: m.id,
       action: mode === 'active' ? 'create' : 'invite',
       summary:
         mode === 'active'
@@ -236,25 +249,45 @@ export async function addMembership(formData: FormData): Promise<void> {
           : `Invited ${u.email} to ${t.name} (platform)`,
       metadata: { via: 'platform', mode },
     })
-    return { ok: true, email: u.email, tenantName: t.name, mode }
+    return {
+      ok: true,
+      email: u.email,
+      tenantName: t.name,
+      mode,
+      membershipId: m.id,
+      tenantId,
+      userId,
+      invitedAt,
+      name: u.name,
+    }
   })
 
   if (!result.ok) backToUser(userId, { error: result.error })
 
-  // Best-effort magic link for invites — failure shouldn't undo the membership.
+  let inviteDeliveryFailed = false
   if (result.mode === 'invite') {
     try {
-      await auth.api.signInMagicLink({
-        body: { email: result.email, callbackURL: '/dashboard' },
-        headers: (await headers()) as unknown as Headers,
+      await sendMembershipInviteEmail({
+        membershipId: result.membershipId,
+        tenantId: result.tenantId,
+        tenantName: result.tenantName,
+        userId: result.userId,
+        email: result.email,
+        invitedAt: result.invitedAt,
+        name: result.name,
       })
     } catch {
-      // swallowed — the membership exists; the admin can resend
+      inviteDeliveryFailed = true
     }
   }
 
   revalidatePath(userPath(userId))
   revalidatePath('/platform/users')
+  if (inviteDeliveryFailed) {
+    backToUser(userId, {
+      error: `The membership was created, but the invite email for ${result.tenantName} could not be sent. Check mail configuration, then resend it.`,
+    })
+  }
   backToUser(userId, {
     notice:
       result.mode === 'active'
@@ -274,14 +307,32 @@ export async function setMembershipStatus(formData: FormData): Promise<void> {
   if (status !== 'active' && status !== 'suspended') return
 
   const result: MembershipResult = await withSuperAdmin(db, async (tx) => {
-    const row = await loadMembership(tx, membershipId)
+    const row = await loadMembership(tx, membershipId, true)
     if (!row) return { ok: false, error: 'Membership not found.' }
+    if (row.account.id !== userId) {
+      return { ok: false, error: 'Membership does not belong to this user.' }
+    }
     if (row.membership.userId === ctx.userId) {
       return { ok: false, error: "Manage your own membership from the tenant's Users page." }
     }
-    const patch: { status: 'active' | 'suspended'; joinedAt?: Date } = { status }
-    if (status === 'active' && !row.membership.joinedAt) patch.joinedAt = new Date()
-    await tx.update(tenantUsers).set(patch).where(eq(tenantUsers.id, membershipId))
+    if (row.membership.status === 'invited') {
+      return {
+        ok: false,
+        error: 'Pending invitations activate only when the member accepts the email link.',
+      }
+    }
+    if (
+      (status === 'suspended' && row.membership.status !== 'active') ||
+      (status === 'active' && row.membership.status !== 'suspended')
+    ) {
+      return { ok: false, error: 'That membership status has already changed.' }
+    }
+    const [updated] = await tx
+      .update(tenantUsers)
+      .set({ status })
+      .where(and(eq(tenantUsers.id, membershipId), eq(tenantUsers.status, row.membership.status)))
+      .returning({ id: tenantUsers.id })
+    if (!updated) return { ok: false, error: 'That membership status has already changed.' }
     await tx.insert(auditLog).values({
       tenantId: row.tenant.id,
       actorUserId: ctx.userId,
@@ -310,8 +361,11 @@ export async function removeMembership(formData: FormData): Promise<void> {
   if (!userId || !membershipId) return
 
   const result: MembershipResult = await withSuperAdmin(db, async (tx) => {
-    const row = await loadMembership(tx, membershipId)
+    const row = await loadMembership(tx, membershipId, true)
     if (!row) return { ok: false, error: 'Membership not found.' }
+    if (row.account.id !== userId) {
+      return { ok: false, error: 'Membership does not belong to this user.' }
+    }
     if (row.membership.userId === ctx.userId) {
       return { ok: false, error: "Manage your own membership from the tenant's Users page." }
     }
@@ -341,32 +395,53 @@ export async function resendInvite(formData: FormData): Promise<void> {
   const membershipId = String(formData.get('membershipId') ?? '')
   if (!userId || !membershipId) return
 
-  const email = await withSuperAdmin(db, async (tx) => {
-    const row = await loadMembership(tx, membershipId)
+  const invite = await withSuperAdmin(db, async (tx) => {
+    const row = await loadMembership(tx, membershipId, true)
     if (!row) return null
-    await tx.insert(auditLog).values({
-      tenantId: row.tenant.id,
-      actorUserId: ctx.userId,
-      entityType: 'tenant_user',
-      entityId: membershipId,
-      action: 'invite',
-      summary: `Resent invite to ${row.account.email} for ${row.tenant.name} (platform)`,
-      metadata: { via: 'platform' },
-    })
-    return row.account.email
+    if (row.account.id !== userId) return { error: 'Membership does not belong to this user.' }
+    if (row.membership.status !== 'invited')
+      return { error: 'Only pending invitations can be resent.' }
+    if (row.tenant.status !== 'active') {
+      return { error: 'Invitations are disabled while that tenant is not active.' }
+    }
+    const invitedAt = nextInviteGenerationDate(row.membership.invitedAt)
+    const [rotated] = await tx
+      .update(tenantUsers)
+      .set({ invitedAt, updatedAt: new Date() })
+      .where(and(eq(tenantUsers.id, membershipId), eq(tenantUsers.status, 'invited')))
+      .returning({ id: tenantUsers.id })
+    if (!rotated) return { error: 'The invitation changed. Refresh and try again.' }
+    return { row, invitedAt }
   })
-  if (!email) backToUser(userId, { error: 'Membership not found.' })
+  if (!invite) backToUser(userId, { error: 'Membership not found.' })
+  if ('error' in invite) backToUser(userId, { error: invite.error })
 
   try {
-    await auth.api.signInMagicLink({
-      body: { email, callbackURL: '/dashboard' },
-      headers: (await headers()) as unknown as Headers,
+    await sendMembershipInviteEmail({
+      membershipId,
+      tenantId: invite.row.tenant.id,
+      tenantName: invite.row.tenant.name,
+      userId: invite.row.account.id,
+      email: invite.row.account.email,
+      invitedAt: invite.invitedAt,
+      name: invite.row.account.name,
     })
   } catch {
     backToUser(userId, { error: "Couldn't send the invite — check the mail configuration." })
   }
+  await withSuperAdmin(db, (tx) =>
+    tx.insert(auditLog).values({
+      tenantId: invite.row.tenant.id,
+      actorUserId: ctx.userId,
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: 'invite',
+      summary: `Resent invite to ${invite.row.account.email} for ${invite.row.tenant.name} (platform)`,
+      metadata: { via: 'platform' },
+    }),
+  )
   revalidatePath(userPath(userId))
-  backToUser(userId, { notice: `Invite resent to ${email}.` })
+  backToUser(userId, { notice: `Invite resent to ${invite.row.account.email}.` })
 }
 
 // --- bridge to the per-tenant RBAC editor ---------------------------------
@@ -379,9 +454,26 @@ export async function resendInvite(formData: FormData): Promise<void> {
  */
 export async function openMembershipInTenant(formData: FormData): Promise<void> {
   await gate()
+  const userId = String(formData.get('userId') ?? '')
   const tenantId = String(formData.get('tenantId') ?? '')
   const membershipId = String(formData.get('membershipId') ?? '')
-  if (!tenantId || !membershipId) return
-  await setActiveTenant(tenantId)
+  if (!userId || !tenantId || !membershipId) return
+  const valid = await withSuperAdmin(db, async (tx) => {
+    const [membership] = await tx
+      .select({ id: tenantUsers.id })
+      .from(tenantUsers)
+      .where(
+        and(
+          eq(tenantUsers.id, membershipId),
+          eq(tenantUsers.tenantId, tenantId),
+          eq(tenantUsers.userId, userId),
+        ),
+      )
+      .limit(1)
+    return Boolean(membership)
+  })
+  if (!valid) backToUser(userId, { error: 'Membership no longer matches this tenant.' })
+  const switched = await setActiveTenant(tenantId)
+  if (!switched.ok) backToUser(userId, { error: 'Restore this tenant before opening it.' })
   redirect(`/admin/users/${membershipId}`)
 }

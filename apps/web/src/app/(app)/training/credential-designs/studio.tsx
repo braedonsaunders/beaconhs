@@ -47,7 +47,6 @@ import {
   PRINT_PROVIDERS,
   createCertificateDesignDocument,
   createWalletDesignDocument,
-  type ArtboardFormat,
   type CredentialDataField,
   type DesignArtboard,
   type DesignDataField,
@@ -56,7 +55,7 @@ import {
   type PrintProvider,
 } from '@beaconhs/design-studio'
 import { loadFabric } from '@beaconhs/design-studio/fabric'
-import { Badge, Button, Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
+import { Badge, Button, Input, Select, Textarea, cn } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import {
@@ -199,19 +198,10 @@ export function CredentialDesignStudio({
 
   function openDesign(id: string) {
     setActiveId(id)
+    setActiveArtboardId(null)
     setSelectedElementId(null)
     setTab('design')
   }
-
-  useEffect(() => {
-    if (!activeDocument) return
-    setActiveArtboardId((current) =>
-      activeDocument.artboards.some((artboard) => artboard.id === current)
-        ? current
-        : (activeDocument.artboards[0]?.id ?? null),
-    )
-    setSelectedElementId(null)
-  }, [activeDocument])
 
   // Fit the artboard to the visible viewport (the chrome around the canvas —
   // outer p-5 + checkered p-8 — is ~120px per axis). ResizeObserver fires once
@@ -804,29 +794,40 @@ function ArtboardCanvas({
     return undefined
   }, [])
 
+  // Fabric owns long-lived DOM event handlers. Keep those handlers pointed at
+  // current React callbacks without tearing down and recreating the canvas for
+  // every element edit; the parent key remounts this component for an artboard.
+  const mountStateRef = useRef({ artboard, selectedElementId, onSelect, onModify })
+  useEffect(() => {
+    mountStateRef.current = { artboard, selectedElementId, onSelect, onModify }
+  }, [artboard, onModify, onSelect, selectedElementId])
+
   useEffect(() => {
     let disposed = false
     loadFabric().then((fabric) => {
       if (disposed || !canvasRef.current) return
+      const mountState = mountStateRef.current
       fabricRef.current = fabric
       const canvas = new fabric.Canvas(canvasRef.current, {
         preserveObjectStacking: true,
-        backgroundColor: artboard.background,
+        backgroundColor: mountState.artboard.background,
         selection: true,
       })
       canvasInstanceRef.current = canvas
       canvas.on('selection:created', (event: any) =>
-        onSelect(idForObject(event.selected?.[0]), !!event.e),
+        mountStateRef.current.onSelect(idForObject(event.selected?.[0]), !!event.e),
       )
       canvas.on('selection:updated', (event: any) =>
-        onSelect(idForObject(event.selected?.[0]), !!event.e),
+        mountStateRef.current.onSelect(idForObject(event.selected?.[0]), !!event.e),
       )
-      canvas.on('selection:cleared', (event: any) => onSelect(null, !!event.e))
+      canvas.on('selection:cleared', (event: any) =>
+        mountStateRef.current.onSelect(null, !!event.e),
+      )
       canvas.on('object:modified', (event: any) => {
         const object = event.target
         const id = idForObject(object)
         if (!id || !object) return
-        onModify(id, objectPatch(object, PPI * zoomRef.current))
+        mountStateRef.current.onModify(id, objectPatch(object, PPI * zoomRef.current))
       })
       // Inline canvas text editing (double-click on a text box) — persist the
       // typed text back into the element, or it reverts on the next rebuild.
@@ -834,19 +835,26 @@ function ArtboardCanvas({
         const object = event.target
         const id = idForObject(object)
         if (!id || !object) return
-        onModify(id, {
+        mountStateRef.current.onModify(id, {
           ...objectPatch(object, PPI * zoomRef.current),
           text: object.text ?? '',
         } as Partial<DesignElement>)
       })
-      renderFabricArtboard(fabric, canvas, artboard, selectedElementId, zoomRef.current, getImage)
+      renderFabricArtboard(
+        fabric,
+        canvas,
+        mountState.artboard,
+        mountState.selectedElementId,
+        zoomRef.current,
+        getImage,
+      )
     })
     return () => {
       disposed = true
       canvasInstanceRef.current?.dispose()
       canvasInstanceRef.current = null
     }
-  }, [artboard.id])
+  }, [getImage])
 
   useEffect(() => {
     const fabric = fabricRef.current

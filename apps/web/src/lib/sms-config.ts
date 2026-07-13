@@ -16,7 +16,7 @@ import {
   type SmsProvider,
 } from '@beaconhs/sms'
 import type { RequestContext } from '@beaconhs/tenant'
-import { encryptSecret } from '@beaconhs/crypto'
+import { sealSecret } from '@beaconhs/crypto'
 
 const DEFAULT_PROVIDER: SmsProvider = 'twilio'
 
@@ -28,7 +28,7 @@ function normProvider(p: string | undefined): SmsProvider {
 // UI-facing shapes (no secret material)
 // ---------------------------------------------------------------------------
 
-export type SmsSettings = {
+type SmsSettings = {
   enabled: boolean
   provider: SmsProvider
   fromNumber: string
@@ -39,7 +39,7 @@ export type SmsSettings = {
   hasKey: boolean
 }
 
-export type PlatformSmsSettings = SmsSettings & { mode: SmsPolicyMode }
+type PlatformSmsSettings = SmsSettings & { mode: SmsPolicyMode }
 
 function toSettings(raw: RawSmsConfig): SmsSettings {
   return {
@@ -82,7 +82,7 @@ function mergeRaw(prev: RawSmsConfig, input: SmsSettingsInput): RawSmsConfig {
     keyNonce: prev.keyNonce,
   }
   if (input.secret && input.secret.trim()) {
-    const sealed = encryptSecret(input.secret.trim())
+    const sealed = sealSecret(input.secret.trim())
     next.keyCiphertext = sealed.ciphertext
     next.keyNonce = sealed.nonce
   }
@@ -125,6 +125,7 @@ export async function saveTenantSmsSettings(
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
+      .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (
       settings.sms && typeof settings.sms === 'object' ? settings.sms : {}
@@ -144,6 +145,7 @@ export async function clearTenantSmsKey(ctx: RequestContext): Promise<void> {
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
+      .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (
       settings.sms && typeof settings.sms === 'object' ? settings.sms : {}

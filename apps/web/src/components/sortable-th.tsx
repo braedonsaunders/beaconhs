@@ -10,6 +10,9 @@ type SortLinkProps = {
   active: boolean
   dir: 'asc' | 'desc'
   align?: 'left' | 'right'
+  sortParamKey?: string
+  dirParamKey?: string
+  pageParamKey?: string
   children: React.ReactNode
 }
 
@@ -26,10 +29,17 @@ function SortLink({
   active,
   dir,
   align = 'left',
+  sortParamKey = 'sort',
+  dirParamKey = 'dir',
+  pageParamKey = 'page',
   children,
 }: SortLinkProps) {
   const nextDir: 'asc' | 'desc' = active && dir === 'asc' ? 'desc' : 'asc'
-  const href = mergeHref(basePath, currentParams, { sort: column, dir: nextDir, page: 1 })
+  const href = mergeHref(basePath, currentParams, {
+    [sortParamKey]: column,
+    [dirParamKey]: nextDir,
+    [pageParamKey]: 1,
+  })
   return (
     <Link
       href={href as any}

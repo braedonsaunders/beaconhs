@@ -6,7 +6,7 @@
 // all of that now lives in the builder (Settings tab + Build surface).
 
 import { notFound } from 'next/navigation'
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { asc, count, eq, sql } from 'drizzle-orm'
 import { Badge, DetailHeader } from '@beaconhs/ui'
 import {
   ppeCriteriaBankCriteria,

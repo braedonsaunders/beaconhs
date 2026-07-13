@@ -24,6 +24,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from 'react'
 import Link from 'next/link'
@@ -141,6 +142,35 @@ const OrgUnitOptionsCacheContext = createContext<Record<
   OrgUnitOption[] | undefined
 > | null>(null)
 
+function getOrCreateDraftSessionId(ref: { current: string | null }): string {
+  if (ref.current) return ref.current
+  ref.current = crypto.randomUUID()
+  return ref.current
+}
+
+const FIELD_MODE_STORAGE_KEY = 'bhs_field_mode'
+const FIELD_MODE_CHANGE_EVENT = 'beaconhs:field-mode-change'
+
+function readFieldModePreference(): boolean {
+  try {
+    return localStorage.getItem(FIELD_MODE_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function subscribeFieldModePreference(onChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === FIELD_MODE_STORAGE_KEY) onChange()
+  }
+  window.addEventListener('storage', onStorage)
+  window.addEventListener(FIELD_MODE_CHANGE_EVENT, onChange)
+  return () => {
+    window.removeEventListener('storage', onStorage)
+    window.removeEventListener(FIELD_MODE_CHANGE_EVENT, onChange)
+  }
+}
+
 export function FormRenderer({
   templateId,
   templateName,
@@ -154,6 +184,7 @@ export function FormRenderer({
   initialValues = {},
   initialRows = {},
   initialStepIndex = 0,
+  initialDraftRevision = 0,
   isResumed = false,
   returnTo = null,
   readOnly = false,
@@ -179,6 +210,9 @@ export function FormRenderer({
   initialValues?: Record<string, unknown>
   initialRows?: Record<string, Array<Record<string, unknown>>>
   initialStepIndex?: number
+  // Database revision of the hydrated draft. A different tab must still be
+  // on this revision before its first write can claim the editing session.
+  initialDraftRevision?: number
   // True when we successfully resumed a saved draft — drives the "Welcome
   // back, your draft was restored" toast on mount.
   isResumed?: boolean
@@ -216,28 +250,23 @@ export function FormRenderer({
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
   const [pending, start] = useTransition()
-  // High-contrast, large-type "field mode" for direct sunlight. Persisted.
-  const [fieldMode, setFieldMode] = useState(false)
+  // High-contrast, large-type "field mode" for direct sunlight. Treat browser
+  // storage as the external source of truth so tabs stay synchronized without
+  // a set-state-on-mount effect.
+  const fieldMode = useSyncExternalStore(
+    subscribeFieldModePreference,
+    readFieldModePreference,
+    () => false,
+  )
   const appliedDefaults = useRef<Set<string>>(new Set())
 
-  // Restore the persisted field-mode preference on mount, and expose a toggle.
-  useEffect(() => {
-    try {
-      setFieldMode(localStorage.getItem('bhs_field_mode') === '1')
-    } catch {
-      /* storage unavailable — default off */
-    }
-  }, [])
   const toggleFieldMode = useCallback(() => {
-    setFieldMode((on) => {
-      const next = !on
-      try {
-        localStorage.setItem('bhs_field_mode', next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
+    try {
+      localStorage.setItem(FIELD_MODE_STORAGE_KEY, readFieldModePreference() ? '0' : '1')
+      window.dispatchEvent(new Event(FIELD_MODE_CHANGE_EVENT))
+    } catch {
+      /* storage unavailable — leave the preference unchanged */
+    }
   }, [])
 
   // --- Autosave state -------------------------------------------------------
@@ -255,15 +284,19 @@ export function FormRenderer({
   // Tick state so "Saved Xs ago" updates without us calling render every
   // change. Bumped every 5s by an effect once a save has happened.
   const [, setSavedTick] = useState(0)
-  // Tracks whether the user has actually interacted with the form. Stops us
-  // from creating empty draft rows on a page that's just been opened (a
-  // requirement: "Don't save if the user hasn't typed anything"). Always
-  // starts false — a resumed draft already has its state persisted, so no
-  // beacon-on-unload is needed until the user actually changes something.
-  const dirtyRef = useRef<boolean>(false)
-  // Whether a draft-creation request is in flight. Guards against double
-  // inserts when changes arrive faster than the create round-trip.
-  const creatingRef = useRef<boolean>(false)
+  // Tracks whether the user has actually interacted and gives each local edit
+  // a monotonic sequence. State keeps field event handlers ref-free; the
+  // unload path reads the mirrored latestRef below.
+  const [draftEditState, setDraftEditState] = useState({ dirty: false, sequence: 0 })
+  // Every caller awaits the same lazy-create request, so a second edit that
+  // arrives before the first round-trip is not dropped.
+  const creatingRef = useRef<ReturnType<typeof createDraftResponse> | null>(null)
+  // Whole-draft saves are ordered independently of network completion order.
+  // The session id distinguishes tabs; the edit sequence distinguishes local
+  // payload snapshots; the revision detects a stale tab taking over.
+  const draftSessionIdRef = useRef<string | null>(null)
+  const acknowledgedSequenceRef = useRef(0)
+  const draftRevisionRef = useRef(initialDraftRevision)
   // The latest values + rows + stepIndex, captured in a ref so the
   // beforeunload handler can read them synchronously without re-binding.
   const latestRef = useRef<{
@@ -271,11 +304,15 @@ export function FormRenderer({
     rows: Record<string, Array<Record<string, unknown>>>
     stepIndex: number
     responseId: string | null
+    dirty: boolean
+    editSequence: number
   }>({
     values: initialValues,
     rows: initialRows,
     stepIndex: initialStepIndex,
     responseId: initialResponseId,
+    dirty: false,
+    editSequence: 0,
   })
   // Per-picker entity attribute maps, fed into the evaluator on every render
   // so `entity_attr` formula fields stay live. Refreshed via the
@@ -306,7 +343,7 @@ export function FormRenderer({
   const steps = schema.workflow.steps
   const totalSteps = steps.length
   const step = steps[stepIndex]!
-  const stepSections = sectionsByStep.get(step.key) ?? []
+  const stepSections = useMemo(() => sectionsByStep.get(step.key) ?? [], [sectionsByStep, step.key])
   // Tabs apply to single-step apps (multi-step wizards keep their own nav). We
   // filter only the RENDERED sections — validation still spans every tab.
   const tabbed = appTabs.length >= 2 && totalSteps === 1
@@ -323,7 +360,7 @@ export function FormRenderer({
       currentUserPersonId: currentUser.personId,
       currentUserName: currentUser.name,
     }
-    // Materialize per-row computed (formula/calc) fields into the rows the
+    // Materialize per-row formula fields into the rows the
     // evaluator sees, so `sum_section` / `avg_section` can roll up a computed
     // column. Consistent with the read-time-projection model: computed values
     // are never persisted (buildPayload uses the raw rows) — only derived here
@@ -332,9 +369,7 @@ export function FormRenderer({
     for (const sec of schema.sections) {
       if (!sec.repeating) continue
       const raw = rowsByStep[sec.id] ?? []
-      const formulaFields = sec.fields.filter(
-        (f) => (f.type === 'formula' || f.type === 'calc') && f.formula,
-      )
+      const formulaFields = sec.fields.filter((f) => f.type === 'formula' && f.formula)
       if (formulaFields.length === 0) {
         materializedRows[sec.id] = raw
         continue
@@ -364,29 +399,36 @@ export function FormRenderer({
   // Apply default values on first render of a step. Tracked via a ref so we
   // don't re-apply when the user clears the field intentionally.
   useEffect(() => {
-    let mutated: Record<string, unknown> | null = null
-    for (const sec of stepSections) {
-      // Skip repeating sections — defaults are applied per row on row add.
-      if (sec.repeating) continue
-      for (const f of sec.fields) {
-        if (!f.defaultValue) continue
-        const key = `${step.key}:${f.id}`
-        if (appliedDefaults.current.has(key)) continue
-        if (values[f.id] !== undefined && values[f.id] !== '' && values[f.id] !== null) {
-          appliedDefaults.current.add(key)
-          continue
+    const handle = window.setTimeout(() => {
+      setValues((current) => {
+        let mutated: Record<string, unknown> | null = null
+        for (const sec of stepSections) {
+          // Skip repeating sections — defaults are applied per row on row add.
+          if (sec.repeating) continue
+          for (const f of sec.fields) {
+            if (!f.defaultValue) continue
+            const key = `${step.key}:${f.id}`
+            if (appliedDefaults.current.has(key)) continue
+            if (current[f.id] !== undefined && current[f.id] !== '' && current[f.id] !== null) {
+              appliedDefaults.current.add(key)
+              continue
+            }
+            const v = resolveDefaultValue(f.defaultValue as DefaultValueExpression, {
+              ...evalCtx,
+              values: mutated ?? current,
+            })
+            if (v !== undefined && v !== null) {
+              mutated = mutated ?? { ...current }
+              mutated[f.id] = v
+            }
+            appliedDefaults.current.add(key)
+          }
         }
-        const v = resolveDefaultValue(f.defaultValue as DefaultValueExpression, evalCtx)
-        if (v !== undefined && v !== null) {
-          mutated = mutated ?? { ...values }
-          mutated[f.id] = v
-        }
-        appliedDefaults.current.add(key)
-      }
-    }
-    if (mutated) setValues(mutated)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepIndex])
+        return mutated ?? current
+      })
+    }, 0)
+    return () => window.clearTimeout(handle)
+  }, [evalCtx, step.key, stepSections])
 
   // --- Autosave -------------------------------------------------------------
   //
@@ -398,8 +440,10 @@ export function FormRenderer({
       rows: rowsByStep,
       stepIndex,
       responseId,
+      dirty: draftEditState.dirty,
+      editSequence: draftEditState.sequence,
     }
-  }, [values, rowsByStep, stepIndex, responseId])
+  }, [draftEditState, values, rowsByStep, stepIndex, responseId])
 
   // Surface a one-shot toast when we resumed from a saved draft so the user
   // understands they're not on a fresh form.
@@ -428,15 +472,17 @@ export function FormRenderer({
       rows: Record<string, Array<Record<string, unknown>>>
       stepIndex: number
     }): Promise<boolean> => {
-      // Lazily create a draft row on the first save. If the create-call
-      // races with another save, just wait it out by skipping this round —
-      // the next debounce tick will hit the now-set responseId.
+      const clientSequence = latestRef.current.editSequence
+      const clientSessionId = getOrCreateDraftSessionId(draftSessionIdRef)
+
+      // Lazily create a draft row on the first save. Concurrent saves share
+      // and await the same request, then each submits its ordered snapshot.
       let id = latestRef.current.responseId
       if (!id) {
-        if (creatingRef.current) return false
-        creatingRef.current = true
+        const creation = creatingRef.current ?? createDraftResponse({ templateId })
+        creatingRef.current = creation
         try {
-          const res = await createDraftResponse({ templateId })
+          const res = await creation
           if (!res.ok) {
             setSaveStatus('error')
             setSaveError(res.error)
@@ -446,7 +492,7 @@ export function FormRenderer({
           setResponseId(id)
           latestRef.current.responseId = id
         } finally {
-          creatingRef.current = false
+          if (creatingRef.current === creation) creatingRef.current = null
         }
       }
       setSaveStatus('pending')
@@ -456,17 +502,35 @@ export function FormRenderer({
         values: args.values,
         rows: args.rows,
         stepIndex: args.stepIndex,
+        clientSessionId,
+        clientSequence,
+        baseRevision: draftRevisionRef.current,
       })
       if (!res.ok) {
-        setSaveStatus('error')
-        setSaveError(res.error)
+        if (clientSequence >= acknowledgedSequenceRef.current) {
+          setSaveStatus('error')
+          setSaveError(res.error)
+        }
         return false
       }
-      setSaveStatus('saved')
-      setLastSavedAt(new Date(res.savedAt))
-      // Clear dirty so the unload handler doesn't beacon a no-op. The next
-      // user change calls markDirty() to flip it back on.
-      dirtyRef.current = false
+      draftRevisionRef.current = Math.max(draftRevisionRef.current, res.revision)
+      if (res.sequence >= acknowledgedSequenceRef.current) {
+        acknowledgedSequenceRef.current = res.sequence
+        setLastSavedAt(new Date(res.savedAt))
+        if (latestRef.current.editSequence > res.sequence) {
+          setSaveStatus('pending')
+        } else {
+          // Clear dirty only when the acknowledged payload includes every
+          // local edit. An older response completing later must not erase a
+          // newer unsaved change.
+          setSaveStatus('saved')
+          setDraftEditState((current) =>
+            current.sequence <= res.sequence && current.dirty
+              ? { ...current, dirty: false }
+              : current,
+          )
+        }
+      }
       return true
     },
     [templateId],
@@ -474,30 +538,41 @@ export function FormRenderer({
 
   // Debounced autosave on any values / rows / step change. The 1500ms delay
   // is the spec; each new change cancels and reschedules. We also gate on
-  // dirtyRef so the very first render (just hydrated state) doesn't trigger
+  // draftEditState so the very first render (just hydrated state) doesn't trigger
   // a no-op save.
   useEffect(() => {
-    if (!dirtyRef.current) return
+    if (!draftEditState.dirty) return
     const handle = setTimeout(() => {
       void persistDraft({ values, rows: rowsByStep, stepIndex })
     }, 1500)
     return () => clearTimeout(handle)
-  }, [values, rowsByStep, stepIndex, persistDraft])
+  }, [draftEditState.dirty, values, rowsByStep, stepIndex, persistDraft])
 
   // Save-on-unload. Uses navigator.sendBeacon — only this API reliably
   // delivers a POST as the document unloads. Best-effort: failure is
   // silent (the in-app autosave will have run on the previous keystroke).
   useEffect(() => {
     function handleUnload() {
-      if (!dirtyRef.current) return
-      const { values: v, rows, stepIndex: si, responseId: rid } = latestRef.current
+      const {
+        values: v,
+        rows,
+        stepIndex: si,
+        responseId: rid,
+        dirty,
+        editSequence,
+      } = latestRef.current
+      if (!dirty) return
       if (!rid) return // No draft row yet — nothing to persist to.
       try {
+        const clientSessionId = getOrCreateDraftSessionId(draftSessionIdRef)
         const payload = JSON.stringify({
           responseId: rid,
           values: v,
           rows,
           stepIndex: si,
+          clientSessionId,
+          clientSequence: editSequence,
+          baseRevision: draftRevisionRef.current,
         })
         const blob = new Blob([payload], { type: 'application/json' })
         navigator.sendBeacon?.('/api/apps/draft-save', blob)
@@ -522,7 +597,7 @@ export function FormRenderer({
     // In read-only mode nothing is editable; never flip dirty so autosave +
     // the unload beacon stay silent.
     if (readOnly) return
-    if (!dirtyRef.current) dirtyRef.current = true
+    setDraftEditState((current) => ({ dirty: true, sequence: current.sequence + 1 }))
   }
 
   // --- Helpers ---------------------------------------------------------------
@@ -647,7 +722,7 @@ export function FormRenderer({
             const rowCtx: EvalContext = { ...evalCtx, values: { ...evalCtx.values, ...rows[i] } }
             if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) continue
             // Computed fields are derived, never user-validated.
-            if (f.type === 'formula' || f.type === 'calc') continue
+            if (f.type === 'formula') continue
             const error = validateOne(f, rows[i]![f.id])
             if (error) errs.set(`${sec.id}.${i}.${f.id}`, error)
           }
@@ -656,7 +731,7 @@ export function FormRenderer({
         for (const f of sec.fields) {
           if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) continue
           // Formula fields are auto-computed and never validated against the user.
-          if (f.type === 'formula' || f.type === 'calc') continue
+          if (f.type === 'formula') continue
           const error = validateOne(f, values[f.id])
           if (error) errs.set(f.id, error)
         }
@@ -670,7 +745,7 @@ export function FormRenderer({
   // hasn't returned in 500ms we proceed anyway — the next debounce tick
   // will catch up on the new step.
   async function saveBeforeNavigation(targetStepIndex: number) {
-    if (!dirtyRef.current || !responseId) return
+    if (!draftEditState.dirty || !responseId) return
     const savePromise = persistDraft({
       values,
       rows: rowsByStep,
@@ -780,7 +855,7 @@ export function FormRenderer({
       } else {
         // Clear dirty so the unload-handler doesn't try to overwrite our
         // freshly-submitted row with a stale draft payload.
-        dirtyRef.current = false
+        setDraftEditState((current) => (current.dirty ? { ...current, dirty: false } : current))
         toast.success('Form submitted')
       }
       // ok-path navigates via server redirect.
@@ -908,7 +983,7 @@ export function FormRenderer({
                             field={f}
                             value={values[f.id]}
                             onChange={(v) => setValue(f.id, v)}
-                            setFieldValue={setValue}
+                            onSetFieldValue={setValue}
                             error={errors.get(f.id)}
                             people={people}
                             evalCtx={evalCtx}
@@ -1244,7 +1319,7 @@ export function FormRenderer({
                                       field={f}
                                       value={values[f.id]}
                                       onChange={(v) => setValue(f.id, v)}
-                                      setFieldValue={setValue}
+                                      onSetFieldValue={setValue}
                                       error={errors.get(f.id)}
                                       people={people}
                                       evalCtx={evalCtx}
@@ -1277,7 +1352,7 @@ export function FormRenderer({
                                     field={f}
                                     value={values[f.id]}
                                     onChange={(v) => setValue(f.id, v)}
-                                    setFieldValue={setValue}
+                                    onSetFieldValue={setValue}
                                     error={errors.get(f.id)}
                                     people={people}
                                     evalCtx={evalCtx}
@@ -1297,7 +1372,7 @@ export function FormRenderer({
                               field={f}
                               value={values[f.id]}
                               onChange={(v) => setValue(f.id, v)}
-                              setFieldValue={setValue}
+                              onSetFieldValue={setValue}
                               error={errors.get(f.id)}
                               people={people}
                               evalCtx={evalCtx}
@@ -1392,7 +1467,7 @@ function RepeatingSection({
                       field={f}
                       value={row[f.id]}
                       onChange={(v) => onUpdate(i, { [f.id]: v })}
-                      setFieldValue={(id, v) => onUpdate(i, { [id]: v })}
+                      onSetFieldValue={(id, v) => onUpdate(i, { [id]: v })}
                       error={errors.get(`${section.id}.${i}.${f.id}`)}
                       people={people}
                       evalCtx={rowCtx}
@@ -1441,7 +1516,7 @@ function FieldRow({
   people,
   evalCtx,
   loading,
-  setFieldValue,
+  onSetFieldValue,
 }: {
   field: FormField
   value: unknown
@@ -1456,7 +1531,7 @@ function FieldRow({
   // Sibling-field setter — used by `lookup` auto-fill to write the picked
   // row's columns into other fields. Scoped to the current repeating row when
   // rendered inside one.
-  setFieldValue?: (fieldId: string, v: unknown) => void
+  onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
   return (
     <div className="space-y-1">
@@ -1478,7 +1553,7 @@ function FieldRow({
         onChange={onChange}
         people={people}
         evalCtx={evalCtx}
-        setFieldValue={setFieldValue}
+        onSetFieldValue={onSetFieldValue}
       />
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
@@ -1491,7 +1566,6 @@ function FieldRow({
 // in inline mode. Their FieldInput render path is purely presentational.
 const INLINE_NON_SAVING_TYPES = new Set([
   'formula',
-  'calc',
   'metric',
   'heading',
   'paragraph',
@@ -1586,7 +1660,7 @@ function InlineFieldRow({
   field,
   value,
   onChange,
-  setFieldValue,
+  onSetFieldValue,
   error,
   people,
   evalCtx,
@@ -1598,7 +1672,7 @@ function InlineFieldRow({
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
-  setFieldValue?: (fieldId: string, v: unknown) => void
+  onSetFieldValue?: (fieldId: string, v: unknown) => void
   error?: string
   people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   evalCtx: EvalContext
@@ -1659,7 +1733,7 @@ function InlineFieldRow({
         onChange={handleChange}
         people={people}
         evalCtx={evalCtx}
-        setFieldValue={setFieldValue}
+        onSetFieldValue={onSetFieldValue}
       />
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
@@ -1672,20 +1746,20 @@ function FieldInput({
   onChange,
   people,
   evalCtx,
-  setFieldValue,
+  onSetFieldValue,
 }: {
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
   people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   evalCtx: EvalContext
-  setFieldValue?: (fieldId: string, v: unknown) => void
+  onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
   // Formula fields are render-only: recompute the value on every render via
   // the evaluator and pass through to the display input. When the formula
   // resolves to null (e.g. an `entity_attr` whose picker is empty) we show
   // the optional `field.config.defaultDisplay` placeholder or an em-dash.
-  if ((field.type === 'formula' || field.type === 'calc') && field.formula) {
+  if (field.type === 'formula' && field.formula) {
     const computed = evaluateFormulaTree(field.formula as FormulaExpression, evalCtx)
     const fallback = (field.config?.defaultDisplay as string | undefined) ?? '—'
     const display =
@@ -1739,7 +1813,6 @@ function FieldInput({
           enterKeyHint="next"
         />
       )
-    case 'textarea':
     case 'long_text':
       return (
         <Textarea
@@ -1866,7 +1939,6 @@ function FieldInput({
       )
     }
     case 'formula':
-    case 'calc':
       // No formula configured — fall back to a read-only blank.
       return <Input disabled placeholder="(no formula)" />
     case 'date':
@@ -2227,7 +2299,7 @@ function FieldInput({
           value={value}
           onChange={onChange}
           evalCtx={evalCtx}
-          setFieldValue={setFieldValue}
+          onSetFieldValue={onSetFieldValue}
         />
       )
     case 'data_table':
@@ -2752,49 +2824,52 @@ function LookupInput({
   value,
   onChange,
   evalCtx,
-  setFieldValue,
+  onSetFieldValue,
 }: {
   field: FormField
   value: unknown
   onChange: (v: unknown) => void
   evalCtx: EvalContext
-  setFieldValue?: (fieldId: string, v: unknown) => void
+  onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
   const hasCascade = !!b?.filterByField && !!b?.filterColumn
-  const parentKey = String(parentVal ?? '')
-  const [rows, setRows] = useState<DataRow[]>([])
-  const [loading, setLoading] = useState(false)
-  const whereKey = JSON.stringify(b?.where ?? null)
+  const sourceKey = b?.sourceKey
+  const where = b?.where
+  const filterColumn = hasCascade ? b?.filterColumn : undefined
+  const filterValue = hasCascade ? parentVal : undefined
+  const limit = b?.limit ?? 200
+  const requestKey = JSON.stringify([sourceKey, where ?? null, filterColumn, filterValue, limit])
+  const [queryResult, setQueryResult] = useState<{ key: string; rows: DataRow[] }>({
+    key: '',
+    rows: [],
+  })
+  const loading = !!sourceKey && queryResult.key !== requestKey
+  const rows = queryResult.key === requestKey ? queryResult.rows : []
 
   useEffect(() => {
-    if (!b?.sourceKey) return
+    if (!sourceKey) return
     let alive = true
-    setLoading(true)
     queryDataSource({
-      sourceKey: b.sourceKey,
-      where: b.where,
-      filterColumn: hasCascade ? b.filterColumn : undefined,
-      filterValue: hasCascade ? parentVal : undefined,
-      limit: b.limit ?? 200,
+      sourceKey,
+      where,
+      filterColumn,
+      filterValue,
+      limit,
     })
       .then((res) => {
-        if (alive) setRows(res.rows)
+        if (alive) setQueryResult({ key: requestKey, rows: res.rows })
       })
       .catch(() => {
-        if (alive) setRows([])
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
+        if (alive) setQueryResult({ key: requestKey, rows: [] })
       })
     return () => {
       alive = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [b?.sourceKey, b?.filterByField, b?.filterColumn, whereKey, parentKey, b?.limit])
+  }, [filterColumn, filterValue, limit, requestKey, sourceKey, where])
 
-  if (!b?.sourceKey) {
+  if (!sourceKey) {
     return (
       <Select disabled>
         <option>Configure a data source…</option>
@@ -2807,9 +2882,11 @@ function LookupInput({
 
   const pick = (rowVal: string) => {
     onChange(rowVal)
-    if (setFieldValue && b.autofill?.length) {
+    if (onSetFieldValue && b.autofill?.length) {
       const row = rows.find((r) => String(r[valueCol] ?? '') === rowVal)
-      if (row) for (const m of b.autofill) setFieldValue(m.targetFieldId, row[m.column] ?? null)
+      if (row) {
+        for (const m of b.autofill) onSetFieldValue(m.targetFieldId, row[m.column] ?? null)
+      }
     }
   }
 
@@ -2850,38 +2927,44 @@ function DataTableInput({
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
   const hasCascade = !!b?.filterByField && !!b?.filterColumn
-  const parentKey = String(parentVal ?? '')
-  const [res, setRes] = useState<DataQueryResult>({ columns: [], rows: [] })
-  const [loading, setLoading] = useState(false)
-  const whereKey = JSON.stringify(b?.where ?? null)
+  const sourceKey = b?.sourceKey
+  const where = b?.where
+  const filterColumn = hasCascade ? b?.filterColumn : undefined
+  const filterValue = hasCascade ? parentVal : undefined
+  const limit = b?.limit ?? 50
+  const requestKey = JSON.stringify([sourceKey, where ?? null, filterColumn, filterValue, limit])
+  const [queryResult, setQueryResult] = useState<{
+    key: string
+    result: DataQueryResult
+  }>({ key: '', result: { columns: [], rows: [] } })
+  const loading = !!sourceKey && queryResult.key !== requestKey
+  const res =
+    queryResult.key === requestKey ? queryResult.result : { columns: [], rows: [] as DataRow[] }
 
   useEffect(() => {
-    if (!b?.sourceKey) return
+    if (!sourceKey) return
     let alive = true
-    setLoading(true)
     queryDataSource({
-      sourceKey: b.sourceKey,
-      where: b.where,
-      filterColumn: hasCascade ? b.filterColumn : undefined,
-      filterValue: hasCascade ? parentVal : undefined,
-      limit: b.limit ?? 50,
+      sourceKey,
+      where,
+      filterColumn,
+      filterValue,
+      limit,
     })
       .then((r) => {
-        if (alive) setRes(r)
+        if (alive) setQueryResult({ key: requestKey, result: r })
       })
       .catch(() => {
-        if (alive) setRes({ columns: [], rows: [] })
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
+        if (alive) {
+          setQueryResult({ key: requestKey, result: { columns: [], rows: [] } })
+        }
       })
     return () => {
       alive = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [b?.sourceKey, b?.filterByField, b?.filterColumn, whereKey, parentKey, b?.limit])
+  }, [filterColumn, filterValue, limit, requestKey, sourceKey, where])
 
-  if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
+  if (!sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
 
   const selectable = b.selectable ?? 'none'
   const showCols = b.columns?.length
@@ -3690,7 +3773,6 @@ function validateOne(field: FormField, value: unknown): string | null {
       return null
     }
     case 'text':
-    case 'textarea':
     case 'long_text':
     case 'email':
     case 'phone':
@@ -3749,14 +3831,10 @@ function SignatureField({
     })
     if (!put.ok) return
     const fin = await finalizeUpload({
-      kind: 'signature',
-      key: req.key,
-      filename: file.name,
-      contentType: file.type,
-      sizeBytes: file.size,
+      uploadId: req.uploadId,
     })
     if (!fin.ok) return
-    onChange({ attachmentId: fin.attachmentId, url: req.publicUrl })
+    onChange({ attachmentId: fin.attachmentId, url: fin.url })
   }
 
   return (
@@ -3808,14 +3886,10 @@ function SketchField({
     })
     if (!put.ok) return
     const fin = await finalizeUpload({
-      kind: 'image',
-      key: req.key,
-      filename: file.name,
-      contentType: file.type,
-      sizeBytes: file.size,
+      uploadId: req.uploadId,
     })
     if (!fin.ok) return
-    onChange({ attachmentId: fin.attachmentId, url: req.publicUrl, scene })
+    onChange({ attachmentId: fin.attachmentId, url: fin.url, scene })
   }
 
   return <SketchPad initialScene={stored?.scene ?? null} onChange={persist} readOnly={readOnly} />

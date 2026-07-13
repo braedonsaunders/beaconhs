@@ -11,7 +11,7 @@
 
 import type { TenantNavConfig } from '@beaconhs/db/schema'
 
-export type NavModule = {
+type NavModule = {
   /** Stable id, referenced by NavItemConfig.moduleKey. Never change once shipped. */
   key: string
   href: string
@@ -34,7 +34,7 @@ export type NavModule = {
 }
 
 // Group order top-to-bottom.
-export const NAV_GROUP_ORDER = [
+const NAV_GROUP_ORDER = [
   'Overview',
   'Frontline',
   'Knowledge',
@@ -44,10 +44,10 @@ export const NAV_GROUP_ORDER = [
   'Administration',
 ] as const
 
-export type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
+type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
 
 // Stable, url-ish ids for the default groups (used as React keys / reorder ids).
-export function defaultGroupId(label: string): string {
+function defaultGroupId(label: string): string {
   return label
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -110,7 +110,14 @@ export const NAV_MODULES: NavModule[] = [
     group: 'Frontline',
   },
   // Field tools (safe-distance calc, etc.) sit with the crew workflows by default.
-  { key: 'tools', href: '/tools', label: 'Tools', iconKey: 'wrench', group: 'Frontline' },
+  {
+    key: 'tools',
+    href: '/tools',
+    label: 'Tools',
+    iconKey: 'wrench',
+    requiredAnyPermission: ['tools.safe-distance.use', 'forms.response.create'],
+    group: 'Frontline',
+  },
 
   // Knowledge
   { key: 'training', href: '/training', label: 'Training', iconKey: 'grad', group: 'Knowledge' },

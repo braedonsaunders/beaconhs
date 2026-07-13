@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Gauge } from 'lucide-react'
+import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -16,6 +17,7 @@ import {
 import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canUseSafeDistance } from '@/lib/safe-distance-access'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -69,6 +71,7 @@ export default async function SafeDistanceListPage({
   const methodFilter = pickString(sp.method)
 
   const ctx = await requireRequestContext()
+  if (!canUseSafeDistance(ctx)) redirect('/tools')
   const canExport = can(ctx, 'admin.data.export')
 
   const { rows, total, methodCounts } = await ctx.db(async (tx) => {

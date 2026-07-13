@@ -26,15 +26,17 @@ import {
   people,
   tenantUsers,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import type { Database } from '@beaconhs/db'
 import { can, type RequestContext } from '@beaconhs/tenant'
+import { templateAccessWhere } from '@/app/(app)/apps/_lib/access'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { getAuthorPersonId, htmlToText, journalScopeWhere, snippetOf } from '../journals/_lib'
 import type { FeedEvent, FeedKind, FeedPage, FeedSummary, FeedTag } from './_types'
 
 const PAGE = 20
 
-export type ModuleScope = SQL | undefined | 'none'
+type ModuleScope = SQL | undefined | 'none'
 
 /**
  * Conservative per-module visibility: all → site → self → none (mirrors
@@ -87,6 +89,7 @@ export async function getFeed(
   const limit = Math.min(opts.limit ?? PAGE, 50)
   const cursor = opts.cursor ? new Date(opts.cursor) : null
   const authorPersonId = await getAuthorPersonId(ctx)
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   // Optional kind filter (drives the timeline's filter pills). Empty/undefined
   // means "all kinds" — otherwise only the requested sources are queried.
   const kindSet = opts.kinds && opts.kinds.length ? new Set<FeedKind>(opts.kinds) : null
@@ -335,6 +338,7 @@ export async function getFeed(
             whereAll(
               isNotNull(formResponses.submittedAt),
               isNull(formResponses.deletedAt),
+              templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
               scope,
               cursor ? lt(formResponses.submittedAt, cursor) : undefined,
             ),
@@ -378,6 +382,7 @@ export async function getFeedSummary(ctx: RequestContext): Promise<FeedSummary> 
   const week = new Date(now - 7 * 24 * 60 * 60 * 1000)
   const dayIso = new Date(now - 24 * 60 * 60 * 1000).toISOString()
   const authorPersonId = await getAuthorPersonId(ctx)
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   return ctx.db(async (tx) => {
     const byKind: Record<FeedKind, number> = {
@@ -486,10 +491,12 @@ export async function getFeedSummary(ctx: RequestContext): Promise<FeedSummary> 
             day: sql<number>`count(*) filter (where ${formResponses.submittedAt} >= ${dayIso}::timestamptz)`,
           })
           .from(formResponses)
+          .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
           .where(
             whereAll(
               isNotNull(formResponses.submittedAt),
               isNull(formResponses.deletedAt),
+              templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
               scope,
               gte(formResponses.submittedAt, week),
             ),
@@ -518,7 +525,7 @@ async function journalPhotos(
   const rows = await tx
     .select({
       entryId: journalEntryPhotos.entryId,
-      r2Key: attachments.r2Key,
+      attachmentId: attachments.id,
     })
     .from(journalEntryPhotos)
     .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
@@ -528,7 +535,7 @@ async function journalPhotos(
     const cur = map.get(r.entryId) ?? { urls: [], count: 0 }
     cur.count++
     if (cur.urls.length < 4) {
-      const u = publicUrl(r.r2Key)
+      const u = attachmentUrl(r.attachmentId)
       if (u) cur.urls.push(u)
     }
     map.set(r.entryId, cur)

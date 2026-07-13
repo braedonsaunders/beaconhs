@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, count, desc, eq, inArray, isNull, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, type SQL } from 'drizzle-orm'
 import { ArrowUpRight, Download, ShieldCheck } from 'lucide-react'
 import {
   Badge,
@@ -25,8 +25,11 @@ import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
-import { buildHref, mergeHref, pickString } from '@/lib/list-params'
+import { Pagination } from '@/components/pagination'
+import { buildHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { buildResponseExportColumns } from '@/app/(app)/apps/responses/_export-columns'
+import { templateAccessWhere } from '@/app/(app)/apps/_lib/access'
 import {
   EXPORTABLE_ENTITIES,
   EXPORT_GROUPS,
@@ -38,6 +41,9 @@ import { ExportSourcesTable } from './_sources-table'
 
 export const metadata = { title: 'Data export' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/admin/export'
+const SORTS = ['label', 'group', 'sensitivity'] as const
 
 const SENSITIVITY_OPTIONS = [
   { value: 'Standard', label: 'Standard' },
@@ -92,6 +98,12 @@ export default async function ExportHubPage({
   const groupFilter = pickString(sp.group)
   const sensitivityFilter = pickString(sp.sensitivity)
   const sourceKey = pickString(sp.source)
+  const listParams = parseListParams(sp, {
+    sort: 'label',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
 
   const dynamicEntities = await loadBuilderAppExportEntities(ctx)
   const availableEntities = [...EXPORTABLE_ENTITIES, ...dynamicEntities].filter((entity) =>
@@ -103,10 +115,24 @@ export default async function ExportHubPage({
       (!groupFilter || entity.groupLabel === groupFilter) &&
       (!sensitivityFilter || entity.sensitivity === sensitivityFilter),
   )
+  const sortedEntities = [...filteredEntities].sort((a, b) => {
+    const mult = listParams.dir === 'asc' ? 1 : -1
+    if (listParams.sort === 'group') {
+      return (a.groupLabel.localeCompare(b.groupLabel) || a.label.localeCompare(b.label)) * mult
+    }
+    if (listParams.sort === 'sensitivity') {
+      return (a.sensitivity.localeCompare(b.sensitivity) || a.label.localeCompare(b.label)) * mult
+    }
+    return a.label.localeCompare(b.label) * mult
+  })
+  const pageEntities = sortedEntities.slice(
+    (listParams.page - 1) * listParams.perPage,
+    listParams.page * listParams.perPage,
+  )
   const selectedSource = sourceKey
     ? (availableEntities.find((entity) => entity.key === sourceKey) ?? null)
     : null
-  const closeHref = mergeHref('/admin/export', sp, { source: undefined })
+  const closeHref = mergeHref(BASE, sp, { source: undefined })
   const groupCounts = new Map(
     EXPORT_GROUPS.map((group) => [
       group.label,
@@ -150,7 +176,7 @@ export default async function ExportHubPage({
             >
               <SearchInput placeholder="Search data sources..." />
               <FilterChips
-                basePath="/admin/export"
+                basePath={BASE}
                 currentParams={sp}
                 paramKey="group"
                 label="Group"
@@ -161,7 +187,7 @@ export default async function ExportHubPage({
                 }))}
               />
               <FilterChips
-                basePath="/admin/export"
+                basePath={BASE}
                 currentParams={sp}
                 paramKey="sensitivity"
                 label="Sensitivity"
@@ -171,11 +197,24 @@ export default async function ExportHubPage({
                   count: sensitivityCounts.get(option.value) ?? 0,
                 }))}
               />
+              <FilterChips
+                basePath={BASE}
+                currentParams={sp}
+                paramKey="sort"
+                label="Sort"
+                defaultValue="label"
+                hideAll
+                options={[
+                  { value: 'label', label: 'Name' },
+                  { value: 'group', label: 'Group' },
+                  { value: 'sensitivity', label: 'Sensitivity' },
+                ]}
+              />
             </TableToolbar>
           </>
         }
       >
-        {filteredEntities.length === 0 ? (
+        {pageEntities.length === 0 ? (
           <EmptyState
             icon={<Download size={32} />}
             title="No matching data sources"
@@ -183,11 +222,18 @@ export default async function ExportHubPage({
           />
         ) : (
           <ExportSourcesTable
-            entities={filteredEntities}
+            entities={pageEntities}
             currentParams={sp}
             selectedKey={selectedSource?.key}
           />
         )}
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={filteredEntities.length}
+          page={listParams.page}
+          perPage={listParams.perPage}
+        />
       </ListPageLayout>
 
       <UrlDrawer
@@ -354,6 +400,7 @@ function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
 
 async function loadBuilderAppExportEntities(ctx: RequestContext): Promise<ExportEntity[]> {
   if (!can(ctx, 'forms.response.read.self')) return []
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   return ctx.db(async (tx) => {
     const vis = await moduleScopeWhere(ctx, tx, {
@@ -362,7 +409,7 @@ async function loadBuilderAppExportEntities(ctx: RequestContext): Promise<Export
       personCol: formResponses.subjectPersonId,
       siteCol: formResponses.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = [isNull(formTemplates.deletedAt)]
+    const filters: SQL<unknown>[] = [templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records')]
     if (vis) filters.push(vis)
 
     const apps = await tx

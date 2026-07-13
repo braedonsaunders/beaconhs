@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { Library } from 'lucide-react'
 import { ReadOnlyPdfModal, type PdfResolveResult } from '../_read-only-pdf-modal'
 
-export type ReadOnlyBook = {
+type ReadOnlyBook = {
   id: string
   title: string
   description: string | null

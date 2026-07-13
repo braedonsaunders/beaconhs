@@ -23,7 +23,7 @@ export type SmsProviderSpecLite = {
   docsHint?: string
 }
 
-export type SmsFormInitial = {
+type SmsFormInitial = {
   enabled: boolean
   provider: string
   fromNumber: string

@@ -7,7 +7,7 @@
 
 import { ModuleNav } from '@/components/module-admin/module-nav'
 
-export type TrainingTab =
+type TrainingTab =
   | 'records'
   | 'skills'
   | 'courses'

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { Boxes, ListChecks, Plus, Save } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -46,14 +47,14 @@ const CATEGORIES = [
   { value: 'other', label: 'Other' },
 ]
 
-export type BuilderBank = {
+type BuilderBank = {
   id: string
   name: string
   description: string | null
   category: string | null
   isPublished: boolean
 }
-export type BuilderBankCriterion = {
+type BuilderBankCriterion = {
   id: string
   sequence: number
   text: string
@@ -75,13 +76,11 @@ export function InspectionBankBuilder({
 }) {
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  const [criteria, setCriteria] = React.useState(initialCriteria)
+  const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
   const [published, setPublished] = React.useState(bank.isPublished)
   const [editor, setEditor] = React.useState<EditorState | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  React.useEffect(() => setCriteria(initialCriteria), [initialCriteria])
 
   const run = React.useCallback(
     (fn: () => Promise<unknown>) => {
@@ -299,20 +298,21 @@ function BankCriterionEditorDrawer({
     requiresComment: boolean
   }) => void
 }) {
-  const [text, setText] = React.useState('')
-  const [responseType, setResponseType] = React.useState<ResponseType>('pass_fail_na')
-  const [requiresPhoto, setRequiresPhoto] = React.useState(false)
-  const [requiresComment, setRequiresComment] = React.useState(false)
-
-  React.useEffect(() => {
-    if (!editor) return
-    const c = editor.criterion
-    setText(c?.text ?? '')
-    // Coerce withdrawn 'rating' rows to the type they actually behave as.
-    setResponseType(c && c.responseType !== 'rating' ? c.responseType : 'pass_fail_na')
-    setRequiresPhoto(c?.requiresPhoto ?? false)
-    setRequiresComment(c?.requiresComment ?? false)
-  }, [editor])
+  const criterion = editor?.criterion
+  const [text, setText] = useReseededState(editor, criterion?.text ?? '')
+  // Coerce withdrawn 'rating' rows to the type they actually behave as.
+  const [responseType, setResponseType] = useReseededState<ResponseType>(
+    editor,
+    criterion && criterion.responseType !== 'rating' ? criterion.responseType : 'pass_fail_na',
+  )
+  const [requiresPhoto, setRequiresPhoto] = useReseededState(
+    editor,
+    criterion?.requiresPhoto ?? false,
+  )
+  const [requiresComment, setRequiresComment] = useReseededState(
+    editor,
+    criterion?.requiresComment ?? false,
+  )
 
   return (
     <Drawer

@@ -423,7 +423,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                 <p>
                   Missing source records are{' '}
                   {syncPolicy.missing === 'archive'
-                    ? 'archived after full pulls.'
+                    ? 'archived only after complete, non-empty full pulls with no record failures.'
                     : 'left untouched.'}
                 </p>
                 <p className="text-xs text-slate-400">
@@ -463,7 +463,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                       defaultValue={syncPolicy.missing === 'archive' ? 'archive' : 'keep'}
                     >
                       <option value="keep">Keep BeaconHS rows</option>
-                      <option value="archive">Archive after full pulls</option>
+                      <option value="archive">Archive after safe full pulls</option>
                     </Select>
                   </div>
                   <div className="flex justify-end">

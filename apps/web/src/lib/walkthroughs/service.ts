@@ -5,18 +5,19 @@
 
 import { eq } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import { roleAssignments, walkthroughProgress, walkthroughSettings } from '@beaconhs/db/schema'
+import { walkthroughProgress, walkthroughSettings } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { getEffectiveRoleIds } from '@/lib/effective-roles'
 import { WALKTHROUGHS, type Walkthrough } from './registry'
 
-export type WalkthroughSettingRow = {
+type WalkthroughSettingRow = {
   walkthroughId: string
   enabled: boolean
   autoStart: boolean
   roleIds: string[]
 }
 
-export type ResolvedWalkthrough = {
+type ResolvedWalkthrough = {
   walkthrough: Walkthrough
   enabled: boolean
   autoStart: boolean
@@ -58,21 +59,15 @@ export async function resolveWalkthroughs(
   ctx: RequestContext,
   tx: Database,
 ): Promise<{ visible: ResolvedWalkthrough[]; autoStartId: string | null }> {
-  const [settings, progressRows, roleRows] = await Promise.all([
+  const [settings, progressRows, myRoles] = await Promise.all([
     loadWalkthroughSettings(tx),
     tx
       .select({ walkthroughId: walkthroughProgress.walkthroughId })
       .from(walkthroughProgress)
       .where(eq(walkthroughProgress.userId, ctx.userId)),
-    ctx.membership
-      ? tx
-          .select({ roleId: roleAssignments.roleId })
-          .from(roleAssignments)
-          .where(eq(roleAssignments.tenantUserId, ctx.membership.id))
-      : Promise.resolve([] as { roleId: string }[]),
+    getEffectiveRoleIds(ctx, tx),
   ])
   const done = new Set(progressRows.map((r) => r.walkthroughId))
-  const myRoles = new Set(roleRows.map((r) => r.roleId))
   const settingById = new Map(settings.map((s) => [s.walkthroughId, s]))
 
   const visible: ResolvedWalkthrough[] = []

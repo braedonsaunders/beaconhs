@@ -16,7 +16,7 @@ import type { requireRequestContext } from '@/lib/auth'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
-export type DocObligationRow = {
+type DocObligationRow = {
   id: string
   title: string
   status: 'active' | 'paused' | 'archived'

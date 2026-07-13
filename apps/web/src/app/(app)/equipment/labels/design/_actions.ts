@@ -1,8 +1,6 @@
 'use server'
 
-import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { tenants } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import type { DesignDocument } from '@beaconhs/design-studio'
 import { requireRequestContext } from '@/lib/auth'
@@ -12,6 +10,7 @@ import {
   normalizeEquipmentLabelDesign,
 } from '@/lib/equipment-label-design'
 import { recordAudit } from '@/lib/audit'
+import { deleteTenantSetting, setTenantSetting } from '@/lib/tenant-settings'
 
 export async function saveEquipmentLabelDesign(input: DesignDocument): Promise<DesignDocument> {
   const ctx = await requireRequestContext()
@@ -27,18 +26,7 @@ export async function saveEquipmentLabelDesign(input: DesignDocument): Promise<D
     throw new Error('Label design needs one artboard')
   }
 
-  await ctx.db(async (tx) => {
-    const [tenant] = await tx
-      .select({ settings: tenants.settings })
-      .from(tenants)
-      .where(eq(tenants.id, ctx.tenantId!))
-      .limit(1)
-    const settings = {
-      ...(tenant?.settings ?? {}),
-      [EQUIPMENT_LABEL_DESIGN_SETTINGS_KEY]: document,
-    }
-    await tx.update(tenants).set({ settings }).where(eq(tenants.id, ctx.tenantId!))
-  })
+  await setTenantSetting(ctx, EQUIPMENT_LABEL_DESIGN_SETTINGS_KEY, document)
 
   await recordAudit(ctx, {
     entityType: 'equipment_label_design',
@@ -56,21 +44,12 @@ export async function saveEquipmentLabelDesign(input: DesignDocument): Promise<D
   return document
 }
 
-export async function resetEquipmentLabelDesign(): Promise<DesignDocument> {
+async function resetEquipmentLabelDesign(): Promise<DesignDocument> {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
   assertCan(ctx, 'equipment.manage')
   const document = defaultEquipmentLabelDesign()
-  await ctx.db(async (tx) => {
-    const [tenant] = await tx
-      .select({ settings: tenants.settings })
-      .from(tenants)
-      .where(eq(tenants.id, ctx.tenantId!))
-      .limit(1)
-    const settings = { ...(tenant?.settings ?? {}) } as Record<string, unknown>
-    delete settings[EQUIPMENT_LABEL_DESIGN_SETTINGS_KEY]
-    await tx.update(tenants).set({ settings }).where(eq(tenants.id, ctx.tenantId!))
-  })
+  await deleteTenantSetting(ctx, EQUIPMENT_LABEL_DESIGN_SETTINGS_KEY)
   await recordAudit(ctx, {
     entityType: 'equipment_label_design',
     action: 'update',

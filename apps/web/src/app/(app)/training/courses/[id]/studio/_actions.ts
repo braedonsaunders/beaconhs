@@ -1,9 +1,9 @@
 'use server'
 
 // Authoring Studio — curriculum (modules + lessons) CRUD for a course.
-// Native to training: no Forms/Builder. Rich lesson content is a bespoke
-// LessonBlock[] (see packages/db/src/schema/training-lms.ts). Quiz lessons point
-// at an existing training_assessment_types row; session lessons at a class.
+// Native to training: no Forms/Builder. Rich lessons use the shared training
+// TipTap editor. Quiz lessons point at an existing training_assessment_types
+// row; session lessons point at a class.
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'

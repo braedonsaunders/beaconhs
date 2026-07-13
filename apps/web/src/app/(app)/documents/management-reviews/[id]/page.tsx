@@ -17,7 +17,7 @@ import {
   documentManagementReviews,
   documents,
   tenantUsers,
-  user as userTable,
+  users as userTable,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'

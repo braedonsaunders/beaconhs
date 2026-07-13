@@ -15,8 +15,9 @@ import {
   trainingSkillAssignments,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
+import { activeTenantPredicate } from '@/lib/active-tenant'
 import { EXPIRING_DAYS, formatDay, isoDaysFromNow, standingFor, todayIsoDate } from './_format'
 import { TranscriptList, type TranscriptItem } from './_transcript-list'
 
@@ -57,7 +58,7 @@ async function resolveToken(token: string): Promise<Resolved | null> {
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(attachments, eq(attachments.id, people.photoAttachmentId))
       .innerJoin(tenants, eq(tenants.id, people.tenantId))
-      .where(and(eq(people.badgeToken, token), isNull(people.deletedAt)))
+      .where(and(eq(people.badgeToken, token), isNull(people.deletedAt), activeTenantPredicate()))
       .limit(1)
     if (!row) return null
 
@@ -108,7 +109,9 @@ async function resolveToken(token: string): Promise<Resolved | null> {
       jobTitle: row.person.jobTitle,
       departmentName: row.departmentName,
       personActive: row.person.status === 'active',
-      photoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
+      photoUrl: row.photoKey
+        ? await presignGet({ key: row.photoKey, expiresInSeconds: 300 })
+        : null,
       tenantName: row.tenant.name,
       tenantLogoUrl: row.tenant.branding.logoUrl ?? null,
       credentials: records,

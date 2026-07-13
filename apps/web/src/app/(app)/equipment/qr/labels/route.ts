@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { equipmentItems, tenants } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { renderDesignDocumentsPdf } from '@beaconhs/forms-pdf'
@@ -8,10 +8,9 @@ import { moduleScopeWhere } from '@/lib/visibility'
 import { loadEquipmentLabelData } from '@/lib/equipment-label-data'
 import { normalizeEquipmentLabelDesign } from '@/lib/equipment-label-design'
 import { pdfBufferResponse } from '@/lib/pdf-route'
+import { parseBulkQrRequest } from '@/lib/equipment-bulk-qr'
 
 export const dynamic = 'force-dynamic'
-
-const MAX_LABELS = 500
 
 /**
  * Bulk equipment QR labels — one PDF, one label page per item, at the
@@ -23,14 +22,9 @@ export async function GET(req: Request) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.read.site')
 
-  const url = new URL(req.url)
-  const ids = (url.searchParams.get('ids') ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, MAX_LABELS)
-  if (ids.length === 0) {
-    return NextResponse.json({ error: 'No equipment selected' }, { status: 400 })
+  const request = parseBulkQrRequest(req.url)
+  if (!request) {
+    return NextResponse.json({ error: 'Invalid or expired QR sheet request' }, { status: 400 })
   }
 
   const result = await ctx.db(async (tx) => {
@@ -44,11 +38,12 @@ export async function GET(req: Request) {
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
-    const labels = await loadEquipmentLabelData(tx, t?.name ?? 'BeaconHS', ids, scope)
+    const tokenScope = and(scope, eq(equipmentItems.bulkQrToken, request.token))
+    const labels = await loadEquipmentLabelData(tx, t?.name ?? 'BeaconHS', request.ids, tokenScope)
     return { document: normalizeEquipmentLabelDesign(t?.settings ?? {}), labels }
   })
-  if (result.labels.length === 0) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (result.labels.length !== request.ids.length) {
+    return NextResponse.json({ error: 'QR sheet request has expired' }, { status: 409 })
   }
 
   const pdf = await renderDesignDocumentsPdf(

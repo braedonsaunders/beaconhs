@@ -1,12 +1,12 @@
 import type { FormField, FormSchemaV1, I18nString } from '@beaconhs/forms-core'
 
-export type DataSourceFieldUsage = {
+type DataSourceFieldUsage = {
   fieldId: string
   fieldLabel: string
   fieldType: string
 }
 
-export type DataSourceAppUsage = {
+type DataSourceAppUsage = {
   templateId: string
   templateName: string
   fields: DataSourceFieldUsage[]

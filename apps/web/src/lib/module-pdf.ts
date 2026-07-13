@@ -28,7 +28,7 @@ import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 // registered flow adapter (loadValues + the record-summary fallback) AND a
 // /…/pdf route wired through renderModulePdfResponse below. Documents are
 // excluded — they're hand-authored, so the document *is* the content.
-export const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
+const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
   { moduleKey: 'incidents', label: 'Incidents' },
   { moduleKey: 'hazid', label: 'Hazard assessments' },
   { moduleKey: 'corrective-actions', label: 'Corrective actions' },

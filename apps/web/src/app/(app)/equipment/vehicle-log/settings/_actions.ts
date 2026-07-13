@@ -12,7 +12,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 
-export type VehicleLogSettingsInput = {
+type VehicleLogSettingsInput = {
   enabledModes: VehicleLogEnabledModes
   defaultMode: 'destination' | 'odometer'
 }

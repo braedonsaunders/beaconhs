@@ -1,8 +1,8 @@
 'use client'
 
-// Learner course player — curriculum sidebar + lesson viewer. Renders bespoke
-// content via the shared LessonBlocksView; quiz lessons hand off to the existing
-// native assessment engine; completing the last required lesson issues the cert.
+// Learner course player — curriculum sidebar + lesson viewer. Rich content is
+// sanitized HTML; quiz lessons hand off to the native assessment engine;
+// completing the last required lesson issues the certificate.
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -31,7 +31,7 @@ import {
 } from '../_actions'
 import { toast } from '@/lib/toast'
 
-export type PlayerEvaluation = {
+type PlayerEvaluation = {
   evaluatorName: string | null
   notes: string | null
   signatureDataUrl: string | null
@@ -39,13 +39,12 @@ export type PlayerEvaluation = {
   completedAt: string | null
 }
 
-export type PlayerLesson = {
+type PlayerLesson = {
   id: string
   title: string
   kind: 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
   completionRule: 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
   isRequired: boolean
-  blocks: LessonBlock[]
   contentHtml: string | null
   slides: Slide[]
   practicalCriteria: PracticalCriterion[]
@@ -61,8 +60,6 @@ export type PlayerModule = { id: string; title: string; lessons: PlayerLesson[] 
 
 function asBlocks(l: PlayerLesson): LessonBlock[] {
   switch (l.kind) {
-    case 'rich':
-      return l.blocks
     case 'video':
       return [
         {
@@ -82,7 +79,6 @@ function asBlocks(l: PlayerLesson): LessonBlock[] {
 }
 
 export function CoursePlayer({
-  courseName,
   modules,
   enrollmentId,
   attachmentUrls,
@@ -90,7 +86,6 @@ export function CoursePlayer({
   certificateRecordId,
   issuesRecord,
 }: {
-  courseName: string
   modules: PlayerModule[]
   enrollmentId: string
   attachmentUrls: Record<string, string | null | undefined>
@@ -285,8 +280,6 @@ export function CoursePlayer({
                       className="lesson-prose"
                       dangerouslySetInnerHTML={{ __html: current.contentHtml }}
                     />
-                  ) : current.blocks.length > 0 ? (
-                    <LessonBlocksView blocks={current.blocks} attachmentUrls={attachmentUrls} />
                   ) : null}
                   {current.practicalCriteria.length > 0 ? (
                     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">

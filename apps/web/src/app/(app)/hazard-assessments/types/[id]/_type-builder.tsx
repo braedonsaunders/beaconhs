@@ -10,6 +10,7 @@ import { Boxes, ListChecks, Package, Plus, Save, Settings2 } from 'lucide-react'
 import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -44,7 +45,7 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   multi_select: 'Multi-select',
 }
 
-export type BuilderType = {
+type BuilderType = {
   id: string
   name: string
   description: string | null
@@ -54,14 +55,14 @@ export type BuilderType = {
   hasQuestions: boolean
   availableToGroupIds: string[]
 }
-export type PPE = {
+type PPE = {
   id: string
   name: string
   description: string | null
   required: boolean
   entityOrder: number
 }
-export type Question = {
+type Question = {
   id: string
   question: string
   questionType: QuestionType
@@ -69,7 +70,7 @@ export type Question = {
   requiresYes: boolean
   entityOrder: number
 }
-export type AppRow = {
+type AppRow = {
   id: string
   label: string
   key: string
@@ -105,16 +106,12 @@ export function HazardTypeBuilder({
 }) {
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  const [ppe, setPPE] = React.useState(initialPPE)
-  const [questions, setQuestions] = React.useState(initialQuestions)
-  const [apps, setApps] = React.useState(initialApps)
+  const [ppe, setPPE] = useReseededState(initialPPE, initialPPE)
+  const [questions, setQuestions] = useReseededState(initialQuestions, initialQuestions)
+  const [apps, setApps] = useReseededState(initialApps, initialApps)
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings'>('build')
   const [editor, setEditor] = React.useState<Editor | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  React.useEffect(() => setPPE(initialPPE), [initialPPE])
-  React.useEffect(() => setQuestions(initialQuestions), [initialQuestions])
-  React.useEffect(() => setApps(initialApps), [initialApps])
 
   const run = React.useCallback(
     (fn: () => Promise<unknown>) => {
@@ -539,42 +536,57 @@ function EditorDrawer({
   onSave: (data: Record<string, unknown>) => void
 }) {
   // PPE
-  const [name, setName] = React.useState('')
-  const [ppeDesc, setPpeDesc] = React.useState('')
-  const [ppeRequired, setPpeRequired] = React.useState(true)
+  const [name, setName] = useReseededState(
+    editor,
+    editor?.kind === 'ppe' ? (editor.item?.name ?? '') : '',
+  )
+  const [ppeDesc, setPpeDesc] = useReseededState(
+    editor,
+    editor?.kind === 'ppe' ? (editor.item?.description ?? '') : '',
+  )
+  const [ppeRequired, setPpeRequired] = useReseededState(
+    editor,
+    editor?.kind === 'ppe' ? (editor.item?.required ?? true) : true,
+  )
   // Question
-  const [question, setQuestion] = React.useState('')
-  const [questionType, setQuestionType] = React.useState<QuestionType>('yes_no')
-  const [answers, setAnswers] = React.useState('')
-  const [requiresYes, setRequiresYes] = React.useState(false)
+  const [question, setQuestion] = useReseededState(
+    editor,
+    editor?.kind === 'question' ? (editor.item?.question ?? '') : '',
+  )
+  const [questionType, setQuestionType] = useReseededState<QuestionType>(
+    editor,
+    editor?.kind === 'question' ? (editor.item?.questionType ?? 'yes_no') : 'yes_no',
+  )
+  const [answers, setAnswers] = useReseededState(
+    editor,
+    editor?.kind === 'question' ? (editor.item?.answers ?? []).join('\n') : '',
+  )
+  const [requiresYes, setRequiresYes] = useReseededState(
+    editor,
+    editor?.kind === 'question' ? (editor.item?.requiresYes ?? false) : false,
+  )
   // App
-  const [templateId, setTemplateId] = React.useState('')
-  const [label, setLabel] = React.useState('')
-  const [appKey, setAppKey] = React.useState('')
-  const [appDesc, setAppDesc] = React.useState('')
-  const [appRequired, setAppRequired] = React.useState(false)
-  const [autoCreate, setAutoCreate] = React.useState(true)
-
-  React.useEffect(() => {
-    if (!editor) return
-    if (editor.kind === 'ppe') {
-      setName(editor.item?.name ?? '')
-      setPpeDesc(editor.item?.description ?? '')
-      setPpeRequired(editor.item?.required ?? true)
-    } else if (editor.kind === 'question') {
-      setQuestion(editor.item?.question ?? '')
-      setQuestionType(editor.item?.questionType ?? 'yes_no')
-      setAnswers((editor.item?.answers ?? []).join('\n'))
-      setRequiresYes(editor.item?.requiresYes ?? false)
-    } else {
-      setTemplateId('')
-      setLabel(editor.item?.label ?? '')
-      setAppKey(editor.item?.key ?? '')
-      setAppDesc(editor.item?.description ?? '')
-      setAppRequired(editor.item?.required ?? false)
-      setAutoCreate(editor.item?.autoCreate ?? true)
-    }
-  }, [editor])
+  const [templateId, setTemplateId] = useReseededState(editor, '')
+  const [label, setLabel] = useReseededState(
+    editor,
+    editor?.kind === 'app' ? (editor.item?.label ?? '') : '',
+  )
+  const [appKey, setAppKey] = useReseededState(
+    editor,
+    editor?.kind === 'app' ? (editor.item?.key ?? '') : '',
+  )
+  const [appDesc, setAppDesc] = useReseededState(
+    editor,
+    editor?.kind === 'app' ? (editor.item?.description ?? '') : '',
+  )
+  const [appRequired, setAppRequired] = useReseededState(
+    editor,
+    editor?.kind === 'app' ? (editor.item?.required ?? false) : false,
+  )
+  const [autoCreate, setAutoCreate] = useReseededState(
+    editor,
+    editor?.kind === 'app' ? (editor.item?.autoCreate ?? true) : true,
+  )
 
   const kind = editor?.kind
   const isAdd = editor?.mode === 'add'

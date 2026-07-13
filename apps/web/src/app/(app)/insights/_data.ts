@@ -12,8 +12,9 @@ import {
   type InsightDashboardLayout,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { runBhql } from '@beaconhs/analytics/server'
 import type { BhqlResult } from '@beaconhs/analytics'
+import { addTrustedSystemFormEntity, runBhql } from '@beaconhs/analytics/server'
+import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import { applyParams } from './_params'
 import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
 import { DEFAULT_INSIGHT_LAYOUT } from './_widgets'
@@ -32,17 +33,28 @@ async function runCardCached(
   ctx: RequestContext,
   query: BhqlQuery,
   key: string,
+  trustedSystemCard: boolean,
 ): Promise<BhqlResult> {
-  const now = Date.now()
-  const hit = CARD_RESULT_CACHE.get(key)
-  if (hit && now - hit.at < CARD_RESULT_TTL_MS) return hit.result
-  const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 20_000 }))
-  CARD_RESULT_CACHE.set(key, { at: now, result })
-  if (CARD_RESULT_CACHE.size > 2_000) {
-    for (const [k, v] of CARD_RESULT_CACHE)
-      if (now - v.at > CARD_RESULT_TTL_MS) CARD_RESULT_CACHE.delete(k)
-  }
-  return result
+  return ctx.db(async (tx) => {
+    const access = await resolveAnalyticsAccess(ctx, tx)
+    const trustScope = trustedSystemCard ? 'system' : 'user'
+    const cacheKey = `${ctx.tenantId}:${access.scopeKey}:${trustScope}:${key}`
+    const now = Date.now()
+    const hit = CARD_RESULT_CACHE.get(cacheKey)
+    if (hit && now - hit.at < CARD_RESULT_TTL_MS) return hit.result
+    const result = await runBhql(tx, query, {
+      maxRows: 20_000,
+      entityMap: trustedSystemCard
+        ? addTrustedSystemFormEntity(access.entityMap)
+        : access.entityMap,
+    })
+    CARD_RESULT_CACHE.set(cacheKey, { at: now, result })
+    if (CARD_RESULT_CACHE.size > 2_000) {
+      for (const [k, v] of CARD_RESULT_CACHE)
+        if (now - v.at > CARD_RESULT_TTL_MS) CARD_RESULT_CACHE.delete(k)
+    }
+    return result
+  })
 }
 
 /** A Card compiled for a dashboard cell (server-side, under RLS). */
@@ -66,7 +78,10 @@ export type CardRender = {
 export async function loadDashboardCardRenders(
   ctx: RequestContext,
   cards: Array<
-    Pick<CardRow, 'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config'>
+    Pick<
+      CardRow,
+      'id' | 'name' | 'kind' | 'query' | 'vizType' | 'vizSettings' | 'config' | 'trustedSystemCard'
+    >
   >,
   opts: {
     paramValues?: Record<string, unknown>
@@ -94,7 +109,12 @@ export async function loadDashboardCardRenders(
       }
       try {
         const query = applyParams(c.query, paramValues, paramMap, c.id, params)
-        const result = await runCardCached(ctx, query, `${ctx.tenantId}:${JSON.stringify(query)}`)
+        const result = await runCardCached(
+          ctx,
+          query,
+          JSON.stringify(query),
+          c.trustedSystemCard === true,
+        )
         return { ...base, result, error: null }
       } catch (e) {
         return {

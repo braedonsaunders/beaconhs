@@ -2,9 +2,9 @@
 // /platform/sms-log/[id] (scope 'platform'). Mirrors the email-log detail.
 
 import { notFound } from 'next/navigation'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { Badge, Card, CardContent, CardHeader, CardTitle, DetailHeader } from '@beaconhs/ui'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { smsLog, tenants } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
@@ -41,22 +41,21 @@ export async function SmsLogDetailView({
 }) {
   const ctx = await requireRequestContext()
 
-  const row = await withSuperAdmin(db, async (tx) => {
+  const loadRow = async (tx: Database) => {
     const [r] = await tx
       .select({ log: smsLog, tenant: { id: tenants.id, name: tenants.name } })
       .from(smsLog)
       .leftJoin(tenants, eq(tenants.id, smsLog.tenantId))
-      .where(eq(smsLog.id, id))
+      .where(
+        scope === 'tenant'
+          ? and(eq(smsLog.id, id), eq(smsLog.tenantId, ctx.tenantId))
+          : eq(smsLog.id, id),
+      )
       .limit(1)
     return r ?? null
-  })
-  if (!row) notFound()
-
-  // The tenant view only exposes the active tenant's rows (and platform-level
-  // rows). The platform route is super-admin-gated by its layout.
-  if (scope === 'tenant' && row.log.tenantId && row.log.tenantId !== ctx.tenantId) {
-    notFound()
   }
+  const row = scope === 'platform' ? await withSuperAdmin(db, loadRow) : await ctx.db(loadRow)
+  if (!row) notFound()
 
   const { log, tenant } = row
   const meta = (log.meta ?? {}) as Record<string, unknown>

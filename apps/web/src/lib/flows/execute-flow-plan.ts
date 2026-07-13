@@ -4,10 +4,11 @@ import 'server-only'
 // gates) against any FlowSubjectAdapter (forms today, native modules too). The
 // generic actions (send_email / notify_role / set_field / flag / webhook) and
 // recipient/assignee resolution live here; everything record-specific is an
-// adapter call. Fully guarded: a Flow must NEVER break a submit/save, so every
-// action is individually try/caught and the whole run is best-effort.
+// adapter call. Durable executions checkpoint each completed node; failures are
+// returned to the caller so its domain-event outbox can retry from that node.
 
 import { and, eq, isNull } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import {
   resolveDefaultValue,
   type AssigneeTarget,
@@ -16,7 +17,15 @@ import {
   type EvalContext,
 } from '@beaconhs/forms-core'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { people, roleAssignments, roles, tenants, tenantUsers, users } from '@beaconhs/db/schema'
+import {
+  domainEventEffects,
+  people,
+  roleAssignments,
+  roles,
+  tenants,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
 import {
@@ -39,12 +48,51 @@ import type { FlowActorRef, FlowSubjectAdapter } from './types'
 export async function executeFlowPlan(
   ctx: RequestContext,
   adapter: FlowSubjectAdapter,
-  params: { flowId: string; plan: AutomationPlan; values: Record<string, unknown> },
+  params: {
+    flowId: string
+    plan: AutomationPlan
+    values: Record<string, unknown>
+    executionId?: string
+  },
 ): Promise<{ ran: string[]; failed: string[] }> {
   const { flowId, plan, values } = params
   const evalCtx: EvalContext = { values, rows: {}, entities: {} }
   const ran: string[] = []
   const failed: string[] = []
+  const completedEffects = new Set<string>()
+  if (params.executionId) {
+    const rows = await ctx.db((tx) =>
+      tx
+        .select({ effectKey: domainEventEffects.effectKey })
+        .from(domainEventEffects)
+        .where(eq(domainEventEffects.eventId, params.executionId!)),
+    )
+    for (const row of rows) completedEffects.add(row.effectKey)
+  }
+  const markEffectComplete = async (
+    effectKey: string,
+    detail: Record<string, unknown>,
+  ): Promise<void> => {
+    if (!params.executionId) return
+    await ctx.db((tx) =>
+      tx
+        .insert(domainEventEffects)
+        .values({
+          tenantId: ctx.tenantId,
+          eventId: params.executionId!,
+          effectKey,
+          detail,
+        })
+        .onConflictDoNothing(),
+    )
+    completedEffects.add(effectKey)
+  }
+  const jobId = (nodeId: string, effect: string): string | undefined =>
+    params.executionId
+      ? `flow|${createHash('sha256')
+          .update(`${params.executionId}\0${flowId}\0${nodeId}\0${effect}`)
+          .digest('hex')}`
+      : undefined
 
   // --- Lazy, cached resolvers (generic) ----------------------------------
 
@@ -267,7 +315,13 @@ export async function executeFlowPlan(
     return tenantNameCache
   }
 
-  for (const action of plan.actions) {
+  for (const { nodeId, action } of plan.actionNodes) {
+    const actionEffectKey = `${flowId}:action:${nodeId}`
+    const durableExecutionKey = params.executionId
+      ? `${params.executionId}:${actionEffectKey}`
+      : undefined
+    if (completedEffects.has(actionEffectKey)) continue
+    const failedBefore = failed.length
     try {
       switch (action.action) {
         case 'create_capa': {
@@ -286,8 +340,10 @@ export async function executeFlowPlan(
               : null,
             severity: action.severity,
             dueOn,
+            flowExecutionKey: durableExecutionKey,
           })
-          ran.push(res.ok ? 'create_capa' : 'create_capa (failed)')
+          if (!res.ok) failed.push('create_capa (failed)')
+          else ran.push('create_capa')
           break
         }
         case 'create_incident': {
@@ -297,8 +353,10 @@ export async function executeFlowPlan(
           }
           const res = await adapter.spawnIncident({
             title: interpolate(action.titleTemplate, values) || 'Incident from form',
+            flowExecutionKey: durableExecutionKey,
           })
-          ran.push(res.ok ? 'create_incident' : 'create_incident (failed)')
+          if (!res.ok) failed.push('create_incident (failed)')
+          else ran.push('create_incident')
           break
         }
         case 'send_email': {
@@ -342,16 +400,21 @@ export async function executeFlowPlan(
               failed.push(`send_email:${channel} (no users)`)
               break
             }
-            await enqueueNotification({
-              tenantId: ctx.tenantId,
-              userIds,
-              category: adapter.notifyCategory,
-              type: 'flow.send',
-              title: subject,
-              body: text,
-              channels: [channel],
-              isCritical: channel === 'sms',
-            })
+            await enqueueNotification(
+              {
+                tenantId: ctx.tenantId,
+                userIds,
+                category: adapter.notifyCategory,
+                type: 'flow.send',
+                title: subject,
+                body: text,
+                channels: [channel],
+                isCritical: channel === 'sms',
+              },
+              jobId(nodeId, `send-${channel}`)
+                ? { jobId: jobId(nodeId, `send-${channel}`) }
+                : undefined,
+            )
             ran.push(`send_email:${channel}→${userIds.length}`)
             break
           }
@@ -407,6 +470,7 @@ export async function executeFlowPlan(
                   filename: pdfFilename,
                 },
                 emailPayload,
+                jobId(nodeId, 'pdf-email'),
               )
               ran.push(`send_email+pdfdoc→${to.length}`)
               break
@@ -427,17 +491,20 @@ export async function executeFlowPlan(
                 subtitle: values.title,
                 values,
               })
-            await enqueuePdfEmail(pdfJob, emailPayload)
+            await enqueuePdfEmail(pdfJob, emailPayload, jobId(nodeId, 'pdf-email'))
             ran.push(`send_email+pdf→${to.length}`)
             break
           }
-          await enqueueEmail({
-            to,
-            subject,
-            text,
-            html,
-            meta: { tenantId: ctx.tenantId, category: adapter.notifyCategory },
-          })
+          await enqueueEmail(
+            {
+              to,
+              subject,
+              text,
+              html,
+              meta: { tenantId: ctx.tenantId, category: adapter.notifyCategory },
+            },
+            jobId(nodeId, 'email') ? { jobId: jobId(nodeId, 'email') } : undefined,
+          )
           ran.push(`send_email→${to.length}`)
           break
         }
@@ -448,20 +515,23 @@ export async function executeFlowPlan(
             failed.push('notify_role (no users)')
             break
           }
-          await enqueueNotification({
-            tenantId: ctx.tenantId,
-            userIds,
-            category: adapter.notifyCategory,
-            type: 'flow.notify',
-            title: interpolate(action.message, values) || 'Notification',
-            channels:
-              action.channel === 'email'
-                ? ['email']
-                : action.channel === 'sms'
-                  ? ['sms']
-                  : ['in_app'],
-            isCritical: action.channel === 'sms',
-          })
+          await enqueueNotification(
+            {
+              tenantId: ctx.tenantId,
+              userIds,
+              category: adapter.notifyCategory,
+              type: 'flow.notify',
+              title: interpolate(action.message, values) || 'Notification',
+              channels:
+                action.channel === 'email'
+                  ? ['email']
+                  : action.channel === 'sms'
+                    ? ['sms']
+                    : ['in_app'],
+              isCritical: action.channel === 'sms',
+            },
+            jobId(nodeId, 'notify') ? { jobId: jobId(nodeId, 'notify') } : undefined,
+          )
           ran.push(`notify_role→${userIds.length}`)
           break
         }
@@ -483,16 +553,26 @@ export async function executeFlowPlan(
             : JSON.stringify(values)
           const res = await fetch(action.url, {
             method: action.method,
-            headers: { 'content-type': 'application/json', ...(action.headers ?? {}) },
+            headers: {
+              'content-type': 'application/json',
+              ...(action.headers ?? {}),
+              ...(params.executionId ? { 'idempotency-key': jobId(nodeId, 'webhook')! } : {}),
+            },
             body: payload,
             signal: AbortSignal.timeout(8000),
           })
-          ran.push(res.ok ? 'webhook' : `webhook (${res.status})`)
+          if (!res.ok) throw new Error(`Webhook returned HTTP ${res.status}`)
+          ran.push('webhook')
           break
         }
         default: {
           // create_response | analyze_photos | start_monitored_session — subject-specific.
-          const r = await adapter.handleExtraAction?.(action, { values, fieldPatch, evalCtx })
+          const r = await adapter.handleExtraAction?.(action, {
+            values,
+            fieldPatch,
+            evalCtx,
+            executionKey: durableExecutionKey,
+          })
           if (r) {
             ran.push(...r.ran)
             failed.push(...r.failed)
@@ -501,23 +581,31 @@ export async function executeFlowPlan(
           }
         }
       }
+      if (failed.length === failedBefore) {
+        if (Object.keys(fieldPatch).length > 0 || flagReason !== undefined) {
+          if (!adapter.persistAfterRun) throw new Error('Flow subject cannot persist field changes')
+          await adapter.persistAfterRun({
+            fieldPatch: { ...fieldPatch },
+            flagNonCompliant: flagReason !== undefined,
+          })
+          for (const key of Object.keys(fieldPatch)) delete fieldPatch[key]
+          flagReason = undefined
+        }
+        await markEffectComplete(actionEffectKey, { action: action.action })
+      } else {
+        break
+      }
     } catch {
       failed.push(`${action.action} (error)`)
-    }
-  }
-
-  // Persist set_field + flag_non_compliant (subjects that support write-back).
-  if (Object.keys(fieldPatch).length > 0 || flagReason !== undefined) {
-    try {
-      await adapter.persistAfterRun?.({ fieldPatch, flagNonCompliant: flagReason !== undefined })
-    } catch {
-      failed.push('persist (error)')
+      break
     }
   }
 
   // Gates → pending approvals. Resolving one (from the record's detail page)
   // resumes the chosen branch via planFromGate → executeFlowPlan.
   for (const { nodeId, gate } of plan.gates) {
+    const gateEffectKey = `${flowId}:gate:${nodeId}`
+    if (completedEffects.has(gateEffectKey)) continue
     try {
       const assignee = await resolveAssignee(gate.assignee)
       await recordFlowGate(ctx, {
@@ -529,6 +617,7 @@ export async function executeFlowPlan(
         title: gate.title,
         assigneeTenantUserId: assignee,
         signatureRequired: !!gate.signatureRequired,
+        executionId: params.executionId,
       })
       if (assignee) {
         const [u] = await ctx.db((tx) =>
@@ -539,20 +628,27 @@ export async function executeFlowPlan(
             .limit(1),
         )
         if (u?.userId) {
-          await enqueueNotification({
-            tenantId: ctx.tenantId,
-            userIds: [u.userId],
-            category: adapter.notifyCategory,
-            type: 'flow.approval',
-            title: `Approval needed: ${gate.title}`,
-            linkPath: adapter.deepLink(),
-            channels: ['in_app'],
-          })
+          await enqueueNotification(
+            {
+              tenantId: ctx.tenantId,
+              userIds: [u.userId],
+              category: adapter.notifyCategory,
+              type: 'flow.approval',
+              title: `Approval needed: ${gate.title}`,
+              linkPath: adapter.deepLink(),
+              channels: ['in_app'],
+            },
+            jobId(nodeId, 'gate-notification')
+              ? { jobId: jobId(nodeId, 'gate-notification') }
+              : undefined,
+          )
         }
       }
+      await markEffectComplete(gateEffectKey, { gate: gate.title })
       ran.push('gate')
     } catch {
       failed.push('gate (error)')
+      break
     }
   }
 

@@ -13,7 +13,7 @@ export const DELIVERY_TYPES = [
 
 export type DeliveryType = (typeof DELIVERY_TYPES)[number]
 
-export type DeliveryMeta = {
+type DeliveryMeta = {
   value: DeliveryType
   label: string
   /** One-line explainer shown under the delivery-type select. */
@@ -43,7 +43,7 @@ export type DeliveryMeta = {
   autoIssuesRecord: boolean
 }
 
-export const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
+const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
   classroom: {
     value: 'classroom',
     label: 'Classroom',

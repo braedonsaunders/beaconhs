@@ -15,7 +15,7 @@ import {
 import type { requireRequestContext } from '@/lib/auth'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
-export type ScopeOpt = { value: string; label: string; hint?: string }
+type ScopeOpt = { value: string; label: string; hint?: string }
 export type ScopeOptions = {
   sites: ScopeOpt[]
   crews: ScopeOpt[]
@@ -46,8 +46,7 @@ export function parseRoleScope(raw: string): RoleScope {
       case 'team':
         return {
           type: 'team',
-          // Accept the legacy `divisionIds` key on any not-yet-migrated stored scope.
-          departmentIds: strArray(v.departmentIds ?? v.divisionIds),
+          departmentIds: strArray(v.departmentIds),
           groupIds: strArray(v.groupIds),
         }
     }

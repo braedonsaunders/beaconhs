@@ -4,21 +4,20 @@
 // the training_records row (expiry from course.validForMonths), mints the
 // certificate (+ verify token), and flips the enrollment to completed.
 
-import { randomBytes } from 'node:crypto'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
-  trainingCertificates,
   trainingCourses,
   trainingEnrollments,
   trainingLessonProgress,
   trainingLessons,
   trainingRecords,
 } from '@beaconhs/db/schema'
+import { issueTrainingCertificate } from '@/lib/training-certificate-issuance'
 import { addMonthsIso } from '../../_lib/dates'
 import { deliveryMeta } from '../../_lib/delivery'
 
-export type CompletionResult = {
+type CompletionResult = {
   completed: boolean
   percent: number
   recordId: string | null
@@ -65,11 +64,8 @@ async function issueCourseRecordAndComplete(
     .returning()
   let certificateId: string | null = null
   if (rec) {
-    const [cert] = await tx
-      .insert(trainingCertificates)
-      .values({ tenantId, recordId: rec.id, verifyToken: randomBytes(20).toString('hex') })
-      .returning()
-    certificateId = cert?.id ?? null
+    const cert = await issueTrainingCertificate(tx, { tenantId, recordId: rec.id })
+    certificateId = cert.id
   }
   await tx
     .update(trainingEnrollments)

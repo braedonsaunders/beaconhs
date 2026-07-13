@@ -9,7 +9,7 @@ import { eq, type SQL } from 'drizzle-orm'
 import { documents } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 
-export function canManageDocuments(ctx: RequestContext): boolean {
+function canManageDocuments(ctx: RequestContext): boolean {
   return ctx.isSuperAdmin || can(ctx, 'documents.manage')
 }
 

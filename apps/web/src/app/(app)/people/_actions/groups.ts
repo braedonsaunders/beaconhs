@@ -7,7 +7,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import { people, personGroupMemberships, personGroups } from '@beaconhs/db/schema'
+import { personGroupMemberships, personGroups } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'

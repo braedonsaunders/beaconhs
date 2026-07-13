@@ -11,7 +11,7 @@
 
 import type { ComplianceTargetRef } from '@beaconhs/db/schema'
 
-export type ComplianceLink = { href: string; prefetch: boolean }
+type ComplianceLink = { href: string; prefetch: boolean }
 
 export function resolveComplianceLink(
   kind: string,

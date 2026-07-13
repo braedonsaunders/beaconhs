@@ -34,7 +34,7 @@ export type SketchScene = {
   files?: Record<string, unknown>
 }
 
-export type SketchPadProps = {
+type SketchPadProps = {
   /** Previously-saved scene to re-open, or null for a blank canvas. */
   initialScene?: SketchScene | null
   /**

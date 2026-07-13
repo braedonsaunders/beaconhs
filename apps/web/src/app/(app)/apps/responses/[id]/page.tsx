@@ -43,7 +43,7 @@ import {
   orgUnits,
   people,
   tenantUsers,
-  user,
+  users as user,
   type FormResponseDraftData,
   type FormWorkflowStep,
 } from '@beaconhs/db/schema'
@@ -51,6 +51,7 @@ import { evaluateLogicRule } from '@beaconhs/forms-core'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { requireRequestContext } from '@/lib/auth'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
@@ -69,7 +70,12 @@ import { buildSpawnPrefill, labelForField } from './_spawn-prefill'
 import { SpawnDrawers, type SpawnDrawerKind } from './_spawn-drawers'
 import { MonitorPanel, type MonitorStatus } from './_monitor-panel'
 import { can } from '@beaconhs/tenant'
-import { appVisibleTo, getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+import {
+  canAccessResponseTemplate,
+  canAccessTemplate,
+  canEditResponsePayload,
+} from '@/app/(app)/apps/_lib/access'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { FormRenderer } from '@/app/(app)/apps/templates/[id]/fill/form-renderer'
 import {
   finalizeResponse,
@@ -102,6 +108,7 @@ async function addComment(formData: FormData) {
   const body = String(formData.get('body') ?? '').trim()
   if (!responseId || !body) return
   if (!ctx.membership?.id) return
+  if (!(await canAccessResponseTemplate(ctx, responseId, 'operate'))) return
   // Per-user record visibility re-check: the page render is scoped, but this
   // action is reachable directly, so a user must be able to see the response
   // before commenting on it (read.all → any; read.site → my sites; else → mine).
@@ -163,6 +170,8 @@ export default async function FormResponsePage({
   const active: Tab = pickActiveTab(sp, TABS, 'response')
 
   const ctx = await requireRequestContext()
+  if (!(await canAccessResponseTemplate(ctx, id, 'browse-records'))) notFound()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -350,8 +359,8 @@ export default async function FormResponsePage({
   }
   const recordConfig = (template.recordConfig as RecordConfig | null) ?? null
   const locked = !!response.locked
-  const userRoleKeys = await getUserRoleKeys(ctx)
-  const canFillApp = appVisibleTo(ctx, template.allowedRoles, userRoleKeys)
+  const userRoleKeys = effectiveRoleKeys
+  const canOperateApp = canAccessTemplate(ctx, template, userRoleKeys, 'operate')
   const recordValues = responsePayload(
     response.data ?? {},
     response.status === 'draft' || response.status === 'in_progress'
@@ -364,29 +373,22 @@ export default async function FormResponsePage({
   const entitiesByField = await loadEntitiesForPickers(ctx, version.schema, recordValues)
   const callerMembershipId = ctx.membership?.id ?? null
   const isOwner = response.submittedBy !== null && response.submittedBy === callerMembershipId
-  const canWorkDraft =
-    (response.status === 'draft' || response.status === 'in_progress') &&
-    can(ctx, 'forms.response.create')
-  const canEditRecord =
-    canFillApp &&
-    !locked &&
-    (ctx.isSuperAdmin ||
-      ctx.permissions.has('*') ||
-      can(ctx, 'forms.response.read.all') ||
-      (isOwner && (can(ctx, 'forms.response.update.own') || canWorkDraft)) ||
-      (response.submittedBy === null && canWorkDraft))
+  const canEditRecord = canOperateApp && canEditResponsePayload(ctx, response)
   const canManageRecord =
-    ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all') || isOwner
+    canOperateApp &&
+    (ctx.isSuperAdmin || ctx.permissions.has('*') || can(ctx, 'forms.response.read.all') || isOwner)
   const lockRoles = recordConfig?.locking?.lockRoles
   const unlockRoles = recordConfig?.locking?.unlockRoles
   const canLockRecord =
-    lockRoles && lockRoles.length > 0
+    canOperateApp &&
+    (lockRoles && lockRoles.length > 0
       ? ctx.isSuperAdmin || ctx.permissions.has('*') || hasAnyRole(userRoleKeys, lockRoles)
-      : canManageRecord
+      : canManageRecord)
   const canUnlockRecord =
-    unlockRoles && unlockRoles.length > 0
+    canOperateApp &&
+    (unlockRoles && unlockRoles.length > 0
       ? ctx.isSuperAdmin || ctx.permissions.has('*') || hasAnyRole(userRoleKeys, unlockRoles)
-      : canManageRecord
+      : canManageRecord)
 
   // Record-page tab/review config — pending-review (compliance + sign-off),
   // Comments and Audit tabs are each toggleable per app. Sensible defaults keep
@@ -410,26 +412,28 @@ export default async function FormResponsePage({
     confirm?: string
     order: number
   }[] = []
-  for (const flow of manualFlows) {
-    for (const node of flow.graph.nodes) {
-      if (node.data.kind !== 'trigger') continue
-      const t = node.data.trigger
-      if (t.trigger !== 'manual') continue
-      if (t.requirePermission && !can(ctx, t.requirePermission)) continue
-      if (
-        t.showIf &&
-        !evaluateLogicRule(t.showIf, { values: recordValues, rows: {}, entities: {} })
-      )
-        continue
-      manualButtons.push({
-        flowId: flow.id,
-        buttonId: t.buttonId,
-        label: t.label,
-        icon: t.icon,
-        variant: t.variant,
-        confirm: t.confirm,
-        order: t.order ?? 0,
-      })
+  if (canOperateApp) {
+    for (const flow of manualFlows) {
+      for (const node of flow.graph.nodes) {
+        if (node.data.kind !== 'trigger') continue
+        const t = node.data.trigger
+        if (t.trigger !== 'manual') continue
+        if (t.requirePermission && !can(ctx, t.requirePermission)) continue
+        if (
+          t.showIf &&
+          !evaluateLogicRule(t.showIf, { values: recordValues, rows: {}, entities: {} })
+        )
+          continue
+        manualButtons.push({
+          flowId: flow.id,
+          buttonId: t.buttonId,
+          label: t.label,
+          icon: t.icon,
+          variant: t.variant,
+          confirm: t.confirm,
+          order: t.order ?? 0,
+        })
+      }
     }
   }
   manualButtons.sort((a, b) => a.order - b.order)
@@ -504,7 +508,7 @@ export default async function FormResponsePage({
       status: (row?.status ?? 'pending') as WorkflowStepProp['status'],
       signedAt: row?.signedAt ? row.signedAt.toISOString() : null,
       signedBy: signedByName,
-      signatureDataUrl: row?.signatureDataUrl ?? null,
+      signatureUrl: row?.signatureAttachmentId ? attachmentUrl(row.signatureAttachmentId) : null,
       comment: row?.comment ?? null,
       rejectionReason: row?.rejectionReason ?? null,
       rejectedAt: row?.rejectedAt ? row.rejectedAt.toISOString() : null,
@@ -555,20 +559,24 @@ export default async function FormResponsePage({
           }
           actions={
             <>
-              <Link
-                href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}
-              >
-                <Button variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}>
-                  <Plus size={14} /> Create CAPA
-                </Button>
-              </Link>
-              <Link
-                href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}
-              >
-                <Button variant="outline">
-                  <ShieldAlert size={14} /> Create incident
-                </Button>
-              </Link>
+              {canOperateApp ? (
+                <>
+                  <Link
+                    href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}
+                  >
+                    <Button variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}>
+                      <Plus size={14} /> Create CAPA
+                    </Button>
+                  </Link>
+                  <Link
+                    href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}
+                  >
+                    <Button variant="outline">
+                      <ShieldAlert size={14} /> Create incident
+                    </Button>
+                  </Link>
+                </>
+              ) : null}
               <RecordActionBar responseId={id} buttons={manualButtons} />
               {!locked ? (
                 <>
@@ -691,6 +699,7 @@ export default async function FormResponsePage({
                 }
                 intervalMinutes={response.checkinIntervalMinutes}
                 requireGeo={response.monitorRequireGeo ?? false}
+                readOnly={!canOperateApp}
                 checkins={checkins.map((c) => ({
                   id: c.id,
                   kind: c.kind,
@@ -731,13 +740,15 @@ export default async function FormResponsePage({
                             Answer: <strong>{displayValue}</strong>
                           </div>
                         </div>
-                        <Link
-                          href={`${basePath}?drawer=spawn-ca&failedField=${encodeURIComponent(key)}${active === 'response' ? '' : `&tab=${active}`}`}
-                        >
-                          <Button size="sm" variant="outline">
-                            <Plus size={12} /> Create CAPA
-                          </Button>
-                        </Link>
+                        {canOperateApp ? (
+                          <Link
+                            href={`${basePath}?drawer=spawn-ca&failedField=${encodeURIComponent(key)}${active === 'response' ? '' : `&tab=${active}`}`}
+                          >
+                            <Button size="sm" variant="outline">
+                              <Plus size={12} /> Create CAPA
+                            </Button>
+                          </Link>
+                        ) : null}
                       </li>
                     )
                   })}
@@ -855,7 +866,9 @@ export default async function FormResponsePage({
               )
             })()}
 
-            {pendingFlowGates.length > 0 ? <FlowApprovals gates={pendingFlowGates} /> : null}
+            {canOperateApp && pendingFlowGates.length > 0 ? (
+              <FlowApprovals gates={pendingFlowGates} />
+            ) : null}
 
             {reviewEnabled ? (
               <Section
@@ -877,7 +890,7 @@ export default async function FormResponsePage({
                     // (closed/rejected) state. Super-admin viewing-as has
                     // membership=null but ctx-level permissions; we still allow
                     // them to interact for cross-tenant debugging.
-                    canAct={true}
+                    canAct={canOperateApp}
                   />
                 )}
               </Section>
@@ -922,17 +935,19 @@ export default async function FormResponsePage({
                 )}
               </CardContent>
             </Card>
-            <Section title="Add a comment">
-              <form action={addComment} className="space-y-3">
-                <input type="hidden" name="responseId" value={id} />
-                <Textarea name="body" rows={3} required placeholder="Type a comment…" />
-                <div className="flex justify-end">
-                  <Button type="submit">
-                    <Send size={14} /> Post comment
-                  </Button>
-                </div>
-              </form>
-            </Section>
+            {canOperateApp ? (
+              <Section title="Add a comment">
+                <form action={addComment} className="space-y-3">
+                  <input type="hidden" name="responseId" value={id} />
+                  <Textarea name="body" rows={3} required placeholder="Type a comment…" />
+                  <div className="flex justify-end">
+                    <Button type="submit">
+                      <Send size={14} /> Post comment
+                    </Button>
+                  </div>
+                </form>
+              </Section>
+            ) : null}
           </div>
         ) : null}
 
@@ -948,31 +963,33 @@ export default async function FormResponsePage({
         ) : null}
       </div>
 
-      <SpawnDrawers
-        responseId={id}
-        openDrawer={openDrawer}
-        closeHref={closeHref}
-        prefill={
-          // Per-field CAPA spawn — recompute prefill scoped to the single
-          // failed field referenced in `?failedField=`. Cheap; runs once
-          // per render.
-          (() => {
-            const single = pickString(sp.failedField)
-            if (!single || !failedFieldKeys.includes(single)) return spawnPrefill
-            return buildSpawnPrefill({
-              templateName: template.name,
-              reference: referenceShort,
-              score: complianceScore,
-              schema: version.schema,
-              values: recordValues,
-              failedFieldKeys,
-              singleFailedFieldKey: single,
-            })
-          })()
-        }
-        spawnCa={createCorrectiveActionFromResponse}
-        spawnIncident={createIncidentFromResponse}
-      />
+      {canOperateApp ? (
+        <SpawnDrawers
+          responseId={id}
+          openDrawer={openDrawer}
+          closeHref={closeHref}
+          prefill={
+            // Per-field CAPA spawn — recompute prefill scoped to the single
+            // failed field referenced in `?failedField=`. Cheap; runs once
+            // per render.
+            (() => {
+              const single = pickString(sp.failedField)
+              if (!single || !failedFieldKeys.includes(single)) return spawnPrefill
+              return buildSpawnPrefill({
+                templateName: template.name,
+                reference: referenceShort,
+                score: complianceScore,
+                schema: version.schema,
+                values: recordValues,
+                failedFieldKeys,
+                singleFailedFieldKey: single,
+              })
+            })()
+          }
+          spawnCa={createCorrectiveActionFromResponse}
+          spawnIncident={createIncidentFromResponse}
+        />
+      ) : null}
     </DetailPageLayout>
   )
 }

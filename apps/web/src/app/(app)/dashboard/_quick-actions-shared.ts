@@ -7,7 +7,7 @@ import type { DashboardQuickAction } from '@beaconhs/db/schema'
 
 export type QuickAction = DashboardQuickAction
 
-export type QuickActionsSaveResult = { ok: true } | { ok: false; error?: string }
+type QuickActionsSaveResult = { ok: true } | { ok: false; error?: string }
 
 export type SaveQuickActionsAction = (input: QuickAction[]) => Promise<QuickActionsSaveResult>
 
@@ -28,7 +28,7 @@ export type QuickActionOptions = {
   forms: QuickActionOption[]
 }
 
-export type QuickActionTone =
+type QuickActionTone =
   | 'rose'
   | 'orange'
   | 'amber'
@@ -39,7 +39,7 @@ export type QuickActionTone =
   | 'violet'
   | 'slate'
 
-export type ToneClasses = {
+type ToneClasses = {
   /** Border + surface + hover + focus ring for the tile (light + dark). */
   tile: string
   /** Icon chip idle + group-hover (light + dark). */
@@ -161,7 +161,7 @@ export const MAX_QUICK_ACTIONS = 12
  * `requiredPermission` matches the destination page's own gate — the picker
  * (actions.ts listQuickActionOptions) filters on it with can(ctx, …).
  */
-export type CuratedQuickAction = QuickActionOption & {
+type CuratedQuickAction = QuickActionOption & {
   /** Stable id used for the shipped default tiles. */
   id: string
   /** Permission the destination requires (null = reachable by everyone). */

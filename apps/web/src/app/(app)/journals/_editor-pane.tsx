@@ -66,12 +66,10 @@ export function EditorPane({
   const bodyBaseline = useRef<string | null>(null)
 
   useEffect(() => {
-    setSaveState('saved')
-    pending.current = {}
-    bodyBaseline.current = null
-    if (timer.current) clearTimeout(timer.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.id])
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [])
 
   function flush(): Promise<void> {
     if (timer.current) clearTimeout(timer.current)

@@ -16,6 +16,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { buildEditorUrl, getCollaboraEditUrl } from '@/lib/collabora'
 import { mintWopiToken } from '@/lib/wopi'
+import { tenantIsActive } from '@/lib/active-tenant'
 import { blankDocxBuffer } from '@/lib/docx-blank'
 import type { CollaboraSession } from '@/components/collabora-embed'
 
@@ -32,6 +33,10 @@ export async function getDocumentWriterSession(
 ): Promise<CollaboraSession> {
   const ctx = await requireRequestContext()
   assertCan(ctx, versionId ? 'documents.read' : 'documents.manage')
+  if (ctx.impersonation) return { ok: false, error: 'impersonation_blocked' }
+  if (!(await tenantIsActive(ctx.tenantId))) {
+    return { ok: false, error: 'workspace_unavailable' }
+  }
 
   const attachmentId = await ctx.db(async (tx) => {
     if (versionId) {
@@ -67,6 +72,7 @@ export async function getDocumentWriterSession(
     target: 'document',
     targetId: documentId,
     canWrite: !versionId,
+    activeRoleId: ctx.activeRoleId ?? null,
   })
   return {
     ok: true,

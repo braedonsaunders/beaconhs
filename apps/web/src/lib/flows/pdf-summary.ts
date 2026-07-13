@@ -18,9 +18,7 @@ function humanize(key: string): string {
     .trim()
 }
 
-export function summarizeFlowValues(
-  values: Record<string, unknown>,
-): { label: string; value: string }[] {
+function summarizeFlowValues(values: Record<string, unknown>): { label: string; value: string }[] {
   return Object.entries(values)
     .filter(
       ([k, v]) =>
@@ -61,7 +59,7 @@ const isRowArray = (v: unknown): v is Record<string, unknown>[] =>
  * attendees, …) into printable table sections, and photo collections (rows
  * carrying a `url`) into an image list.
  */
-export function summarizeFlowCollections(values: Record<string, unknown>): {
+function summarizeFlowCollections(values: Record<string, unknown>): {
   sections: SummarySection[]
   photos: SummaryPhoto[]
 } {

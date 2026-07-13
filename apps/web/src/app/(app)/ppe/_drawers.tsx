@@ -21,7 +21,7 @@ import {
   type SelectOption,
 } from '@beaconhs/ui'
 
-export type PpeDrawerType = {
+type PpeDrawerType = {
   id: string
   name: string
   category: string | null

@@ -1,6 +1,20 @@
 import Link from 'next/link'
 import { cookies, headers } from 'next/headers'
-import { desc } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  ilike,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 import { BookText, Download, Key } from 'lucide-react'
 import {
   Alert,
@@ -23,9 +37,15 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { apiKeys } from '@beaconhs/db/schema'
+import { apiKeys, formTemplates } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortableTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
 import { formatDate, formatDateTime } from '@/lib/datetime'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { permissionGroupLabel } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../roles/_components/permission-matrix'
 import { createApiKey, dismissReveal, REVEAL_COOKIE, revokeApiKey } from './_actions'
@@ -33,6 +53,9 @@ import { requireApiKeyAdmin } from './_guard'
 
 export const metadata = { title: 'API keys' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/admin/api-keys'
+const SORTS = ['name', 'created', 'expires', 'lastUsed', 'status'] as const
 
 // Outline-button styling for anchor links (the Button component doesn't render
 // as an anchor, so links are styled <a> elements — matching the app's pattern).
@@ -72,10 +95,85 @@ export default async function ApiKeysPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const ctx = await requireApiKeyAdmin()
-  const rows = await ctx.db((tx) => tx.select().from(apiKeys).orderBy(desc(apiKeys.createdAt)))
+  const sp = await searchParams
+  const statusParam = pickString(sp.status)
+  const statusFilter =
+    statusParam === 'active' || statusParam === 'expired' || statusParam === 'revoked'
+      ? statusParam
+      : undefined
+  const params = parseListParams(sp, {
+    sort: 'created',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const nowDate = new Date()
+  const [list, builderApps] = await Promise.all([
+    ctx.db(async (tx) => {
+      const search: SQL<unknown> | undefined = params.q
+        ? or(ilike(apiKeys.name, `%${params.q}%`), ilike(apiKeys.prefix, `%${params.q}%`))
+        : undefined
+      const active = and(
+        isNull(apiKeys.revokedAt),
+        or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, nowDate)),
+      )
+      const expired = and(isNull(apiKeys.revokedAt), lte(apiKeys.expiresAt, nowDate))
+      const revoked = isNotNull(apiKeys.revokedAt)
+      const status =
+        statusFilter === 'active'
+          ? active
+          : statusFilter === 'expired'
+            ? expired
+            : statusFilter === 'revoked'
+              ? revoked
+              : undefined
+      const where = and(search, status)
+      const statusRank = sql<number>`case when ${apiKeys.revokedAt} is not null then 3 when ${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} <= ${nowDate} then 2 else 1 end`
+      const dirFn = params.dir === 'asc' ? asc : desc
+      const orderBy =
+        params.sort === 'name'
+          ? [dirFn(apiKeys.name)]
+          : params.sort === 'expires'
+            ? [dirFn(apiKeys.expiresAt), asc(apiKeys.name)]
+            : params.sort === 'lastUsed'
+              ? [dirFn(apiKeys.lastUsedAt), asc(apiKeys.name)]
+              : params.sort === 'status'
+                ? [dirFn(statusRank), asc(apiKeys.name)]
+                : [dirFn(apiKeys.createdAt)]
+      const baseCount = () => tx.select({ c: count() }).from(apiKeys)
+      const [totalRow, activeRow, expiredRow, revokedRow, rows] = await Promise.all([
+        baseCount().where(where),
+        baseCount().where(and(search, active)),
+        baseCount().where(and(search, expired)),
+        baseCount().where(and(search, revoked)),
+        tx
+          .select()
+          .from(apiKeys)
+          .where(where)
+          .orderBy(...orderBy)
+          .limit(params.perPage)
+          .offset((params.page - 1) * params.perPage),
+      ])
+      return {
+        rows,
+        total: Number(totalRow[0]?.c ?? 0),
+        statusCounts: {
+          active: Number(activeRow[0]?.c ?? 0),
+          expired: Number(expiredRow[0]?.c ?? 0),
+          revoked: Number(revokedRow[0]?.c ?? 0),
+        },
+      }
+    }),
+    ctx.db((tx) =>
+      tx
+        .select({ id: formTemplates.id, name: formTemplates.name })
+        .from(formTemplates)
+        .where(and(eq(formTemplates.status, 'published'), isNull(formTemplates.deletedAt)))
+        .orderBy(asc(formTemplates.name)),
+    ),
+  ])
   const cookieStore = await cookies()
   const reveal = cookieStore.get(REVEAL_COOKIE)?.value ?? null
-  const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
 
   const h = await headers()
@@ -83,7 +181,7 @@ export default async function ApiKeysPage({
   const proto = host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https'
   const baseUrl = `${proto}://${host}/api/v1`
 
-  const now = new Date().getTime()
+  const now = nowDate.getTime()
 
   return (
     <PageContainer>
@@ -176,6 +274,24 @@ export default async function ApiKeysPage({
                 <PermissionMatrix />
               </fieldset>
 
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Builder app grants
+                </legend>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Forms permissions do not grant every app. Select each published app this key may
+                  access. No selection means Builder app access is blocked.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {builderApps.map((app) => (
+                    <label key={app.id} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" name="builderTemplateIds" value={app.id} />
+                      <span>{app.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
               <Button type="submit">
                 <Key size={14} /> Generate
               </Button>
@@ -183,24 +299,82 @@ export default async function ApiKeysPage({
           </CardContent>
         </Card>
 
-        {rows.length === 0 ? (
-          <EmptyState icon={<Key size={32} />} title="No API keys" />
+        <TableToolbar>
+          <SearchInput placeholder="Search key name or prefix…" />
+          <FilterChips
+            basePath={BASE}
+            currentParams={sp}
+            paramKey="status"
+            label="Status"
+            options={[
+              { value: 'active', label: 'Active', count: list.statusCounts.active },
+              { value: 'expired', label: 'Expired', count: list.statusCounts.expired },
+              { value: 'revoked', label: 'Revoked', count: list.statusCounts.revoked },
+            ]}
+          />
+        </TableToolbar>
+
+        {list.rows.length === 0 ? (
+          <EmptyState
+            icon={<Key size={32} />}
+            title={!params.q && !statusFilter ? 'No API keys' : 'No matching API keys'}
+          />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="name"
+                  active={params.sort === 'name'}
+                >
+                  Name
+                </SortableTh>
                 <TableHead>Permissions</TableHead>
                 <TableHead>Prefix</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="created"
+                  active={params.sort === 'created'}
+                >
+                  Created
+                </SortableTh>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="expires"
+                  active={params.sort === 'expires'}
+                >
+                  Expires
+                </SortableTh>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="lastUsed"
+                  active={params.sort === 'lastUsed'}
+                >
+                  Last used
+                </SortableTh>
+                <SortableTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  dir={params.dir}
+                  column="status"
+                  active={params.sort === 'status'}
+                >
+                  Status
+                </SortableTh>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((k) => {
+              {list.rows.map((k) => {
                 const expired = !k.revokedAt && k.expiresAt && k.expiresAt.getTime() <= now
                 return (
                   <TableRow key={k.id}>
@@ -248,6 +422,13 @@ export default async function ApiKeysPage({
             </TableBody>
           </Table>
         )}
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={list.total}
+          page={params.page}
+          perPage={params.perPage}
+        />
       </div>
     </PageContainer>
   )

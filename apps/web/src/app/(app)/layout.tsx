@@ -31,7 +31,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getRequestContext()
-  if (!ctx) redirect('/login')
+  if (!ctx) {
+    const sessionUser = await getSessionUser()
+    redirect(sessionUser ? '/auth/continue' : '/login')
+  }
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 

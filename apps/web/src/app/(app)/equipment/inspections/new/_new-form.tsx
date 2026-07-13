@@ -10,14 +10,14 @@ import { useMemo, useState } from 'react'
 import { Button, Label, SearchSelect } from '@beaconhs/ui'
 import { startEquipmentInspection } from '../_actions'
 
-export type NewInspectionItemOption = {
+type NewInspectionItemOption = {
   value: string
   label: string
   hint?: string
   typeId: string | null
 }
 
-export type NewInspectionTypeOption = {
+type NewInspectionTypeOption = {
   value: string
   label: string
   hint?: string

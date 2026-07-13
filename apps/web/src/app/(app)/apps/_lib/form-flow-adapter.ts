@@ -8,7 +8,8 @@ import 'server-only'
 // flow_gates store (via the executor); the three forms-only actions
 // (create_response / analyze_photos / start_monitored_session) run here.
 
-import { desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import {
   SKIP_FIELD_TYPES,
   evaluateFormulaTree,
@@ -24,12 +25,13 @@ import { loadEntitiesForFormPickers } from '@beaconhs/db'
 import {
   formResponses,
   formTemplateVersions,
+  attachments,
   people,
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
-import { interpolate } from '@beaconhs/email-render'
 import { spawnCorrectiveActionCore, spawnIncidentCore } from '@/app/(app)/apps/_lib/spawn-core'
 import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
 import {
@@ -73,6 +75,31 @@ function attachmentIdsFromValue(raw: unknown): string[] {
   return []
 }
 
+function collectAttachmentIds(raw: unknown, ids: Set<string>): void {
+  if (Array.isArray(raw)) {
+    for (const value of raw) collectAttachmentIds(value, ids)
+    return
+  }
+  if (!raw || typeof raw !== 'object') return
+  const record = raw as Record<string, unknown>
+  if (typeof record.attachmentId === 'string') ids.add(record.attachmentId)
+  for (const value of Object.values(record)) collectAttachmentIds(value, ids)
+}
+
+function resolveAttachmentUrls(raw: unknown, urls: ReadonlyMap<string, string>): unknown {
+  if (Array.isArray(raw)) return raw.map((value) => resolveAttachmentUrls(value, urls))
+  if (!raw || typeof raw !== 'object') return raw
+  const record = raw as Record<string, unknown>
+  const out = Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key, resolveAttachmentUrls(value, urls)]),
+  )
+  if (typeof record.attachmentId === 'string') {
+    const url = urls.get(record.attachmentId)
+    if (url) out.url = url
+  }
+  return out
+}
+
 export function createFormFlowAdapter(ctx: RequestContext, responseId: string): FlowSubjectAdapter {
   return {
     subjectType: 'form_template',
@@ -108,12 +135,32 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           .limit(1),
       )
       const data = (resp?.data as Record<string, unknown> | null) ?? {}
-      // Raw field values stay byte-identical (conditions, recipient `field`
-      // targets, and analyze_photos all read them). Human-readable COMPANION
-      // keys (<id>_text / <id>_image / <id>_photos) are ADDED below so PDF /
-      // email templates render fields the way the bespoke form PDF did.
+      const attachmentIds = new Set<string>()
+      collectAttachmentIds(data, attachmentIds)
+      const attachmentRows =
+        attachmentIds.size > 0
+          ? await ctx.db((tx) =>
+              tx
+                .select({ id: attachments.id, r2Key: attachments.r2Key })
+                .from(attachments)
+                .where(inArray(attachments.id, [...attachmentIds])),
+            )
+          : []
+      const attachmentUrls = new Map(
+        await Promise.all(
+          attachmentRows.map(
+            async (row) =>
+              [row.id, await presignGet({ key: row.r2Key, expiresInSeconds: 900 })] as const,
+          ),
+        ),
+      )
+      const resolvedData = resolveAttachmentUrls(data, attachmentUrls) as Record<string, unknown>
+
+      // Conditions and formulas still evaluate against persisted IDs. The
+      // render/notification projection replaces only attachment URLs with
+      // short-lived reads, preserving the surrounding field value shapes.
       const out: Record<string, unknown> = {
-        ...data,
+        ...resolvedData,
         compliance_score: resp?.score != null ? Number(resp.score) : null,
         compliance_status: resp?.status ?? null,
       }
@@ -161,7 +208,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         for (const p of rows) personNames.set(p.id, personName(p))
       }
 
-      // Formula/calc fields are computed, never stored — evaluate them here so
+      // Formula fields are computed, never stored — evaluate them here so
       // templates print the same fresh values the bespoke PDF recomputed.
       const rowsMap: Record<string, Array<Record<string, unknown>>> = {}
       for (const sec of schema.sections ?? []) {
@@ -176,9 +223,14 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         for (const f of sec.fields ?? []) {
           if (SKIP_FIELD_TYPES.has(f.type)) continue
           let raw = data[f.id]
-          if ((f.type === 'formula' || f.type === 'calc') && f.formula) {
+          const resolvedRaw = resolvedData[f.id]
+          if (f.type === 'formula' && f.formula) {
             raw = evaluateFormulaTree(f.formula, evalCtx)
             out[f.id] = raw ?? null
+          }
+          if (f.type === 'signature') {
+            const value = resolvedRaw as { url?: unknown } | null
+            out[f.id] = value && typeof value.url === 'string' ? value.url : ''
           }
           if (hasTextCompanion(f.type)) {
             out[`${f.id}_text`] = renderFormFieldText(f, raw, {
@@ -186,8 +238,10 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
               personNameById: (id) => personNames.get(id),
             })
           }
-          if (hasImageCompanion(f.type)) out[`${f.id}_image`] = sketchImageUrl(raw)
-          if (hasPhotosCompanion(f.type)) out[`${f.id}_photos`] = nestedPhotoRows(raw)
+          if (hasImageCompanion(f.type)) out[`${f.id}_image`] = sketchImageUrl(resolvedRaw)
+          if (hasPhotosCompanion(f.type)) {
+            out[`${f.id}_photos`] = nestedPhotoRows(resolvedRaw)
+          }
         }
       }
       return out
@@ -230,11 +284,17 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        flowExecutionKey: i.flowExecutionKey,
         initiatedBy: 'flow',
       }),
 
     spawnIncident: (i) =>
-      spawnIncidentCore(ctx, { responseId, title: i.title, initiatedBy: 'flow' }),
+      spawnIncidentCore(ctx, {
+        responseId,
+        title: i.title,
+        flowExecutionKey: i.flowExecutionKey,
+        initiatedBy: 'flow',
+      }),
 
     async persistAfterRun({ fieldPatch, flagNonCompliant }) {
       await ctx.db(async (tx) => {
@@ -256,7 +316,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
 
     async handleExtraAction(
       action: ActionData,
-      { values, fieldPatch, evalCtx }: ExtraActionHelpers,
+      { values, fieldPatch, evalCtx, executionKey }: ExtraActionHelpers,
     ) {
       const ran: string[] = []
       const failed: string[] = []
@@ -281,13 +341,19 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           }
         }
         await ctx.db((tx) =>
-          tx.insert(formResponses).values({
-            tenantId: ctx.tenantId,
-            templateId: action.templateId,
-            templateVersionId: ver.id,
-            status: 'draft',
-            data,
-          }),
+          tx
+            .insert(formResponses)
+            .values({
+              tenantId: ctx.tenantId,
+              templateId: action.templateId,
+              templateVersionId: ver.id,
+              status: 'draft',
+              data,
+              flowExecutionKey: executionKey,
+            })
+            .onConflictDoNothing({
+              target: [formResponses.tenantId, formResponses.flowExecutionKey],
+            }),
         )
         ran.push('create_response')
         return { ran, failed }
@@ -330,6 +396,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
                 '\n\n' +
                 bad.map((h) => `• ${h.type} (${h.severity}) — ${h.detail}`).join('\n'),
               severity: sev as 'low' | 'medium' | 'high' | 'critical',
+              flowExecutionKey: executionKey ? `${executionKey}:capa` : undefined,
               initiatedBy: 'flow',
             })
             ran.push(res.ok ? 'analyze_photos→capa' : 'analyze_photos→capa (failed)')
@@ -359,6 +426,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             .update(formResponses)
             .set({
               monitorStatus: 'active',
+              monitorFlowExecutionKey: executionKey,
               checkinIntervalMinutes: interval,
               gracePeriodMinutes: grace,
               monitorRequireGeo: !!action.requireGeo,
@@ -366,7 +434,17 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
               nextCheckinDueAt: new Date(now.getTime() + interval * 60_000),
               expectedEndAt: duration > 0 ? new Date(now.getTime() + duration * 60_000) : null,
             })
-            .where(eq(formResponses.id, responseId)),
+            .where(
+              and(
+                eq(formResponses.id, responseId),
+                executionKey
+                  ? or(
+                      isNull(formResponses.monitorFlowExecutionKey),
+                      ne(formResponses.monitorFlowExecutionKey, executionKey),
+                    )
+                  : undefined,
+              ),
+            ),
         )
         ran.push('start_monitored_session')
         return { ran, failed }
@@ -412,16 +490,22 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           return { ran, failed }
         }
         await ctx.db((tx) =>
-          tx.insert(formResponses).values({
-            tenantId: ctx.tenantId,
-            templateId: src.templateId,
-            templateVersionId: src.templateVersionId,
-            status: 'draft',
-            data: (src.data as Record<string, unknown>) ?? {},
-            siteOrgUnitId: src.siteOrgUnitId,
-            subjectPersonId: src.subjectPersonId,
-            submittedBy: ctx.membership?.id ?? null,
-          }),
+          tx
+            .insert(formResponses)
+            .values({
+              tenantId: ctx.tenantId,
+              templateId: src.templateId,
+              templateVersionId: src.templateVersionId,
+              status: 'draft',
+              data: (src.data as Record<string, unknown>) ?? {},
+              siteOrgUnitId: src.siteOrgUnitId,
+              subjectPersonId: src.subjectPersonId,
+              submittedBy: ctx.membership?.id ?? null,
+              flowExecutionKey: executionKey,
+            })
+            .onConflictDoNothing({
+              target: [formResponses.tenantId, formResponses.flowExecutionKey],
+            }),
         )
         ran.push('duplicate_record')
         return { ran, failed }
@@ -436,6 +520,9 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           const { enqueuePdf } = await import('@beaconhs/jobs')
           const { resolveSubjectDefaultPdfTemplate } = await import('@/lib/pdf-templates')
           const { renderTemplate } = await import('@beaconhs/email-render')
+          const pdfJobId = executionKey
+            ? `flow-pdf|${createHash('sha256').update(executionKey).digest('hex')}`
+            : undefined
           const tpl = await resolveSubjectDefaultPdfTemplate(ctx, {
             subjectType: 'form_template',
             subjectKey: null,
@@ -443,22 +530,25 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           })
           if (tpl) {
             const headerVals = { ...values, page: '{{page}}', pages: '{{pages}}' }
-            await enqueuePdf({
-              kind: 'template_pdf',
-              tenantId: ctx.tenantId,
-              html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
-              paperSize: tpl.paperSize,
-              orientation: tpl.orientation,
-              marginMm: tpl.marginMm,
-              headerHtml: tpl.headerHtml
-                ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
-                : null,
-              footerHtml: tpl.footerHtml
-                ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
-                : null,
-              entityType: 'form_response',
-              entityId: responseId,
-            })
+            await enqueuePdf(
+              {
+                kind: 'template_pdf',
+                tenantId: ctx.tenantId,
+                html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+                paperSize: tpl.paperSize,
+                orientation: tpl.orientation,
+                marginMm: tpl.marginMm,
+                headerHtml: tpl.headerHtml
+                  ? renderTemplate(tpl.headerHtml, headerVals, { escapeHtml: false })
+                  : null,
+                footerHtml: tpl.footerHtml
+                  ? renderTemplate(tpl.footerHtml, headerVals, { escapeHtml: false })
+                  : null,
+                entityType: 'form_response',
+                entityId: responseId,
+              },
+              pdfJobId,
+            )
           } else {
             await enqueuePdf(
               buildRecordSummaryPdfJob({
@@ -470,6 +560,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
                 subtitle: values.title,
                 values,
               }),
+              pdfJobId,
             )
           }
           ran.push('export_pdf')

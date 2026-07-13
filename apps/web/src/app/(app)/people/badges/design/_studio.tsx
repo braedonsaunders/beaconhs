@@ -89,7 +89,7 @@ export function PersonBadgeStudio({
     [artboard.elements, selectedElementId],
   )
 
-  const zoomCtl = useDesignZoom({ artboard, reattachKey: doc })
+  const { viewportRef, zoom, ...zoomControls } = useDesignZoom({ artboard, reattachKey: doc })
 
   function patchArtboard(patch: Partial<typeof artboard>) {
     setDoc((prev) => ({
@@ -282,13 +282,13 @@ export function PersonBadgeStudio({
       </aside>
 
       <section
-        ref={zoomCtl.viewportRef}
+        ref={viewportRef}
         className="relative grid min-h-0 min-w-0 place-items-center overflow-auto bg-slate-100 p-5 dark:bg-slate-950"
       >
         <div className="rounded-lg bg-[repeating-conic-gradient(#e2e8f0_0%_25%,#f1f5f9_0%_50%)] bg-[length:22px_22px] p-8 shadow-inner dark:bg-[repeating-conic-gradient(#1e293b_0%_25%,#0f172a_0%_50%)]">
           <ArtboardCanvas
             artboard={artboard}
-            zoom={zoomCtl.zoom}
+            zoom={zoom}
             sample={CATALOG.sample}
             selectedElementId={selectedElementId}
             onSelect={(id, userInitiated) => {
@@ -299,7 +299,7 @@ export function PersonBadgeStudio({
           />
         </div>
         <div className="absolute right-4 bottom-4 flex items-center gap-1 rounded-md border border-slate-200 bg-white/95 px-1.5 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
-          <CanvasZoomControls {...zoomCtl} />
+          <CanvasZoomControls zoom={zoom} {...zoomControls} />
         </div>
       </section>
     </div>

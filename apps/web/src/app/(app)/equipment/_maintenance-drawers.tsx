@@ -42,8 +42,8 @@ export type ReminderEditing = {
   assignedToPersonId: string | null
 }
 
-export type PersonOption = { value: string; label: string; hint?: string }
-export type TypeOption = {
+type PersonOption = { value: string; label: string; hint?: string }
+type TypeOption = {
   value: string
   label: string
   hint?: string
@@ -51,7 +51,7 @@ export type TypeOption = {
   intervalValue?: number | null
   intervalUnit?: EquipmentIntervalUnit | null
 }
-export type ItemOption = { value: string; label: string; hint?: string }
+type ItemOption = { value: string; label: string; hint?: string }
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)

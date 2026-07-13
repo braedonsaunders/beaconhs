@@ -4,7 +4,13 @@
 // tenant admin distribution list; caller can override.
 
 import { eq } from 'drizzle-orm'
-import { equipmentItems, equipmentWorkOrders, people, tenantUsers, user } from '@beaconhs/db/schema'
+import {
+  equipmentItems,
+  equipmentWorkOrders,
+  people,
+  tenantUsers,
+  users as user,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'

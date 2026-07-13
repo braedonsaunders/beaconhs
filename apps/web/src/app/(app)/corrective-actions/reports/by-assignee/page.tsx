@@ -2,14 +2,23 @@ import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import { Badge, EmptyState, PageHeader } from '@beaconhs/ui'
-import { correctiveActions, tenantUsers, user } from '@beaconhs/db/schema'
+import { correctiveActions, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { ListPageLayout } from '@/components/page-layout'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Corrective actions by assignee' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/corrective-actions/reports/by-assignee'
+const SORTS = ['owner', 'total', 'open', 'overdue', 'completion', 'average'] as const
 
 type AssigneeStat = {
   ownerId: string | null
@@ -31,7 +40,22 @@ type AssigneeStat = {
  * status, an overdue count, a completion-rate ratio (closed ÷ total), and
  * the average days-to-close on resolved CAs. Sorted by most-loaded first.
  */
-export default async function ByAssigneeReport() {
+export default async function ByAssigneeReport({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const params = parseListParams(sp, {
+    sort: 'total',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const attentionParam = pickString(sp.attention)
+  const attentionFilter = ['overdue', 'outstanding', 'clear'].find(
+    (attention) => attention === attentionParam,
+  )
   const ctx = await requireRequestContext()
   const today = new Date().toISOString().slice(0, 10)
 
@@ -109,6 +133,35 @@ export default async function ByAssigneeReport() {
 
   const totalCAs = stats.reduce((acc, s) => acc + s.total, 0)
   const totalOverdue = stats.reduce((acc, s) => acc + s.overdue, 0)
+  const query = params.q?.toLowerCase()
+  const filtered = stats.filter((stat) => {
+    const outstanding = stat.open + stat.inProgress + stat.pendingVerification
+    if (attentionFilter === 'overdue' && stat.overdue === 0) return false
+    if (attentionFilter === 'outstanding' && outstanding === 0) return false
+    if (attentionFilter === 'clear' && outstanding > 0) return false
+    if (!query) return true
+    return [stat.ownerName, stat.ownerEmail ?? ''].join(' ').toLowerCase().includes(query)
+  })
+  const mult = params.dir === 'asc' ? 1 : -1
+  filtered.sort((a, b) => {
+    const comparison =
+      params.sort === 'owner'
+        ? a.ownerName.localeCompare(b.ownerName)
+        : params.sort === 'open'
+          ? a.open - b.open
+          : params.sort === 'overdue'
+            ? a.overdue - b.overdue
+            : params.sort === 'completion'
+              ? a.completionRate - b.completionRate
+              : params.sort === 'average'
+                ? (a.avgDaysToClose ?? Number.POSITIVE_INFINITY) -
+                  (b.avgDaysToClose ?? Number.POSITIVE_INFINITY)
+                : a.total - b.total
+    return comparison * mult || a.ownerName.localeCompare(b.ownerName)
+  })
+  const pageCount = Math.max(1, Math.ceil(filtered.length / params.perPage))
+  const page = Math.min(params.page, pageCount)
+  const pageRows = filtered.slice((page - 1) * params.perPage, page * params.perPage)
 
   return (
     <ListPageLayout
@@ -125,33 +178,125 @@ export default async function ByAssigneeReport() {
             <Badge variant="secondary">{totalCAs} total CAs</Badge>
             {totalOverdue > 0 ? <Badge variant="destructive">{totalOverdue} overdue</Badge> : null}
           </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search owner or email…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="attention"
+              label="Workload"
+              options={[
+                {
+                  value: 'overdue',
+                  label: 'Has overdue',
+                  count: stats.filter((stat) => stat.overdue > 0).length,
+                },
+                {
+                  value: 'outstanding',
+                  label: 'Has outstanding',
+                  count: stats.filter(
+                    (stat) => stat.open + stat.inProgress + stat.pendingVerification > 0,
+                  ).length,
+                },
+                {
+                  value: 'clear',
+                  label: 'No outstanding',
+                  count: stats.filter(
+                    (stat) => stat.open + stat.inProgress + stat.pendingVerification === 0,
+                  ).length,
+                },
+              ]}
+            />
+          </TableToolbar>
         </>
       }
     >
-      {stats.length === 0 ? (
+      {pageRows.length === 0 ? (
         <EmptyState
           icon={<Users size={32} />}
-          title="No corrective actions yet"
-          description="Create some corrective actions and assign owners to populate this scorecard."
+          title={stats.length === 0 ? 'No corrective actions yet' : 'No matching assignees'}
+          description={
+            stats.length === 0
+              ? 'Create some corrective actions and assign owners to populate this scorecard.'
+              : 'Adjust the search or workload filter.'
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                <th className="px-4 py-2">Owner</th>
-                <th className="px-4 py-2 text-right">Total</th>
-                <th className="px-4 py-2 text-right">Open</th>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="owner"
+                >
+                  Owner
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="total"
+                  align="right"
+                  className="text-right"
+                >
+                  Total
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="open"
+                  align="right"
+                  className="text-right"
+                >
+                  Open
+                </SortTh>
                 <th className="px-4 py-2 text-right">In progress</th>
                 <th className="px-4 py-2 text-right">Pending verif.</th>
                 <th className="px-4 py-2 text-right">Closed</th>
-                <th className="px-4 py-2 text-right">Overdue</th>
-                <th className="px-4 py-2 text-right">Completion</th>
-                <th className="px-4 py-2 text-right">Avg days to close</th>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="overdue"
+                  align="right"
+                  className="text-right"
+                >
+                  Overdue
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="completion"
+                  align="right"
+                  className="text-right"
+                >
+                  Completion
+                </SortTh>
+                <SortTh
+                  basePath={BASE}
+                  currentParams={sp}
+                  sort={params.sort}
+                  dir={params.dir}
+                  column="average"
+                  align="right"
+                  className="text-right"
+                >
+                  Avg days to close
+                </SortTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {stats.map((s) => (
+              {pageRows.map((s) => (
                 <tr
                   key={s.ownerId ?? 'unassigned'}
                   className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
@@ -203,6 +348,13 @@ export default async function ByAssigneeReport() {
           </table>
         </div>
       )}
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={filtered.length}
+        page={page}
+        perPage={params.perPage}
+      />
     </ListPageLayout>
   )
 }

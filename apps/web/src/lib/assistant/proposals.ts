@@ -12,18 +12,11 @@ const KEY = Buffer.from(
 )
 const TTL_MS = 15 * 60 * 1000 // a draft is good for 15 minutes
 
-export type ProposalKind = 'create_corrective_action' | 'create_incident'
+type ProposalKind = 'create_corrective_action' | 'create_incident'
 
-export type CaSeverity = 'low' | 'medium' | 'high' | 'critical'
-export type CaSource =
-  | 'inspection'
-  | 'incident'
-  | 'near_miss'
-  | 'observation'
-  | 'audit'
-  | 'jsha'
-  | 'other'
-export type IncidentType =
+type CaSeverity = 'low' | 'medium' | 'high' | 'critical'
+type CaSource = 'inspection' | 'incident' | 'near_miss' | 'observation' | 'audit' | 'jsha' | 'other'
+type IncidentType =
   | 'injury'
   | 'illness'
   | 'near_miss'
@@ -31,12 +24,7 @@ export type IncidentType =
   | 'environmental'
   | 'security'
   | 'other'
-export type IncidentSeverity =
-  | 'first_aid_only'
-  | 'medical_aid'
-  | 'lost_time'
-  | 'fatality'
-  | 'no_injury'
+type IncidentSeverity = 'first_aid_only' | 'medical_aid' | 'lost_time' | 'fatality' | 'no_injury'
 
 export type CaPreview = {
   title: string

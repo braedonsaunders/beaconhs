@@ -7,7 +7,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { Button, Input, Label, PageHeader, Select, Textarea } from '@beaconhs/ui'
+import { Button, Input, Label, PageHeader, Select } from '@beaconhs/ui'
 import { ppeTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'

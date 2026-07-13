@@ -4,12 +4,11 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq, isNull, or } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
-import { db, withSuperAdmin } from '@beaconhs/db'
 import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { computeNextRunAt } from '@beaconhs/reports'
+import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
 
 /**
  * Run-once: build (or reuse) a hidden, single-recipient schedule pointed at
@@ -20,9 +19,11 @@ import { computeNextRunAt } from '@beaconhs/reports'
 export async function runOnceFromDefinition(definitionId: string): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
+  if (!ctx.membership) throw new Error('An active tenant membership is required to run reports')
+  const runAsTenantUserId = ctx.membership.id
 
   // Make sure the definition is visible to this tenant (built-in or owned).
-  const def = await withSuperAdmin(db, async (tx) => {
+  const def = await ctx.db(async (tx) => {
     const [d] = await tx
       .select()
       .from(reportDefinitions)
@@ -39,7 +40,8 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
 
   // Reuse an existing one-shot schedule if we already made one for this def.
   const oneShotName = `One-shot — ${def.name}`
-  const scheduleId = await ctx.db(async (tx) => {
+  const requestedAt = new Date()
+  const { scheduleId, runId } = await ctx.db(async (tx) => {
     const [existing] = await tx
       .select({ id: reportSchedules.id })
       .from(reportSchedules)
@@ -56,9 +58,19 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
       // so the PDF is emailed to whoever clicked, not the first-ever runner.
       await tx
         .update(reportSchedules)
-        .set({ recipientUserIds: [ctx.userId], recipientEmails: [] })
+        .set({
+          recipientUserIds: [ctx.userId],
+          recipientEmails: [],
+          runAsTenantUserId,
+          runAsRoleId: ctx.activeRoleId ?? null,
+        })
         .where(eq(reportSchedules.id, existing.id))
-      return existing.id
+      const run = await claimReportRun(tx, {
+        scheduleId: existing.id,
+        scheduledFor: requestedAt,
+        trigger: 'manual',
+      })
+      return { scheduleId: existing.id, runId: run.id }
     }
 
     // Otherwise create one. It's marked paused (active=false) so the
@@ -84,20 +96,27 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
         recipientUserIds: [ctx.userId],
         recipientEmails: [],
         filters: {},
+        runAsTenantUserId,
+        runAsRoleId: ctx.activeRoleId ?? null,
         nextRunAt,
         active: false,
       })
       .returning({ id: reportSchedules.id })
-    return row!.id
+    const run = await claimReportRun(tx, {
+      scheduleId: row!.id,
+      scheduledFor: requestedAt,
+      trigger: 'manual',
+    })
+    return { scheduleId: row!.id, runId: run.id }
   })
 
-  await enqueueReportRun({ tenantId: ctx.tenantId, scheduleId })
+  await enqueueReportRun({ tenantId: ctx.tenantId, scheduleId, runId })
   await recordAudit(ctx, {
     entityType: 'report_definition',
     entityId: definitionId,
     action: 'export',
     summary: `Ran one-shot of "${def.name}"`,
-    metadata: { scheduleId },
+    metadata: { scheduleId, runId },
   })
 
   revalidatePath(`/reports/definitions/${definitionId}`)
@@ -109,7 +128,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
 export async function deleteDefinition(definitionId: string): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.builder')
-  const deletedName = await withSuperAdmin(db, async (tx) => {
+  const deletedName = await ctx.db(async (tx) => {
     const [d] = await tx
       .select()
       .from(reportDefinitions)

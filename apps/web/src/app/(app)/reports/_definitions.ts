@@ -1,10 +1,10 @@
 // Shared loader for report definitions visible to a tenant. Returns the union
 // of every built-in definition (tenant_id IS NULL) and any custom definition
-// owned by the active tenant. Read with super-admin bypass since built-ins
-// have no tenant and tenant-scoped RLS would filter them out.
+// owned by the active tenant. The report_definitions RLS policy deliberately
+// exposes that exact union while keeping global built-ins read-only.
 
 import { and, asc, eq, isNull, or } from 'drizzle-orm'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { db, withTenant } from '@beaconhs/db'
 import {
   reportDefinitions,
   type ReportCustomQuery,
@@ -27,7 +27,7 @@ export type ReportDefinitionRow = {
 }
 
 export async function loadVisibleDefinitions(tenantId: string): Promise<ReportDefinitionRow[]> {
-  return await withSuperAdmin(db, async (tx) => {
+  return await withTenant(db, tenantId, async (tx) => {
     const rows = await tx
       .select()
       .from(reportDefinitions)
@@ -46,7 +46,7 @@ export async function loadDefinitionById(
   tenantId: string,
   id: string,
 ): Promise<ReportDefinitionRow | null> {
-  return await withSuperAdmin(db, async (tx) => {
+  return await withTenant(db, tenantId, async (tx) => {
     const [r] = await tx
       .select()
       .from(reportDefinitions)

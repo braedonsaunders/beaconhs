@@ -16,7 +16,7 @@ export const DashboardLayoutInputSchema = z.object({
   widgets: z.array(WidgetSchema).max(64),
 })
 
-export type DashboardLayoutWidgetInput = z.infer<typeof WidgetSchema>
+type DashboardLayoutWidgetInput = z.infer<typeof WidgetSchema>
 
 export function filterPersistableDashboardWidgets(
   widgets: DashboardLayoutWidgetInput[],

@@ -22,6 +22,12 @@ const CARD_W = 320
 const GAP = 10
 
 type Rect = { top: number; left: number; width: number; height: number }
+type TargetSnapshot = {
+  step: Walkthrough['steps'][number] | undefined
+  pathname: string
+  rect: Rect | null
+  state: 'looking' | 'found' | 'missing' | 'none'
+}
 
 function rectOf(el: Element): Rect {
   const r = el.getBoundingClientRect()
@@ -39,12 +45,27 @@ export function WalkthroughPlayer({
   const router = useRouter()
   const pathname = usePathname()
   const [index, setIndex] = useState(0)
-  const [rect, setRect] = useState<Rect | null>(null)
-  // 'looking' while we poll for the target; 'missing' falls back to a centered card.
-  const [targetState, setTargetState] = useState<'looking' | 'found' | 'missing' | 'none'>('none')
   const finishedRef = useRef(false)
   const step = walkthrough.steps[index]
   const total = walkthrough.steps.length
+  const initialTargetState = !step?.target
+    ? 'none'
+    : step.path && pathname !== step.path
+      ? 'looking'
+      : 'looking'
+  const [targetSnapshot, setTargetSnapshot] = useState<TargetSnapshot>({
+    step,
+    pathname,
+    rect: null,
+    state: initialTargetState,
+  })
+  const currentTarget =
+    targetSnapshot.step === step && targetSnapshot.pathname === pathname
+      ? targetSnapshot
+      : ({ step, pathname, rect: null, state: initialTargetState } satisfies TargetSnapshot)
+  const rect = currentTarget.rect
+  // 'looking' while we poll for the target; 'missing' falls back to a centered card.
+  const targetState = currentTarget.state
 
   const finish = useCallback(
     (status: 'completed' | 'dismissed') => {
@@ -64,43 +85,36 @@ export function WalkthroughPlayer({
   // Locate + track the step target. Re-runs on step and route changes.
   useEffect(() => {
     if (!step) return
-    if (!step.target) {
-      setRect(null)
-      setTargetState('none')
-      return
-    }
+    if (!step.target) return
     if (step.path && pathname !== step.path) {
       // Still navigating; keep looking without starting the miss timer yet.
-      setRect(null)
-      setTargetState('looking')
       return
     }
     let cancelled = false
     let el: Element | null = null
     const started = Date.now()
-    setTargetState('looking')
-    setRect(null)
 
     const track = () => {
       if (cancelled) return
       if (el && document.contains(el)) {
-        setRect(rectOf(el))
+        setTargetSnapshot({ step, pathname, rect: rectOf(el), state: 'found' })
         return
       }
       el = document.querySelector(step.target!)
       if (el) {
         el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as never })
-        setRect(rectOf(el))
-        setTargetState('found')
+        setTargetSnapshot({ step, pathname, rect: rectOf(el), state: 'found' })
       } else if (Date.now() - started > TARGET_WAIT_MS) {
-        setTargetState('missing')
+        setTargetSnapshot({ step, pathname, rect: null, state: 'missing' })
         return // stop polling
       }
       timer = window.setTimeout(track, TARGET_POLL_MS)
     }
     let timer = window.setTimeout(track, 0)
     const onMove = () => {
-      if (el && document.contains(el)) setRect(rectOf(el))
+      if (el && document.contains(el)) {
+        setTargetSnapshot({ step, pathname, rect: rectOf(el), state: 'found' })
+      }
     }
     window.addEventListener('resize', onMove)
     window.addEventListener('scroll', onMove, true)

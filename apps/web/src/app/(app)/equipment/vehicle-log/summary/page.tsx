@@ -14,7 +14,7 @@ import {
 } from '@beaconhs/ui'
 import { Truck } from 'lucide-react'
 import { extractRows } from '@beaconhs/reports'
-import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
+import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildHref, pickString } from '@/lib/list-params'
@@ -80,11 +80,12 @@ export default async function TruckLogSummaryPage({
         id: equipmentItems.id,
         assetTag: equipmentItems.assetTag,
         name: equipmentItems.name,
-        category: equipmentTypes.category,
+        category: equipmentCategories.name,
         typeName: equipmentTypes.name,
       })
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
       .where(isNull(equipmentItems.deletedAt))
       .orderBy(asc(equipmentItems.assetTag))
       .limit(500)

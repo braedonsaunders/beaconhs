@@ -16,6 +16,7 @@ import {
   Label,
 } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
+import { RawImage } from '@/components/raw-image'
 
 /**
  * Customer signature capture card — wraps the shared <SignaturePad>, gathers
@@ -108,7 +109,7 @@ export function CustomerSignatureCard({
                 <div className="text-xs tracking-wide text-slate-500 uppercase">
                   Signature (locked)
                 </div>
-                <img
+                <RawImage
                   src={currentSignature}
                   alt="Customer signature"
                   className="max-h-32 rounded border border-slate-200 bg-white"

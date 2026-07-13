@@ -17,7 +17,7 @@ export type ProviderSpecLite = {
   modelHint?: string
 }
 
-export type AiFormInitial = {
+type AiFormInitial = {
   enabled: boolean
   provider: string
   modelFast: string

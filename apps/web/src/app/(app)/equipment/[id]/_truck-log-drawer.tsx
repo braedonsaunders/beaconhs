@@ -22,9 +22,7 @@ type CreateTruckLogInput = {
   notes: string | null
 }
 
-export type CreateTruckLogAction = (
-  input: CreateTruckLogInput,
-) => Promise<{ ok: boolean; error?: string }>
+type CreateTruckLogAction = (input: CreateTruckLogInput) => Promise<{ ok: boolean; error?: string }>
 
 type Driver = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
 type Site = { id: string; name: string }

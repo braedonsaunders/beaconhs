@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { attachments, departments, people, tenants } from '@beaconhs/db/schema'
 import { renderDesignDocumentPdf } from '@beaconhs/forms-pdf'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { PersonBadgeDesignData } from '@beaconhs/design-studio'
 import { appBaseUrl } from '@/lib/app-base-url'
@@ -18,7 +18,7 @@ import { normalizePersonBadgeDesign } from '@/lib/person-badge-design'
 import type { RenderedCredentialPdf } from '@/lib/training-credential-pdf'
 
 /** Return the person's badge token, generating + persisting one on first use. */
-export async function ensurePersonBadgeToken(
+async function ensurePersonBadgeToken(
   ctx: RequestContext,
   personId: string,
 ): Promise<string | null> {
@@ -36,7 +36,7 @@ export async function ensurePersonBadgeToken(
   })
 }
 
-export function personBadgeVerifyUrl(token: string): string {
+function personBadgeVerifyUrl(token: string): string {
   return `${appBaseUrl()}/verify/person/${token}`
 }
 
@@ -78,7 +78,9 @@ export async function renderPersonBadgePdf(
     tenantLogoUrl: row.tenant.branding.logoUrl,
     recipientFullName: `${row.person.firstName} ${row.person.lastName}`,
     recipientEmployeeNo: row.person.employeeNo,
-    recipientPhotoUrl: row.photoKey ? publicUrl(row.photoKey) : null,
+    recipientPhotoUrl: row.photoKey
+      ? await presignGet({ key: row.photoKey, expiresInSeconds: 900 })
+      : null,
     personTitle: row.person.jobTitle,
     personDepartment: row.departmentName,
     verifyUrl,

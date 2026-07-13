@@ -60,14 +60,14 @@ import {
   ppeTypes,
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
-import { publicUrl } from '@beaconhs/storage'
+import { recordModuleFlowEvent } from '@beaconhs/events'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { PersonSelectField } from '@/components/person-select-field'
 import { LiveField, LiveSelect } from '@/components/live-field'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { CertificateDrawer, type CertificateInput } from './_certificate-drawer'
 import { PpeInspectionForm } from './_inspection-form'
 import { pickString } from '@/lib/list-params'
@@ -203,6 +203,14 @@ async function recordInspection(formData: FormData) {
         ? { lastInspectionOn: today, nextInspectionDue: nextDueDate(kind, today) }
         : { lastAnnualInspectionOn: today, nextAnnualInspectionDue: nextDueDate(kind, today) }
     await tx.update(ppeItems).set(set).where(eq(ppeItems.id, itemId))
+    if (row) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: row.id,
+        moduleKey: 'ppe',
+        event: 'on_submit',
+        occurrenceKey: row.id,
+      })
+    }
     return row?.id ?? null
   })
 
@@ -229,10 +237,6 @@ async function recordInspection(formData: FormData) {
         .join('\n\n'),
       severity: highestSeverityFailQuestion.severity,
     })
-  }
-
-  if (inspectionId) {
-    await runModuleFlows(ctx, { moduleKey: 'ppe', event: 'on_submit', subjectId: inspectionId })
   }
 
   revalidatePath(`/ppe/${itemId}`)
@@ -1161,7 +1165,7 @@ export default async function PpeDetailPage({
                       <TableCell>
                         {cert ? (
                           <a
-                            href={publicUrl(cert.r2Key)}
+                            href={attachmentUrl(cert.id)}
                             className="inline-flex items-center gap-1.5 text-teal-700 hover:underline"
                             target="_blank"
                             rel="noreferrer"

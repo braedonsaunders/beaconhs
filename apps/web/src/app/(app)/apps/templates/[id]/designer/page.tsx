@@ -9,6 +9,8 @@ import {
 } from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { isTemplateBuilder } from '@/app/(app)/apps/_lib/access'
+import { isUuid } from '@/lib/list-params'
 import { loadNavConfig } from '@/lib/nav/resolve'
 import { listActiveEmailTemplatesForSubject } from '@/lib/email-templates'
 import { listActivePdfTemplatesForSubject } from '@/lib/pdf-templates'
@@ -55,6 +57,7 @@ export default async function FormDesignerPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const initialSurface = sp.surface === 'flows' ? 'flows' : 'build'
   const ctx = await requireRequestContext()
@@ -62,7 +65,7 @@ export default async function FormDesignerPage({
   // flow graph (which can embed literal recipient emails), tenant role keys,
   // and recipient options. Non-editors land on the records list instead —
   // mirrors the /apps/templates/[id] router.
-  if (!can(ctx, 'forms.template.create')) {
+  if (!isTemplateBuilder(ctx)) {
     redirect(`/apps/templates/${id}/records`)
   }
   const canPin = can(ctx, 'admin.nav.manage')
@@ -85,7 +88,8 @@ export default async function FormDesignerPage({
         .select()
         .from(formTemplateVersions)
         .where(eq(formTemplateVersions.templateId, id))
-        .orderBy(desc(formTemplateVersions.version)),
+        .orderBy(desc(formTemplateVersions.version))
+        .limit(1),
       tx
         .select({
           id: formAutomations.id,

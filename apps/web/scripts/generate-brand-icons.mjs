@@ -4,23 +4,10 @@
 //
 //   node apps/web/scripts/generate-brand-icons.mjs
 
-import { mkdirSync, readdirSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-const require = createRequire(import.meta.url)
-let sharp
-try {
-  sharp = require('sharp')
-} catch {
-  // sharp is only a transitive dependency (via next) — resolve it out of the
-  // pnpm store when a bare require can't see it.
-  const store = join(dirname(fileURLToPath(import.meta.url)), '../../../node_modules/.pnpm')
-  const dir = readdirSync(store).find((d) => d.startsWith('sharp@'))
-  if (!dir) throw new Error('sharp not found in pnpm store — pnpm install first')
-  sharp = require(join(store, dir, 'node_modules/sharp'))
-}
+import sharp from 'sharp'
 
 const NAVY = '#1B2B4A'
 const AMBER = '#F5A623'

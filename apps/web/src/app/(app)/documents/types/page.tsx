@@ -1,6 +1,18 @@
-import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
-import { asc, count, desc, eq, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  not,
+  or,
+  type SQL,
+} from 'drizzle-orm'
 import { Tag, Trash2 } from 'lucide-react'
 import {
   Badge,
@@ -26,10 +38,19 @@ import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { ListPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { SortableTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
 
 export const metadata = { title: 'Document types' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/documents/types'
+const SORTS = ['name', 'key'] as const
 
 function slugify(s: string): string {
   return s
@@ -112,23 +133,80 @@ async function deleteType(formData: FormData): Promise<void> {
   revalidatePath('/documents/types')
 }
 
-export default async function DocumentTypesPage() {
+export default async function DocumentTypesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const usageParam = pickString(sp.usage)
+  const usageFilter = usageParam === 'used' || usageParam === 'unused' ? usageParam : undefined
+  const params = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const ctx = await requireModuleManage('documents')
 
-  const { rows, usageMap } = await ctx.db(async (tx) => {
-    const data = await tx
-      .select()
-      .from(documentTypes)
-      .where(sql`${documentTypes.deletedAt} is null`)
-      .orderBy(asc(documentTypes.name))
-    const usage = await tx
-      .select({ typeId: documents.typeId, c: count() })
-      .from(documents)
-      .where(sql`${documents.typeId} is not null`)
-      .groupBy(documents.typeId)
+  const { rows, total, usedCount, unusedCount, usageMap } = await ctx.db(async (tx) => {
+    const active = isNull(documentTypes.deletedAt)
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(documentTypes.name, `%${params.q}%`),
+          ilike(documentTypes.key, `%${params.q}%`),
+          ilike(documentTypes.description, `%${params.q}%`),
+        )
+      : undefined
+    const hasDocuments = exists(
+      tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(and(eq(documents.typeId, documentTypes.id), isNull(documents.deletedAt))),
+    )
+    const usage =
+      usageFilter === 'used'
+        ? hasDocuments
+        : usageFilter === 'unused'
+          ? not(hasDocuments)
+          : undefined
+    const where = and(active, search, usage)
+    const dirFn = params.dir === 'asc' ? asc : desc
+    const orderBy = params.sort === 'key' ? [dirFn(documentTypes.key)] : [dirFn(documentTypes.name)]
+
+    const [totalRow, usedRow, unusedRow, data] = await Promise.all([
+      tx.select({ c: count() }).from(documentTypes).where(where),
+      tx
+        .select({ c: count() })
+        .from(documentTypes)
+        .where(and(active, search, hasDocuments)),
+      tx
+        .select({ c: count() })
+        .from(documentTypes)
+        .where(and(active, search, not(hasDocuments))),
+      tx
+        .select()
+        .from(documentTypes)
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage),
+    ])
+    const rowIds = data.map((row) => row.id)
+    const usageRows =
+      rowIds.length === 0
+        ? []
+        : await tx
+            .select({ typeId: documents.typeId, c: count() })
+            .from(documents)
+            .where(and(isNull(documents.deletedAt), inArray(documents.typeId, rowIds)))
+            .groupBy(documents.typeId)
     return {
       rows: data,
-      usageMap: Object.fromEntries(usage.map((u) => [u.typeId ?? '', Number(u.c)])),
+      total: Number(totalRow[0]?.c ?? 0),
+      usedCount: Number(usedRow[0]?.c ?? 0),
+      unusedCount: Number(unusedRow[0]?.c ?? 0),
+      usageMap: Object.fromEntries(usageRows.map((u) => [u.typeId ?? '', Number(u.c)])),
     }
   })
 
@@ -141,6 +219,19 @@ export default async function DocumentTypesPage() {
             description="Admin-managed classification for documents. Each type can have a name, key, colour and description."
           />
           <DocumentsSubNav active="types" />
+          <TableToolbar>
+            <SearchInput placeholder="Search name, key, description…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="usage"
+              label="Usage"
+              options={[
+                { value: 'used', label: 'Used', count: usedCount },
+                { value: 'unused', label: 'Unused', count: unusedCount },
+              ]}
+            />
+          </TableToolbar>
         </>
       }
     >
@@ -177,87 +268,120 @@ export default async function DocumentTypesPage() {
         {rows.length === 0 ? (
           <EmptyState
             icon={<Tag size={32} />}
-            title="No document types"
-            description="Add types like Policy, Procedure, SDS, Manual so authors can classify documents consistently."
+            title={!params.q && !usageFilter ? 'No document types' : 'No matching document types'}
+            description={
+              !params.q && !usageFilter
+                ? 'Add types like Policy, Procedure, SDS, Manual so authors can classify documents consistently.'
+                : 'Adjust the search or usage filter.'
+            }
           />
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Existing types ({rows.length})</CardTitle>
+              <CardTitle>Existing types ({total})</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Key</TableHead>
-                    <TableHead>Colour</TableHead>
-                    <TableHead>Used by</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((t) => {
-                    const usage = usageMap[t.id] ?? 0
-                    return (
-                      <TableRow key={t.id}>
-                        <TableCell>
-                          <form
-                            action={updateType}
-                            className="flex flex-col gap-2 sm:flex-row sm:items-center"
-                          >
-                            <input type="hidden" name="id" value={t.id} />
-                            <Input name="name" defaultValue={t.name} className="max-w-xs min-w-0" />
-                            <Input
-                              name="description"
-                              defaultValue={t.description ?? ''}
-                              placeholder="description"
-                              className="max-w-md min-w-0"
-                            />
-                            <Input
-                              name="color"
-                              type="color"
-                              defaultValue={t.color ?? '#0f766e'}
-                              className="h-8 w-12 shrink-0 p-0"
-                            />
-                            <Button type="submit" size="sm" variant="outline">
-                              Save
-                            </Button>
-                          </form>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{t.key}</TableCell>
-                        <TableCell>
-                          <span
-                            className="inline-block h-4 w-8 rounded border border-slate-200 align-middle"
-                            style={{ background: t.color ?? '#0f766e' }}
-                          />
-                        </TableCell>
-                        <TableCell className="text-slate-600">
-                          <Badge variant={usage > 0 ? 'secondary' : 'outline'}>
-                            {usage} {usage === 1 ? 'document' : 'documents'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <form action={deleteType} className="inline">
-                            <input type="hidden" name="id" value={t.id} />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                              aria-label="Delete type"
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="name"
+                        active={params.sort === 'name'}
+                      >
+                        Name
+                      </SortableTh>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="key"
+                        active={params.sort === 'key'}
+                      >
+                        Key
+                      </SortableTh>
+                      <TableHead>Colour</TableHead>
+                      <TableHead>Used by</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((t) => {
+                      const usage = usageMap[t.id] ?? 0
+                      return (
+                        <TableRow key={t.id}>
+                          <TableCell>
+                            <form
+                              action={updateType}
+                              className="flex flex-col gap-2 sm:flex-row sm:items-center"
                             >
-                              <Trash2 size={14} className="text-red-500" />
-                            </Button>
-                          </form>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                              <input type="hidden" name="id" value={t.id} />
+                              <Input
+                                name="name"
+                                defaultValue={t.name}
+                                className="max-w-xs min-w-0"
+                              />
+                              <Input
+                                name="description"
+                                defaultValue={t.description ?? ''}
+                                placeholder="description"
+                                className="max-w-md min-w-0"
+                              />
+                              <Input
+                                name="color"
+                                type="color"
+                                defaultValue={t.color ?? '#0f766e'}
+                                className="h-8 w-12 shrink-0 p-0"
+                              />
+                              <Button type="submit" size="sm" variant="outline">
+                                Save
+                              </Button>
+                            </form>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{t.key}</TableCell>
+                          <TableCell>
+                            <span
+                              className="inline-block h-4 w-8 rounded border border-slate-200 align-middle"
+                              style={{ background: t.color ?? '#0f766e' }}
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600">
+                            <Badge variant={usage > 0 ? 'secondary' : 'outline'}>
+                              {usage} {usage === 1 ? 'document' : 'documents'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <form action={deleteType} className="inline">
+                              <input type="hidden" name="id" value={t.id} />
+                              <Button
+                                type="submit"
+                                variant="ghost"
+                                size="sm"
+                                aria-label="Delete type"
+                              >
+                                <Trash2 size={14} className="text-red-500" />
+                              </Button>
+                            </form>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         )}
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={total}
+          page={params.page}
+          perPage={params.perPage}
+        />
       </div>
     </ListPageLayout>
   )

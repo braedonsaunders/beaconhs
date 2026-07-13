@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ChevronRight, Gauge, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import {
   Badge,
   Card,
@@ -12,8 +12,12 @@ import {
   PageHeader,
 } from '@beaconhs/ui'
 import { formTemplates } from '@beaconhs/db/schema'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { canUseSafeDistance, SAFE_DISTANCE_PERMISSION } from '@/lib/safe-distance-access'
 import { PageContainer } from '@/components/page-layout'
+import { templateAccessWhere } from '../apps/_lib/access'
 
 export const metadata = { title: 'Tools' }
 export const dynamic = 'force-dynamic'
@@ -31,6 +35,7 @@ type ToolCard = {
   title: string
   description: string
   custom?: boolean
+  requiredPermission?: string
 }
 
 const NATIVE_TOOLS: ToolCard[] = [
@@ -38,6 +43,7 @@ const NATIVE_TOOLS: ToolCard[] = [
     href: '/tools/safe-distance',
     icon: Gauge,
     title: 'Safe Distance',
+    requiredPermission: SAFE_DISTANCE_PERMISSION,
     description:
       'Pneumatic pressure-test stand-off calculator — NASA-Glenn, ASME PCC-2, and Lloyd’s Register stored-energy distances for a piping system under test. Records each assessment for sign-off and PDF export.',
   },
@@ -45,29 +51,31 @@ const NATIVE_TOOLS: ToolCard[] = [
 
 export default async function ToolsLandingPage() {
   const ctx = await requireRequestContext()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   // Published Builder apps the tenant chose to surface as tools.
-  const customTools = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({
-        id: formTemplates.id,
-        name: formTemplates.name,
-        description: formTemplates.description,
+  const customTools = can(ctx, 'forms.response.create')
+    ? await ctx.db(async (tx) => {
+        const rows = await tx
+          .select({
+            id: formTemplates.id,
+            name: formTemplates.name,
+            description: formTemplates.description,
+          })
+          .from(formTemplates)
+          .where(
+            and(
+              eq(formTemplates.surfaceAsTool, true),
+              templateAccessWhere(ctx, effectiveRoleKeys, 'operate'),
+            ),
+          )
+          .orderBy(asc(formTemplates.name))
+        return rows
       })
-      .from(formTemplates)
-      .where(
-        and(
-          eq(formTemplates.surfaceAsTool, true),
-          eq(formTemplates.status, 'published'),
-          isNull(formTemplates.deletedAt),
-        ),
-      )
-      .orderBy(asc(formTemplates.name))
-    return rows
-  })
+    : []
 
   const tools: ToolCard[] = [
-    ...NATIVE_TOOLS,
+    ...NATIVE_TOOLS.filter((tool) => !tool.requiredPermission || canUseSafeDistance(ctx)),
     ...customTools.map((t) => ({
       href: `/apps/templates/${t.id}/fill`,
       icon: Wrench,

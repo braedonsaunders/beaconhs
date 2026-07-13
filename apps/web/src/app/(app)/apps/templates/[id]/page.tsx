@@ -4,8 +4,8 @@
 // list where New entry opens the unified create/edit/view page.
 
 import { redirect } from 'next/navigation'
-import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { isTemplateBuilder } from '@/app/(app)/apps/_lib/access'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +13,6 @@ export default async function FormTemplatePage({ params }: { params: Promise<{ i
   const { id } = await params
   const ctx = await requireRequestContext()
   redirect(
-    can(ctx, 'forms.template.create')
-      ? `/apps/templates/${id}/designer`
-      : `/apps/templates/${id}/records`,
+    isTemplateBuilder(ctx) ? `/apps/templates/${id}/designer` : `/apps/templates/${id}/records`,
   )
 }

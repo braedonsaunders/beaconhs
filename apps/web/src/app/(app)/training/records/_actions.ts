@@ -145,13 +145,11 @@ export async function updateTrainingRecordField(formData: FormData): Promise<voi
   revalidatePath('/training/records')
 }
 
-export type BulkActionResult =
+type BulkActionResult =
   | { ok: true; updated: number; skipped: number }
   | { ok: false; error: string }
 
-export type BulkCsvResult =
-  | { ok: true; filename: string; content: string }
-  | { ok: false; error: string }
+type BulkCsvResult = { ok: true; filename: string; content: string } | { ok: false; error: string }
 
 const MAX_BULK = 500
 

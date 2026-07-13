@@ -1,32 +1,117 @@
 import 'server-only'
 
-// App-level role gating (form_templates.allowedRoles). Empty/null ⇒ everyone.
-// Non-empty ⇒ only those role keys, plus admins (forms.template.create) and
-// super-admins. Used by the gallery (/apps) + the fill page.
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
+import { formResponses, formTemplates } from '@beaconhs/db/schema'
+import type { RequestContext } from '@beaconhs/tenant'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { isUuid } from '@/lib/list-params'
+import {
+  canAccessTemplate,
+  isTemplateBuilder,
+  type TemplateAccessDescriptor,
+  type TemplateAccessMode,
+} from './access-policy'
 
-import { eq } from 'drizzle-orm'
-import { can, type RequestContext } from '@beaconhs/tenant'
-import { roleAssignments, roles } from '@beaconhs/db/schema'
+export { canAccessTemplate, canEditResponsePayload, isTemplateBuilder } from './access-policy'
 
-export async function getUserRoleKeys(ctx: RequestContext): Promise<Set<string>> {
-  if (!ctx.membership) return new Set()
-  const membershipId = ctx.membership.id
-  const rows = await ctx.db((tx) =>
-    tx
-      .select({ key: roles.key })
-      .from(roleAssignments)
-      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-      .where(eq(roleAssignments.tenantUserId, membershipId)),
-  )
-  return new Set(rows.map((r) => r.key))
+function roleKeyArray(roleKeys: ReadonlySet<string>): SQL {
+  return sql`array[${sql.join(
+    [...roleKeys].map((role) => sql`${role}`),
+    sql`, `,
+  )}]::text[]`
 }
 
-export function appVisibleTo(
+/** SQL equivalent of canAccessTemplate for queries joining form_templates. */
+export function templateAccessWhere(
   ctx: RequestContext,
-  allowedRoles: string[] | null | undefined,
-  userRoleKeys: Set<string>,
-): boolean {
-  if (!allowedRoles || allowedRoles.length === 0) return true
-  if (ctx.isSuperAdmin || can(ctx, 'forms.template.create')) return true
-  return allowedRoles.some((r) => userRoleKeys.has(r))
+  effectiveRoleKeys: ReadonlySet<string>,
+  mode: TemplateAccessMode,
+): SQL {
+  const live = isNull(formTemplates.deletedAt)
+  const builder = isTemplateBuilder(ctx)
+
+  if (mode === 'builder-edit') {
+    return builder ? live : sql`false`
+  }
+  if (mode === 'browse-records' && builder) return live
+
+  const published = eq(formTemplates.status, 'published')
+  if (builder) return and(live, published)!
+
+  const openAudience = sql`(
+    ${formTemplates.allowedRoles} is null
+    or jsonb_array_length(${formTemplates.allowedRoles}) = 0
+  )`
+  const audience =
+    effectiveRoleKeys.size === 0
+      ? openAudience
+      : sql`(${openAudience} or jsonb_exists_any(${formTemplates.allowedRoles}, ${roleKeyArray(effectiveRoleKeys)}))`
+  return and(live, published, audience)!
+}
+
+async function loadTemplateAccess(
+  ctx: RequestContext,
+  templateId: string,
+  tx?: Database,
+): Promise<(TemplateAccessDescriptor & { id: string }) | null> {
+  if (!isUuid(templateId)) return null
+  const load = async (db: Database) => {
+    const [template] = await db
+      .select({
+        id: formTemplates.id,
+        status: formTemplates.status,
+        allowedRoles: formTemplates.allowedRoles,
+        deletedAt: formTemplates.deletedAt,
+      })
+      .from(formTemplates)
+      .where(and(eq(formTemplates.id, templateId), eq(formTemplates.tenantId, ctx.tenantId)))
+      .limit(1)
+    return template ?? null
+  }
+  return tx ? load(tx) : ctx.db(load)
+}
+
+export async function canAccessTemplateById(
+  ctx: RequestContext,
+  templateId: string,
+  mode: TemplateAccessMode,
+): Promise<boolean> {
+  if (!isUuid(templateId)) return false
+  const [template, roleKeys] = await Promise.all([
+    loadTemplateAccess(ctx, templateId),
+    getEffectiveRoleKeys(ctx),
+  ])
+  return !!template && canAccessTemplate(ctx, template, roleKeys, mode)
+}
+
+export async function canAccessResponseTemplate(
+  ctx: RequestContext,
+  responseId: string,
+  mode: TemplateAccessMode = 'browse-records',
+): Promise<boolean> {
+  if (!isUuid(responseId)) return false
+  const [template, roleKeys] = await Promise.all([
+    ctx.db(async (tx) => {
+      const [row] = await tx
+        .select({
+          status: formTemplates.status,
+          allowedRoles: formTemplates.allowedRoles,
+          deletedAt: formTemplates.deletedAt,
+        })
+        .from(formResponses)
+        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+        .where(
+          and(
+            eq(formResponses.id, responseId),
+            eq(formResponses.tenantId, ctx.tenantId),
+            isNull(formResponses.deletedAt),
+          ),
+        )
+        .limit(1)
+      return row ?? null
+    }),
+    getEffectiveRoleKeys(ctx),
+  ])
+  return !!template && canAccessTemplate(ctx, template, roleKeys, mode)
 }

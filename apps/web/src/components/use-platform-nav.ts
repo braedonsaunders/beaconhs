@@ -8,7 +8,7 @@
 import { usePathname } from 'next/navigation'
 import type { SidebarNavGroup } from './sidebar-nav'
 
-export const PLATFORM_NAV_GROUPS: SidebarNavGroup[] = [
+const PLATFORM_NAV_GROUPS: SidebarNavGroup[] = [
   {
     label: 'Platform',
     items: [
@@ -27,7 +27,7 @@ export const PLATFORM_NAV_GROUPS: SidebarNavGroup[] = [
 ]
 
 /** True when the current route is part of the platform (super-admin) area. */
-export function useIsPlatform(): boolean {
+function useIsPlatform(): boolean {
   return (usePathname() ?? '').startsWith('/platform')
 }
 

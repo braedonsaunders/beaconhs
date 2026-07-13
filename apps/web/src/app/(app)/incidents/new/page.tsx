@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, count, eq, sql } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -15,12 +15,11 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
-import { emitIncidentReported } from '@beaconhs/events'
-import { emitIncidentCreated } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { incidentCreatedEvent } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { nextReference } from '@/lib/reference'
 import { PageContainer } from '@/components/page-layout'
 import { OccurredAtField } from './_occurred-at-field'
@@ -61,7 +60,7 @@ async function reportIncident(formData: FormData) {
 
   const [row] = await ctx.db(async (tx) => {
     const reference = await nextReference(tx, ctx.tenantId, 'incident')
-    return tx
+    const created = await tx
       .insert(incidents)
       .values({
         tenantId: ctx.tenantId,
@@ -79,6 +78,35 @@ async function reportIncident(formData: FormData) {
         reportedByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning()
+    const incident = created[0]
+    if (incident) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'incident.created',
+        subjectId: incident.id,
+        dedupKey: `incident.created:${incident.id}`,
+        payload: {
+          notification: { kind: 'incident_reported', incidentId: incident.id },
+          integration: incidentCreatedEvent(ctx.tenantId, {
+            id: incident.id,
+            reference: incident.reference,
+            type,
+            severity,
+            status: 'reported',
+            title,
+            description,
+            occurredAt,
+            location,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: incident.id,
+            moduleKey: 'incidents',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
+    return created
   })
 
   revalidatePath('/incidents')
@@ -90,20 +118,6 @@ async function reportIncident(formData: FormData) {
       summary: `Reported ${row.reference}: ${title}`,
       after: { reference: row.reference, type, severity, occurredAt, siteOrgUnitId },
     })
-    // Fire-and-forget notification; the emit function never throws.
-    await emitIncidentReported(ctx, { incidentId: row.id })
-    await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
-    await emitIncidentCreated(ctx, {
-      id: row.id,
-      reference: row.reference,
-      type,
-      severity,
-      status: 'reported',
-      title,
-      description,
-      occurredAt,
-      location,
-    }).catch(() => {})
     redirect(`/incidents/${row.id}`)
   }
   redirect('/incidents')

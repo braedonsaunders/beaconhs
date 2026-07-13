@@ -34,7 +34,7 @@ import {
   type HardFailRule,
 } from '@beaconhs/forms-core'
 
-export type ComplianceStatus = 'compliant' | 'non_compliant' | 'pending_review'
+type ComplianceStatus = 'compliant' | 'non_compliant' | 'pending_review'
 
 export type ComputeFormScoreResult = {
   score: number

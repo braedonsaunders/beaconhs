@@ -12,7 +12,7 @@ import { X } from 'lucide-react'
 import { Label, SearchSelect, Select } from '@beaconhs/ui'
 import type { RoleScope } from '@beaconhs/db/schema'
 
-export type ScopeOption = { value: string; label: string; hint?: string }
+type ScopeOption = { value: string; label: string; hint?: string }
 type ScopeType = RoleScope['type']
 
 const TYPE_OPTIONS: { value: ScopeType; label: string; help: string }[] = [

@@ -1,17 +1,29 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, DetailHeader } from '@beaconhs/ui'
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  DetailHeader,
+} from '@beaconhs/ui'
 import {
   orgUnits,
   people,
   safeDistanceRecords,
   safeDistanceSegments,
   tenantUsers,
-  user as userTable,
+  users as userTable,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity } from '@/lib/audit'
+import { isUuid, pickString } from '@/lib/list-params'
+import { canUseSafeDistance } from '@/lib/safe-distance-access'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
@@ -39,7 +51,9 @@ export default async function SafeDistanceDetailPage({
   const { id } = await params
   const sp = await searchParams
   const tab = pickActiveTab<Tab>(sp, TABS, 'calculator')
+  const mutationError = pickString(sp.error)?.slice(0, 300) ?? null
   const ctx = await requireRequestContext()
+  if (!canUseSafeDistance(ctx) || !isUuid(id)) notFound()
 
   const detail = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -56,7 +70,7 @@ export default async function SafeDistanceDetailPage({
     const sites = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
+      .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
       .orderBy(asc(orgUnits.name))
       .limit(200)
     const supervisors = await tx
@@ -107,6 +121,7 @@ export default async function SafeDistanceDetailPage({
           </Link>
           <form action={toggleLockSafeDistanceRecord}>
             <input type="hidden" name="id" value={row.id} />
+            <input type="hidden" name="version" value={row.updatedAt.toISOString()} />
             <input type="hidden" name="desired" value={row.locked ? 'false' : 'true'} />
             <Button variant="outline" type="submit">
               {row.locked ? 'Unlock' : 'Lock'}
@@ -115,6 +130,7 @@ export default async function SafeDistanceDetailPage({
           {row.locked ? null : (
             <form action={deleteSafeDistanceRecordAndRedirect}>
               <input type="hidden" name="id" value={row.id} />
+              <input type="hidden" name="version" value={row.updatedAt.toISOString()} />
               <Button variant="outline" type="submit">
                 Delete
               </Button>
@@ -139,10 +155,16 @@ export default async function SafeDistanceDetailPage({
 
   return (
     <DetailPageLayout header={header} subtabs={subtabs}>
+      {mutationError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{mutationError}</AlertDescription>
+        </Alert>
+      ) : null}
       {tab === 'calculator' ? (
         <SafeDistanceEditor
           record={{
             id: row.id,
+            version: row.updatedAt.toISOString(),
             name: row.name,
             method: row.method as SafeDistanceMethod,
             unit: row.unit as SafeDistanceUnit,

@@ -11,7 +11,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { syncConnections, syncCrosswalk } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
 
-export type OrgUnitSyncOrigin = {
+type OrgUnitSyncOrigin = {
   connectionId: string
   connectionName: string
   connectorKey: string

@@ -18,7 +18,7 @@ import {
   equipmentTypes,
   equipmentWorkOrders,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
@@ -81,6 +81,7 @@ export default async function WorkOrdersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const renderedAtMs = new Date().getTime()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'opened_at',
@@ -433,7 +434,7 @@ export default async function WorkOrdersPage({
             <TableBody>
               {rows.map(({ wo, item, type, assignee, assigneeUser }) => {
                 const openedMs = new Date(wo.openedAt).getTime()
-                const closedMs = wo.closedAt ? new Date(wo.closedAt).getTime() : Date.now()
+                const closedMs = wo.closedAt ? new Date(wo.closedAt).getTime() : renderedAtMs
                 const ageDays = Math.max(0, Math.round((closedMs - openedMs) / 86_400_000))
                 const ageVariant: 'success' | 'warning' | 'destructive' | 'secondary' = wo.closedAt
                   ? 'secondary'

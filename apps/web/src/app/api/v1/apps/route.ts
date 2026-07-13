@@ -17,8 +17,8 @@ export async function GET(req: Request): Promise<NextResponse> {
         `This key cannot list Builder apps — grant permission ${BUILDER_APP_READ_PERMISSION}.`,
       )
     }
-    const apps = await listBuilderApps(ctx)
-    return NextResponse.json({ data: apps }, { headers: noStore() })
+    const apps = await listBuilderApps(ctx, key.builderTemplateIds)
+    return NextResponse.json({ data: apps }, { headers: noStore(key.rateLimitHeaders) })
   } catch (err) {
     if (!(err instanceof ApiError)) console.error('[api/v1/apps] unhandled error', err)
     return errorResponse(err)

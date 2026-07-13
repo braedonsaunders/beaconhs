@@ -336,7 +336,7 @@ export function SlideView({
 }
 
 /** Tiny filmstrip thumbnail — same layouts at postage-stamp size. */
-export function SlideThumb({
+function SlideThumb({
   slide,
   attachmentUrls = {},
   className = '',

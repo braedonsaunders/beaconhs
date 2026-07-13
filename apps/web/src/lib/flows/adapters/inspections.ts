@@ -16,7 +16,7 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
@@ -64,6 +64,7 @@ export function createInspectionFlowAdapter(
             contactFirst: contact.firstName,
             contactLast: contact.lastName,
             contactFormal: contact.formalName,
+            customerSignatureKey: attachments.r2Key,
           })
           .from(inspectionRecords)
           .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
@@ -74,6 +75,10 @@ export function createInspectionFlowAdapter(
           .leftJoin(supU, eq(supU.id, supTU.userId))
           .leftJoin(customerOU, eq(customerOU.id, inspectionRecords.customerOrgUnitId))
           .leftJoin(contact, eq(contact.id, inspectionRecords.customerContactPersonId))
+          .leftJoin(
+            attachments,
+            eq(attachments.id, inspectionRecords.customerSignatureAttachmentId),
+          )
           .where(eq(inspectionRecords.id, recordId))
           .limit(1),
       )
@@ -130,7 +135,9 @@ export function createInspectionFlowAdapter(
           '',
         customer_signer_name: r.customerSignerName ?? '',
         customer_signed_at: fmtDateTime(r.customerSignedAt),
-        customer_signature_image: r.customerSignatureDataUrl ?? '',
+        customer_signature_image: head.customerSignatureKey
+          ? await presignGet({ key: head.customerSignatureKey, expiresInSeconds: 900 })
+          : '',
         // FK ids for conditions / recipient `field` targets.
         type_id: r.typeId ?? null,
         site_org_unit_id: r.siteOrgUnitId ?? null,
@@ -144,7 +151,12 @@ export function createInspectionFlowAdapter(
           non_compliance: c.nonCompliance ?? '',
           action_taken: c.actionTaken ?? '',
         })),
-        photos: photos.map((p) => ({ url: publicUrl(p.r2Key), caption: p.caption ?? '' })),
+        photos: await Promise.all(
+          photos.map(async (p) => ({
+            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
+            caption: p.caption ?? '',
+          })),
+        ),
       }
     },
 
@@ -183,6 +195,7 @@ export function createInspectionFlowAdapter(
         description: i.description ?? null,
         severity: i.severity,
         dueOn: i.dueOn ?? null,
+        flowExecutionKey: i.flowExecutionKey,
       }),
   }
 }

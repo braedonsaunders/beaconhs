@@ -390,14 +390,10 @@ function ImageBtn({ editor }: { editor: Editor | null }) {
               headers: { 'Content-Type': file.type },
             })
             const fin = await finalizeUpload({
-              key: req.key,
-              kind: 'image',
-              filename: file.name,
-              contentType: file.type,
-              sizeBytes: file.size,
+              uploadId: req.uploadId,
             })
             if (!fin.ok) throw new Error(fin.error)
-            editor.chain().focus().setImage({ src: req.publicUrl, alt: file.name }).run()
+            editor.chain().focus().setImage({ src: fin.url, alt: file.name }).run()
           } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Image upload failed')
           } finally {

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { randomUUID } from 'node:crypto'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, isNull } from 'drizzle-orm'
@@ -22,15 +23,14 @@ import {
   incidents,
   orgUnits,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { assertCan } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -45,7 +45,7 @@ import {
   LiveSelect,
   LiveToggle,
 } from '@/components/live-field'
-import { emitCorrectiveActionCompleted } from '@beaconhs/events'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { listTenantOwners, reopenCorrectiveAction } from '../_actions'
 import { CaHeaderActions } from './_header-actions'
 import { CloseBody } from './_close-button'
@@ -97,12 +97,42 @@ async function updateStatus(formData: FormData) {
     })
   })
   if (!visible) return
-  await ctx.db((tx) =>
-    tx
+  const changed = await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ status: correctiveActions.status })
+      .from(correctiveActions)
+      .where(eq(correctiveActions.id, id))
+      .limit(1)
+      .for('update')
+    if (!current || current.status === status) return false
+    await tx
       .update(correctiveActions)
       .set({ status, closedAt: null, locked: false })
-      .where(eq(correctiveActions.id, id)),
-  )
+      .where(eq(correctiveActions.id, id))
+    if (status === 'pending_verification') {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.completed',
+        subjectId: id,
+        dedupKey: `corrective_action.completed:${id}:${randomUUID()}`,
+        payload: {
+          notification: {
+            kind: 'corrective_action_completed',
+            caId: id,
+            completerUserId: ctx.userId,
+          },
+          web: moduleFlowCommand(ctx, {
+            subjectId: id,
+            moduleKey: 'corrective-actions',
+            event: 'status_change',
+            toStatus: status,
+          }),
+        },
+      })
+    }
+    return true
+  })
+  if (!changed) return
   await recordAudit(ctx, {
     entityType: 'corrective_action',
     entityId: id,
@@ -110,15 +140,6 @@ async function updateStatus(formData: FormData) {
     summary: `Status moved to "${status.replace(/_/g, ' ')}"`,
     after: { status },
   })
-  await runModuleFlows(ctx, {
-    moduleKey: 'corrective-actions',
-    event: 'status_change',
-    subjectId: id,
-    toStatus: status,
-  })
-  if (status === 'pending_verification') {
-    await emitCorrectiveActionCompleted(ctx, { caId: id, completerUserId: ctx.userId })
-  }
   revalidatePath(`/corrective-actions/${id}`)
   revalidatePath('/corrective-actions')
 }
@@ -330,7 +351,7 @@ export default async function CorrectiveActionPage({
 
   const photos: CaPhotoRow[] = photoRows.map((p) => ({
     id: p.link.id,
-    url: publicUrl(p.attachment.r2Key),
+    url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
   }))
@@ -341,7 +362,9 @@ export default async function CorrectiveActionPage({
     description: s.step.description,
     completedAt: s.step.completedAt,
     completedByName: s.byUser?.name ?? s.byTenantUser?.displayName ?? null,
-    signatureDataUrl: s.step.signatureDataUrl,
+    signatureDataUrl: s.step.signatureAttachmentId
+      ? attachmentUrl(s.step.signatureAttachmentId)
+      : null,
     entityOrder: s.step.entityOrder,
   }))
 

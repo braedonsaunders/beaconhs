@@ -29,9 +29,9 @@ export function LoginForm() {
             setError(result.error.message ?? 'Sign-in failed')
             return
           }
-          router.replace('/dashboard')
+          router.replace('/auth/continue')
         } else {
-          const result = await signIn.magicLink({ email, callbackURL: '/dashboard' })
+          const result = await signIn.magicLink({ email, callbackURL: '/auth/continue' })
           if ('error' in result && result.error) {
             setError(result.error.message ?? 'Could not send magic link')
             return

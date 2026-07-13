@@ -17,7 +17,7 @@ import { people } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
 import { can, type RequestContext } from '@beaconhs/tenant'
 
-export type RecordOwnerColumns = {
+type RecordOwnerColumns = {
   /** Person the record is about/assigned to (holder, owner, assignee, author). */
   personCol?: PgColumn
   /** tenant_users id of whoever created the record. */
@@ -103,7 +103,7 @@ export async function recordVisibilityWhere(
 // (journals/_lib.ts `journalScopeWhere`) to every record module.
 // ---------------------------------------------------------------------------
 
-export type VisibilityTier = 'all' | 'site' | 'self'
+type VisibilityTier = 'all' | 'site' | 'self'
 
 /**
  * The record-visibility tier this context holds for a module, from its tiered
@@ -111,7 +111,7 @@ export type VisibilityTier = 'all' | 'site' | 'self'
  * site; otherwise self (the safe default — a role with no read tier still only
  * ever sees its own records, never the whole tenant).
  */
-export function resolveVisibilityTier(ctx: RequestContext, prefix: string): VisibilityTier {
+function resolveVisibilityTier(ctx: RequestContext, prefix: string): VisibilityTier {
   if (ctx.isSuperAdmin || can(ctx, `${prefix}.read.all`)) return 'all'
   if (can(ctx, `${prefix}.read.site`)) return 'site'
   return 'self'
@@ -125,7 +125,7 @@ function myTenantUserId(ctx: RequestContext): string | null {
   return ctx.membership?.id ?? null
 }
 
-export type ModuleScopeCols = {
+type ModuleScopeCols = {
   /** Permission-key prefix, e.g. 'incidents' | 'ca' | 'hazid' | 'inspections' | 'forms.response'. */
   prefix: string
   /** tenant_users columns identifying who owns/created/submitted the record. */
@@ -137,11 +137,7 @@ export type ModuleScopeCols = {
 }
 
 /** The "this record is mine" conditions: an owner column equals me, or I'm the subject. */
-async function ownPredicates(
-  ctx: RequestContext,
-  tx: Database,
-  cols: ModuleScopeCols,
-): Promise<SQL[]> {
+async function ownPredicates(ctx: RequestContext, cols: ModuleScopeCols): Promise<SQL[]> {
   const conds: SQL[] = []
   const tuId = myTenantUserId(ctx)
   if (tuId && cols.ownerCols) for (const c of cols.ownerCols) conds.push(eq(c, tuId))
@@ -159,13 +155,13 @@ async function ownPredicates(
  */
 export async function moduleScopeWhere(
   ctx: RequestContext,
-  tx: Database,
+  _tx: Database,
   cols: ModuleScopeCols,
 ): Promise<SQL | undefined> {
   const tier = resolveVisibilityTier(ctx, cols.prefix)
   if (tier === 'all') return undefined
 
-  const ownConds = await ownPredicates(ctx, tx, cols)
+  const ownConds = await ownPredicates(ctx, cols)
 
   if (tier === 'site' && cols.siteCol) {
     const sites = mySiteIds(ctx)
@@ -177,7 +173,7 @@ export async function moduleScopeWhere(
   return ownConds.length === 1 ? ownConds[0] : or(...ownConds)
 }
 
-export type RecordOwnership = {
+type RecordOwnership = {
   prefix: string
   /** tenant_users ids that own/created/submitted the record (nullish ignored). */
   ownerIds?: (string | null | undefined)[]
@@ -193,7 +189,7 @@ export type RecordOwnership = {
  */
 export async function canSeeRecord(
   ctx: RequestContext,
-  tx: Database,
+  _tx: Database,
   rec: RecordOwnership,
 ): Promise<boolean> {
   const tier = resolveVisibilityTier(ctx, rec.prefix)

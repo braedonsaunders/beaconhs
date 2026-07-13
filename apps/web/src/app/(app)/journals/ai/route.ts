@@ -3,28 +3,61 @@
 // active tenant; returns 503 when AI is disabled so the UI can fall back.
 
 import { isWritingMode, streamWritingAssist, AIDisabledError } from '@beaconhs/ai'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
+import {
+  readBoundedJsonBody,
+  RequestBodyLengthError,
+  RequestBodyParseError,
+  RequestBodyTimeoutError,
+  RequestBodyTooLargeError,
+} from '@/lib/request-body'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+const MAX_REQUEST_BYTES = 16 * 1024
+const REQUEST_TIMEOUT_MS = 15_000
 
 export async function POST(req: Request): Promise<Response> {
   const ctx = await requireRequestContext().catch(() => null)
   if (!ctx) return new Response('Unauthorized', { status: 401 })
+  if (
+    !ctx.isSuperAdmin &&
+    !can(ctx, 'journals.create') &&
+    !can(ctx, 'journals.update.own') &&
+    !can(ctx, 'journals.assign')
+  ) {
+    return new Response('Forbidden', { status: 403 })
+  }
 
   let body: unknown
   try {
-    body = await req.json()
-  } catch {
+    body = await readBoundedJsonBody(req, {
+      maxBytes: MAX_REQUEST_BYTES,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    })
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return new Response('Request too large', { status: 413 })
+    }
+    if (error instanceof RequestBodyTimeoutError) {
+      return new Response('Request timed out', { status: 408 })
+    }
+    if (error instanceof RequestBodyLengthError || error instanceof RequestBodyParseError) {
+      return new Response('Bad request', { status: 400 })
+    }
     return new Response('Bad request', { status: 400 })
   }
 
-  const b = (body ?? {}) as Record<string, unknown>
-  const mode = String(b.mode ?? '')
-  const text = String(b.text ?? '')
-  const tone = b.tone ? String(b.tone) : undefined
-  const context = b.context ? String(b.context).slice(0, 2000) : undefined
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return new Response('Bad request', { status: 400 })
+  }
+  const b = body as Record<string, unknown>
+  const mode = typeof b.mode === 'string' ? b.mode : ''
+  const text = typeof b.text === 'string' ? b.text : ''
+  const tone = typeof b.tone === 'string' ? b.tone.slice(0, 100) : undefined
+  const context = typeof b.context === 'string' ? b.context.slice(0, 2000) : undefined
 
   if (!isWritingMode(mode)) return new Response('Invalid mode', { status: 400 })
   if (!text.trim()) return new Response('Nothing to work with', { status: 400 })

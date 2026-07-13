@@ -10,7 +10,7 @@ import type { requireRequestContext } from '@/lib/auth'
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
 /** True when the given person record is the caller's own linked record. */
-export function isOwnPersonRecord(ctx: Ctx, personId: string): boolean {
+function isOwnPersonRecord(ctx: Ctx, personId: string): boolean {
   return ctx.personId != null && ctx.personId === personId
 }
 

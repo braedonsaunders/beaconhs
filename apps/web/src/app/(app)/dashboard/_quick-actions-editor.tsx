@@ -46,34 +46,47 @@ export function QuickActionsEditor({
   const [view, setView] = useState<View>('list')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [options, setOptions] = useState<QuickActionOptions | null>(null)
-  const [loadingOptions, setLoadingOptions] = useState(false)
+  const [optionsFailed, setOptionsFailed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pickerTab, setPickerTab] = useState<PickerTab>('common')
   const [search, setSearch] = useState('')
   const [customLabel, setCustomLabel] = useState('')
   const [customHref, setCustomHref] = useState('')
 
-  // Reset to a fresh editing session every time the drawer opens.
-  useEffect(() => {
-    if (!open) return
-    setItems(value.map((a) => ({ ...a })))
+  function reset(nextItems: QuickAction[]) {
+    setItems(nextItems.map((action) => ({ ...action })))
     setView('list')
     setEditingId(null)
     setSearch('')
     setPickerTab('common')
     setCustomLabel('')
     setCustomHref('')
-  }, [open, value])
+  }
+
+  function close() {
+    reset(value)
+    onClose()
+  }
 
   // Lazy-load the picker catalogue the first time the drawer opens.
   useEffect(() => {
-    if (!open || options || loadingOptions) return
-    setLoadingOptions(true)
+    if (!open || options || optionsFailed) return
+    let cancelled = false
     listQuickActionOptions()
-      .then(setOptions)
-      .catch(() => toast.error('Could not load the action catalogue'))
-      .finally(() => setLoadingOptions(false))
-  }, [open, options, loadingOptions])
+      .then((nextOptions) => {
+        if (!cancelled) setOptions(nextOptions)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setOptionsFailed(true)
+        toast.error('Could not load the action catalogue')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, options, optionsFailed])
+
+  const loadingOptions = open && !options && !optionsFailed
 
   const editing = editingId ? items.find((a) => a.id === editingId) : null
 
@@ -138,6 +151,7 @@ export function QuickActionsEditor({
         toast.success(saveSuccessMessage)
         onSaved(clean)
         router.refresh()
+        reset(clean)
         onClose()
       } else {
         toast.error(res.error ?? 'Save failed')
@@ -157,7 +171,7 @@ export function QuickActionsEditor({
   return (
     <Drawer
       open={open}
-      onClose={onClose}
+      onClose={close}
       size="md"
       title={title}
       description={
@@ -167,7 +181,7 @@ export function QuickActionsEditor({
       }
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+          <Button type="button" variant="ghost" onClick={close} disabled={saving}>
             Cancel
           </Button>
           <Button type="button" onClick={handleSave} disabled={saving}>

@@ -49,7 +49,7 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     columns: ['reference', 'title', 'severity', 'status', 'due_on'],
     groupBy: 'status',
     sort: { column: 'due_on', direction: 'asc' },
-    filtersV2: {
+    filters: {
       combinator: 'and',
       rules: [
         { field: 'status', op: 'in', value: ['open', 'in_progress', 'pending_verification'] },

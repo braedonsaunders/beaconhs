@@ -24,7 +24,7 @@ export type EmailProviderSpecLite = {
   docsHint?: string
 }
 
-export type EmailFormInitial = {
+type EmailFormInitial = {
   enabled: boolean
   provider: string
   fromName: string

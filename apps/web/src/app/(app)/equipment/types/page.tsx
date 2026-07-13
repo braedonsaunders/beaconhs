@@ -278,7 +278,7 @@ export default async function EquipmentTypesPage({
                       ) : null}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-400">
-                      {cat?.name ?? type.category ?? <span className="text-slate-400">—</span>}
+                      {cat?.name ?? <span className="text-slate-400">—</span>}
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge variant="secondary">{n}</Badge>

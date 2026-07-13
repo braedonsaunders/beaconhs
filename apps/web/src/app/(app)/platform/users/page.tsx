@@ -1,7 +1,20 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
-import { Badge, DetailHeader, EmptyState, cn } from '@beaconhs/ui'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  notExists,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
+import { Badge, DetailHeader, EmptyState } from '@beaconhs/ui'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { getCurrentUserId, getRequestContext } from '@/lib/auth'
@@ -10,7 +23,9 @@ import { PageContainer } from '@/components/page-layout'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { SearchInput } from '@/components/search-input'
-import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Users · Platform' }
 export const dynamic = 'force-dynamic'
@@ -61,32 +76,104 @@ export default async function PlatformUsersPage({
   const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
 
   const sp = await searchParams
-  const { sort, dir, q } = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
-  const view = pickString(sp.view) ?? 'all'
-  const query = (q ?? '').trim().toLowerCase()
-
-  const { accounts, memberships } = await withSuperAdmin(db, async (tx) => {
-    const accountRows = await tx
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        isSuperAdmin: users.isSuperAdmin,
-        createdAt: users.createdAt,
-      })
-      .from(users)
-      .orderBy(asc(users.name))
-    const membershipRows = await tx
-      .select({
-        userId: tenantUsers.userId,
-        status: tenantUsers.status,
-        tenantName: tenants.name,
-      })
-      .from(tenantUsers)
-      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .orderBy(asc(tenants.name))
-    return { accounts: accountRows, memberships: membershipRows }
+  const listParams = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
   })
+  const { sort, dir } = listParams
+  const viewParam = pickString(sp.view)
+  const view = VIEW_FILTERS.some((filter) => filter.value === viewParam) ? viewParam! : 'all'
+
+  const { accounts, memberships, total, identityCount, multiCount } = await withSuperAdmin(
+    db,
+    async (tx) => {
+      const membershipCount = sql<number>`(select count(*) from ${tenantUsers} where ${tenantUsers.userId} = ${users.id})`
+      const search: SQL<unknown> | undefined = listParams.q
+        ? or(
+            ilike(users.name, `%${listParams.q}%`),
+            ilike(users.email, `%${listParams.q}%`),
+            exists(
+              tx
+                .select({ id: tenantUsers.id })
+                .from(tenantUsers)
+                .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+                .where(
+                  and(eq(tenantUsers.userId, users.id), ilike(tenants.name, `%${listParams.q}%`)),
+                ),
+            ),
+          )
+        : undefined
+      const viewWhere =
+        view === 'multi'
+          ? sql`${membershipCount} >= 2`
+          : view === 'super'
+            ? eq(users.isSuperAdmin, true)
+            : view === 'none'
+              ? notExists(
+                  tx
+                    .select({ id: tenantUsers.id })
+                    .from(tenantUsers)
+                    .where(eq(tenantUsers.userId, users.id)),
+                )
+              : undefined
+      const where = and(search, viewWhere)
+      const dirFn = dir === 'asc' ? asc : desc
+      const orderBy =
+        sort === 'email'
+          ? [dirFn(users.email)]
+          : sort === 'tenants'
+            ? [dirFn(membershipCount), asc(users.name)]
+            : sort === 'created'
+              ? [dirFn(users.createdAt), asc(users.name)]
+              : [dirFn(users.name)]
+
+      const [identityRow, multiRow, totalRow, accountRows] = await Promise.all([
+        tx.select({ c: count() }).from(users),
+        tx
+          .select({ c: count() })
+          .from(users)
+          .where(sql`${membershipCount} >= 2`),
+        tx.select({ c: count() }).from(users).where(where),
+        tx
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            isSuperAdmin: users.isSuperAdmin,
+            createdAt: users.createdAt,
+            membershipCount,
+          })
+          .from(users)
+          .where(where)
+          .orderBy(...orderBy)
+          .limit(listParams.perPage)
+          .offset((listParams.page - 1) * listParams.perPage),
+      ])
+      const accountIds = accountRows.map((account) => account.id)
+      const membershipRows =
+        accountIds.length === 0
+          ? []
+          : await tx
+              .select({
+                userId: tenantUsers.userId,
+                status: tenantUsers.status,
+                tenantName: tenants.name,
+              })
+              .from(tenantUsers)
+              .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
+              .where(inArray(tenantUsers.userId, accountIds))
+              .orderBy(asc(tenants.name))
+      return {
+        accounts: accountRows,
+        memberships: membershipRows,
+        total: Number(totalRow[0]?.c ?? 0),
+        identityCount: Number(identityRow[0]?.c ?? 0),
+        multiCount: Number(multiRow[0]?.c ?? 0),
+      }
+    },
+  )
 
   const byUser = new Map<string, TenantBadge[]>()
   for (const m of memberships) {
@@ -104,29 +191,6 @@ export default async function PlatformUsersPage({
     tenants: byUser.get(a.id) ?? [],
   }))
 
-  const filtered = rows.filter((r) => {
-    if (view === 'multi' && r.tenants.length < 2) return false
-    if (view === 'super' && !r.isSuperAdmin) return false
-    if (view === 'none' && r.tenants.length > 0) return false
-    if (!query) return true
-    const haystack = [r.name, r.email, ...r.tenants.map((t) => t.name)].join(' ').toLowerCase()
-    return haystack.includes(query)
-  })
-  const sorted = [...filtered].sort((a, b) => {
-    const mult = dir === 'asc' ? 1 : -1
-    switch (sort) {
-      case 'email':
-        return a.email.localeCompare(b.email) * mult
-      case 'tenants':
-        return (a.tenants.length - b.tenants.length) * mult
-      case 'created':
-        return (a.createdAt.getTime() - b.createdAt.getTime()) * mult
-      default:
-        return a.name.localeCompare(b.name) * mult
-    }
-  })
-
-  const multiCount = rows.filter((r) => r.tenants.length >= 2).length
   const basePath = '/platform/users'
   const sortProps = { basePath, currentParams: sp, sort, dir }
 
@@ -136,37 +200,25 @@ export default async function PlatformUsersPage({
         <DetailHeader
           back={{ href: '/platform', label: 'Back to platform' }}
           title="Users"
-          subtitle={`${rows.length} global identit${rows.length === 1 ? 'y' : 'ies'} · ${multiCount} in more than one tenant`}
+          subtitle={`${identityCount} global identit${identityCount === 1 ? 'y' : 'ies'} · ${multiCount} in more than one tenant`}
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <SearchInput placeholder="Search name, email, or tenant…" />
-          <div className="flex flex-wrap gap-1.5">
-            {VIEW_FILTERS.map((f) => {
-              const active = view === f.value
-              return (
-                <Link
-                  key={f.value}
-                  href={mergeHref(basePath, sp, { view: f.value === 'all' ? undefined : f.value })}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                    active
-                      ? 'border-amber-500 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/50 dark:text-amber-300'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/60',
-                  )}
-                >
-                  {f.label}
-                </Link>
-              )
-            })}
-          </div>
+          <FilterChips
+            basePath={basePath}
+            currentParams={sp}
+            paramKey="view"
+            label="View"
+            options={VIEW_FILTERS.filter((filter) => filter.value !== 'all')}
+          />
         </div>
 
-        {sorted.length === 0 ? (
+        {rows.length === 0 ? (
           <EmptyState
             title="No users match"
             description={
-              query
+              listParams.q
                 ? 'No users match your search. Try a different term or filter.'
                 : 'New users appear here once they’re invited into a tenant from its Users page.'
             }
@@ -175,7 +227,7 @@ export default async function PlatformUsersPage({
           <>
             {/* Phones: tappable cards. */}
             <MobileCardList>
-              {sorted.map((r) => (
+              {rows.map((r) => (
                 <ListCard
                   key={r.id}
                   href={`/platform/users/${r.id}`}
@@ -222,7 +274,7 @@ export default async function PlatformUsersPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {sorted.map((r) => (
+                  {rows.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
                       <td className="px-3 py-2">
                         <Link
@@ -254,6 +306,13 @@ export default async function PlatformUsersPage({
             </div>
           </>
         )}
+        <Pagination
+          basePath={basePath}
+          currentParams={sp}
+          total={total}
+          page={listParams.page}
+          perPage={listParams.perPage}
+        />
       </div>
     </PageContainer>
   )

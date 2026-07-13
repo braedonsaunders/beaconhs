@@ -18,6 +18,7 @@ export type ExtraActionHelpers = {
   values: Record<string, unknown>
   fieldPatch: Record<string, unknown>
   evalCtx: EvalContext
+  executionKey?: string
 }
 
 export type FlowSubjectAdapter = {
@@ -43,8 +44,9 @@ export type FlowSubjectAdapter = {
     description?: string | null
     severity?: 'low' | 'medium' | 'high' | 'critical'
     dueOn?: string | null
+    flowExecutionKey?: string
   }): Promise<{ ok: boolean }>
-  spawnIncident?(i: { title: string }): Promise<{ ok: boolean }>
+  spawnIncident?(i: { title: string; flowExecutionKey?: string }): Promise<{ ok: boolean }>
   /** Persist set_field patches + the non-compliant flag (forms write back to the response). */
   persistAfterRun?(p: {
     fieldPatch: Record<string, unknown>

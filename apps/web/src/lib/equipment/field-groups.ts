@@ -11,7 +11,7 @@
 // updateEquipmentField's allowlist and the record page renderer both derive
 // from this registry, so adding a field here wires both ends.
 
-export type EquipmentNativeFieldType = 'text' | 'date' | 'number' | 'select'
+type EquipmentNativeFieldType = 'text' | 'date' | 'number' | 'select'
 
 export type EquipmentNativeField = {
   /** equipment_items column, camelCase (matches Drizzle + the autosave allowlist). */
@@ -25,7 +25,7 @@ export type EquipmentNativeField = {
   numeric?: 'int' | 'decimal'
 }
 
-export type EquipmentFieldGroup = {
+type EquipmentFieldGroup = {
   key: string
   label: string
   description: string
@@ -33,7 +33,7 @@ export type EquipmentFieldGroup = {
   fields: EquipmentNativeField[]
 }
 
-export const EQUIPMENT_OWNERSHIP_OPTIONS = [
+const EQUIPMENT_OWNERSHIP_OPTIONS = [
   { value: 'owned', label: 'Owned' },
   { value: 'rented', label: 'Rented' },
   { value: 'leased', label: 'Leased' },

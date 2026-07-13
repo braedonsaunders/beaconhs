@@ -11,10 +11,10 @@ import { READ_TOOLS } from './tools'
 import { WRITE_TOOLS } from './tools-write'
 import type { AssistantToolDef, ToolResult, VisionToolData } from './types'
 
-export const ASSISTANT_TOOLS: AssistantToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS]
+const ASSISTANT_TOOLS: AssistantToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS]
 
 /** Provider-derived capabilities that change which tools are exposed this turn. */
-export type ToolCapabilities = {
+type ToolCapabilities = {
   /** The provider accepts IMAGE content in a tool result (Anthropic). When false,
    *  vision tools are withheld so the model never calls one the API would reject. */
   imageToolResults: boolean

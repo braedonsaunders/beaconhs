@@ -42,7 +42,7 @@ export type AudienceOptions = {
   orgUnits: { id: string; label: string }[]
 }
 
-export const ALL_AUDIENCE_TYPES: AudienceType[] = [
+const ALL_AUDIENCE_TYPES: AudienceType[] = [
   'everyone',
   'role',
   'trade',
@@ -226,7 +226,7 @@ export function AudiencePicker({
   )
 }
 
-export function audienceLabel(row: AudienceItem, options: AudienceOptions): string {
+function audienceLabel(row: AudienceItem, options: AudienceOptions): string {
   if (row.type === 'everyone') return 'Everyone (all active people)'
   if (row.type === 'role')
     return options.roles.find((x) => x.key === row.entityKey)?.name ?? row.entityKey
@@ -240,7 +240,7 @@ export function audienceLabel(row: AudienceItem, options: AudienceOptions): stri
 }
 
 /** One-line summary of an audience for list/detail rows. */
-export function summariseAudience(value: AudienceItem[]): string {
+function summariseAudience(value: AudienceItem[]): string {
   if (value.length === 0) return '—'
   if (value.some((a) => a.type === 'everyone')) return 'Everyone'
   const counts = new Map<AudienceType, number>()

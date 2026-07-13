@@ -13,7 +13,7 @@
 // and download keep working; they don't need Collabora).
 
 /** Office app inside Collabora: Impress (slides) or Writer (documents). */
-export type CollaboraApp = 'presentation' | 'text'
+type CollaboraApp = 'presentation' | 'text'
 
 const APP_MIME: Record<CollaboraApp, string> = {
   presentation: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -22,12 +22,12 @@ const APP_MIME: Record<CollaboraApp, string> = {
 const APP_EXT: Record<CollaboraApp, string> = { presentation: 'pptx', text: 'docx' }
 const DISCOVERY_TTL_MS = 10 * 60 * 1000
 
-export function collaboraConfigured(): boolean {
+function collaboraConfigured(): boolean {
   return !!process.env.COLLABORA_URL
 }
 
 /** Base URL of this app as reachable from the Collabora container. */
-export function wopiCallbackBase(): string {
+function wopiCallbackBase(): string {
   const base =
     process.env.COLLABORA_WOPI_URL ??
     process.env.APP_URL ??
@@ -69,10 +69,7 @@ export async function getCollaboraEditUrl(
   }
 }
 
-export function editUrlFromDiscovery(
-  xml: string,
-  app: CollaboraApp = 'presentation',
-): string | null {
+function editUrlFromDiscovery(xml: string, app: CollaboraApp = 'presentation'): string | null {
   // <app name="...mime..."><action name="edit" urlsrc="https://..."/></app>
   const apps = [...xml.matchAll(/<app[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/app>/g)]
   for (const [, name, body] of apps) {

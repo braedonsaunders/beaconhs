@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
-import { documents } from '@beaconhs/db/schema'
+import { documentCategories, documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     const orderBy =
       params.sort === 'category'
-        ? [params.dir === 'asc' ? asc(documents.category) : desc(documents.category)]
+        ? [params.dir === 'asc' ? asc(documentCategories.name) : desc(documentCategories.name)]
         : params.sort === 'status'
           ? [params.dir === 'asc' ? asc(documents.status) : desc(documents.status)]
           : params.sort === 'next_review_on'
@@ -63,8 +63,9 @@ export async function GET(req: NextRequest) {
             : [params.dir === 'asc' ? asc(documents.title) : desc(documents.title)]
 
     return tx
-      .select()
+      .select({ document: documents, categoryName: documentCategories.name })
       .from(documents)
+      .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(10_000)
@@ -99,11 +100,11 @@ export async function GET(req: NextRequest) {
   return csvResponse({
     filename: csvFilename('documents'),
     headers: selection.headers,
-    rows: rows.map((d) =>
+    rows: rows.map(({ document: d, categoryName }) =>
       selection.project([
         d.title,
         d.key,
-        d.category ?? '',
+        categoryName ?? '',
         d.status,
         d.nextReviewOn ?? '',
         d.reviewFrequencyMonths ?? '',

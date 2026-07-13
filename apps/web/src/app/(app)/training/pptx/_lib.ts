@@ -13,7 +13,7 @@ import {
 import { deleteObject } from '@beaconhs/storage'
 import type { WopiDeckTarget } from '@/lib/wopi'
 
-export type DeckMaster = {
+type DeckMaster = {
   target: WopiDeckTarget
   targetId: string
   title: string

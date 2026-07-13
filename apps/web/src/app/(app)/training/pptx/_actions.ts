@@ -14,14 +14,23 @@ import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { buildEditorUrl, getCollaboraEditUrl } from '@/lib/collabora'
 import { mintWopiToken } from '@/lib/wopi'
+import { tenantIsActive } from '@/lib/active-tenant'
 import { blankPptxBuffer } from '@/lib/pptx-blank'
 import { loadDeckMaster, parseDeckTarget } from './_lib'
 
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
-export type PptxEditorSession =
+type PptxEditorSession =
   | { ok: true; actionUrl: string; accessToken: string; accessTokenTtl: number }
-  | { ok: false; error: 'not_configured' | 'no_master' | 'unknown_target' }
+  | {
+      ok: false
+      error:
+        | 'not_configured'
+        | 'no_master'
+        | 'unknown_target'
+        | 'workspace_unavailable'
+        | 'impersonation_blocked'
+    }
 
 /**
  * Mint a WOPI session for the inline Collabora editor: resolves the deck's
@@ -33,6 +42,10 @@ export async function getPptxEditorSession(
 ): Promise<PptxEditorSession> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
+  if (ctx.impersonation) return { ok: false, error: 'impersonation_blocked' }
+  if (!(await tenantIsActive(ctx.tenantId))) {
+    return { ok: false, error: 'workspace_unavailable' }
+  }
   const target = parseDeckTarget(targetRaw)
   if (!target) return { ok: false, error: 'unknown_target' }
 
@@ -50,6 +63,7 @@ export async function getPptxEditorSession(
     target,
     targetId,
     canWrite: true,
+    activeRoleId: ctx.activeRoleId ?? null,
   })
   return {
     ok: true,

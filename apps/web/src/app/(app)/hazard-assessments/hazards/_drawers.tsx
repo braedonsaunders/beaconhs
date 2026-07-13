@@ -9,7 +9,7 @@ import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 
 type FormAction = (formData: FormData) => Promise<void>
 
-export type HazardTypeOption = { id: string; name: string }
+type HazardTypeOption = { id: string; name: string }
 
 export type EditHazardDefaults = {
   id: string

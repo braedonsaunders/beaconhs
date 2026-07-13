@@ -40,7 +40,7 @@ export type WorkflowStepProp = {
   status: 'pending' | 'signed' | 'rejected' | 'skipped'
   signedAt: string | null // ISO
   signedBy: string | null // human-readable
-  signatureDataUrl: string | null
+  signatureUrl: string | null
   comment: string | null
   rejectionReason: string | null
   rejectedAt: string | null // ISO
@@ -176,11 +176,11 @@ function WorkflowStepCard({
             Signed by <strong>{step.signedBy ?? '—'}</strong>
             {step.signedAt ? <> · {new Date(step.signedAt).toLocaleString()}</> : null}
           </div>
-          {step.signatureDataUrl ? (
+          {step.signatureUrl ? (
             <div className="rounded border border-slate-200 bg-white p-1.5 dark:border-slate-700">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={step.signatureDataUrl}
+                src={step.signatureUrl}
                 alt={`Signature for ${step.title}`}
                 className="max-h-24 w-auto"
               />

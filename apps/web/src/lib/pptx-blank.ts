@@ -2,7 +2,7 @@
 // the starting master when an author creates a new slideshow deck. Kept as
 // base64 so the web server needs no filesystem asset in the standalone build.
 
-export const BLANK_PPTX_BASE64 =
+const BLANK_PPTX_BASE64 =
   'UEsDBBQAAAAIAKVx51zGr8RntAEAALoMAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbM2XyU7DMBCG7zxFlEsOqHHZFzXlwHJiqQQ8gEmmrcGxLc+00Ldnki6q' +
   '2FKWCl8S2TPz/58nUTTpnLyUOhqDR2VNlmyl7SQCk9tCmUGW3N9dtA6TCEmaQmprIEsmgMlJd6NzN3GAERcbzOIhkTsWAvMhlBJT68BwpG99KYmXfiCczJ/k' +
   'AMR2u70vcmsIDLWo0oi7nTPoy5Gm6PyFt2uQ+EGZODqd5lVWWSyd0yqXxGExNsUbk5bt91UOhc1HJZekzgPyvU4vNS8VS/lbIOKDYSw+NH10MHjjqsqKug58' +

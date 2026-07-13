@@ -45,14 +45,13 @@ import {
 import { loadFabric } from '@beaconhs/design-studio/fabric'
 import { Badge, Button, Input, Select, Textarea, cn } from '@beaconhs/ui'
 
-export const PPI = 96
+const PPI = 96
 
-export const ZOOM_MIN = 0.1
-export const ZOOM_MAX = 4
-export const clampZoom = (z: number) =>
-  Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 1000) / 1000))
+const ZOOM_MIN = 0.1
+const ZOOM_MAX = 4
+const clampZoom = (z: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 1000) / 1000))
 
-export type ImageSource = Extract<DesignElement, { kind: 'image' }>['source']
+type ImageSource = Extract<DesignElement, { kind: 'image' }>['source']
 
 /** What a studio's data fields bind to: options, sample values, image slots. */
 export type DesignFieldCatalog = {
@@ -1111,7 +1110,7 @@ export function RailLabel({ icon, label }: { icon: ReactNode; label: string }) {
   )
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
       <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
@@ -1120,7 +1119,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   )
 }
 
-export function ElementButton({
+function ElementButton({
   label,
   icon,
   onClick,
@@ -1141,7 +1140,7 @@ export function ElementButton({
   )
 }
 
-export function LayerToggle({
+function LayerToggle({
   checked,
   label,
   onChange,
@@ -1168,7 +1167,7 @@ export function LayerToggle({
   )
 }
 
-export function ColorField({
+function ColorField({
   label,
   value,
   onChange,
@@ -1191,7 +1190,7 @@ export function ColorField({
   )
 }
 
-export function NumberField({
+function NumberField({
   label,
   value,
   step = 0.01,
@@ -1214,7 +1213,7 @@ export function NumberField({
   )
 }
 
-export function iconForElement(element: DesignElement): ReactNode {
+function iconForElement(element: DesignElement): ReactNode {
   if (element.kind === 'text') return <Type size={14} />
   if (element.kind === 'field') return <BadgeCheck size={14} />
   if (element.kind === 'image') return <ImageIcon size={14} />
@@ -1310,6 +1309,6 @@ function titleCase(value: string) {
   )
 }
 
-export function roundInches(value: number): number {
+function roundInches(value: number): number {
   return Math.round(value * 1000) / 1000
 }

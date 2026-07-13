@@ -39,9 +39,9 @@ import {
   documents,
   people,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
@@ -282,7 +282,7 @@ export default async function DocumentDetailPage({
           versionId: documentAcknowledgments.versionId,
           sessionId: documentAcknowledgments.sessionId,
           sessionTitle: documentAcknowledgmentSessions.title,
-          r2Key: attachments.r2Key,
+          signatureAttachmentId: attachments.id,
         })
         .from(documentAcknowledgments)
         .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
@@ -334,6 +334,9 @@ export default async function DocumentDetailPage({
 
   if (!data) notFound()
   const { doc, versions, acks, reviews, currentPerson, masterAtt, categories, types } = data
+  const categoryName = doc.categoryId
+    ? (categories.find((category) => category.id === doc.categoryId)?.name ?? null)
+    : null
   // Non-managers may only view PUBLISHED documents — same rule the list page
   // applies via `eq(documents.status, 'published')`.
   if (!canManage && doc.status !== 'published') notFound()
@@ -356,7 +359,7 @@ export default async function DocumentDetailPage({
     acknowledgedAt: a.acknowledgedAt.toISOString(),
     sessionId: a.sessionId,
     sessionTitle: a.sessionTitle,
-    signatureUrl: a.r2Key ? publicUrl(a.r2Key) : null,
+    signatureUrl: a.signatureAttachmentId ? attachmentUrl(a.signatureAttachmentId) : null,
   }))
   const myAck = currentPerson
     ? acks.find(
@@ -405,7 +408,7 @@ export default async function DocumentDetailPage({
             {isOverdue ? <Badge variant="destructive">Review overdue</Badge> : null}
           </div>
           <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-            {doc.category ?? 'document'} · <span className="font-mono">{doc.key}</span>
+            {categoryName ?? 'document'} · <span className="font-mono">{doc.key}</span>
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -537,10 +540,7 @@ export default async function DocumentDetailPage({
                         { label: 'Key', value: doc.key },
                         {
                           label: 'Category',
-                          value:
-                            (doc.categoryId
-                              ? categories.find((c) => c.id === doc.categoryId)?.name
-                              : doc.category) ?? '—',
+                          value: categoryName ?? '—',
                         },
                         {
                           label: 'Type',

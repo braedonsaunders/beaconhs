@@ -2,7 +2,7 @@
 // client picker + chips and the server-rendered admin page render identically.
 // Class strings are full literals so Tailwind's content scanner emits them.
 
-export type TagColorKey =
+type TagColorKey =
   | 'slate'
   | 'red'
   | 'orange'
@@ -26,7 +26,7 @@ export const TAG_COLOR_KEYS: TagColorKey[] = [
 ]
 
 /** Default when a tag has no colour set — matches the app's historic teal chip. */
-export const DEFAULT_TAG_COLOR: TagColorKey = 'teal'
+const DEFAULT_TAG_COLOR: TagColorKey = 'teal'
 
 type Swatch = {
   /** Chip surface: background + text + ring colours. */

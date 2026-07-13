@@ -19,7 +19,7 @@ import { cn } from '@beaconhs/ui'
 import type { RiskMatrixConfig } from '@beaconhs/db/schema'
 
 export type { RiskMatrixConfig }
-export type RiskCell = { score: number; label: string; color: string }
+type RiskCell = { score: number; label: string; color: string }
 /** A risk band: every cell scoring ≥ `minScore` (and below the next band) wears
  *  this label + colour. */
 export type RiskBandDef = { label: string; color: string; minScore: number }
@@ -35,10 +35,10 @@ export const MAX_AXIS = 6
 // a tenant has no saved matrix (or a malformed one), so unconfigured tenants see
 // exactly what they saw before this became editable.
 
-export const SEVERITY_LABELS = ['Negligible', 'Minor', 'Moderate', 'Major', 'Severe']
-export const LIKELIHOOD_LABELS = ['Rare', 'Unlikely', 'Possible', 'Likely', 'Almost certain']
+const SEVERITY_LABELS = ['Negligible', 'Minor', 'Moderate', 'Major', 'Severe']
+const LIKELIHOOD_LABELS = ['Rare', 'Unlikely', 'Possible', 'Likely', 'Almost certain']
 
-export const DEFAULT_BANDS: RiskBandDef[] = [
+const DEFAULT_BANDS: RiskBandDef[] = [
   { label: 'Low', color: '#10b981', minScore: 1 }, // emerald-500
   { label: 'Moderate', color: '#f59e0b', minScore: 5 }, // amber-500
   { label: 'High', color: '#f97316', minScore: 10 }, // orange-500
@@ -47,7 +47,7 @@ export const DEFAULT_BANDS: RiskBandDef[] = [
 
 /** The risk band a score falls into (highest band whose threshold it meets;
  *  the lowest band catches anything beneath the first threshold). */
-export function resolveBand(bands: RiskBandDef[], score: number): RiskBandDef {
+function resolveBand(bands: RiskBandDef[], score: number): RiskBandDef {
   const sorted = [...bands].sort((a, b) => a.minScore - b.minScore)
   let chosen = sorted[0] ?? { label: '', color: '#94a3b8', minScore: 1 }
   for (const b of sorted) if (score >= b.minScore) chosen = b
@@ -99,7 +99,7 @@ export const DEFAULT_RISK_MATRIX: RiskMatrixConfig = buildMatrix(
 
 /** The cell for a 1-based likelihood × severity pair, or null when unrated /
  *  out of range. */
-export function cellFor(
+function cellFor(
   matrix: RiskMatrixConfig,
   likelihood?: number | null,
   severity?: number | null,
@@ -109,14 +109,14 @@ export function cellFor(
 }
 
 /** Plain severity × likelihood product — the fallback score with no matrix. */
-export function riskScore(likelihood?: number | null, severity?: number | null): number | null {
+function riskScore(likelihood?: number | null, severity?: number | null): number | null {
   if (!likelihood || !severity) return null
   return likelihood * severity
 }
 
 /** Map a precomputed score (e.g. an aggregated "worst residual") onto a band by
  *  matching, then bracketing, the matrix's cell scores. */
-export function bandForScore(matrix: RiskMatrixConfig, score: number): RiskCell | null {
+function bandForScore(matrix: RiskMatrixConfig, score: number): RiskCell | null {
   const cells = Object.values(matrix.cells)
   if (cells.length === 0) return null
   const exact = cells.find((c) => c.score === score)
@@ -146,7 +146,7 @@ function normalizeMatrix(matrix: RiskMatrixConfig | null | undefined): RiskMatri
 const RiskMatrixContext = createContext<RiskMatrixConfig>(DEFAULT_RISK_MATRIX)
 
 /** The tenant's active risk matrix (falls back to the default outside a provider). */
-export function useRiskMatrix(): RiskMatrixConfig {
+function useRiskMatrix(): RiskMatrixConfig {
   return useContext(RiskMatrixContext)
 }
 
@@ -176,7 +176,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 }
 
 /** Black or white text, whichever reads on the given background. */
-export function readableTextColor(hex: string): string {
+function readableTextColor(hex: string): string {
   const { r, g, b } = hexToRgb(hex)
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
   return luminance > 0.62 ? '#0f172a' : '#ffffff'

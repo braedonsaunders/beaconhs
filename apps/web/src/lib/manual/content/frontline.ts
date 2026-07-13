@@ -130,6 +130,20 @@ Depending on the type, you list either the steps of the job or the hazards on si
 3. Have them sign in the **Signature** box.
 4. Repeat for everyone on the crew. The header shows how many signatures are collected.
 
+## Attached assessment apps
+
+Some assessment types include an **Assessment apps** section for extra company forms.
+
+1. Tap **Start** or **Continue** beside the app.
+2. Complete the form in the full-screen panel.
+3. Tap **Submit** to return to the assessment.
+
+Only published apps allowed for the role you are currently using appear. A locked assessment cannot start or continue an unfinished app. Use **View response** to open a completed record.
+
+## Set up assessment types
+
+If your role manages Hazard Assessments, open **Types** to set up the templates crews choose when they start an assessment. Use **Search assessment types…** to find one, and use **Style** to show task-based or hazard-based types.
+
 ## Finishing up
 
 1. When everything is rated and signed, tap **Lock** so nothing changes.
@@ -305,6 +319,8 @@ Open **Corrective Actions** in the left menu, or go to [Corrective actions](/cor
 
 The due date is on the row in the list and at the top of the action. Overdue actions are marked and show up in reports your supervisor sees. If you cannot make the date, say so early — do not let it quietly go overdue.
 
+Supervisors can use the report tabs to work through larger backlogs. **Aging** filters open actions by age, severity, and status. **Overdue** searches all overdue actions and filters by severity, status, or whether an owner is assigned. **By assignee** finds owners with overdue or outstanding work, and **By source** shows which records create the most actions. Click a heading to change the sort order.
+
 ## Tips
 
 - Write **Action taken** like you are explaining it to someone who was not there.
@@ -410,6 +426,8 @@ One place for all the paperwork. Nothing gets lost in a truck cab, and the offic
 - **Pinned forms** sit right in the left menu. Most companies pin **Toolbox talks** and **Lift plans** there, and may pin others.
 - **Assigned forms** show up in your [Workspace](/my) and your Inbox when someone assigns one to you, and under [My compliance](/help/compliance) if it is required.
 
+Only published forms allowed for the role you are currently using appear. If you switch roles, your pinned forms and available form records update with that role.
+
 ## Filling out a pinned form
 
 1. Tap the form in the left menu — for example **Toolbox talks**. You land on the list of past entries.
@@ -433,7 +451,7 @@ One place for all the paperwork. Nothing gets lost in a truck cab, and the offic
 
 - Required fields are marked. The form tells you what is missing when you try to submit.
 - For a toolbox talk, add everyone who attended before you submit — that is your attendance record.
-- If a form you need is not in your menu, ask your supervisor. Forms can be pinned or assigned to you.`,
+- If a form you need is not in your menu, check that you are using the right role, then ask your supervisor. The form may need to be published, allowed for your role, pinned, or assigned to you.`,
   },
   {
     slug: 'compliance',
@@ -469,6 +487,7 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 - The bar at the top shows your progress — how many items are done out of the total.
 - Each row is one obligation. The **Due** column shows the deadline; overdue items are flagged.
 - The **Completed** column shows when you finished it.
+- Use the search box or the **Status** and **Kind** filters when your list is long. Click a heading to sort it.
 
 ## Clearing an item
 
@@ -550,20 +569,10 @@ On a desktop, a summary rail on the side shows the same counts at a glance.
     title: 'Field tools',
     group: 'Everyday tasks',
     iconKey: 'wrench',
-    summary: 'Built-in calculators and utilities, like the Safe Distance pressure-test calculator.',
-    keywords: [
-      'tools',
-      'calculator',
-      'safe distance',
-      'pressure test',
-      'pneumatic test',
-      'stand off',
-      'standoff',
-      'exclusion zone',
-      'QR',
-      'utilities',
-    ],
-    body: `The Tools page collects standalone calculators and utilities — small helpers that do one field job well.
+    summary: 'Open field calculators and company-published utilities available to your role.',
+    keywords: ['tools', 'calculator', 'utilities', 'company tools', 'custom tools'],
+    requiredAnyPermission: ['tools.safe-distance.use', 'forms.response.create'],
+    body: `The Tools page collects standalone calculators and company-published utilities — small helpers that do one field job well.
 
 ## What this is for
 
@@ -573,25 +582,63 @@ Some field math is too important to do on a napkin. Tools give you a tested calc
 
 Open **Tools** in the left menu, or go to [Tools](/tools). Each tool is a card — tap one to open it.
 
-## Safe Distance (pressure-test calculator)
-
-**Safe Distance** works out the stand-off distance for a pneumatic pressure test — how far people must stay from piping under test. It uses recognized industry methods (NASA-Glenn, ASME PCC-2, and Lloyd's Register stored-energy calculations) and saves every assessment for sign-off and PDF export.
-
-1. Open [Tools](/tools) and tap **Safe Distance**.
-2. Tap **New assessment**.
-3. Enter the details of the system under test — the pipe dimensions and test pressure.
-4. Read the calculated stand-off distances and set your exclusion zone to the largest one.
-5. The assessment is saved in the list, where it can be signed off and exported as a PDF.
-
-Past assessments stay in the list on the Safe Distance page, so you can pull up the numbers used on an earlier test.
-
 ## Company-published tools
 
 Your company can build its own tools and publish them here. Those appear as extra cards on the same page — tap one and fill it in like a form. What you see depends on what your company has published.
 
 ## Tips
 
-- The calculator is only as good as the numbers you type. Double-check pressures and pipe sizes against the test plan.
+- Follow the labels and required fields inside each tool. Company tools can have different steps.
 - If a tool you expect is missing, ask your admin — company tools have to be published before they show up.`,
+  },
+  {
+    slug: 'safe-distance',
+    title: 'Safe Distance pressure-test calculator',
+    group: 'Everyday tasks',
+    iconKey: 'wrench',
+    summary: 'Calculate, save, lock, and print pneumatic pressure-test stand-off distances.',
+    keywords: [
+      'safe distance',
+      'pressure test',
+      'pneumatic test',
+      'stand off',
+      'standoff',
+      'exclusion zone',
+      'NASA',
+      'ASME',
+      'Lloyds',
+    ],
+    requiredPermission: 'tools.safe-distance.use',
+    body: `**Safe Distance** works out the stand-off distance for a pneumatic pressure test — how far people must stay from piping under test. It uses NASA-Glenn, ASME PCC-2, and Lloyd's Register calculations and keeps the assessment as a safety record.
+
+## Start an assessment
+
+1. Open [Tools](/tools) and tap **Safe Distance**.
+2. Tap **New assessment**.
+3. Enter the system name and test pressure.
+4. Tap **Add pipe** for each pipe segment. Enter its length, inside diameter, and unit.
+5. Choose the governing calculation method.
+6. Add the site, supervisor, operator, and notes when they apply.
+7. Tap **Save calculation**.
+
+The server calculates the result again when you save. This prevents a changed browser value from becoming the official result.
+
+## Review and lock the record
+
+The result shows all three calculated distances. Use the method required by your test plan and confirm the exclusion zone with the responsible supervisor.
+
+Tap **Lock** after the values have been checked. A locked assessment cannot be edited or deleted. Tap **Unlock** before making an approved correction.
+
+If somebody changes or locks the assessment while you have it open, refresh the page before trying again. The app will not overwrite the newer record.
+
+## Print or save a PDF
+
+Open the assessment and tap **Print / PDF**. Use your browser's print window to print it or save it as a PDF. Past assessments remain in the Safe Distance list.
+
+## Tips
+
+- Double-check pressure, pipe length, inside diameter, and units against the approved test plan.
+- Add every connected pipe segment before relying on the result.
+- If **Safe Distance** is missing, ask an administrator to grant **Use Safe Distance**.`,
   },
 ]

@@ -3,15 +3,10 @@
 
 import { and, eq, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
-import { sendEmail } from '@beaconhs/emails'
+import { resolveNotificationAudienceEmails } from '@beaconhs/events'
+import { enqueueEmail } from '@beaconhs/jobs'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import {
-  journalEntries,
-  orgUnits,
-  people,
-  tenantNotificationRecipients,
-  users,
-} from '@beaconhs/db/schema'
+import { journalEntries, orgUnits, people } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { getAuthorPersonId, journalCanReadAll, journalScopeWhere } from './_lib'
@@ -58,23 +53,14 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
       .limit(1)
     if (!e) return null
 
-    const recip = await tx
-      .select({ email: users.email })
-      .from(tenantNotificationRecipients)
-      .innerJoin(users, eq(users.id, tenantNotificationRecipients.userId))
-      .where(
-        and(
-          eq(tenantNotificationRecipients.tenantId, ctx.tenantId),
-          eq(tenantNotificationRecipients.category, 'journal'),
-        ),
-      )
+    const recip = await resolveNotificationAudienceEmails(tx, ctx.tenantId, 'journal')
     return { e, recip }
   })
   if (!data) return 0
 
   const to = Array.from(
     new Set(
-      [...data.recip.map((r) => r.email), data.e.supEmail, data.e.authorEmail].filter(
+      [...data.recip, data.e.supEmail, data.e.authorEmail].filter(
         (x): x is string => !!x && x.includes('@'),
       ),
     ),
@@ -107,7 +93,13 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
       }</div>
     </div>`
 
-  await sendEmail({ to, subject, html, text })
+  await enqueueEmail({
+    to,
+    subject,
+    html,
+    text,
+    meta: { tenantId: ctx.tenantId, category: 'journal' },
+  })
   await recordAudit(ctx, {
     entityType: 'journal_entry',
     entityId: entryId,

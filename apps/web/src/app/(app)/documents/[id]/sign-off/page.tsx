@@ -17,7 +17,7 @@ import {
   documents,
   people,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -81,7 +81,7 @@ export default async function SignOffPage({
           firstName: people.firstName,
           lastName: people.lastName,
           acknowledgedAt: documentAcknowledgments.acknowledgedAt,
-          r2Key: attachments.r2Key,
+          signatureAttachmentId: attachments.id,
         })
         .from(documentAcknowledgments)
         .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
@@ -93,7 +93,7 @@ export default async function SignOffPage({
         personId: r.personId,
         name: `${r.firstName} ${r.lastName}`.trim() || '(unnamed)',
         acknowledgedAt: r.acknowledgedAt.toISOString(),
-        signatureUrl: r.r2Key ? publicUrl(r.r2Key) : null,
+        signatureUrl: r.signatureAttachmentId ? attachmentUrl(r.signatureAttachmentId) : null,
       }))
     }
 

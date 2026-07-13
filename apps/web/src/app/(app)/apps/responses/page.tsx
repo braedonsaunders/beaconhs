@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { ClipboardCheck } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, type SQL } from 'drizzle-orm'
 import {
@@ -20,13 +21,13 @@ import {
   orgUnits,
   people,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -34,6 +35,8 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { formCategoryLabel } from '../_lib/category-label'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { templateAccessWhere } from '../_lib/access'
 
 export const metadata = { title: 'Form responses' }
 
@@ -61,7 +64,10 @@ export default async function FormResponsesPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  const rawStatus = pickString(sp.status)
+  const statusFilter = STATUS_OPTIONS.some((option) => option.value === rawStatus)
+    ? (rawStatus as (typeof formResponses.$inferSelect)['status'])
+    : undefined
   // Optional deep-link filter only: `?category=…` narrows to one template
   // category (e.g. links from other modules). No hardcoded category pivot.
   const categoryFilter = pickString(sp.category)
@@ -69,8 +75,10 @@ export default async function FormResponsesPage({
   // one undifferentiated dump of every app's submissions (e.g. thousands of JHSA
   // wizard responses drowning out the rest).
   const templateFilter = pickString(sp.template)
+  if (templateFilter && !isUuid(templateFilter)) notFound()
   const ctx = await requireRequestContext()
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'forms.response.read.self')
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   const { rows, total, statusCounts, templateOptions } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
@@ -81,9 +89,10 @@ export default async function FormResponsesPage({
       personCol: formResponses.subjectPersonId,
       siteCol: formResponses.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = [isNull(formResponses.deletedAt)]
+    const accessWhere = templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records')
+    const filters: SQL<unknown>[] = [isNull(formResponses.deletedAt), accessWhere]
     if (vis) filters.push(vis)
-    if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
+    if (statusFilter) filters.push(eq(formResponses.status, statusFilter))
     if (templateFilter) filters.push(eq(formResponses.templateId, templateFilter))
     if (categoryFilter) filters.push(eq(formTemplates.category, categoryFilter))
     if (params.q) {
@@ -134,9 +143,11 @@ export default async function FormResponsesPage({
     const ss = await tx
       .select({ s: formResponses.status, c: count() })
       .from(formResponses)
+      .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
       .where(
         and(
           isNull(formResponses.deletedAt),
+          accessWhere,
           templateFilter ? eq(formResponses.templateId, templateFilter) : undefined,
           vis,
         ),
@@ -148,7 +159,7 @@ export default async function FormResponsesPage({
       .select({ id: formTemplates.id, name: formTemplates.name, c: count(formResponses.id) })
       .from(formResponses)
       .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-      .where(and(isNull(formResponses.deletedAt), vis))
+      .where(and(isNull(formResponses.deletedAt), accessWhere, vis))
       .groupBy(formTemplates.id, formTemplates.name)
       .orderBy(desc(count(formResponses.id)))
     return {

@@ -14,9 +14,10 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { createWalletDesignDocument, renderDesignDocumentHtml } from '@beaconhs/design-studio'
-import { publicUrl } from '@beaconhs/storage'
+import { presignGet } from '@beaconhs/storage'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { resolveCredentialOutput } from '@/lib/credential-designs'
+import { activeTenantPredicate } from '@/lib/active-tenant'
 import { EXPIRING_DAYS, isoDaysFromNow, standingFor, todayIsoDate } from '../../_format'
 import { factDay, PublicCardNotFound, PublicCardPage, verifyQrDataUrl } from '../../_card-page'
 
@@ -40,7 +41,7 @@ export default async function VerifyPersonSkillPage({
       .from(people)
       .leftJoin(attachments, eq(attachments.id, people.photoAttachmentId))
       .innerJoin(tenants, eq(tenants.id, people.tenantId))
-      .where(and(eq(people.badgeToken, token), isNull(people.deletedAt)))
+      .where(and(eq(people.badgeToken, token), isNull(people.deletedAt), activeTenantPredicate()))
       .limit(1)
     if (!row) return null
 
@@ -98,7 +99,9 @@ export default async function VerifyPersonSkillPage({
     tenantLogoUrl: data.tenant.branding.logoUrl,
     recipientFullName: `${data.person.firstName} ${data.person.lastName}`,
     recipientEmployeeNo: data.person.employeeNo,
-    recipientPhotoUrl: data.photoKey ? publicUrl(data.photoKey) : null,
+    recipientPhotoUrl: data.photoKey
+      ? await presignGet({ key: data.photoKey, expiresInSeconds: 300 })
+      : null,
     credentialName: data.skillName,
     credentialCode: data.skillCode,
     authorityName: data.authorityName,

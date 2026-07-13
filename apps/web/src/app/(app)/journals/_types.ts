@@ -3,7 +3,7 @@
 
 export type JournalStatus = 'draft' | 'submitted' | 'archived'
 export type JournalDefinition = 'worker' | 'supervisor'
-export type JournalAssignmentFrequency = 'day' | 'week' | 'month' | 'quarter' | 'year'
+type JournalAssignmentFrequency = 'day' | 'week' | 'month' | 'quarter' | 'year'
 // The compose workspace is self-scoped (one author), so there is no "Person"
 // grouping — cross-person browsing lives in /journals/records.
 export type GroupBy = 'date' | 'site' | 'topic'
@@ -95,7 +95,7 @@ export type AuthorRef = {
 }
 
 /** A filter facet (site / author) with the count of entries in the caller's scope. */
-export type JournalFacetOption = { id: string; name: string; count: number }
+type JournalFacetOption = { id: string; name: string; count: number }
 
 /** Scoped facet options + status counts for the records list filter chips. */
 export type JournalRecordsFacets = {
@@ -107,7 +107,7 @@ export type JournalRecordsFacets = {
 /** A tag offered in the entry picker — name + optional palette colour. */
 export type TagSuggestion = { name: string; color: string | null }
 
-export type WorkspaceCounts = {
+type WorkspaceCounts = {
   total: number
   drafts: number
   mine: number

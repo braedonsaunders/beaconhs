@@ -1,11 +1,12 @@
 // CSV export of a Card's result (flat or pivot), under the caller's RLS.
 
-import { runBhql } from '@beaconhs/analytics/server'
 import type { BhqlResult } from '@beaconhs/analytics'
+import { runAuthorizedBhql } from '@/lib/analytics-access'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { canViewInsights } from '../../../_access'
 import { loadCard } from '../../_data'
+import { isTrustedSystemCard } from '../../../_system-cards'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const card = await loadCard(ctx, id)
   if (!card) return new Response('Not found', { status: 404 })
 
-  const result = await ctx.db((tx) => runBhql(tx, card.query, { maxRows: 50_000 }))
+  const result = await runAuthorizedBhql(ctx, card.query, {
+    maxRows: 50_000,
+    trustedSystemCard: isTrustedSystemCard(card),
+  })
   const csv = toCsv(result)
   const rowCount = result.shape === 'flat' ? result.rows.length : result.rowKeys.length
   await recordAudit(ctx, {

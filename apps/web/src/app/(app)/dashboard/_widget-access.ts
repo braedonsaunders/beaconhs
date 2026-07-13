@@ -63,12 +63,12 @@ function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly s
 
 export function canPermissionSetViewInsights(permissions: Iterable<string>): boolean {
   const set = permissions instanceof Set ? permissions : new Set(permissions)
-  return hasAnyPermission(set, ['insights.read', 'reports.read', 'dashboards.read'])
+  return hasAnyPermission(set, ['insights.read'])
 }
 
 export function canPermissionSetPublishInsights(permissions: Iterable<string>): boolean {
   const set = permissions instanceof Set ? permissions : new Set(permissions)
-  return hasAnyPermission(set, ['insights.publish', 'reports.builder'])
+  return hasAnyPermission(set, ['insights.publish'])
 }
 
 export function canPermissionSetSeeWidget(permissions: Iterable<string>, id: string): boolean {

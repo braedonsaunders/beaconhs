@@ -12,7 +12,7 @@ const TABS = [
   { key: 'mine', label: 'Mine', href: '/compliance/mine' },
 ]
 
-export type ComplianceTab = 'overview' | 'obligations' | 'by-person' | 'aging' | 'expiring' | 'mine'
+type ComplianceTab = 'overview' | 'obligations' | 'by-person' | 'aging' | 'expiring' | 'mine'
 
 // `canReadAll` = the viewer holds `compliance.read` (the org-wide hub). Without
 // it, a person only ever sees their own obligations, so we hide the org tabs and

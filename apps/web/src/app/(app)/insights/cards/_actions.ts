@@ -3,17 +3,19 @@
 import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import {
+  parseBhqlQuery,
   resultShapeOf,
   suggestViz,
   type BhqlResult,
   type ResultColumn,
   type VizKey,
 } from '@beaconhs/analytics'
-import { runBhql, validateBhqlWithCustomFields } from '@beaconhs/analytics/server'
+import { runBhql } from '@beaconhs/analytics/server'
 import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
+import { resolveAnalyticsAccess, runAuthorizedBhql } from '@/lib/analytics-access'
 import { canCreateInsights, canPublishInsights } from '../_access'
 import { generateBhqlFromPrompt } from './_lib/ai-card'
 
@@ -39,10 +41,12 @@ export async function previewCard(payload: {
 }): Promise<Ok<{ result: BhqlResult; suggestedViz: VizKey }> | Err> {
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
+  if (!payload || typeof payload !== 'object') return { ok: false, error: 'Invalid query.' }
   try {
     const result = await ctx.db(async (tx) => {
-      const query = await validateBhqlWithCustomFields(tx, payload.query)
-      return runBhql(tx, query, { maxRows: 1000 })
+      const access = await resolveAnalyticsAccess(ctx, tx)
+      const query = parseBhqlQuery(payload.query, access.entityMap)
+      return runBhql(tx, query, { maxRows: 1000, entityMap: access.entityMap })
     })
     const cols = columnsForSuggest(result)
     const suggestedViz = suggestViz(
@@ -63,7 +67,10 @@ export async function generateCard(
 ): Promise<Ok<{ query: BhqlQuery; suggestedViz: VizKey }> | Err> {
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
-  const trimmed = (prompt ?? '').trim()
+  if (typeof prompt !== 'string' || prompt.length > 8_000) {
+    return { ok: false, error: 'The request is invalid or too large.' }
+  }
+  const trimmed = prompt.trim()
   if (trimmed.length < 3) {
     return { ok: false, error: 'Describe the chart — e.g. “incidents by month this year”.' }
   }
@@ -83,7 +90,7 @@ export async function generateCard(
   // live preview re-suggests once the query is hydrated.
   let suggestedViz: VizKey = 'table'
   try {
-    const result = await ctx.db((tx) => runBhql(tx, query, { maxRows: 1000 }))
+    const result = await runAuthorizedBhql(ctx, query, { maxRows: 1000 })
     const cols = columnsForSuggest(result)
     suggestedViz = suggestViz(
       resultShapeOf(result),
@@ -109,7 +116,10 @@ export async function createCard(input: {
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
   let query
   try {
-    query = await ctx.db((tx) => validateBhqlWithCustomFields(tx, input.query))
+    query = await ctx.db(async (tx) => {
+      const access = await resolveAnalyticsAccess(ctx, tx)
+      return parseBhqlQuery(input.query, access.entityMap)
+    })
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }
@@ -172,7 +182,10 @@ export async function updateCard(input: {
   if (!(await ownedCard(ctx, input.id))) return { ok: false, error: 'Card not found.' }
   let query
   try {
-    query = await ctx.db((tx) => validateBhqlWithCustomFields(tx, input.query))
+    query = await ctx.db(async (tx) => {
+      const access = await resolveAnalyticsAccess(ctx, tx)
+      return parseBhqlQuery(input.query, access.entityMap)
+    })
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }

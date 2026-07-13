@@ -4,12 +4,13 @@ import { and, asc, desc, eq, ilike, isNull, type SQL } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import {
   formResponses,
+  formResponseStatus,
   formTemplateVersions,
   formTemplates,
   orgUnits,
   people,
   tenantUsers,
-  user,
+  users as user,
   type FormSchemaV1,
 } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
@@ -17,8 +18,10 @@ import { responsePayload } from '../../_lib/response-payload'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { csvFilename, csvResponse } from '@/lib/csv'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { selectCsvColumns } from '@/lib/export-columns'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
+import { templateAccessWhere } from '../../_lib/access'
 import {
   buildResponseExportColumns,
   valueForResponseExportColumn,
@@ -38,9 +41,22 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status)
+  const rawStatus = pickString(sp.status)
+  if (
+    rawStatus &&
+    !formResponseStatus.enumValues.includes(
+      rawStatus as (typeof formResponseStatus.enumValues)[number],
+    )
+  ) {
+    return Response.json({ error: 'Invalid response status filter' }, { status: 400 })
+  }
+  const statusFilter = rawStatus as (typeof formResponseStatus.enumValues)[number] | undefined
   const templateFilter = pickString(sp.template)
+  if (templateFilter && !isUuid(templateFilter)) {
+    return Response.json({ error: 'Invalid app filter' }, { status: 400 })
+  }
   const ctx = await requireExportContext()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   // Read-tier floor: a caller with no forms.response read permission can never
   // export the response set (mirrors the list page's per-user visibility).
   if (
@@ -63,11 +79,11 @@ export async function GET(req: NextRequest) {
       personCol: formResponses.subjectPersonId,
       siteCol: formResponses.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = [isNull(formResponses.deletedAt)]
+    const accessWhere = templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records')
+    const filters: SQL<unknown>[] = [isNull(formResponses.deletedAt), accessWhere]
     if (vis) filters.push(vis)
-    if (statusFilter) filters.push(eq(formResponses.status, statusFilter as any))
+    if (statusFilter) filters.push(eq(formResponses.status, statusFilter))
     if (templateFilter) filters.push(eq(formResponses.templateId, templateFilter))
-    filters.push(isNull(formTemplates.deletedAt))
     if (params.q) {
       const term = `%${params.q}%`
       const cond = ilike(formTemplates.name, term)
@@ -111,7 +127,8 @@ export async function GET(req: NextRequest) {
       ? await tx
           .select({ schema: formTemplateVersions.schema })
           .from(formTemplateVersions)
-          .where(eq(formTemplateVersions.templateId, templateFilter))
+          .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+          .where(and(eq(formTemplateVersions.templateId, templateFilter), accessWhere))
           .orderBy(asc(formTemplateVersions.version))
       : []
 

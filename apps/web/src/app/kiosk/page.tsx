@@ -3,9 +3,9 @@
 // no logged-in user, no tenant cookie). Authenticates by tenant slug in
 // ?t=<slug> + a tenant-configured kiosk PIN.
 
-import { sql } from 'drizzle-orm'
-import { db } from '@beaconhs/db'
+import { db, type Database } from '@beaconhs/db'
 import { KioskClient } from './kiosk-client'
+import { resolveActiveTenant } from '@/lib/active-tenant'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Kiosk · sign in/out' }
@@ -40,44 +40,23 @@ export default async function KioskPage({
 
   // The kiosk is unauthenticated. Resolve only non-sensitive tenant chrome here;
   // roster/site/crew data is loaded by a PIN-verified server action.
-  const data = await db.transaction(async (tx) => {
-    const tenantRows = await tx.execute(
-      sql`
-        SELECT id, name, slug, kiosk_pin IS NOT NULL AS kiosk_enabled
-        FROM tenants
-        WHERE slug = ${slug}
-        LIMIT 1
-      `,
-    )
-    const tenant = (
-      tenantRows as unknown as {
-        id: string
-        name: string
-        slug: string
-        kiosk_enabled: boolean
-      }[]
-    )[0]
-    if (!tenant) return null
-    return { tenant, kioskEnabled: tenant.kiosk_enabled }
-  })
+  const tenant = await db.transaction((tx) =>
+    resolveActiveTenant(tx as unknown as Database, { slug }),
+  )
 
-  if (!data) {
+  if (!tenant) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-900 p-6 text-white">
         <div className="max-w-md rounded-2xl bg-slate-800 p-8 text-center">
-          <h1 className="text-xl font-semibold">Tenant not found</h1>
+          <h1 className="text-xl font-semibold">Kiosk unavailable</h1>
           <p className="mt-2 text-sm text-slate-400">
-            No tenant matches slug{' '}
-            <code className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-amber-400">
-              {slug}
-            </code>
-            .
+            This workspace is unavailable. Ask your administrator to check its status.
           </p>
         </div>
       </div>
     )
   }
-  if (!data.kioskEnabled) {
+  if (!tenant.kioskPin) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-900 p-6 text-white">
         <div className="max-w-md rounded-2xl bg-slate-800 p-8 text-center">
@@ -88,5 +67,5 @@ export default async function KioskPage({
     )
   }
 
-  return <KioskClient tenantId={data.tenant.id} tenantName={data.tenant.name} />
+  return <KioskClient tenantId={tenant.id} tenantName={tenant.name} />
 }

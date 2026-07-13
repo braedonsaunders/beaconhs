@@ -1,8 +1,8 @@
-import { auditLog, user } from '@beaconhs/db/schema'
+import { auditLog, users as user } from '@beaconhs/db/schema'
 import { and, desc, eq } from 'drizzle-orm'
 import type { RequestContext } from '@beaconhs/tenant'
 
-export type AuditAction =
+type AuditAction =
   | 'create'
   | 'update'
   | 'delete'
@@ -28,6 +28,7 @@ export async function recordAudit(
     before?: Record<string, unknown> | null
     after?: Record<string, unknown> | null
     metadata?: Record<string, unknown>
+    dedupKey?: string
   },
 ): Promise<void> {
   // Dual-attribution: while an admin is impersonating, every write is performed
@@ -55,19 +56,23 @@ export async function recordAudit(
   const summary = imp && evt.summary ? `[impersonated] ${evt.summary}` : evt.summary
   const actorUserId = isSyntheticApiActor ? null : ctx.userId
 
-  await ctx.db((tx) =>
-    tx.insert(auditLog).values({
+  await ctx.db((tx) => {
+    const insert = tx.insert(auditLog).values({
       tenantId: ctx.tenantId,
       actorUserId,
       entityType: evt.entityType,
       entityId: evt.entityId,
       action: evt.action,
+      dedupKey: evt.dedupKey,
       summary,
       before: evt.before ?? null,
       after: evt.after ?? null,
       metadata,
-    }),
-  )
+    })
+    return evt.dedupKey
+      ? insert.onConflictDoNothing({ target: [auditLog.tenantId, auditLog.dedupKey] })
+      : insert
+  })
 }
 
 export async function recentActivityForEntity(

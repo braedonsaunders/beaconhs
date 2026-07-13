@@ -95,8 +95,11 @@ function PdfPage({
 }
 
 export function PdfViewer({ url, className }: { url: string; className?: string }) {
-  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [resource, setResource] = useState<{
+    url: string
+    doc: PDFDocumentProxy | null
+    error: string | null
+  }>({ url, doc: null, error: null })
   const [zoom, setZoom] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -104,21 +107,28 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
 
   useEffect(() => {
     let cancelled = false
-    setDoc(null)
-    setError(null)
     void (async () => {
       try {
         const pdfjs = await loadPdfjs()
         const loaded = await pdfjs.getDocument({ url }).promise
-        if (!cancelled) setDoc(loaded)
+        if (!cancelled) setResource({ url, doc: loaded, error: null })
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the PDF')
+        if (!cancelled) {
+          setResource({
+            url,
+            doc: null,
+            error: err instanceof Error ? err.message : 'Could not load the PDF',
+          })
+        }
       }
     })()
     return () => {
       cancelled = true
     }
   }, [url])
+
+  const doc = resource.url === url ? resource.doc : null
+  const error = resource.url === url ? resource.error : null
 
   // Page width tracks the container (minus padding), scaled by zoom.
   useEffect(() => {

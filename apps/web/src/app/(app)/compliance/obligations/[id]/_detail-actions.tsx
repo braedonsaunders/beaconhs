@@ -12,6 +12,7 @@ export function ObligationDetailActions({
   enabled,
   canManage,
   canEdit,
+  editHref,
 }: {
   id: string
   enabled: boolean
@@ -19,6 +20,7 @@ export function ObligationDetailActions({
   // The unified form can only author the KIND_META kinds; ETL-only source
   // modules are manageable (pause/delete) but not editable through the flyout.
   canEdit: boolean
+  editHref: string
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -28,7 +30,7 @@ export function ObligationDetailActions({
   return (
     <div className="flex gap-2">
       {canEdit ? (
-        <Link href={`/compliance/obligations/${id}?drawer=edit`} scroll={false}>
+        <Link href={editHref as never} scroll={false}>
           <Button variant="outline" disabled={pending}>
             Edit
           </Button>

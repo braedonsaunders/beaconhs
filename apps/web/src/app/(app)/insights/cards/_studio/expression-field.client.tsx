@@ -9,7 +9,7 @@ import { useMemo, useRef, useState } from 'react'
 import { EXPR_FN_HELP, EXPR_SCALAR_FNS, parseExpression } from '@beaconhs/analytics'
 import { cn } from '@beaconhs/ui'
 
-export type ExprField = { value: string; label: string; group?: string | null }
+type ExprField = { value: string; label: string; group?: string | null }
 
 const FN_PALETTE = [
   'count',
@@ -53,7 +53,6 @@ export function ExpressionField({
       m.set(exprLabel(f).trim().toLowerCase(), f.value)
     }
     return (label: string) => m.get(label.trim().toLowerCase()) ?? null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields])
 
   const parsed = useMemo(

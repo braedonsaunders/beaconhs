@@ -10,14 +10,14 @@ import { tenants } from '@beaconhs/db/schema'
  * level. Keep the keys untouched (DB enum `org_unit_level`, level filters,
  * audit `level` fields); only the display labels change here.
  */
-export type OrgLevel = 'customer' | 'project' | 'site' | 'area'
+type OrgLevel = 'customer' | 'project' | 'site' | 'area'
 
-export const ORG_LEVELS = ['customer', 'project', 'site', 'area'] as const
+const ORG_LEVELS = ['customer', 'project', 'site', 'area'] as const
 
 export type TenantHierarchy = Record<OrgLevel, boolean>
 
 /** Mirrors the column default in `tenants.hierarchy`. */
-export const DEFAULT_HIERARCHY: TenantHierarchy = {
+const DEFAULT_HIERARCHY: TenantHierarchy = {
   customer: true,
   project: true,
   site: true,

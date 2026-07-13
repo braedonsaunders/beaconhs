@@ -1,8 +1,7 @@
 import 'server-only'
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
-  formAutomations,
   formResponseScores,
   formResponses,
   formTemplateVersions,
@@ -10,15 +9,15 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { extractScores, validateResponse, type ValidationError } from '@beaconhs/forms-core'
-import { emitFormSubmitted } from '@beaconhs/integrations'
+import { recordDomainEvent } from '@beaconhs/events'
+import { formSubmittedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
+import { canEditResponsePayload } from '@/app/(app)/apps/_lib/access-policy'
 import { computeFormScore, type ComputeFormScoreResult } from '@/app/(app)/apps/_lib/score-router'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
-import { sendFormResponseRecapEmail } from '@/app/(app)/apps/_lib/recap-email'
-import { runOnSubmitAutomations } from '@/app/(app)/apps/_lib/run-automations'
 import { recordAudit } from '@/lib/audit'
 
-export type SubmitFormResponseLifecycleInput = {
+type SubmitFormResponseLifecycleInput = {
   templateId: string
   data: Record<string, unknown>
   siteOrgUnitId?: string | null
@@ -26,7 +25,7 @@ export type SubmitFormResponseLifecycleInput = {
   responseId?: string | null
 }
 
-export type SubmitFormResponseLifecycleResult =
+type SubmitFormResponseLifecycleResult =
   | {
       ok: true
       responseId: string
@@ -62,13 +61,77 @@ export async function submitFormResponseLifecycle(
   args: SubmitFormResponseLifecycleInput,
 ): Promise<SubmitFormResponseLifecycleResult> {
   const result = await ctx.db(async (tx) => {
-    const [version] = await tx
-      .select()
-      .from(formTemplateVersions)
-      .where(eq(formTemplateVersions.templateId, args.templateId))
-      .orderBy(desc(formTemplateVersions.version))
-      .limit(1)
-    if (!version) return { ok: false as const, errors: [{ fieldId: '', message: 'No version' }] }
+    const [existing] = args.responseId
+      ? await tx
+          .select({
+            id: formResponses.id,
+            templateId: formResponses.templateId,
+            templateVersionId: formResponses.templateVersionId,
+            status: formResponses.status,
+            locked: formResponses.locked,
+            submittedBy: formResponses.submittedBy,
+            siteOrgUnitId: formResponses.siteOrgUnitId,
+            subjectPersonId: formResponses.subjectPersonId,
+          })
+          .from(formResponses)
+          .where(
+            and(
+              eq(formResponses.id, args.responseId),
+              eq(formResponses.tenantId, ctx.tenantId),
+              isNull(formResponses.deletedAt),
+            ),
+          )
+          .limit(1)
+      : []
+
+    if (args.responseId && !existing) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: '', message: 'Response not found' }],
+      }
+    }
+    if (existing && existing.templateId !== args.templateId) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: '', message: 'Response belongs to a different template' }],
+      }
+    }
+    if (existing && existing.status !== 'draft' && existing.status !== 'in_progress') {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: '', message: 'Response was already submitted' }],
+      }
+    }
+    if (existing && !canEditResponsePayload(ctx, existing)) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: '', message: 'You do not have permission to submit this response' }],
+      }
+    }
+
+    const [version] = existing
+      ? await tx
+          .select()
+          .from(formTemplateVersions)
+          .where(
+            and(
+              eq(formTemplateVersions.id, existing.templateVersionId),
+              eq(formTemplateVersions.templateId, args.templateId),
+            ),
+          )
+          .limit(1)
+      : await tx
+          .select()
+          .from(formTemplateVersions)
+          .where(eq(formTemplateVersions.templateId, args.templateId))
+          .orderBy(desc(formTemplateVersions.version))
+          .limit(1)
+    if (!version) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: '', message: existing ? 'Response version not found' : 'No version' }],
+      }
+    }
 
     const [tmpl] = await tx
       .select({ category: formTemplates.category, name: formTemplates.name })
@@ -89,59 +152,59 @@ export async function submitFormResponseLifecycle(
     const submittedAt = new Date()
 
     let resp: { id: string } | undefined = undefined
-    if (args.responseId) {
-      const [existing] = await tx
-        .select({
-          id: formResponses.id,
-          templateId: formResponses.templateId,
-        })
-        .from(formResponses)
-        .where(and(eq(formResponses.id, args.responseId), eq(formResponses.tenantId, ctx.tenantId)))
-        .limit(1)
-
-      if (existing && existing.templateId !== args.templateId) {
-        return {
-          ok: false as const,
-          errors: [{ fieldId: '', message: 'Response belongs to a different template' }],
-        }
-      }
-
+    if (args.responseId && existing) {
       // A response that already left draft/in_progress must never fall through
       // to the insert branch — a double-click or replayed API POST would
       // duplicate the record and re-fire every submit side effect. The status
       // predicate on the UPDATE makes the transition atomic, so concurrent
       // submits of the same draft can only ever fire the lifecycle once.
-      if (existing) {
-        const [updated] = await tx
-          .update(formResponses)
-          .set({
-            status: finalStatus,
-            siteOrgUnitId: args.siteOrgUnitId ?? null,
-            subjectPersonId: args.subjectPersonId ?? null,
-            submittedBy: ctx.membership?.id ?? null,
-            submittedAt,
-            data: args.data,
-            complianceScore: String(verdict.score),
-            complianceStatus: verdict.status,
-            draftData: null,
-            draftUpdatedAt: null,
-            draftStepIndex: null,
-          })
-          .where(
-            and(
-              eq(formResponses.id, args.responseId),
-              inArray(formResponses.status, ['draft', 'in_progress']),
-            ),
-          )
-          .returning({ id: formResponses.id })
-        if (!updated) {
-          return {
-            ok: false as const,
-            errors: [{ fieldId: '', message: 'Response was already submitted' }],
-          }
+      const ownerUnchanged =
+        existing.submittedBy === null
+          ? isNull(formResponses.submittedBy)
+          : eq(formResponses.submittedBy, existing.submittedBy)
+      const [updated] = await tx
+        .update(formResponses)
+        .set({
+          status: finalStatus,
+          siteOrgUnitId:
+            args.siteOrgUnitId === undefined
+              ? existing.siteOrgUnitId
+              : (args.siteOrgUnitId ?? null),
+          subjectPersonId:
+            args.subjectPersonId === undefined
+              ? existing.subjectPersonId
+              : (args.subjectPersonId ?? null),
+          // A reviewer may finalize somebody else's draft, but that must not
+          // rewrite who originally submitted it. An unowned system draft is
+          // claimed only when a real tenant member performs the submission.
+          submittedBy: existing.submittedBy ?? ctx.membership?.id ?? null,
+          submittedAt,
+          data: args.data,
+          complianceScore: String(verdict.score),
+          complianceStatus: verdict.status,
+          draftData: null,
+          draftUpdatedAt: null,
+          draftStepIndex: null,
+        })
+        .where(
+          and(
+            eq(formResponses.id, args.responseId),
+            eq(formResponses.templateId, args.templateId),
+            eq(formResponses.templateVersionId, existing.templateVersionId),
+            inArray(formResponses.status, ['draft', 'in_progress']),
+            eq(formResponses.locked, false),
+            isNull(formResponses.deletedAt),
+            ownerUnchanged,
+          ),
+        )
+        .returning({ id: formResponses.id })
+      if (!updated) {
+        return {
+          ok: false as const,
+          errors: [{ fieldId: '', message: 'Response changed before it could be submitted' }],
         }
-        resp = updated
       }
+      resp = updated
     }
 
     if (!resp) {
@@ -165,6 +228,11 @@ export async function submitFormResponseLifecycle(
     }
 
     if (resp) {
+      if (existing) {
+        // Inline editing may already have materialized score rows. Submission
+        // replaces that snapshot; it must not append duplicate field scores.
+        await tx.delete(formResponseScores).where(eq(formResponseScores.responseId, resp.id))
+      }
       const scores = extractScores(version.schema, args.data)
       if (scores.length > 0) {
         await tx.insert(formResponseScores).values(
@@ -196,54 +264,44 @@ export async function submitFormResponseLifecycle(
         submitterPersonId: submitterPerson?.id ?? null,
       })
 
-      const monitor = version.schema.monitor
-      if (monitor?.enabled) {
-        const [flowStart] = await tx
-          .select({ id: formAutomations.id })
-          .from(formAutomations)
-          .where(
-            and(
-              eq(formAutomations.templateId, args.templateId),
-              eq(formAutomations.enabled, true),
-              sql`${formAutomations.graph}::text like '%start_monitored_session%'`,
-            ),
-          )
-          .limit(1)
-        if (!flowStart) {
-          const numField = (key: string | undefined, fallback: number): number => {
-            if (key) {
-              const value = Number(args.data[key])
-              if (Number.isFinite(value) && value > 0) return value
-            }
-            return fallback
-          }
-          const interval = numField(monitor.intervalFieldKey, monitor.intervalMinutes)
-          const grace =
-            monitor.graceFieldKey && Number.isFinite(Number(args.data[monitor.graceFieldKey]))
-              ? Math.max(0, Number(args.data[monitor.graceFieldKey]))
-              : monitor.graceMinutes
-          const duration = numField(monitor.durationFieldKey, monitor.durationMinutes ?? 0)
-          await tx
-            .update(formResponses)
-            .set({
-              monitorStatus: 'active',
-              checkinIntervalMinutes: interval,
-              gracePeriodMinutes: grace,
-              monitorRequireGeo: !!monitor.requireGeo,
-              lastCheckinAt: submittedAt,
-              nextCheckinDueAt: new Date(submittedAt.getTime() + interval * 60_000),
-              expectedEndAt:
-                duration > 0 ? new Date(submittedAt.getTime() + duration * 60_000) : null,
-            })
-            .where(eq(formResponses.id, resp.id))
-        }
-      }
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'form.submitted',
+        subjectId: resp.id,
+        dedupKey: `form.submitted:${resp.id}:${submittedAt.toISOString()}`,
+        payload: {
+          integration: formSubmittedEvent(ctx.tenantId, {
+            id: resp.id,
+            templateId: args.templateId,
+            templateName: tmpl?.name ?? null,
+            status: verdict.status,
+            submittedAt,
+            complianceScore: verdict.score,
+            complianceStatus: verdict.status,
+            data: args.data,
+          }),
+          web: {
+            kind: 'form_submitted',
+            subjectId: resp.id,
+            templateId: args.templateId,
+            data: args.data,
+            score: verdict.score,
+            status: verdict.status,
+            recap: true,
+            actor: {
+              userId: ctx.userId,
+              membershipId: ctx.membership?.id ?? null,
+              personId: ctx.personId,
+              timezone: ctx.timezone,
+            },
+          },
+        },
+      })
     }
 
     return {
       ok: true as const,
       responseId: resp?.id,
-      templateName: tmpl?.name ?? null,
       verdict,
       submittedAt,
     }
@@ -266,39 +324,6 @@ export async function submitFormResponseLifecycle(
       failedFieldKeys: result.verdict.failedFieldKeys,
     },
   })
-
-  try {
-    await sendFormResponseRecapEmail(ctx, result.responseId)
-  } catch {
-    // Best-effort only.
-  }
-
-  try {
-    await runOnSubmitAutomations(ctx, {
-      templateId: args.templateId,
-      responseId: result.responseId,
-      data: args.data,
-      score: result.verdict.score,
-      status: result.verdict.status,
-    })
-  } catch {
-    // Best-effort only.
-  }
-
-  try {
-    await emitFormSubmitted(ctx, {
-      id: result.responseId,
-      templateId: args.templateId,
-      templateName: result.templateName,
-      status: result.verdict.status,
-      submittedAt: result.submittedAt,
-      complianceScore: result.verdict.score,
-      complianceStatus: result.verdict.status,
-      data: args.data,
-    })
-  } catch {
-    // Best-effort only.
-  }
 
   return {
     ok: true,

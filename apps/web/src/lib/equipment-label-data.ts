@@ -16,11 +16,11 @@ import type { EquipmentLabelDesignData } from '@beaconhs/design-studio'
 import type { SQL } from 'drizzle-orm'
 import { appBaseUrl } from '@/lib/app-base-url'
 
-export function equipmentScanUrl(qrToken: string): string {
+function equipmentScanUrl(qrToken: string): string {
   return `${appBaseUrl()}/equipment/scan/${qrToken}`
 }
 
-export async function equipmentQrDataUrl(scanUrl: string): Promise<string> {
+async function equipmentQrDataUrl(scanUrl: string): Promise<string> {
   // margin 1 keeps a quiet zone inside the label's white QR panel so thermal
   // prints stay scannable edge-to-edge.
   return QRCode.toDataURL(scanUrl, {

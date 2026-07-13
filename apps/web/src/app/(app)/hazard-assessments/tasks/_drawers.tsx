@@ -7,7 +7,7 @@ import { RiskMatrixField } from '../_risk'
 
 type FormAction = (formData: FormData) => Promise<void>
 
-export type HazardOption = {
+type HazardOption = {
   value: string
   label: string
   sublabel?: string

@@ -1,9 +1,10 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { Camera, FileUp, Loader2, Trash2, X } from 'lucide-react'
+import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
+import { RawImage } from '@/components/raw-image'
 
 export type AttachedFile = {
   attachmentId: string
@@ -60,11 +61,7 @@ export function FileUpload({
       return null
     }
     const fin = await finalizeUpload({
-      kind,
-      key: req.key,
-      filename: file.name,
-      contentType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
+      uploadId: req.uploadId,
     })
     if (!fin.ok) {
       setError(fin.error)
@@ -74,7 +71,7 @@ export function FileUpload({
       attachmentId: fin.attachmentId,
       filename: file.name,
       contentType: file.type || 'application/octet-stream',
-      url: req.publicUrl,
+      url: fin.url,
     }
   }
 
@@ -148,7 +145,11 @@ export function FileUpload({
             >
               <div className="flex min-w-0 items-center gap-2">
                 {f.contentType.startsWith('image/') ? (
-                  <img src={f.url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                  <RawImage
+                    src={f.url}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded object-cover"
+                  />
                 ) : (
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                     <FileUp size={14} />

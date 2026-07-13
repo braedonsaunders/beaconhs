@@ -6,7 +6,7 @@ import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/compone
 // record page (id present) and the lazy /new page (id omitted; the row is
 // created on first edit via LazyRecordProvider).
 
-export type ClassFieldValues = {
+type ClassFieldValues = {
   courseId: string
   title: string
   startsAt: string // datetime-local string
@@ -17,7 +17,7 @@ export type ClassFieldValues = {
   notes: string | null
 }
 
-export type ClassFieldOptions = {
+type ClassFieldOptions = {
   courses: { id: string; name: string; code: string }[]
   sites: { id: string; name: string }[]
   instructors: {

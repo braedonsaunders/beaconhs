@@ -115,9 +115,9 @@ export function JournalWorkspace({
     }
   }
 
-  function changeFilters(partial: Partial<JournalFilters>) {
+  const changeFilters = useCallback((partial: Partial<JournalFilters>) => {
     setFilters((f) => ({ ...f, ...partial }))
-  }
+  }, [])
 
   function newEntry() {
     if (author) return // author flyout is review/edit only — no create-as-other
@@ -169,6 +169,7 @@ export function JournalWorkspace({
 
   const sidebar = (
     <SidebarTree
+      key={`${groupBy}:${data.tree[0]?.key ?? 'empty'}`}
       data={data}
       groupBy={groupBy}
       filters={filters}
@@ -220,6 +221,7 @@ export function JournalWorkspace({
         <div className="min-h-0 flex-1">
           {entry ? (
             <EditorPane
+              key={entry.id}
               entry={entry}
               sites={data.sites}
               people={data.people}

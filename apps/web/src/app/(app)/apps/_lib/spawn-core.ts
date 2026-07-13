@@ -16,10 +16,10 @@ import 'server-only'
 import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
-import { emitCorrectiveActionAssigned, emitIncidentReported } from '@beaconhs/events'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { nextReference } from '@/lib/reference'
 
 type Initiator = 'user' | 'flow'
@@ -39,7 +39,7 @@ async function loadSourceSite(
   return { ok: true, siteOrgUnitId: row.siteOrgUnitId }
 }
 
-export type SpawnCorrectiveActionCoreInput = {
+type SpawnCorrectiveActionCoreInput = {
   responseId: string
   title: string
   description?: string | null
@@ -47,6 +47,7 @@ export type SpawnCorrectiveActionCoreInput = {
   dueOn?: string | null
   siteOrgUnitId?: string | null
   failedFieldKey?: string | null
+  flowExecutionKey?: string
   initiatedBy: Initiator
 }
 
@@ -66,6 +67,14 @@ export async function spawnCorrectiveActionCore(
   const assignedOn = new Date().toISOString().slice(0, 10)
 
   const row = await ctx.db(async (tx) => {
+    if (input.flowExecutionKey) {
+      const [existing] = await tx
+        .select()
+        .from(correctiveActions)
+        .where(eq(correctiveActions.flowExecutionKey, input.flowExecutionKey))
+        .limit(1)
+      if (existing) return { record: existing, replayed: true }
+    }
     const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     const [inserted] = await tx
       .insert(correctiveActions)
@@ -85,50 +94,86 @@ export async function spawnCorrectiveActionCore(
         dueOn: input.dueOn ?? null,
         assignedByTenantUserId: ctx.membership?.id,
         ownerTenantUserId: ctx.membership?.id,
+        flowExecutionKey: input.flowExecutionKey,
+      })
+      .onConflictDoNothing({
+        target: [correctiveActions.tenantId, correctiveActions.flowExecutionKey],
       })
       .returning()
-    return inserted
+    if (inserted) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'corrective_action.created',
+        subjectId: inserted.id,
+        dedupKey: `corrective_action.created:${inserted.id}`,
+        payload: {
+          notification: { kind: 'corrective_action_assigned', caId: inserted.id },
+          integration: correctiveActionCreatedEvent(ctx.tenantId, {
+            id: inserted.id,
+            reference: inserted.reference,
+            title: inserted.title,
+            status: inserted.status,
+            severity: inserted.severity,
+            source: inserted.source,
+            dueOn: inserted.dueOn,
+            assignedOn: inserted.assignedOn,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: inserted.id,
+            moduleKey: 'corrective-actions',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
+    if (inserted) return { record: inserted, replayed: false }
+    if (input.flowExecutionKey) {
+      const [existing] = await tx
+        .select()
+        .from(correctiveActions)
+        .where(eq(correctiveActions.flowExecutionKey, input.flowExecutionKey))
+        .limit(1)
+      if (existing) return { record: existing, replayed: true }
+    }
+    return null
   })
 
   if (!row) return { ok: false, error: 'Failed to create corrective action' }
+  const record = row.record
 
   const via = input.initiatedBy === 'flow' ? ' (automation)' : ''
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: row.id,
-    action: 'create',
-    summary: `Spawned ${row.reference} from form response ${input.responseId.slice(0, 8)}${via}`,
-    after: {
-      reference: row.reference,
-      severity,
-      sourceFormResponseId: input.responseId,
-      failedFieldKey: input.failedFieldKey ?? null,
-      initiatedBy: input.initiatedBy,
-    },
-  })
-  await recordAudit(ctx, {
-    entityType: 'form_response',
-    entityId: input.responseId,
-    action: 'update',
-    summary: `Spawned corrective action ${row.reference}${via}`,
-    metadata: {
-      caId: row.id,
-      failedFieldKey: input.failedFieldKey ?? null,
-      initiatedBy: input.initiatedBy,
-    },
-  })
-  await emitCorrectiveActionAssigned(ctx, {
-    caId: row.id,
-    assigneeUserId: null,
-    assignerUserId: null,
-  })
-
+  if (!row.replayed) {
+    await recordAudit(ctx, {
+      entityType: 'corrective_action',
+      entityId: record.id,
+      action: 'create',
+      summary: `Spawned ${record.reference} from form response ${input.responseId.slice(0, 8)}${via}`,
+      after: {
+        reference: record.reference,
+        severity,
+        sourceFormResponseId: input.responseId,
+        failedFieldKey: input.failedFieldKey ?? null,
+        initiatedBy: input.initiatedBy,
+      },
+    })
+    await recordAudit(ctx, {
+      entityType: 'form_response',
+      entityId: input.responseId,
+      action: 'update',
+      summary: `Spawned corrective action ${record.reference}${via}`,
+      metadata: {
+        caId: record.id,
+        failedFieldKey: input.failedFieldKey ?? null,
+        initiatedBy: input.initiatedBy,
+      },
+    })
+  }
   revalidatePath(`/apps/responses/${input.responseId}`)
   revalidatePath('/corrective-actions')
-  return { ok: true, caId: row.id, reference: row.reference }
+  return { ok: true, caId: record.id, reference: record.reference }
 }
 
-export type SpawnIncidentCoreInput = {
+type SpawnIncidentCoreInput = {
   responseId: string
   title: string
   description?: string | null
@@ -144,6 +189,7 @@ export type SpawnIncidentCoreInput = {
   occurredAt?: string | null
   siteOrgUnitId?: string | null
   location?: string | null
+  flowExecutionKey?: string
   initiatedBy: Initiator
 }
 
@@ -165,6 +211,14 @@ export async function spawnIncidentCore(
   }
 
   const row = await ctx.db(async (tx) => {
+    if (input.flowExecutionKey) {
+      const [existing] = await tx
+        .select()
+        .from(incidents)
+        .where(eq(incidents.flowExecutionKey, input.flowExecutionKey))
+        .limit(1)
+      if (existing) return { record: existing, replayed: true }
+    }
     const reference = await nextReference(tx, ctx.tenantId, 'incident', occurredAt.getFullYear())
     const [inserted] = await tx
       .insert(incidents)
@@ -181,36 +235,74 @@ export async function spawnIncidentCore(
         location: input.location?.trim() || null,
         reportedByTenantUserId: ctx.membership?.id ?? null,
         sourceFormResponseId: input.responseId,
+        flowExecutionKey: input.flowExecutionKey,
       })
+      .onConflictDoNothing({ target: [incidents.tenantId, incidents.flowExecutionKey] })
       .returning()
-    return inserted
+    if (inserted) {
+      await recordDomainEvent(tx, {
+        tenantId: ctx.tenantId,
+        eventType: 'incident.created',
+        subjectId: inserted.id,
+        dedupKey: `incident.created:${inserted.id}`,
+        payload: {
+          notification: { kind: 'incident_reported', incidentId: inserted.id },
+          integration: incidentCreatedEvent(ctx.tenantId, {
+            id: inserted.id,
+            reference: inserted.reference,
+            type: inserted.type,
+            severity: inserted.severity,
+            status: inserted.status,
+            title: inserted.title,
+            description: inserted.description,
+            occurredAt: inserted.occurredAt,
+            location: inserted.location,
+          }),
+          web: moduleFlowCommand(ctx, {
+            subjectId: inserted.id,
+            moduleKey: 'incidents',
+            event: 'on_create',
+          }),
+        },
+      })
+    }
+    if (inserted) return { record: inserted, replayed: false }
+    if (input.flowExecutionKey) {
+      const [existing] = await tx
+        .select()
+        .from(incidents)
+        .where(eq(incidents.flowExecutionKey, input.flowExecutionKey))
+        .limit(1)
+      if (existing) return { record: existing, replayed: true }
+    }
+    return null
   })
 
   if (!row) return { ok: false, error: 'Failed to create incident' }
+  const record = row.record
 
   const via = input.initiatedBy === 'flow' ? ' (automation)' : ''
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: row.id,
-    action: 'create',
-    summary: `Spawned ${row.reference} from form response ${input.responseId.slice(0, 8)}${via}`,
-    after: {
-      reference: row.reference,
-      sourceFormResponseId: input.responseId,
-      initiatedBy: input.initiatedBy,
-    },
-  })
-  await recordAudit(ctx, {
-    entityType: 'form_response',
-    entityId: input.responseId,
-    action: 'update',
-    summary: `Spawned incident ${row.reference}${via}`,
-    metadata: { incidentId: row.id, initiatedBy: input.initiatedBy },
-  })
-  await emitIncidentReported(ctx, { incidentId: row.id })
-  await runModuleFlows(ctx, { moduleKey: 'incidents', event: 'on_create', subjectId: row.id })
-
+  if (!row.replayed) {
+    await recordAudit(ctx, {
+      entityType: 'incident',
+      entityId: record.id,
+      action: 'create',
+      summary: `Spawned ${record.reference} from form response ${input.responseId.slice(0, 8)}${via}`,
+      after: {
+        reference: record.reference,
+        sourceFormResponseId: input.responseId,
+        initiatedBy: input.initiatedBy,
+      },
+    })
+    await recordAudit(ctx, {
+      entityType: 'form_response',
+      entityId: input.responseId,
+      action: 'update',
+      summary: `Spawned incident ${record.reference}${via}`,
+      metadata: { incidentId: record.id, initiatedBy: input.initiatedBy },
+    })
+  }
   revalidatePath(`/apps/responses/${input.responseId}`)
   revalidatePath('/incidents')
-  return { ok: true, incidentId: row.id, reference: row.reference }
+  return { ok: true, incidentId: record.id, reference: record.reference }
 }

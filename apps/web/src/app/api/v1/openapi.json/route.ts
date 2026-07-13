@@ -26,7 +26,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
     const { ctx, key } = await authenticateApiKey(req)
     const builderApps = keyHasPermission(key.permissions, BUILDER_APP_READ_PERMISSION)
-      ? await listBuilderAppOpenApiEntities(ctx)
+      ? await listBuilderAppOpenApiEntities(ctx, key.builderTemplateIds)
       : []
     // Fold the tenant's custom-field columns into the documented schema/params.
     const customColumns = await ctx.db(async (tx) => {
@@ -38,7 +38,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       return out
     })
     return NextResponse.json(buildOpenApiDocument(origin, { builderApps, customColumns }), {
-      headers: noStore(),
+      headers: noStore(key.rateLimitHeaders),
     })
   } catch (err) {
     if (!(err instanceof ApiError)) console.error('[api/v1/openapi.json] unhandled error', err)

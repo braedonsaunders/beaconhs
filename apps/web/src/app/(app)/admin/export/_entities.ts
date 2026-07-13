@@ -26,7 +26,7 @@ export type ExportEntity = {
   formActionHref?: string
 }
 
-export type ExportSelectOption = {
+type ExportSelectOption = {
   value: string
   label: string
 }
@@ -57,7 +57,7 @@ export type ExportFilterControl =
       defaultValue: string
     }
 
-export type ExportGroupSummary = {
+type ExportGroupSummary = {
   label: string
   description: string
 }
@@ -186,7 +186,7 @@ export const EXPORT_GROUPS: ExportGroupSummary[] = [
   },
 ]
 
-export function groupEntities(entities: ExportEntity[] = EXPORTABLE_ENTITIES) {
+function groupEntities(entities: ExportEntity[] = EXPORTABLE_ENTITIES) {
   const groups = new Map<string, ExportEntity[]>()
   for (const entity of entities) {
     const entries = groups.get(entity.groupLabel) ?? []
@@ -653,7 +653,7 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
     sourceHref: '/tools/safe-distance',
     groupLabel: 'Tools',
     ownerLabel: 'Safe-distance tool',
-    permissionAny: [],
+    permissionAny: ['tools.safe-distance.use'],
     sensitivity: 'Sensitive',
     defaultScope: 'Tenant safe-distance records',
     rowLimit: '10,000 rows',

@@ -5,7 +5,7 @@
 
 import type { CustomFieldEntityKind } from '@beaconhs/forms-core'
 
-export type EntityKindConfig = {
+type EntityKindConfig = {
   kind: CustomFieldEntityKind
   /** Plural label for headings ("Equipment"). */
   label: string
@@ -31,7 +31,7 @@ export type EntityKindConfig = {
   designerPath: string
 }
 
-export const CUSTOM_FIELD_ENTITY_CONFIG: Record<CustomFieldEntityKind, EntityKindConfig> = {
+const CUSTOM_FIELD_ENTITY_CONFIG: Record<CustomFieldEntityKind, EntityKindConfig> = {
   equipment: {
     kind: 'equipment',
     label: 'Equipment',

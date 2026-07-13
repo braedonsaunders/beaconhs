@@ -10,9 +10,6 @@ import {
   type EquipmentKioskConfig,
 } from './actions'
 
-type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
-type Location = { id: string; name: string; level: string; isBase: boolean }
-
 export function EquipmentKioskClient(props: { tenantId: string; tenantName: string }) {
   const { tenantId } = props
   const [pin, setPin] = useState<string | null>(null)

@@ -10,7 +10,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import {
   formResponses,
   formTemplateVersions,
@@ -20,13 +20,16 @@ import {
 } from '@beaconhs/db/schema'
 import { validateResponse } from '@beaconhs/forms-core'
 import { can } from '@beaconhs/tenant'
+import { domainEventActor, recordDomainEvent } from '@beaconhs/events'
+import { formSubmittedEvent } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
-import { getUserRoleKeys } from '@/app/(app)/apps/_lib/access'
+import { canAccessTemplate } from '@/app/(app)/apps/_lib/access'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
-import { runOnSubmitAutomations } from '@/app/(app)/apps/_lib/run-automations'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -78,6 +81,7 @@ function canUnlockRecord(ctx: Ctx, rec: LockGateRec, roleKeys: ReadonlySet<strin
 }
 
 async function loadRecord(ctx: Ctx, responseId: string) {
+  if (!isUuid(responseId)) return null
   return ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -91,6 +95,9 @@ async function loadRecord(ctx: Ctx, responseId: string) {
         templateId: formResponses.templateId,
         category: formTemplates.category,
         recordConfig: formTemplates.recordConfig,
+        templateStatus: formTemplates.status,
+        templateAllowedRoles: formTemplates.allowedRoles,
+        templateDeletedAt: formTemplates.deletedAt,
         schema: formTemplateVersions.schema,
       })
       .from(formResponses)
@@ -104,7 +111,20 @@ async function loadRecord(ctx: Ctx, responseId: string) {
         ),
       )
       .limit(1)
-    return row ?? null
+    if (!row) return null
+    const roleKeys = await getEffectiveRoleKeys(ctx, tx)
+    return canAccessTemplate(
+      ctx,
+      {
+        status: row.templateStatus,
+        allowedRoles: row.templateAllowedRoles,
+        deletedAt: row.templateDeletedAt,
+      },
+      roleKeys,
+      'operate',
+    )
+      ? row
+      : null
   })
 }
 
@@ -114,14 +134,16 @@ export async function lockResponse(formData: FormData) {
   if (!responseId) return
   const rec = await loadRecord(ctx, responseId)
   if (!rec) return
-  const roleKeys = await getUserRoleKeys(ctx)
+  const roleKeys = await getEffectiveRoleKeys(ctx)
   if (!canLockRecord(ctx, rec, roleKeys)) return
-  await ctx.db((tx) =>
+  const [locked] = await ctx.db((tx) =>
     tx
       .update(formResponses)
       .set({ locked: true, lockedAt: new Date(), lockedByTenantUserId: ctx.membership?.id ?? null })
-      .where(eq(formResponses.id, responseId)),
+      .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, false)))
+      .returning({ id: formResponses.id }),
   )
+  if (!locked) return
   await recordAudit(ctx, {
     entityType: 'form_response',
     entityId: responseId,
@@ -137,14 +159,16 @@ export async function unlockResponse(formData: FormData) {
   if (!responseId) return
   const rec = await loadRecord(ctx, responseId)
   if (!rec) return
-  const roleKeys = await getUserRoleKeys(ctx)
+  const roleKeys = await getEffectiveRoleKeys(ctx)
   if (!canUnlockRecord(ctx, rec, roleKeys)) return
-  await ctx.db((tx) =>
+  const [unlocked] = await ctx.db((tx) =>
     tx
       .update(formResponses)
       .set({ locked: false, lockedAt: null, lockedByTenantUserId: null })
-      .where(eq(formResponses.id, responseId)),
+      .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, true)))
+      .returning({ id: formResponses.id }),
   )
+  if (!unlocked) return
   await recordAudit(ctx, {
     entityType: 'form_response',
     entityId: responseId,
@@ -201,13 +225,14 @@ export async function finalizeResponse(formData: FormData) {
       .limit(1),
   )
 
-  await ctx.db(async (tx) => {
-    await tx
+  const submittedAt = rec.submittedAt ?? new Date()
+  const finalized = await ctx.db(async (tx) => {
+    const [claimed] = await tx
       .update(formResponses)
       .set({
         status: finalStatus,
         submittedBy: rec.submittedBy ?? ctx.membership?.id ?? null,
-        submittedAt: rec.submittedAt ?? new Date(),
+        submittedAt,
         data,
         draftData: null,
         draftUpdatedAt: null,
@@ -217,7 +242,15 @@ export async function finalizeResponse(formData: FormData) {
           ? { locked: true, lockedAt: new Date(), lockedByTenantUserId: ctx.membership?.id ?? null }
           : {}),
       })
-      .where(eq(formResponses.id, responseId))
+      .where(
+        and(
+          eq(formResponses.id, responseId),
+          eq(formResponses.locked, false),
+          inArray(formResponses.status, ['draft', 'in_progress']),
+        ),
+      )
+      .returning({ id: formResponses.id })
+    if (!claimed) return false
     await repopulateParticipants(tx, {
       tenantId: ctx.tenantId,
       responseId,
@@ -225,10 +258,39 @@ export async function finalizeResponse(formData: FormData) {
       category: rec.category ?? null,
       schema: rec.schema,
       data,
-      submittedAt: new Date(),
+      submittedAt,
       submitterPersonId: submitterPerson?.id ?? null,
     })
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'form.submitted',
+      subjectId: responseId,
+      dedupKey: `form.submitted:${responseId}:${submittedAt.toISOString()}`,
+      payload: {
+        integration: formSubmittedEvent(ctx.tenantId, {
+          id: responseId,
+          templateId: rec.templateId,
+          status: verdict.status,
+          submittedAt,
+          complianceScore: verdict.score,
+          complianceStatus: verdict.status,
+          data,
+        }),
+        web: {
+          kind: 'form_submitted',
+          subjectId: responseId,
+          templateId: rec.templateId,
+          data,
+          score: verdict.score,
+          status: verdict.status,
+          recap: false,
+          actor: domainEventActor(ctx),
+        },
+      },
+    })
+    return true
   })
+  if (!finalized) return
 
   await recordAudit(ctx, {
     entityType: 'form_response',
@@ -236,17 +298,6 @@ export async function finalizeResponse(formData: FormData) {
     action: 'update',
     summary: `Record finalized (${finalStatus})`,
   })
-  try {
-    await runOnSubmitAutomations(ctx, {
-      templateId: rec.templateId,
-      responseId,
-      data,
-      score: verdict.score,
-      status: verdict.status,
-    })
-  } catch {
-    // automations are non-critical to finalize
-  }
   revalidatePath(`/apps/responses/${responseId}`)
 }
 
@@ -256,9 +307,9 @@ export async function reopenResponse(formData: FormData) {
   if (!responseId) return
   const rec = await loadRecord(ctx, responseId)
   if (!rec) return
-  const roleKeys = await getUserRoleKeys(ctx)
+  const roleKeys = await getEffectiveRoleKeys(ctx)
   if (!canUnlockRecord(ctx, rec, roleKeys)) return
-  await ctx.db((tx) =>
+  const [reopened] = await ctx.db((tx) =>
     tx
       .update(formResponses)
       .set({
@@ -268,8 +319,15 @@ export async function reopenResponse(formData: FormData) {
         lockedAt: null,
         lockedByTenantUserId: null,
       })
-      .where(eq(formResponses.id, responseId)),
+      .where(
+        and(
+          eq(formResponses.id, responseId),
+          inArray(formResponses.status, ['closed', 'rejected']),
+        ),
+      )
+      .returning({ id: formResponses.id }),
   )
+  if (!reopened) return
   await recordAudit(ctx, {
     entityType: 'form_response',
     entityId: responseId,

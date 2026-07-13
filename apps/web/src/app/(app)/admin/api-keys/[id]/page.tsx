@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { eq } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -11,7 +11,7 @@ import {
   Input,
   Label,
 } from '@beaconhs/ui'
-import { apiKeys } from '@beaconhs/db/schema'
+import { apiKeys, formTemplates } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { formatDateTime } from '@/lib/datetime'
 import { PERMISSION_GROUPS } from '@/lib/permissions-meta'
@@ -73,23 +73,39 @@ export default async function ApiKeyEditPage({
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
 
-  const key = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1)
-    return row ?? null
-  })
+  const [key, builderApps] = await Promise.all([
+    ctx.db(async (tx) => {
+      const [row] = await tx
+        .select({
+          apiKey: apiKeys,
+          expired: sql<boolean>`${apiKeys.expiresAt} IS NOT NULL AND ${apiKeys.expiresAt} <= now()`,
+        })
+        .from(apiKeys)
+        .where(eq(apiKeys.id, id))
+        .limit(1)
+      return row ?? null
+    }),
+    ctx.db((tx) =>
+      tx
+        .select({ id: formTemplates.id, name: formTemplates.name })
+        .from(formTemplates)
+        .where(and(eq(formTemplates.status, 'published'), isNull(formTemplates.deletedAt)))
+        .orderBy(asc(formTemplates.name)),
+    ),
+  ])
   if (!key) notFound()
 
-  const expired = !key.revokedAt && key.expiresAt && key.expiresAt.getTime() <= Date.now()
+  const { apiKey, expired } = key
 
   return (
     <PageContainer>
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/admin/api-keys', label: 'Back to API keys' }}
-          title={key.name}
-          subtitle={`${key.prefix}...`}
+          title={apiKey.name}
+          subtitle={`${apiKey.prefix}...`}
           badge={
-            key.revokedAt ? (
+            apiKey.revokedAt ? (
               <Badge variant="destructive">Revoked</Badge>
             ) : expired ? (
               <Badge variant="outline">Expired</Badge>
@@ -98,9 +114,9 @@ export default async function ApiKeyEditPage({
             )
           }
           actions={
-            !key.revokedAt ? (
+            !apiKey.revokedAt ? (
               <form action={revokeApiKey}>
-                <input type="hidden" name="id" value={key.id} />
+                <input type="hidden" name="id" value={apiKey.id} />
                 <Button type="submit" variant="outline">
                   Revoke
                 </Button>
@@ -115,18 +131,18 @@ export default async function ApiKeyEditPage({
           </div>
         ) : null}
 
-        {key.revokedAt ? (
+        {apiKey.revokedAt ? (
           <Card>
             <CardHeader>
               <CardTitle>Permissions</CardTitle>
             </CardHeader>
             <CardContent>
-              <PermissionList permissions={key.permissions ?? []} />
+              <PermissionList permissions={apiKey.permissions ?? []} />
             </CardContent>
           </Card>
         ) : (
           <form action={updateApiKey} className="space-y-5">
-            <input type="hidden" name="id" value={key.id} />
+            <input type="hidden" name="id" value={apiKey.id} />
             <Card>
               <CardHeader>
                 <CardTitle>Details</CardTitle>
@@ -137,7 +153,7 @@ export default async function ApiKeyEditPage({
                     <Label htmlFor="name">
                       Name<span className="text-red-600"> *</span>
                     </Label>
-                    <Input id="name" name="name" required defaultValue={key.name} />
+                    <Input id="name" name="name" required defaultValue={apiKey.name} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="expiresAt">Expires</Label>
@@ -145,7 +161,7 @@ export default async function ApiKeyEditPage({
                       id="expiresAt"
                       type="date"
                       name="expiresAt"
-                      defaultValue={dateInputValue(key.expiresAt)}
+                      defaultValue={dateInputValue(apiKey.expiresAt)}
                     />
                   </div>
                 </div>
@@ -155,7 +171,7 @@ export default async function ApiKeyEditPage({
                       Prefix
                     </div>
                     <div className="mt-1 font-mono text-xs text-slate-700 dark:text-slate-200">
-                      {key.prefix}...
+                      {apiKey.prefix}...
                     </div>
                   </div>
                   <div>
@@ -163,7 +179,7 @@ export default async function ApiKeyEditPage({
                       Created
                     </div>
                     <div className="mt-1 text-slate-700 dark:text-slate-200">
-                      {formatDateTime(new Date(key.createdAt), ctx.timezone)}
+                      {formatDateTime(new Date(apiKey.createdAt), ctx.timezone)}
                     </div>
                   </div>
                   <div>
@@ -171,11 +187,36 @@ export default async function ApiKeyEditPage({
                       Last used
                     </div>
                     <div className="mt-1 text-slate-700 dark:text-slate-200">
-                      {key.lastUsedAt
-                        ? formatDateTime(new Date(key.lastUsedAt), ctx.timezone)
+                      {apiKey.lastUsedAt
+                        ? formatDateTime(new Date(apiKey.lastUsedAt), ctx.timezone)
                         : 'Never'}
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Builder app grants</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Select the published apps this key may access. No selection blocks all Builder app
+                  endpoints.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {builderApps.map((app) => (
+                    <label key={app.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="builderTemplateIds"
+                        value={app.id}
+                        defaultChecked={(apiKey.builderTemplateIds ?? []).includes(app.id)}
+                      />
+                      <span>{app.name}</span>
+                    </label>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -190,8 +231,8 @@ export default async function ApiKeyEditPage({
                     without re-rendering them, so the next save would post a
                     stale selection. `updatedAt` bumps per save (`$onUpdate`). */}
                 <PermissionMatrix
-                  key={key.updatedAt.toISOString()}
-                  defaultSelected={key.permissions ?? []}
+                  key={apiKey.updatedAt.toISOString()}
+                  defaultSelected={apiKey.permissions ?? []}
                 />
               </CardContent>
             </Card>

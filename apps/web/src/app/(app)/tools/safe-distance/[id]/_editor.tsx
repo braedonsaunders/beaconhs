@@ -7,10 +7,12 @@
 // server action that recomputes authoritatively + persists. Pipe segments are
 // kept in React state and serialised into a hidden field on submit.
 
-import { useMemo, useState } from 'react'
+import { useActionState, useMemo, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Plus, Trash2 } from 'lucide-react'
 import {
+  Alert,
+  AlertDescription,
   Button,
   Card,
   CardContent,
@@ -22,7 +24,16 @@ import {
   Textarea,
 } from '@beaconhs/ui'
 import { PersonSelectField } from '@/components/person-select-field'
-import { saveSafeDistanceRecordForm } from '../_actions'
+import { saveSafeDistanceRecordForm, type ActionResult } from '../_actions'
+import {
+  MAX_SAFE_DISTANCE_DESCRIPTION_LENGTH,
+  MAX_SAFE_DISTANCE_NAME_LENGTH,
+  MAX_SAFE_DISTANCE_NOTES_LENGTH,
+  MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT,
+  MAX_SAFE_DISTANCE_SEGMENT_NAME_LENGTH,
+  MAX_SAFE_DISTANCE_SEGMENTS,
+  MAX_SAFE_DISTANCE_TEST_PRESSURE,
+} from '../_constraints'
 import {
   computeSafeDistance,
   distanceUnitLabel,
@@ -49,9 +60,10 @@ type SegRow = {
 
 type Option = { value: string; label: string; hint?: string }
 
-export type SafeDistanceEditorProps = {
+type SafeDistanceEditorProps = {
   record: {
     id: string
+    version: string
     name: string
     method: SafeDistanceMethod
     unit: SafeDistanceUnit
@@ -89,6 +101,9 @@ export function SafeDistanceEditor({
   supervisors,
   operators,
 }: SafeDistanceEditorProps) {
+  const [saveState, saveAction] = useActionState(saveSafeDistanceRecordForm, {
+    ok: true,
+  } as ActionResult)
   const locked = record.locked
   const [name, setName] = useState(record.name)
   const [method, setMethod] = useState<SafeDistanceMethod>(record.method)
@@ -155,13 +170,19 @@ export function SafeDistanceEditor({
   const volUnit = volumeUnitLabel(unit)
 
   return (
-    <form action={saveSafeDistanceRecordForm} className="space-y-6">
+    <form action={saveAction} className="space-y-6">
       <input type="hidden" name="id" value={record.id} />
+      <input type="hidden" name="version" value={record.version} />
       <input type="hidden" name="method" value={method} />
       <input type="hidden" name="unit" value={unit} />
       <input type="hidden" name="segments" value={JSON.stringify(segmentsForSubmit)} />
 
       <fieldset disabled={locked} className="space-y-6 disabled:opacity-70">
+        {!saveState.ok ? (
+          <Alert variant="destructive">
+            <AlertDescription>{saveState.error}</AlertDescription>
+          </Alert>
+        ) : null}
         <Card>
           <CardHeader>
             <CardTitle>System</CardTitle>
@@ -169,7 +190,14 @@ export function SafeDistanceEditor({
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">System name</Label>
-              <Input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                id="name"
+                name="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={MAX_SAFE_DISTANCE_NAME_LENGTH}
+                required
+              />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
@@ -205,9 +233,11 @@ export function SafeDistanceEditor({
                   name="testPressure"
                   type="number"
                   step="0.01"
-                  min="0"
+                  min="0.0001"
+                  max={MAX_SAFE_DISTANCE_TEST_PRESSURE}
                   value={testPressure}
                   onChange={(e) => setTestPressure(e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -220,6 +250,7 @@ export function SafeDistanceEditor({
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                maxLength={MAX_SAFE_DISTANCE_DESCRIPTION_LENGTH}
               />
             </div>
           </CardContent>
@@ -268,7 +299,13 @@ export function SafeDistanceEditor({
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <CardTitle>Piping system</CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={addSegment}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSegment}
+                disabled={segments.length >= MAX_SAFE_DISTANCE_SEGMENTS}
+              >
                 <Plus size={14} /> Add pipe
               </Button>
             </div>
@@ -314,6 +351,7 @@ export function SafeDistanceEditor({
                           value={s.name}
                           onChange={(e) => updateSegment(s.key, { name: e.target.value })}
                           placeholder="e.g. Header run"
+                          maxLength={MAX_SAFE_DISTANCE_SEGMENT_NAME_LENGTH}
                         />
                       </div>
                       <div className="space-y-1">
@@ -339,9 +377,11 @@ export function SafeDistanceEditor({
                           <Input
                             type="number"
                             step="0.0001"
-                            min="0"
+                            min="0.000001"
+                            max={MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT}
                             value={s.length}
                             onChange={(e) => updateSegment(s.key, { length: e.target.value })}
+                            required
                           />
                         </div>
                         <div className="space-y-1">
@@ -349,9 +389,11 @@ export function SafeDistanceEditor({
                           <Input
                             type="number"
                             step="0.0001"
-                            min="0"
+                            min="0.000001"
+                            max={MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT}
                             value={s.diameter}
                             onChange={(e) => updateSegment(s.key, { diameter: e.target.value })}
+                            required
                           />
                         </div>
                       </div>
@@ -416,6 +458,7 @@ export function SafeDistanceEditor({
                 rows={3}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                maxLength={MAX_SAFE_DISTANCE_NOTES_LENGTH}
               />
             </div>
           </CardContent>
@@ -423,7 +466,7 @@ export function SafeDistanceEditor({
 
         {!locked ? (
           <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <SaveButton />
+            <SaveButton disabled={segments.length === 0} />
           </div>
         ) : null}
       </fieldset>
@@ -431,10 +474,10 @@ export function SafeDistanceEditor({
   )
 }
 
-function SaveButton() {
+function SaveButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" disabled={pending}>
+    <Button type="submit" disabled={pending || disabled}>
       {pending ? 'Saving…' : 'Save calculation'}
     </Button>
   )

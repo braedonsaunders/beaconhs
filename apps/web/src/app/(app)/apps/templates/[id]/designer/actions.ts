@@ -1,14 +1,24 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
-import { formAutomations, formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
+import {
+  formAutomations,
+  formTemplateVersions,
+  formTemplates,
+  roles as roleTable,
+} from '@beaconhs/db/schema'
 import { validateFormSchema, type AutomationGraph, type FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { ensureFormPdfTemplate } from '@/lib/pdf-template-generate'
 import type { RecordConfig } from './_record-behavior-panel'
+import { isUuid } from '@/lib/list-params'
+
+function assertTemplateId(templateId: string): void {
+  if (!isUuid(templateId)) throw new Error('App not found')
+}
 
 // Records-list configuration (recordConfig.list). The CONTRACT mirrors the
 // records page (apps/templates/[id]/records) exactly — keep them in lockstep.
@@ -59,9 +69,20 @@ export async function publishNewVersion(args: {
 }): Promise<{ ok: boolean; version?: number; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.publish')
+  assertTemplateId(args.templateId)
   try {
     const validated = validateFormSchema(args.schema)
     const result = await ctx.db(async (tx) => {
+      // Serialize publishes for this template and reject deleted/dangling ids.
+      // Without the row lock, two clicks can both select the same latest version
+      // and race an insert for the same next version number.
+      const [template] = await tx
+        .select({ id: formTemplates.id })
+        .from(formTemplates)
+        .where(and(eq(formTemplates.id, args.templateId), isNull(formTemplates.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!template) throw new Error('App not found')
       const [latest] = await tx
         .select({ v: formTemplateVersions.version })
         .from(formTemplateVersions)
@@ -83,30 +104,33 @@ export async function publishNewVersion(args: {
         .set({ status: 'published' })
         .where(eq(formTemplates.id, args.templateId))
 
-      // Monitored app? Ensure an overdue-alert flow exists so a missed check-in
-      // never escalates silently. Seed a sensible default ONCE (the tenant edits
-      // or replaces it in the flow canvas).
-      if (validated.monitor) {
-        const flows = await tx
-          .select({ graph: formAutomations.graph })
-          .from(formAutomations)
-          .where(eq(formAutomations.templateId, args.templateId))
-        const hasOverdueFlow = flows.some((f) =>
-          f.graph?.nodes?.some(
-            (n) => n.data.kind === 'trigger' && n.data.trigger.trigger === 'session_overdue',
-          ),
-        )
-        if (!hasOverdueFlow) {
-          await tx.insert(formAutomations).values({
-            tenantId: ctx.tenantId,
-            subjectType: 'form_template',
-            subjectKey: args.templateId,
-            templateId: args.templateId,
-            name: 'Overdue check-in alert',
-            enabled: true,
-            graph: defaultOverdueFlowGraph(),
-          })
-        }
+      // A monitored-session start action must have an overdue handler. Seed a
+      // sensible editable default once when a builder publishes a flow that can
+      // start monitoring without one.
+      const flows = await tx
+        .select({ graph: formAutomations.graph })
+        .from(formAutomations)
+        .where(eq(formAutomations.templateId, args.templateId))
+      const hasMonitorStart = flows.some((f) =>
+        f.graph?.nodes?.some(
+          (n) => n.data.kind === 'action' && n.data.action.action === 'start_monitored_session',
+        ),
+      )
+      const hasOverdueFlow = flows.some((f) =>
+        f.graph?.nodes?.some(
+          (n) => n.data.kind === 'trigger' && n.data.trigger.trigger === 'session_overdue',
+        ),
+      )
+      if (hasMonitorStart && !hasOverdueFlow) {
+        await tx.insert(formAutomations).values({
+          tenantId: ctx.tenantId,
+          subjectType: 'form_template',
+          subjectKey: args.templateId,
+          templateId: args.templateId,
+          name: 'Overdue check-in alert',
+          enabled: true,
+          graph: defaultOverdueFlowGraph(),
+        })
       }
       return nextVersion
     })
@@ -148,10 +172,11 @@ export async function updateAppOverview(args: {
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
+  assertTemplateId(args.templateId)
   const name = (args.name ?? '').trim()
   if (!name) return { ok: false, error: 'Name is required' }
-  await ctx.db((tx) =>
-    tx
+  const updated = await ctx.db(async (tx) => {
+    const [row] = await tx
       .update(formTemplates)
       .set({
         name,
@@ -166,8 +191,11 @@ export async function updateAppOverview(args: {
         ...(args.surfaceAsTool === undefined ? {} : { surfaceAsTool: args.surfaceAsTool }),
         updatedAt: new Date(),
       })
-      .where(eq(formTemplates.id, args.templateId)),
-  )
+      .where(and(eq(formTemplates.id, args.templateId), isNull(formTemplates.deletedAt)))
+      .returning({ id: formTemplates.id })
+    return row ?? null
+  })
+  if (!updated) throw new Error('App not found')
   await recordAudit(ctx, {
     entityType: 'form_template',
     entityId: args.templateId,
@@ -195,13 +223,15 @@ export async function updateRecordBehavior(args: {
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
+  assertTemplateId(args.templateId)
   await ctx.db(async (tx) => {
     const [row] = await tx
       .select({ recordConfig: formTemplates.recordConfig })
       .from(formTemplates)
-      .where(eq(formTemplates.id, args.templateId))
+      .where(and(eq(formTemplates.id, args.templateId), isNull(formTemplates.deletedAt)))
       .limit(1)
-    const current = (row?.recordConfig ?? {}) as Record<string, unknown>
+    if (!row) throw new Error('App not found')
+    const current = (row.recordConfig ?? {}) as Record<string, unknown>
     const currentTabs = (current.tabs ?? {}) as Record<string, unknown>
     await tx
       .update(formTemplates)
@@ -216,7 +246,7 @@ export async function updateRecordBehavior(args: {
         } as Record<string, unknown>,
         updatedAt: new Date(),
       })
-      .where(eq(formTemplates.id, args.templateId))
+      .where(and(eq(formTemplates.id, args.templateId), isNull(formTemplates.deletedAt)))
   })
   await recordAudit(ctx, {
     entityType: 'form_template',
@@ -240,20 +270,22 @@ export async function updateListConfig(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
+  assertTemplateId(input.templateId)
   await ctx.db(async (tx) => {
     const [row] = await tx
       .select({ recordConfig: formTemplates.recordConfig })
       .from(formTemplates)
-      .where(eq(formTemplates.id, input.templateId))
+      .where(and(eq(formTemplates.id, input.templateId), isNull(formTemplates.deletedAt)))
       .limit(1)
-    const current = (row?.recordConfig ?? {}) as Record<string, unknown>
+    if (!row) throw new Error('App not found')
+    const current = (row.recordConfig ?? {}) as Record<string, unknown>
     await tx
       .update(formTemplates)
       .set({
         recordConfig: { ...current, list: input.list } as Record<string, unknown>,
         updatedAt: new Date(),
       })
-      .where(eq(formTemplates.id, input.templateId))
+      .where(and(eq(formTemplates.id, input.templateId), isNull(formTemplates.deletedAt)))
   })
   await recordAudit(ctx, {
     entityType: 'form_template',
@@ -274,18 +306,31 @@ export async function updateAppPermissions(args: {
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
-  const roles = Array.from(new Set((args.allowedRoles ?? []).map((r) => r.trim()).filter(Boolean)))
-  await ctx.db((tx) =>
-    tx
+  assertTemplateId(args.templateId)
+  const requestedRoles = Array.isArray(args.allowedRoles) ? args.allowedRoles : []
+  const roleKeys = Array.from(new Set(requestedRoles.map((r) => r.trim()).filter(Boolean)))
+  await ctx.db(async (tx) => {
+    if (roleKeys.length > 0) {
+      const available = new Set(
+        (await tx.select({ key: roleTable.key }).from(roleTable)).map((role) => role.key),
+      )
+      const unknown = roleKeys.filter((role) => !available.has(role))
+      if (unknown.length > 0) throw new Error(`Unknown role: ${unknown.join(', ')}`)
+    }
+    const [updated] = await tx
       .update(formTemplates)
-      .set({ allowedRoles: roles.length ? roles : null, updatedAt: new Date() })
-      .where(eq(formTemplates.id, args.templateId)),
-  )
+      .set({ allowedRoles: roleKeys.length ? roleKeys : null, updatedAt: new Date() })
+      .where(and(eq(formTemplates.id, args.templateId), isNull(formTemplates.deletedAt)))
+      .returning({ id: formTemplates.id })
+    if (!updated) throw new Error('App not found')
+  })
   await recordAudit(ctx, {
     entityType: 'form_template',
     entityId: args.templateId,
     action: 'update',
-    summary: roles.length ? `Restricted to roles: ${roles.join(', ')}` : 'Opened to all roles',
+    summary: roleKeys.length
+      ? `Restricted to roles: ${roleKeys.join(', ')}`
+      : 'Opened to all roles',
   })
   revalidatePath(`/apps/templates/${args.templateId}`)
   revalidatePath('/apps')

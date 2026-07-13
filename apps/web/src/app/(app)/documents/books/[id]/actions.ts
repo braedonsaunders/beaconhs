@@ -17,7 +17,6 @@ export async function createBook(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   const title = String(formData.get('title') ?? '').trim() || 'Untitled book'
-  const category = String(formData.get('category') ?? '').trim() || null
   const description = String(formData.get('description') ?? '').trim() || null
 
   const bookId = await ctx.db(async (tx) => {
@@ -26,9 +25,7 @@ export async function createBook(formData: FormData): Promise<void> {
       .values({
         tenantId: ctx.tenantId,
         title,
-        name: title, // keep legacy column populated
         description,
-        category,
         status: 'draft',
       })
       .returning({ id: documentBooks.id })
@@ -41,7 +38,7 @@ export async function createBook(formData: FormData): Promise<void> {
     entityId: bookId,
     action: 'create',
     summary: `Created document book "${title}"`,
-    after: { title, category, description },
+    after: { title, description },
   })
   revalidatePath('/documents/books')
   redirect(`/documents/books/${bookId}`)

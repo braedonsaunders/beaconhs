@@ -72,7 +72,7 @@ function firstAdded(added: Component | Component[]): Component | undefined {
   return Array.isArray(added) ? added[0] : added
 }
 
-export function addColumn(editor: Editor): void {
+function addColumn(editor: Editor): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
   const at = ctx.colIndex + 1
@@ -91,7 +91,7 @@ export function addColumn(editor: Editor): void {
   editor.trigger('change:canvasOffset')
 }
 
-export function removeColumn(editor: Editor): void {
+function removeColumn(editor: Editor): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
   // Never delete the last column.
@@ -100,7 +100,7 @@ export function removeColumn(editor: Editor): void {
   editor.trigger('change:canvasOffset')
 }
 
-export function addRow(editor: Editor): void {
+function addRow(editor: Editor): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
   const parent = ctx.row.parent()
@@ -123,7 +123,7 @@ export function addRow(editor: Editor): void {
   editor.trigger('change:canvasOffset')
 }
 
-export function removeRow(editor: Editor): void {
+function removeRow(editor: Editor): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
   if (ctx.rows.length <= 1) return
@@ -134,7 +134,7 @@ export function removeRow(editor: Editor): void {
 // Apply a width to EVERY cell in the selected cell's column (px, or '' to clear).
 // Style width is captured by the builders' fullHtml serialization (and inlined by
 // juice for email), so it survives to the rendered output.
-export function setColumnWidth(editor: Editor, px: number | null): void {
+function setColumnWidth(editor: Editor, px: number | null): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
   ctx.rows.forEach((row) => {

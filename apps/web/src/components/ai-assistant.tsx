@@ -18,7 +18,7 @@ import {
   type AiConversationSummary,
 } from '@/lib/ai-conversations'
 
-export type AiSendResult = {
+type AiSendResult = {
   ok: boolean
   conversationId?: string
   error?: string

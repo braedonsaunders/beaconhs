@@ -138,7 +138,9 @@ export function useDebouncedCallback<A extends unknown[]>(
 ): (...args: A) => void {
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const fnRef = React.useRef(fn)
-  fnRef.current = fn
+  React.useEffect(() => {
+    fnRef.current = fn
+  }, [fn])
   React.useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current)

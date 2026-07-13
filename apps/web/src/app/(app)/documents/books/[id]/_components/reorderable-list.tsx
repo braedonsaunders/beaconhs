@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, GripVertical, Trash2 } from 'lucide-react'
 import { Badge, Button } from '@beaconhs/ui'
 import { reorderBookItemsAction, removeBookItemAction } from '../actions'
 
-export type BookItem = {
+type BookItem = {
   documentId: string
   title: string
   status: 'draft' | 'published' | 'archived' | 'under_review'

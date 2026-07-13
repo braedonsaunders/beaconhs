@@ -4,7 +4,7 @@
 // conditional formatting, and PAGINATION (page-size control + prev/next). Used by
 // the builder live preview, the card viewer, and dashboard cells. Dark-mode aware.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown } from 'lucide-react'
 import { Select, cn } from '@beaconhs/ui'
 import {
@@ -36,7 +36,7 @@ export function DataTable({
   settings?: VizSettings
 }) {
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
-  const [page, setPage] = useState(0)
+  const [pagination, setPagination] = useState({ rows: result.rows, page: 0 })
   const [pageSize, setPageSize] = useState(25)
   const rules = (settings.conditionalFormats as CfRule[] | undefined) ?? []
 
@@ -55,11 +55,9 @@ export function DataTable({
     })
   }, [result.rows, result.columns, sort])
 
-  // Reset to the first page whenever the underlying data changes.
-  useEffect(() => setPage(0), [result.rows])
-
   const total = sorted.length
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const page = pagination.rows === result.rows ? pagination.page : 0
   const safePage = Math.min(page, pageCount - 1)
   const start = safePage * pageSize
   const pageRows = sorted.slice(start, start + pageSize)
@@ -68,7 +66,7 @@ export function DataTable({
     setSort((s) =>
       s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
     )
-    setPage(0)
+    setPagination({ rows: result.rows, page: 0 })
   }
 
   if (result.columns.length === 0) {
@@ -172,7 +170,7 @@ export function DataTable({
             value={pageSize}
             onChange={(e) => {
               setPageSize(Number(e.target.value))
-              setPage(0)
+              setPagination({ rows: result.rows, page: 0 })
             }}
             className="h-7 text-xs"
           >
@@ -185,7 +183,7 @@ export function DataTable({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              onClick={() => setPagination({ rows: result.rows, page: Math.max(0, safePage - 1) })}
               disabled={safePage === 0}
               className="grid h-7 w-7 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
               aria-label="Previous page"
@@ -197,7 +195,12 @@ export function DataTable({
             </span>
             <button
               type="button"
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              onClick={() =>
+                setPagination({
+                  rows: result.rows,
+                  page: Math.min(pageCount - 1, safePage + 1),
+                })
+              }
               disabled={safePage >= pageCount - 1}
               className="grid h-7 w-7 place-items-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-800"
               aria-label="Next page"

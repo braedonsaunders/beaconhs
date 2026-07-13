@@ -44,7 +44,7 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { canManageModule } from '@/lib/module-admin/guard'
@@ -641,6 +641,7 @@ function FileCard({
   assignmentId: string
   file: { id: string; label: string; kind: string; uploadedAt: Date | string }
   attachment: {
+    id: string
     r2Key: string
     filename: string
     contentType: string
@@ -650,7 +651,7 @@ function FileCard({
   timeZone: string
 }) {
   const isImage = attachment?.contentType.startsWith('image/') ?? false
-  const href = attachment ? publicUrl(attachment.r2Key) : null
+  const href = attachment ? attachmentUrl(attachment.id) : null
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <a

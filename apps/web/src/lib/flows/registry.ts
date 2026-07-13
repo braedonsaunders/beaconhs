@@ -23,13 +23,10 @@ import { createVehicleLogFlowAdapter } from './adapters/vehicle-log'
 import { createDocumentFlowAdapter } from './adapters/documents'
 import type { FlowSubjectAdapter } from './types'
 
-export type ModuleFlowAdapterFactory = (
-  ctx: RequestContext,
-  subjectId: string,
-) => FlowSubjectAdapter
+type ModuleFlowAdapterFactory = (ctx: RequestContext, subjectId: string) => FlowSubjectAdapter
 
 // moduleKey → adapter factory. One entry per flow-capable native module.
-export const MODULE_FLOW_ADAPTERS: Record<string, ModuleFlowAdapterFactory> = {
+const MODULE_FLOW_ADAPTERS: Record<string, ModuleFlowAdapterFactory> = {
   journals: createJournalFlowAdapter,
   hazid: createHazidFlowAdapter,
   incidents: createIncidentFlowAdapter,

@@ -7,20 +7,15 @@
 // updates apply instantly and stale generated files never need invalidation.
 //
 // `output` selects one of the tenant's saved credential designs.
-// `format=wallet|cert` is retained for legacy links.
 
-import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { desc, eq } from 'drizzle-orm'
-import { trainingCertificates, trainingRecords } from '@beaconhs/db/schema'
+import { eq } from 'drizzle-orm'
+import { trainingRecords } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
-import {
-  pdfResponse,
-  renderTrainingCredentialPdf,
-  type CredentialPdfFormat,
-} from '@/lib/training-credential-pdf'
+import { issueTrainingCertificate } from '@/lib/training-certificate-issuance'
+import { pdfResponse, renderTrainingCredentialPdf } from '@/lib/training-credential-pdf'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,8 +25,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id: recordId } = await params
-  const format = (req.nextUrl.searchParams.get('format') ?? 'cert').toLowerCase()
-  const pdfFormat: CredentialPdfFormat = format === 'wallet' ? 'wallet' : 'cert'
   const outputId = req.nextUrl.searchParams.get('output')
 
   const ctx = await requireRequestContext()
@@ -71,26 +64,9 @@ export async function GET(
       } as const
     }
 
-    let [cert] = await tx
-      .select()
-      .from(trainingCertificates)
-      .where(eq(trainingCertificates.recordId, recordId))
-      .orderBy(desc(trainingCertificates.createdAt))
-      .limit(1)
-
     // Lazy issuance: any live (non-revoked) record can produce a credential.
-    if (!cert) {
-      const [created] = await tx
-        .insert(trainingCertificates)
-        .values({
-          tenantId: ctx.tenantId!,
-          recordId,
-          verifyToken: randomBytes(20).toString('hex'),
-        })
-        .returning()
-      cert = created
-    }
-    if (!cert) return { error: 'Failed to issue certificate.', status: 500 } as const
+    // The shared issuer is safe when multiple downloads race for first issue.
+    const cert = await issueTrainingCertificate(tx, { tenantId: ctx.tenantId, recordId })
     if (cert.revokedAt) {
       return {
         error: 'This certificate has been revoked and can no longer be downloaded.',
@@ -107,7 +83,6 @@ export async function GET(
 
   const rendered = await renderTrainingCredentialPdf(ctx, result.cert.id, {
     outputId,
-    format: pdfFormat,
   })
   if (!rendered) {
     return NextResponse.json({ error: 'Training certificate not found.' }, { status: 404 })
@@ -119,7 +94,7 @@ export async function GET(
     entityId: recordId,
     action: 'export',
     summary: 'Downloaded training credential PDF',
-    metadata: { certificateId: result.cert.id, outputId, format: pdfFormat },
+    metadata: { certificateId: result.cert.id, outputId },
   })
 
   return pdfResponse(rendered)

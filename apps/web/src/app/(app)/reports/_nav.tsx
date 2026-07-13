@@ -4,7 +4,7 @@
 
 import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
 
-export const REPORTS_TABS = [
+const REPORTS_TABS = [
   { key: 'reports', label: 'Reports', href: '/reports' },
   { key: 'schedules', label: 'Schedules', href: '/reports/schedules' },
 ]

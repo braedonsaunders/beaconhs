@@ -24,20 +24,20 @@ import {
 } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 
-export type ExtraFieldRow = {
+type ExtraFieldRow = {
   id: string
   fieldKey: string
   fieldValue: string | null
 }
 
-export type AddExtraFieldAction = (input: {
+type AddExtraFieldAction = (input: {
   ownerType: 'skill' | 'skill_type' | 'authority'
   ownerId: string
   fieldKey: string
   fieldValue: string | null
 }) => Promise<{ ok: boolean; error?: string }>
 
-export type DeleteExtraFieldAction = (input: {
+type DeleteExtraFieldAction = (input: {
   id: string
   ownerType: 'skill' | 'skill_type' | 'authority'
   ownerId: string

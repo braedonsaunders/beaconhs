@@ -5,12 +5,12 @@ export type ExportColumn = {
   defaultSelected?: boolean
 }
 
-export type CsvColumn = {
+type CsvColumn = {
   key: string
   header: string
 }
 
-export function exportColumnKey(label: string): string {
+function exportColumnKey(label: string): string {
   const cleaned = label
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')

@@ -11,6 +11,8 @@ import {
   ACTIVE_TENANT_COOKIE,
   ACTIVE_ROLE_COOKIE,
 } from './auth'
+import { activeTenantPredicate } from './active-tenant'
+import { isUuid } from './list-params'
 
 /**
  * Set (or clear) the active tenant cookie.
@@ -33,6 +35,7 @@ export async function setActiveTenant(
     revalidatePath('/', 'layout')
     return { ok: true }
   }
+  if (!isUuid(tenantId)) return { ok: false, error: 'That tenant is not available' }
 
   // Cross-tenant membership check before switching scope — runs on the BYPASSRLS
   // super pool because tenant_users enforces FORCE ROW LEVEL SECURITY.
@@ -43,18 +46,20 @@ export async function setActiveTenant(
       const [t] = await tx
         .select({ id: tenants.id })
         .from(tenants)
-        .where(eq(tenants.id, tenantId))
+        .where(activeTenantPredicate(tenantId))
         .limit(1)
       return !!t
     }
     const [m] = await tx
       .select({ id: tenantUsers.id })
       .from(tenantUsers)
+      .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
       .where(
         and(
           eq(tenantUsers.userId, userId),
           eq(tenantUsers.tenantId, tenantId),
           eq(tenantUsers.status, 'active'),
+          activeTenantPredicate(),
         ),
       )
       .limit(1)
@@ -96,6 +101,7 @@ export async function setActiveRole(
     revalidatePath('/', 'layout')
     return { ok: true }
   }
+  if (!isUuid(roleId)) return { ok: false, error: 'That role is not assigned to you' }
 
   // Only allow switching into a role actually assigned to this membership.
   // ctx.db is tenant-scoped, so RLS already bounds this to the active tenant.

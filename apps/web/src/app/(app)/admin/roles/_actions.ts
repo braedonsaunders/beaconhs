@@ -19,7 +19,7 @@ import {
   roleDashboardLayouts,
   roles,
   tenantUsers,
-  user,
+  users as user,
   type DashboardLayoutData,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'

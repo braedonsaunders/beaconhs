@@ -45,7 +45,7 @@ import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { resetNavConfig, saveNavConfig } from './_actions'
 
-export type TemplateLite = {
+type TemplateLite = {
   id: string
   name: string
   category: string | null

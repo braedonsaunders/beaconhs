@@ -2,22 +2,17 @@
 //
 // `:id` is a training_skill_assignments id. Resolves (or lazily creates) the
 // training_skill_certificates row for the assignment, then renders the selected
-// credential PDF on demand. `output` selects a saved credential design;
-// `format=wallet|cert` is retained for legacy links.
+// credential PDF on demand. `output` selects a saved credential design.
 
-import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { desc, eq } from 'drizzle-orm'
-import { trainingSkillAssignments, trainingSkillCertificates } from '@beaconhs/db/schema'
+import { eq } from 'drizzle-orm'
+import { trainingSkillAssignments } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
-import {
-  pdfResponse,
-  renderSkillCredentialPdf,
-  type CredentialPdfFormat,
-} from '@/lib/training-credential-pdf'
+import { issueTrainingSkillCertificate } from '@/lib/training-certificate-issuance'
+import { pdfResponse, renderSkillCredentialPdf } from '@/lib/training-credential-pdf'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,8 +22,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id: assignmentId } = await params
-  const format = (req.nextUrl.searchParams.get('format') ?? 'cert').toLowerCase()
-  const pdfFormat: CredentialPdfFormat = format === 'wallet' ? 'wallet' : 'cert'
   const outputId = req.nextUrl.searchParams.get('output')
 
   const ctx = await requireRequestContext()
@@ -66,25 +59,10 @@ export async function GET(
       } as const
     }
 
-    let [cert] = await tx
-      .select()
-      .from(trainingSkillCertificates)
-      .where(eq(trainingSkillCertificates.skillAssignmentId, assignmentId))
-      .orderBy(desc(trainingSkillCertificates.createdAt))
-      .limit(1)
-
-    if (!cert) {
-      const [created] = await tx
-        .insert(trainingSkillCertificates)
-        .values({
-          tenantId: ctx.tenantId!,
-          skillAssignmentId: assignmentId,
-          verifyToken: randomBytes(20).toString('hex'),
-        })
-        .returning()
-      cert = created
-    }
-    if (!cert) return { error: 'Failed to issue certificate.', status: 500 } as const
+    const cert = await issueTrainingSkillCertificate(tx, {
+      tenantId: ctx.tenantId,
+      skillAssignmentId: assignmentId,
+    })
     if (cert.revokedAt) {
       return {
         error: 'This certificate has been revoked and can no longer be downloaded.',
@@ -101,7 +79,6 @@ export async function GET(
 
   const rendered = await renderSkillCredentialPdf(ctx, result.cert.id, {
     outputId,
-    format: pdfFormat,
   })
   if (!rendered) {
     return NextResponse.json({ error: 'Skill certificate not found.' }, { status: 404 })
@@ -113,7 +90,7 @@ export async function GET(
     entityId: assignmentId,
     action: 'export',
     summary: 'Downloaded skill credential PDF',
-    metadata: { certificateId: result.cert.id, outputId, format: pdfFormat },
+    metadata: { certificateId: result.cert.id, outputId },
   })
 
   return pdfResponse(rendered)

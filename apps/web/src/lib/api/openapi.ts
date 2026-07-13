@@ -163,7 +163,7 @@ function entityPath(entity: ReportEntity): Json {
           content: errorContent(),
         },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -185,6 +185,7 @@ function postOperation(entity: ReportEntity): Json {
     description: `Create a ${entity.label} record. Requires permission \`${writePermission}\`. The record is created in the API key's tenant.`,
     'x-beaconhs-required-permission': writePermission,
     security: [{ bearerAuth: [] }],
+    parameters: [idempotencyHeader()],
     requestBody: {
       required: true,
       content: {
@@ -208,7 +209,7 @@ function postOperation(entity: ReportEntity): Json {
       },
       '400': { description: 'Validation failed.', content: errorContent() },
       '401': {
-        description: 'Missing, invalid, revoked or expired API key.',
+        description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
         content: errorContent(),
       },
       '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -228,6 +229,7 @@ function patchOperation(entity: ReportEntity): Json {
     'x-beaconhs-required-permission': updatePermission,
     security: [{ bearerAuth: [] }],
     parameters: [
+      idempotencyHeader(),
       { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
     ],
     requestBody: {
@@ -253,7 +255,7 @@ function patchOperation(entity: ReportEntity): Json {
       },
       '400': { description: 'Validation failed.', content: errorContent() },
       '401': {
-        description: 'Missing, invalid, revoked or expired API key.',
+        description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
         content: errorContent(),
       },
       '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -274,6 +276,7 @@ function deleteOperation(entity: ReportEntity): Json {
     'x-beaconhs-required-permission': deletePermission,
     security: [{ bearerAuth: [] }],
     parameters: [
+      idempotencyHeader(),
       { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
     ],
     responses: {
@@ -300,13 +303,23 @@ function deleteOperation(entity: ReportEntity): Json {
       },
       '400': { description: 'Invalid id or archived/locked record.', content: errorContent() },
       '401': {
-        description: 'Missing, invalid, revoked or expired API key.',
+        description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
         content: errorContent(),
       },
       '403': { description: 'API key lacks the required permission.', content: errorContent() },
       '404': { description: 'No record with that id in your tenant.', content: errorContent() },
       '405': { description: 'Entity does not support DELETE.', content: errorContent() },
     },
+  }
+}
+
+function idempotencyHeader(): Json {
+  return {
+    name: 'Idempotency-Key',
+    in: 'header',
+    required: true,
+    schema: { type: 'string', minLength: 1, maxLength: 128 },
+    description: 'Unique retry key retained for 24 hours. Reusing it with another request is 409.',
   }
 }
 
@@ -342,7 +355,7 @@ function recordPath(entity: ReportEntity): Json {
         },
         '400': { description: 'Invalid id (not a uuid).', content: errorContent() },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -455,7 +468,7 @@ function builderAppsPath(): Json {
           },
         },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -542,7 +555,7 @@ function builderResponsesPath(options: {
         },
         '400': { description: 'Invalid request.', content: errorContent() },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -557,7 +570,7 @@ function builderResponsesPath(options: {
       'x-beaconhs-required-permission': BUILDER_APP_CREATE_PERMISSION,
       ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
       security: [{ bearerAuth: [] }],
-      parameters: templateParam,
+      parameters: [...templateParam, idempotencyHeader()],
       requestBody: {
         required: true,
         content: { 'application/json': { schema: { $ref: options.submitSchemaRef } } },
@@ -579,7 +592,7 @@ function builderResponsesPath(options: {
         },
         '400': { description: 'Validation failed.', content: errorContent() },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -640,7 +653,7 @@ function builderResponseRecordPath(options: {
         },
         '400': { description: 'Invalid id.', content: errorContent() },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -655,7 +668,7 @@ function builderResponseRecordPath(options: {
       'x-beaconhs-required-permission': BUILDER_APP_UPDATE_PERMISSION,
       ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
       security: [{ bearerAuth: [] }],
-      parameters: [...templateParam, idParam],
+      parameters: [...templateParam, idParam, idempotencyHeader()],
       requestBody: {
         required: true,
         content: { 'application/json': { schema: { $ref: options.patchSchemaRef } } },
@@ -677,7 +690,7 @@ function builderResponseRecordPath(options: {
         },
         '400': { description: 'Validation failed or response is locked.', content: errorContent() },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -692,7 +705,7 @@ function builderResponseRecordPath(options: {
       'x-beaconhs-required-permission': BUILDER_APP_DELETE_PERMISSION,
       ...(options.app ? { 'x-beaconhs-builder-app-key': options.app.key } : {}),
       security: [{ bearerAuth: [] }],
-      parameters: [...templateParam, idParam],
+      parameters: [...templateParam, idParam, idempotencyHeader()],
       responses: {
         '200': {
           description: 'Delete result.',
@@ -718,7 +731,7 @@ function builderResponseRecordPath(options: {
         },
         '400': { description: 'Invalid id or response is locked.', content: errorContent() },
         '401': {
-          description: 'Missing, invalid, revoked or expired API key.',
+          description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
           content: errorContent(),
         },
         '403': { description: 'API key lacks the required permission.', content: errorContent() },
@@ -755,7 +768,21 @@ export function buildOpenApiDocument(
         error: {
           type: 'object',
           properties: {
-            code: { type: 'string' },
+            code: {
+              type: 'string',
+              enum: [
+                'unauthorized',
+                'forbidden',
+                'not_found',
+                'invalid_request',
+                'method_not_allowed',
+                'rate_limited',
+                'conflict',
+                'payload_too_large',
+                'unavailable',
+                'internal',
+              ],
+            },
             message: { type: 'string' },
             details: {},
           },
@@ -870,7 +897,10 @@ export function buildOpenApiDocument(
         'API keys use the same permission catalogue as tenant roles. Each operation lists its required permission in the description and `x-beaconhs-required-permission`.',
         '',
         '## Builder apps',
-        'Published Builder apps are addressable at `/api/v1/apps/{templateKey}/responses`. Fetch this OpenAPI document with a valid Bearer token to include concrete, tenant-specific paths and schemas for each published Builder app.',
+        'Builder apps require both a forms permission and an explicit app grant on the API key. Fetch this document with a valid Bearer token to include only the concrete granted app paths and schemas.',
+        '',
+        '## Reliability and limits',
+        'All POST, PATCH, and DELETE requests require an `Idempotency-Key` header. Keys are retained for 24 hours. Valid credentials are limited to 600 requests per minute; 429 responses include `Retry-After` and RateLimit headers.',
         '',
         '## Filtering, sorting & paging',
         'Every list endpoint accepts `limit`, `offset`, `sort`, `order` and `fields`, plus per-column filters (`?status=open`, `?occurred_at__gte=2026-01-01`, `?severity__in=high,critical`).',
@@ -889,6 +919,23 @@ export function buildOpenApiDocument(
           type: 'http',
           scheme: 'bearer',
           description: 'A `bhs_live_…` key from Admin → API keys.',
+        },
+      },
+      responses: {
+        RateLimited: {
+          description: 'Valid API key exceeded 600 requests in the current minute.',
+          headers: {
+            'Retry-After': { schema: { type: 'integer' } },
+            'RateLimit-Limit': { schema: { type: 'integer' } },
+            'RateLimit-Remaining': { schema: { type: 'integer' } },
+            'RateLimit-Reset': { schema: { type: 'integer' } },
+          },
+          content: errorContent(),
+        },
+        Unavailable: {
+          description: 'Authorization dependency unavailable; requests fail closed.',
+          headers: { 'Retry-After': { schema: { type: 'integer' } } },
+          content: errorContent(),
         },
       },
       schemas,

@@ -8,10 +8,11 @@
 // Nothing here mutates state — purely a GET endpoint.
 
 import { NextResponse } from 'next/server'
-import { and, count, desc, gte, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import {
   correctiveActions,
+  documentCategories,
   documents,
   equipmentItems,
   hazidAssessments,
@@ -291,9 +292,10 @@ export async function GET(req: Request): Promise<NextResponse> {
             id: documents.id,
             title: documents.title,
             key: documents.key,
-            category: documents.category,
+            category: documentCategories.name,
           })
           .from(documents)
+          .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
           .where(and(...where))
           .orderBy(documents.title)
           .limit(PER_GROUP_LIMIT)

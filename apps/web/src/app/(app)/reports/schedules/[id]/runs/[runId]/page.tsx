@@ -13,7 +13,6 @@ import {
   DetailHeader,
 } from '@beaconhs/ui'
 import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
-import { db, withSuperAdmin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
@@ -45,7 +44,7 @@ export default async function RunDetailPage({
   })
   if (!row || row.schedule.id !== id) notFound()
 
-  const [definition] = await withSuperAdmin(db, (tx) =>
+  const [definition] = await ctx.db((tx) =>
     tx
       .select()
       .from(reportDefinitions)

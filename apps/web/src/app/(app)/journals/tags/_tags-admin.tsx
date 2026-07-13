@@ -15,7 +15,6 @@ import {
   Sparkles,
   Tag as TagIcon,
   Trash2,
-  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, EmptyState, Input, SearchSelect, Textarea, cn } from '@beaconhs/ui'

@@ -1,7 +1,7 @@
 'use client'
 
 import { Plus, Trash2 } from 'lucide-react'
-import { Button, Input, Label, Select } from '@beaconhs/ui'
+import { Button, Input, Select } from '@beaconhs/ui'
 import type { LogicRule } from '@beaconhs/forms-core'
 
 const OPS: {
@@ -187,10 +187,7 @@ function normalize(rule: LogicRule | undefined): {
   return { combinator: 'and', clauses: [rule] }
 }
 
-export function describeRule(
-  rule: LogicRule | undefined,
-  fieldLookup: Record<string, string>,
-): string {
+function describeRule(rule: LogicRule | undefined, fieldLookup: Record<string, string>): string {
   if (!rule) return 'Always'
   if ('rules' in rule) {
     return rule.rules

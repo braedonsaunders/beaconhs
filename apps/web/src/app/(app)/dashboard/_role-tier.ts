@@ -2,13 +2,14 @@
 // default widget layout. Order is descending priority — the highest tier wins
 // when a user has multiple role assignments.
 
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { roleAssignments, roles } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { effectiveRoleAssignments } from '@/lib/effective-role-policy'
 
 export type RoleTier = 'super_admin' | 'tenant_admin' | 'safety_manager' | 'foreman' | 'worker'
 
-export const ROLE_TIERS: readonly RoleTier[] = [
+const ROLE_TIERS: readonly RoleTier[] = [
   'super_admin',
   'tenant_admin',
   'safety_manager',
@@ -32,7 +33,7 @@ export const ROLE_TIER_LABELS: Record<RoleTier, string> = {
   worker: 'Worker',
 }
 
-export function roleTierFromKey(key: string): RoleTier | null {
+function roleTierFromKey(key: string): RoleTier | null {
   return key in TIER_RANK ? (key as RoleTier) : null
 }
 
@@ -95,7 +96,8 @@ export function dashboardSourceKeyForRole(roleId: string): string {
 /**
  * Pick the dashboard tier for this user in the active tenant.
  *
- *   • If the user is a tenant member, prefer their highest built-in role
+ *   • If the user is acting under one role, use that role's inferred tier.
+ *   • Otherwise, prefer their highest built-in role
  *     (tenant_admin > safety_manager > foreman > worker). This is what
  *     drives the dashboard layout — a super-admin who is also a tenant
  *     member sees the dashboard appropriate to their tenant role, not
@@ -112,14 +114,26 @@ export async function getUserRoleTier(ctx: RequestContext): Promise<RoleTier> {
 
   const rows = await ctx.db(async (tx) =>
     tx
-      .select({ key: roles.key })
+      .select({
+        roleId: roles.id,
+        key: roles.key,
+        permissions: roles.permissions,
+        isBuiltIn: roles.isBuiltIn,
+      })
       .from(roleAssignments)
       .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-      .where(and(eq(roleAssignments.tenantUserId, ctx.membership!.id), eq(roles.isBuiltIn, true))),
+      .where(eq(roleAssignments.tenantUserId, ctx.membership!.id)),
   )
 
+  const effective = effectiveRoleAssignments(ctx.activeRoleId, rows)
+  if (ctx.activeRoleId) {
+    const active = effective[0]
+    return active ? inferRoleTier(active) : 'worker'
+  }
+
   let best: RoleTier | null = null
-  for (const r of rows) {
+  for (const r of effective) {
+    if (!r.isBuiltIn) continue
     const key = r.key as RoleTier
     if (key in TIER_RANK && (best === null || TIER_RANK[key] < TIER_RANK[best])) {
       best = key

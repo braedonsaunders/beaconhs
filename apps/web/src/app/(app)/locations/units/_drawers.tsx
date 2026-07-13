@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer } from '@beaconhs/ui'
 
-export type SaveResult = { ok: true } | { ok: false; error: string }
+type SaveResult = { ok: true } | { ok: false; error: string }
 
 type LevelOption = { value: string; label: string }
 type ParentOption = { value: string; label: string }

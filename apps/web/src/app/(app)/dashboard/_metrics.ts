@@ -3,7 +3,6 @@
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
-import { extractRows } from '@beaconhs/reports'
 import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
@@ -14,6 +13,7 @@ import {
   equipmentItems,
   equipmentTypes,
   formResponses,
+  formTemplates,
   hazidAssessments,
   incidentHoursPeriods,
   incidents,
@@ -31,7 +31,9 @@ import {
   truckLogEntries,
 } from '@beaconhs/db/schema'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
+import { templateAccessWhere } from '../apps/_lib/access'
 import { moduleScope } from '../feed/_data'
 
 /**
@@ -39,7 +41,7 @@ import { moduleScope } from '../feed/_data'
  * tiny inline-SVG sparklines on the hero rate tiles. Values are scalar (incident
  * counts or rates); `null` means "no data that month".
  */
-export type MonthlySeries = ReadonlyArray<number | null>
+type MonthlySeries = ReadonlyArray<number | null>
 
 export type DashboardMetrics = {
   // Headline tiles
@@ -343,6 +345,7 @@ export async function loadDashboardMetrics(
   const thirtyIso = thirtyDaysAhead.toISOString().slice(0, 10)
 
   return await ctx.db(async (tx) => {
+    const effectiveRoleKeys = await getEffectiveRoleKeys(ctx, tx)
     const [
       incRow,
       incPrev,
@@ -392,7 +395,14 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(formResponses)
-        .where(and(isNull(formResponses.deletedAt), gte(formResponses.submittedAt, todayStart)))
+        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+        .where(
+          and(
+            isNull(formResponses.deletedAt),
+            gte(formResponses.submittedAt, todayStart),
+            templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
+          ),
+        )
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -413,7 +423,14 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(formResponses)
-        .where(and(isNull(formResponses.deletedAt), eq(formResponses.monitorStatus, 'active')))
+        .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
+        .where(
+          and(
+            isNull(formResponses.deletedAt),
+            eq(formResponses.monitorStatus, 'active'),
+            templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
+          ),
+        )
         .then((r) => r[0]),
       tx
         .select({ c: count() })

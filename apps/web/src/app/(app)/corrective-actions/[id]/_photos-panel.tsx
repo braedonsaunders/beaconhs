@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react'
 import { Button, Input } from '@beaconhs/ui'
 import { PhotoGallery, type GalleryPhoto } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
+import { RawImage } from '@/components/raw-image'
 import { confirmDialog } from '@/lib/confirm'
 import { attachCaPhotos, deleteCaPhoto, updateCaPhotoCaption } from '../_actions'
 
@@ -99,7 +100,7 @@ function PhotoRow({
 
   return (
     <li className="flex items-center gap-3 px-3 py-2">
-      <img
+      <RawImage
         src={photo.url}
         alt={photo.caption ?? photo.filename}
         className="h-10 w-10 shrink-0 rounded object-cover"

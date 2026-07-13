@@ -22,6 +22,7 @@ import {
 import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { useReseededState } from '@/lib/use-reseeded-state'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -57,7 +58,7 @@ const RESPONSE_LABELS: Record<ResponseType, string> = {
   rating: 'Pass / Fail / N-A',
 }
 
-export type BuilderType = {
+type BuilderType = {
   id: string
   name: string
   description: string | null
@@ -68,8 +69,8 @@ export type BuilderType = {
   allowCompliantNotes: boolean
   isPublished: boolean
 }
-export type BuilderGroup = { id: string; label: string; sequence: number }
-export type BuilderCriterion = {
+type BuilderGroup = { id: string; label: string; sequence: number }
+type BuilderCriterion = {
   id: string
   groupId: string | null
   sequence: number
@@ -78,7 +79,7 @@ export type BuilderCriterion = {
   requiresPhoto: boolean
   requiresComment: boolean
 }
-export type BuilderBank = {
+type BuilderBank = {
   id: string
   name: string
   category: string | null
@@ -102,18 +103,13 @@ export function InspectionTypeBuilder({
 }) {
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  const [groups, setGroups] = React.useState(initialGroups)
-  const [criteria, setCriteria] = React.useState(initialCriteria)
+  const [groups, setGroups] = useReseededState(initialGroups, initialGroups)
+  const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
   const [published, setPublished] = React.useState(type.isPublished)
   const [editor, setEditor] = React.useState<EditorState | null>(null)
   const [importing, setImporting] = React.useState(false)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  // Re-seed from server only when props change (error-path refresh); the happy
-  // path mutates local state directly so drag/edits don't flicker.
-  React.useEffect(() => setGroups(initialGroups), [initialGroups])
-  React.useEffect(() => setCriteria(initialCriteria), [initialCriteria])
 
   const run = React.useCallback(
     (fn: () => Promise<unknown>, errMsg = 'Something went wrong') => {
@@ -599,22 +595,25 @@ function CriterionEditorDrawer({
     groupId: string | null
   }) => void
 }) {
-  const [text, setText] = React.useState('')
-  const [responseType, setResponseType] = React.useState<ResponseType>('pass_fail_na')
-  const [requiresPhoto, setRequiresPhoto] = React.useState(false)
-  const [requiresComment, setRequiresComment] = React.useState(false)
-  const [groupId, setGroupId] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (!editor) return
-    const c = editor.criterion
-    setText(c?.text ?? '')
-    // Coerce withdrawn 'rating' rows to the type they actually behave as.
-    setResponseType(c && c.responseType !== 'rating' ? c.responseType : 'pass_fail_na')
-    setRequiresPhoto(c?.requiresPhoto ?? false)
-    setRequiresComment(c?.requiresComment ?? false)
-    setGroupId(editor.groupId ?? c?.groupId ?? null)
-  }, [editor])
+  const criterion = editor?.criterion
+  const [text, setText] = useReseededState(editor, criterion?.text ?? '')
+  // Coerce withdrawn 'rating' rows to the type they actually behave as.
+  const [responseType, setResponseType] = useReseededState<ResponseType>(
+    editor,
+    criterion && criterion.responseType !== 'rating' ? criterion.responseType : 'pass_fail_na',
+  )
+  const [requiresPhoto, setRequiresPhoto] = useReseededState(
+    editor,
+    criterion?.requiresPhoto ?? false,
+  )
+  const [requiresComment, setRequiresComment] = useReseededState(
+    editor,
+    criterion?.requiresComment ?? false,
+  )
+  const [groupId, setGroupId] = useReseededState<string | null>(
+    editor,
+    editor?.groupId ?? criterion?.groupId ?? null,
+  )
 
   return (
     <Drawer

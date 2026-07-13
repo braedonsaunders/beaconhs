@@ -5,14 +5,7 @@
 
 import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
 
-export type NotificationsTab =
-  | 'rules'
-  | 'groups'
-  | 'email'
-  | 'sms'
-  | 'templates'
-  | 'email-log'
-  | 'sms-log'
+type NotificationsTab = 'rules' | 'groups' | 'email' | 'sms' | 'templates' | 'email-log' | 'sms-log'
 
 const TABS = [
   { key: 'rules', label: 'Rules', href: '/admin/notifications' },

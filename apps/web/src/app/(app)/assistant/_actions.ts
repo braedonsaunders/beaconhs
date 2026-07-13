@@ -41,8 +41,8 @@ export async function unshareAssistantConversation(shareId: string): Promise<voi
   revalidatePath('/assistant')
 }
 
-export type ShareTarget = { id: string; name: string }
-export type ResolvedShare = { id: string; type: 'user' | 'role'; name: string }
+type ShareTarget = { id: string; name: string }
+type ResolvedShare = { id: string; type: 'user' | 'role'; name: string }
 export type ShareData = {
   shares: ResolvedShare[]
   users: ShareTarget[]

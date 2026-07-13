@@ -1,13 +1,13 @@
 'use server'
 
-// Content Library — reusable training material ("outside the course"). Native to
-// training; same bespoke block model as inline lesson content. Gated by
-// training.course.manage.
+// Content Library — reusable training material ("outside the course"). Gated
+// by training.course.manage.
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
-import { trainingContentItems, trainingLessons, type LessonBlock } from '@beaconhs/db/schema'
+import { trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
+import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { enqueueSlidesImport } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
@@ -77,13 +77,17 @@ export async function updateContentItem(id: string, formData: FormData) {
   revalidatePath('/training/library')
 }
 
-export async function saveContentItemBlocks(id: string, blocks: LessonBlock[]) {
+export async function saveContentItemRich(id: string, json: unknown, html: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
+  if (typeof html !== 'string' || html.length > 2_000_000) throw new Error('Content too large')
   await ctx.db(async (tx) => {
     await tx
       .update(trainingContentItems)
-      .set({ contentBlocks: blocks })
+      .set({
+        contentJson: (json ?? null) as Record<string, unknown> | null,
+        contentHtml: sanitizeDocumentHtml(html),
+      })
       .where(eq(trainingContentItems.id, id))
   })
   revalidatePath(`/training/library/${id}`)

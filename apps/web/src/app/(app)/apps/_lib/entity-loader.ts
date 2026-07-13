@@ -16,8 +16,6 @@ import {
 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 
-export type { EntitiesByField }
-
 /**
  * Resolve entity-attr maps for every picker field in the form schema.
  * Returns `{ pickerFieldKey: attrMap | null }` keyed by the picker's field
@@ -78,6 +76,3 @@ export async function fetchSingleEntityAttrs(
   )
   return map['__synth__'] ?? null
 }
-
-// Re-export so call sites have a single import.
-export { ENTITY_ATTRS }

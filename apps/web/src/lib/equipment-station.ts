@@ -17,9 +17,10 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
+import { isUuid } from './list-params'
 
-export const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
-export type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
+const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
+type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
 
 export type StationSearchResults = {
   equipment: {
@@ -66,6 +67,69 @@ export type StationScanInput = {
   direction?: 'in' | 'out'
   condition?: ReturnCondition
   returnedNotes?: string | null
+}
+
+export function parseStationScanInput(value: unknown): StationScanInput | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const input = value as Record<string, unknown>
+  if (typeof input.code !== 'string') return null
+  const code = input.code.trim()
+  if (!code || code.length > 200) return null
+
+  const optionalUuid = (candidate: unknown): string | null | undefined => {
+    if (candidate === undefined) return undefined
+    if (candidate === null || candidate === '') return null
+    return typeof candidate === 'string' && isUuid(candidate) ? candidate : undefined
+  }
+  const activePersonId = optionalUuid(input.activePersonId)
+  const destinationOrgUnitId = optionalUuid(input.destinationOrgUnitId)
+  if (input.activePersonId !== undefined && activePersonId === undefined) return null
+  if (input.destinationOrgUnitId !== undefined && destinationOrgUnitId === undefined) return null
+
+  if (input.direction !== undefined && input.direction !== 'in' && input.direction !== 'out') {
+    return null
+  }
+  if (
+    input.condition !== undefined &&
+    (typeof input.condition !== 'string' ||
+      !RETURN_CONDITIONS.includes(input.condition as ReturnCondition))
+  ) {
+    return null
+  }
+  let expectedReturnOn: string | null | undefined
+  if (input.expectedReturnOn === undefined) expectedReturnOn = undefined
+  else if (input.expectedReturnOn === null || input.expectedReturnOn === '') expectedReturnOn = null
+  else if (typeof input.expectedReturnOn === 'string') {
+    const date = new Date(`${input.expectedReturnOn}T00:00:00.000Z`)
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.expectedReturnOn) ||
+      Number.isNaN(date.valueOf()) ||
+      date.toISOString().slice(0, 10) !== input.expectedReturnOn
+    ) {
+      return null
+    }
+    expectedReturnOn = input.expectedReturnOn
+  } else return null
+
+  if (
+    input.returnedNotes !== undefined &&
+    input.returnedNotes !== null &&
+    typeof input.returnedNotes !== 'string'
+  ) {
+    return null
+  }
+  const returnedNotes =
+    typeof input.returnedNotes === 'string' ? input.returnedNotes.trim().slice(0, 2_000) : null
+
+  return {
+    code,
+    activePersonId,
+    destinationOrgUnitId,
+    expectedReturnOn,
+    direction: input.direction as 'in' | 'out' | undefined,
+    condition: input.condition as ReturnCondition | undefined,
+    returnedNotes,
+  }
 }
 
 function cleanCode(raw: string): string {

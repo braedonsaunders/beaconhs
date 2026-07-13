@@ -16,7 +16,7 @@ import {
   type RawEmailConfig,
 } from '@beaconhs/emails'
 import type { RequestContext } from '@beaconhs/tenant'
-import { encryptSecret } from '@beaconhs/crypto'
+import { sealSecret } from '@beaconhs/crypto'
 
 const DEFAULT_PROVIDER: EmailProvider = 'resend'
 
@@ -28,7 +28,7 @@ function normProvider(p: string | undefined): EmailProvider {
 // UI-facing shapes (no secret material)
 // ---------------------------------------------------------------------------
 
-export type EmailSettings = {
+type EmailSettings = {
   enabled: boolean
   provider: EmailProvider
   fromName: string
@@ -43,7 +43,7 @@ export type EmailSettings = {
   hasKey: boolean
 }
 
-export type PlatformEmailSettings = EmailSettings & { mode: EmailPolicyMode }
+type PlatformEmailSettings = EmailSettings & { mode: EmailPolicyMode }
 
 function toSettings(raw: RawEmailConfig): EmailSettings {
   return {
@@ -98,7 +98,7 @@ function mergeRaw(prev: RawEmailConfig, input: EmailSettingsInput): RawEmailConf
     keyNonce: prev.keyNonce,
   }
   if (input.secret && input.secret.trim()) {
-    const sealed = encryptSecret(input.secret.trim())
+    const sealed = sealSecret(input.secret.trim())
     next.keyCiphertext = sealed.ciphertext
     next.keyNonce = sealed.nonce
   }
@@ -141,6 +141,7 @@ export async function saveTenantEmailSettings(
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
+      .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (
       settings.email && typeof settings.email === 'object' ? settings.email : {}
@@ -160,6 +161,7 @@ export async function clearTenantEmailKey(ctx: RequestContext): Promise<void> {
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
+      .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (
       settings.email && typeof settings.email === 'object' ? settings.email : {}

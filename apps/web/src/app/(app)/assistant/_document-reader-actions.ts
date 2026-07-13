@@ -10,7 +10,7 @@
 // scanned/image-only PDF that has no extractable text.
 
 import { and, desc, eq, isNull, type SQL } from 'drizzle-orm'
-import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
+import { attachments, documentCategories, documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { presignExistingGet } from '@beaconhs/storage'
@@ -33,7 +33,7 @@ export type ReaderDocument = {
   pdfUrl: string | null
 }
 
-export type ReaderResult = { ok: true; doc: ReaderDocument } | { ok: false; error: string }
+type ReaderResult = { ok: true; doc: ReaderDocument } | { ok: false; error: string }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -53,10 +53,11 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
         key: documents.key,
         title: documents.title,
         status: documents.status,
-        category: documents.category,
+        category: documentCategories.name,
         updatedAt: documents.updatedAt,
       })
       .from(documents)
+      .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
       .where(and(...conds))
       .limit(1)
     if (!doc) return { ok: false, error: 'not_found' }

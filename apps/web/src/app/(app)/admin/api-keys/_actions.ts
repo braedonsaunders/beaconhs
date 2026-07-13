@@ -2,8 +2,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { eq } from 'drizzle-orm'
-import { apiKeys } from '@beaconhs/db/schema'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { apiKeys, formTemplates } from '@beaconhs/db/schema'
 import { assertNotImpersonating } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { sanitizeApiPermissions } from '@/lib/api/permissions'
@@ -23,6 +23,31 @@ function readPermissions(formData: FormData): string[] {
   return sanitizeApiPermissions(formData.getAll('permissions').map(String))
 }
 
+async function readBuilderTemplateIds(
+  ctx: Awaited<ReturnType<typeof requireApiKeyWriter>>,
+  formData: FormData,
+): Promise<string[]> {
+  const requested = [...new Set(formData.getAll('builderTemplateIds').map(String))].filter((id) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
+  )
+  if (requested.length === 0) return []
+  const rows = await ctx.db((tx) =>
+    tx
+      .select({ id: formTemplates.id })
+      .from(formTemplates)
+      .where(
+        and(
+          inArray(formTemplates.id, requested),
+          eq(formTemplates.status, 'published'),
+          isNull(formTemplates.deletedAt),
+        ),
+      ),
+  )
+  if (rows.length !== requested.length)
+    throw new Error('One or more Builder app grants are invalid')
+  return rows.map((row) => row.id)
+}
+
 // Date-only input, anchored to end-of-day UTC so it round-trips exactly with
 // the edit form's `toISOString().slice(0, 10)` display. Parsing in server-local
 // time made the shown date drift forward a day per save on any server west of
@@ -39,6 +64,7 @@ export async function createApiKey(formData: FormData) {
   const ctx = await requireApiKeyWriter()
   const name = String(formData.get('name') ?? '').trim()
   const permissions = readPermissions(formData)
+  const builderTemplateIds = await readBuilderTemplateIds(ctx, formData)
 
   if (!name) redirect(`/admin/api-keys?error=${encodeURIComponent('Give the key a name.')}`)
   if (permissions.length === 0) {
@@ -57,6 +83,7 @@ export async function createApiKey(formData: FormData) {
         keyHash,
         prefix,
         permissions,
+        builderTemplateIds,
         expiresAt: parseExpiresAt(formData),
         createdBy: ctx.userId,
       })
@@ -69,7 +96,7 @@ export async function createApiKey(formData: FormData) {
       entityId: row.id,
       action: 'create',
       summary: `Created API key "${name}"`,
-      after: { name, permissions, expiresAt: row.expiresAt },
+      after: { name, permissions, builderTemplateIds, expiresAt: row.expiresAt },
     })
   }
 
@@ -92,6 +119,7 @@ export async function updateApiKey(formData: FormData) {
 
   const name = String(formData.get('name') ?? '').trim()
   const permissions = readPermissions(formData)
+  const builderTemplateIds = await readBuilderTemplateIds(ctx, formData)
   const errorPath = `/admin/api-keys/${id}`
   if (!name) redirect(`${errorPath}?error=${encodeURIComponent('Give the key a name.')}`)
   if (permissions.length === 0) {
@@ -109,7 +137,10 @@ export async function updateApiKey(formData: FormData) {
 
   const expiresAt = parseExpiresAt(formData)
   await ctx.db((tx) =>
-    tx.update(apiKeys).set({ name, permissions, expiresAt }).where(eq(apiKeys.id, id)),
+    tx
+      .update(apiKeys)
+      .set({ name, permissions, builderTemplateIds, expiresAt })
+      .where(eq(apiKeys.id, id)),
   )
   await recordAudit(ctx, {
     entityType: 'api_key',
@@ -119,10 +150,11 @@ export async function updateApiKey(formData: FormData) {
     before: {
       name: before.name,
       permissions: before.permissions,
+      builderTemplateIds: before.builderTemplateIds,
       expiresAt: before.expiresAt,
       revokedAt: before.revokedAt,
     },
-    after: { name, permissions, expiresAt },
+    after: { name, permissions, builderTemplateIds, expiresAt },
   })
   revalidatePath('/admin/api-keys')
   revalidatePath(`/admin/api-keys/${id}`)

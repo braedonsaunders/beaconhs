@@ -49,7 +49,7 @@ export async function createDocument(): Promise<void> {
   redirect(`/documents/${id}`)
 }
 
-export type BulkActionResult =
+type BulkActionResult =
   | { ok: true; updated: number; skipped: number }
   | { ok: false; error: string }
 
@@ -273,14 +273,14 @@ export async function bulkAddDocumentsToBook(args: {
 
   const book = await ctx.db(async (tx) => {
     const [b] = await tx
-      .select({ id: documentBooks.id, title: documentBooks.title, name: documentBooks.name })
+      .select({ id: documentBooks.id, title: documentBooks.title })
       .from(documentBooks)
       .where(eq(documentBooks.id, args.bookId))
       .limit(1)
     return b ?? null
   })
   if (!book) return { ok: false, error: 'Book not found.' }
-  const bookLabel = book.title || book.name || 'Untitled book'
+  const bookLabel = book.title || 'Untitled book'
 
   const result = await ctx.db(async (tx) => {
     const validRows = await tx
@@ -293,7 +293,7 @@ export async function bulkAddDocumentsToBook(args: {
 
     const [maxRow] = await tx
       .select({
-        n: sql<number>`COALESCE(MAX(${documentBookItems.position}), 0)`,
+        n: sql<number>`COALESCE(MAX(${documentBookItems.position}), -1)`,
       })
       .from(documentBookItems)
       .where(eq(documentBookItems.bookId, args.bookId))
@@ -351,14 +351,13 @@ export async function listDocumentBooksForBulk(): Promise<{ id: string; label: s
       .select({
         id: documentBooks.id,
         title: documentBooks.title,
-        name: documentBooks.name,
         status: documentBooks.status,
       })
       .from(documentBooks)
-      .orderBy(asc(documentBooks.title), asc(documentBooks.name))
+      .orderBy(asc(documentBooks.title))
     return rows.map((r) => ({
       id: r.id,
-      label: `${r.title || r.name || 'Untitled'} (${r.status})`,
+      label: `${r.title || 'Untitled'} (${r.status})`,
     }))
   })
 }

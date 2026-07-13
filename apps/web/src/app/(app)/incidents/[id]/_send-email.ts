@@ -92,9 +92,9 @@ export async function sendIncidentEmail(
     ``,
     `Medical:`,
     `  EMS called: ${yn(data.i.emsCalled)}`,
-    `  First aid: ${yn(data.i.firstAidReceived || data.i.firstAidGiven)}`,
+    `  First aid: ${yn(data.i.firstAidGiven)}`,
     `  Medical attention: ${yn(data.i.medicalAttentionReceived)}`,
-    `  Hospital: ${data.i.hospitalName ?? data.i.treatedAtHospital ?? '—'}`,
+    `  Hospital: ${data.i.hospitalName ?? '—'}`,
     `  MOL notified: ${yn(data.i.ministryOfLabourNotified)}${data.i.molReportNumber ? ` (${data.i.molReportNumber})` : ''}`,
     `  Police notified: ${yn(data.i.policeNotified)}${data.i.policeReportNumber ? ` (${data.i.policeReportNumber})` : ''}`,
     `  Insurance claim: ${data.i.insuranceClaimNumber ?? '—'}`,
@@ -155,11 +155,11 @@ export async function sendIncidentEmail(
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">EMS called</td>
             <td>${yn(data.i.emsCalled)}</td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">First aid</td>
-            <td>${yn(data.i.firstAidReceived || data.i.firstAidGiven)}</td></tr>
+            <td>${yn(data.i.firstAidGiven)}</td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">Medical attention</td>
             <td>${yn(data.i.medicalAttentionReceived)}</td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">Hospital</td>
-            <td>${escapeHtml(data.i.hospitalName ?? data.i.treatedAtHospital ?? '—')}</td></tr>
+            <td>${escapeHtml(data.i.hospitalName ?? '—')}</td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">MOL notified</td>
             <td>${yn(data.i.ministryOfLabourNotified)}${
               data.i.molReportNumber ? ` (${escapeHtml(data.i.molReportNumber)})` : ''

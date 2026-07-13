@@ -5,7 +5,7 @@
 // way refreshes / shared links work, and we don't need client state for
 // the list shell.
 
-export type ListParams<S extends string = string> = {
+type ListParams<S extends string = string> = {
   q: string | undefined
   sort: S
   dir: 'asc' | 'desc'

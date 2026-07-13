@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Database, Plus, Table2, Trash2, ArrowUpRight } from 'lucide-react'
-import { asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -39,12 +39,20 @@ import type { FormSchemaV1 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { AdminBackLink } from '../_back-link'
 import { deriveColumnsFromSchema, slugify } from './_shared'
 import { collectDataSourceUsage } from './_usage'
 
 export const metadata = { title: 'Data sources' }
 export const dynamic = 'force-dynamic'
+
+const BASE = '/admin/data-sources'
+const SORTS = ['name', 'key', 'kind', 'rows'] as const
 
 async function createDataSource(formData: FormData): Promise<void> {
   'use server'
@@ -131,11 +139,43 @@ async function deleteDataSource(formData: FormData): Promise<void> {
   revalidatePath('/admin/data-sources')
 }
 
-export default async function DataSourcesPage() {
+export default async function DataSourcesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
+  const sp = await searchParams
+  const kindParam = pickString(sp.kind)
+  const kindFilter = kindParam === 'reference' || kindParam === 'responses' ? kindParam : undefined
+  const params = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
 
-  const { sources, templates } = await ctx.db(async (tx) => {
+  const { sources, templates, total, kindCounts } = await ctx.db(async (tx) => {
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(dataSources.name, `%${params.q}%`),
+          ilike(dataSources.key, `%${params.q}%`),
+          ilike(dataSources.description, `%${params.q}%`),
+        )
+      : undefined
+    const active = isNull(dataSources.deletedAt)
+    const where = and(active, search, kindFilter ? eq(dataSources.kind, kindFilter) : undefined)
+    const rowCount = sql<number>`(select count(*) from ${dataSourceRows} where ${dataSourceRows.dataSourceId} = ${dataSources.id} and ${dataSourceRows.deletedAt} is null)`
+    const dirFn = params.dir === 'asc' ? asc : desc
+    const orderBy =
+      params.sort === 'key'
+        ? [dirFn(dataSources.key)]
+        : params.sort === 'kind'
+          ? [dirFn(dataSources.kind), asc(dataSources.name)]
+          : params.sort === 'rows'
+            ? [dirFn(rowCount), asc(dataSources.name)]
+            : [dirFn(dataSources.name)]
     const all = await tx
       .select({
         id: dataSources.id,
@@ -145,18 +185,13 @@ export default async function DataSourcesPage() {
         kind: dataSources.kind,
         columns: dataSources.columns,
         config: dataSources.config,
+        rowCount,
       })
       .from(dataSources)
-      .where(isNull(dataSources.deletedAt))
-      .orderBy(asc(dataSources.name))
-
-    const counts = await tx
-      .select({ sid: dataSourceRows.dataSourceId, c: sql<number>`count(*)` })
-      .from(dataSourceRows)
-      .where(isNull(dataSourceRows.deletedAt))
-      .groupBy(dataSourceRows.dataSourceId)
-    const countMap: Record<string, number> = {}
-    for (const c of counts) countMap[c.sid] = Number(c.c)
+      .where(where)
+      .orderBy(...orderBy)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
 
     const tmpls = await tx
       .select({ id: formTemplates.id, name: formTemplates.name })
@@ -176,13 +211,23 @@ export default async function DataSourcesPage() {
       .orderBy(asc(formTemplates.name), desc(formTemplateVersions.version))
     const usageBySource = collectDataSourceUsage(versionRows)
 
+    const [totalRow, kindRows] = await Promise.all([
+      tx.select({ c: count() }).from(dataSources).where(where),
+      tx
+        .select({ kind: dataSources.kind, c: count() })
+        .from(dataSources)
+        .where(and(active, search))
+        .groupBy(dataSources.kind),
+    ])
     return {
       sources: all.map((s) => ({
         ...s,
-        rowCount: countMap[s.id] ?? 0,
+        rowCount: Number(s.rowCount),
         usage: usageBySource.get(s.key) ?? [],
       })),
       templates: tmpls,
+      total: Number(totalRow[0]?.c ?? 0),
+      kindCounts: Object.fromEntries(kindRows.map((row) => [row.kind, Number(row.c)])),
     }
   })
 
@@ -204,13 +249,45 @@ export default async function DataSourcesPage() {
           </p>
         </header>
 
+        <TableToolbar>
+          <SearchInput placeholder="Search name, key, or description…" />
+          <FilterChips
+            basePath={BASE}
+            currentParams={sp}
+            paramKey="kind"
+            label="Kind"
+            options={[
+              { value: 'reference', label: 'Reference', count: kindCounts.reference ?? 0 },
+              { value: 'responses', label: 'Live responses', count: kindCounts.responses ?? 0 },
+            ]}
+          />
+          <FilterChips
+            basePath={BASE}
+            currentParams={sp}
+            paramKey="sort"
+            label="Sort"
+            defaultValue="name"
+            hideAll
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'key', label: 'Key' },
+              { value: 'kind', label: 'Kind' },
+              { value: 'rows', label: 'Row count' },
+            ]}
+          />
+        </TableToolbar>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
           <div className="space-y-3">
             {sources.length === 0 ? (
               <EmptyState
                 icon={<Database size={32} />}
-                title="No data sources"
-                description="Create a reference list (e.g. Sites → Areas) or surface an app's responses as live data."
+                title={!params.q && !kindFilter ? 'No data sources' : 'No matching data sources'}
+                description={
+                  !params.q && !kindFilter
+                    ? "Create a reference list (e.g. Sites → Areas) or surface an app's responses as live data."
+                    : 'Adjust the search or kind filter.'
+                }
               />
             ) : (
               <ul className="space-y-3">
@@ -303,7 +380,7 @@ export default async function DataSourcesPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="templateId">Source app (for live)</Label>
-                    <Select id="templateId" name="templateId" defaultValue="">
+                    <Select id="templateId" name="templateId" defaultValue="" searchable>
                       <option value="">—</option>
                       {templates.map((t) => (
                         <option key={t.id} value={t.id}>
@@ -346,6 +423,13 @@ export default async function DataSourcesPage() {
             </Card>
           </div>
         </div>
+        <Pagination
+          basePath={BASE}
+          currentParams={sp}
+          total={total}
+          page={params.page}
+          perPage={params.perPage}
+        />
       </div>
     </PageContainer>
   )

@@ -19,7 +19,7 @@ import { Button } from '@beaconhs/ui'
 
 export type ConfirmTone = 'default' | 'danger'
 
-export type ConfirmOptions = {
+type ConfirmOptions = {
   /** Heading. Defaults to "Are you sure?" (danger) / "Confirm" (default). */
   title?: string
   /** Body message — the sentence(s) that were passed to window.confirm(). */

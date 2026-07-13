@@ -1,6 +1,7 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { notFound } from 'next/navigation'
-import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -49,22 +50,28 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
 import { can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
+import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendHazidEmail } from './_send-email'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
+import {
+  canAccessTemplate,
+  canEditResponsePayload,
+  templateAccessWhere,
+} from '@/app/(app)/apps/_lib/access'
 import { FormRenderer } from '@/app/(app)/apps/templates/[id]/fill/form-renderer'
 import type { EntityAttrsByField, FormSchemaV1 } from '@beaconhs/forms-core'
 import { PhotoGallery } from '@/components/photo-gallery'
@@ -182,6 +189,7 @@ async function sendEmailAction(formData: FormData) {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   return { title: `Hazard assessment · ${id.slice(0, 8)}` }
 }
 
@@ -193,8 +201,10 @@ export default async function HazidAssessmentDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const ctx = await requireRequestContext()
+  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   const pendingGates = await getPendingFlowGatesForSubject(
     ctx,
     'module',
@@ -214,7 +224,6 @@ export default async function HazidAssessmentDetailPage({
         a: hazidAssessments,
         site: orgUnits,
         type: hazidAssessmentTypes,
-        supervisor: people,
       })
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
@@ -222,20 +231,9 @@ export default async function HazidAssessmentDetailPage({
         hazidAssessmentTypes,
         eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
       )
-      .leftJoin(people, eq(people.id, hazidAssessments.supervisorPersonId))
       .where(and(eq(hazidAssessments.id, id), isNull(hazidAssessments.deletedAt)))
       .limit(1)
     if (!row) return null
-
-    let project: { id: string; name: string } | null = null
-    if (row.a.projectOrgUnitId) {
-      const [p] = await tx
-        .select({ id: orgUnits.id, name: orgUnits.name })
-        .from(orgUnits)
-        .where(eq(orgUnits.id, row.a.projectOrgUnitId))
-        .limit(1)
-      project = p ?? null
-    }
 
     const tasks = await tx
       .select({ row: hazidAssessmentTasks, task: hazidTasks })
@@ -279,6 +277,7 @@ export default async function HazidAssessmentDetailPage({
             and(
               eq(hazidAssessmentTypeApps.typeId, row.a.assessmentTypeId),
               isNull(hazidAssessmentTypeApps.deletedAt),
+              templateAccessWhere(ctx, effectiveRoleKeys, 'browse-records'),
             ),
           )
           .orderBy(asc(hazidAssessmentTypeApps.entityOrder))
@@ -375,7 +374,6 @@ export default async function HazidAssessmentDetailPage({
 
     return {
       ...row,
-      project,
       tasks,
       hazards,
       ppe,
@@ -413,8 +411,6 @@ export default async function HazidAssessmentDetailPage({
     a,
     site,
     type,
-    supervisor,
-    project,
     tasks,
     hazards,
     ppe,
@@ -458,13 +454,25 @@ export default async function HazidAssessmentDetailPage({
   if (appParam) {
     const typeApp = typeApps.find((t) => t.app.id === appParam)
     const linked = appResponses.find((r) => r.link.typeAppId === appParam)
-    if (typeApp && linked) {
+    const response = linked?.response ?? null
+    const canOperateEmbeddedApp =
+      typeApp &&
+      response &&
+      (response.status === 'draft' || response.status === 'in_progress') &&
+      !a.locked &&
+      canAccessTemplate(ctx, typeApp.template, effectiveRoleKeys, 'operate') &&
+      canEditResponsePayload(ctx, response)
+    if (typeApp && response && canOperateEmbeddedApp) {
       const loaded = await ctx.db(async (tx) => {
         const [version] = await tx
           .select()
           .from(formTemplateVersions)
-          .where(eq(formTemplateVersions.templateId, typeApp.app.templateId))
-          .orderBy(desc(formTemplateVersions.version))
+          .where(
+            and(
+              eq(formTemplateVersions.id, response.templateVersionId),
+              eq(formTemplateVersions.templateId, typeApp.app.templateId),
+            ),
+          )
           .limit(1)
         if (!version) return null
         const [sitesList, allPeople, currentPersonRow] = await Promise.all([
@@ -492,7 +500,7 @@ export default async function HazidAssessmentDetailPage({
         return { version, sitesList, allPeople, currentPerson: currentPersonRow[0] ?? null }
       })
       if (loaded) {
-        const resp = linked.response
+        const resp = response
         const resumeOk =
           (resp.status === 'draft' || resp.status === 'in_progress') && resp.draftData !== null
         const draft = resp.draftData
@@ -530,7 +538,7 @@ export default async function HazidAssessmentDetailPage({
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
-    url: publicUrl(p.attachment.r2Key),
+    url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
   }))
@@ -553,6 +561,10 @@ export default async function HazidAssessmentDetailPage({
     const status = linked?.response.status ?? null
     const done = status === 'submitted' || status === 'non_compliant' || status === 'closed'
     const started = Boolean(linked)
+    const canOperate = canAccessTemplate(ctx, template, effectiveRoleKeys, 'operate')
+    const canEdit = linked
+      ? !done && canOperate && canEditResponsePayload(ctx, linked.response)
+      : canOperate && can(ctx, 'forms.response.create')
     return {
       app,
       template,
@@ -561,6 +573,7 @@ export default async function HazidAssessmentDetailPage({
       status,
       done,
       started,
+      canEdit,
     }
   })
   const requiredEmbeddedApps = embeddedApps.filter((item) => item.app.required)
@@ -588,7 +601,7 @@ export default async function HazidAssessmentDetailPage({
   const hazardsRated = applicableHazards.filter(
     (h) => h.row.preLikelihood != null && h.row.preSeverity != null,
   ).length
-  const signedCount = signatures.filter((s) => s.row.signatureDataUrl).length
+  const signedCount = signatures.filter((s) => s.row.signatureAttachmentId).length
   const highestResidual = applicableHazards.reduce<{ l: number; s: number } | null>((acc, h) => {
     const l = h.row.postLikelihood ?? h.row.preLikelihood
     const s = h.row.postSeverity ?? h.row.preSeverity
@@ -1172,11 +1185,13 @@ export default async function HazidAssessmentDetailPage({
                         : status === 'draft' || status === 'in_progress'
                           ? ('warning' as const)
                           : ('secondary' as const)
-                  const buttonLabel = item.done
+                  const buttonLabel = !item.canEdit
                     ? 'View response'
-                    : item.started
-                      ? 'Continue'
-                      : 'Start'
+                    : item.done
+                      ? 'View response'
+                      : item.started
+                        ? 'Continue'
+                        : 'Start'
                   return (
                     <div
                       key={item.app.id}
@@ -1219,7 +1234,7 @@ export default async function HazidAssessmentDetailPage({
                           type="submit"
                           // Locked assessments are read-only: submitted responses
                           // stay viewable, drafts cannot be continued or started.
-                          disabled={locked && !item.done}
+                          disabled={!item.done && (locked || !item.canEdit)}
                           className="ff-chip w-full sm:w-auto sm:min-w-32"
                         >
                           {item.done ? <CheckCircle2 size={16} /> : <PlayCircle size={16} />}
@@ -1321,11 +1336,14 @@ export default async function HazidAssessmentDetailPage({
                         ) : null}
                       </div>
                       <div className="flex flex-1 items-center justify-center px-3 py-2">
-                        {s.row.signatureDataUrl ? (
-                          <img
-                            src={s.row.signatureDataUrl}
+                        {s.row.signatureAttachmentId ? (
+                          <Image
+                            src={attachmentUrl(s.row.signatureAttachmentId)}
                             alt="Signature"
-                            className="h-16 max-w-full object-contain"
+                            width={320}
+                            height={64}
+                            unoptimized
+                            className="h-16 w-auto max-w-full object-contain"
                           />
                         ) : (
                           <span className="text-xs text-red-600">Not signed</span>

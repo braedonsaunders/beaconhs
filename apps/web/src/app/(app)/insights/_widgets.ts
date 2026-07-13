@@ -3,9 +3,9 @@
 
 import type { BhqlQuery, InsightDashboardLayout } from '@beaconhs/db/schema'
 
-export type InsightWidgetCategory = 'ai' | 'journal' | 'safety' | 'compliance' | 'operations'
+type InsightWidgetCategory = 'ai' | 'journal' | 'safety' | 'compliance' | 'operations'
 
-export type InsightWidgetMeta = {
+type InsightWidgetMeta = {
   id: string
   label: string
   description: string
@@ -25,7 +25,7 @@ export const INSIGHT_CATEGORY_LABELS: Record<InsightWidgetCategory, string> = {
 const KPI = { defaultSize: { w: 3, h: 2 }, minSize: { w: 2, h: 2 } }
 const CHART = { defaultSize: { w: 6, h: 4 }, minSize: { w: 3, h: 3 } }
 
-export const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
+const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
   // AI
   {
     id: 'ai-analysis',
@@ -211,7 +211,7 @@ export const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
 
 export const INSIGHT_WIDGET_MAP = new Map(INSIGHT_WIDGETS.map((w) => [w.id, w]))
 
-export function insightWidget(id: string): InsightWidgetMeta | undefined {
+function insightWidget(id: string): InsightWidgetMeta | undefined {
   return INSIGHT_WIDGET_MAP.get(id)
 }
 
@@ -867,4 +867,4 @@ export const BUILTIN_QUERIES: Record<
  *  today only the on-demand AI journal analysis. Everything in BUILTIN_QUERIES
  *  is materialized as a published system card and reaches the palette as a Card,
  *  so only these belong in the add palette's widget section. */
-export const LEGACY_INSIGHT_WIDGETS = INSIGHT_WIDGETS.filter((w) => !(w.id in BUILTIN_QUERIES))
+export const BESPOKE_INSIGHT_WIDGETS = INSIGHT_WIDGETS.filter((w) => !(w.id in BUILTIN_QUERIES))

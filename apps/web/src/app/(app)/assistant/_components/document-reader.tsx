@@ -130,7 +130,7 @@ function DocumentReaderDrawer({ docRef, onClose }: { docRef: DocRef | null; onCl
 }
 
 /** Presentational shell — pure function of props so it can be previewed in isolation. */
-export function ReaderShell({
+function ReaderShell({
   open,
   title,
   docKey,

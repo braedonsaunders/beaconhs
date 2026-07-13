@@ -10,9 +10,9 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { inspectionRecords, inspectionTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
 import { materialiseCriteriaForRecord, nextInspectionReference } from '../_lib'
 
 /**
@@ -38,8 +38,8 @@ export async function startInspection(formData: FormData) {
   const occurredAt = new Date()
   const reference = await nextInspectionReference(ctx, occurredAt)
 
-  const [row] = await ctx.db((tx) =>
-    tx
+  const [row] = await ctx.db(async (tx) => {
+    const rows = await tx
       .insert(inspectionRecords)
       .values({
         tenantId: ctx.tenantId,
@@ -50,8 +50,17 @@ export async function startInspection(formData: FormData) {
         foremanPersonIds: [],
         inspectorTenantUserId: ctx.membership?.id ?? null,
       })
-      .returning(),
-  )
+      .returning()
+    if (rows[0]) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: rows[0].id,
+        moduleKey: 'inspections',
+        event: 'on_create',
+        occurrenceKey: rows[0].id,
+      })
+    }
+    return rows
+  })
   if (!row) throw new Error('Failed to create inspection record')
 
   const materialised = await materialiseCriteriaForRecord(ctx, row.id, typeId)
@@ -63,8 +72,6 @@ export async function startInspection(formData: FormData) {
     summary: `Started ${row.reference} (${type.name}) — materialised ${materialised} criteria`,
     after: { reference: row.reference, typeId, occurredAt },
   })
-
-  await runModuleFlows(ctx, { moduleKey: 'inspections', event: 'on_create', subjectId: row.id })
 
   revalidatePath('/inspections/records')
   redirect(`/inspections/records/${row.id}`)

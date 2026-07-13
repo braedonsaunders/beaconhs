@@ -475,7 +475,6 @@ function RateTile({
 }
 
 function DaysSinceCard({ days, lastDate }: { days: number | null; lastDate: Date | null }) {
-  const value = days ?? 0
   const display = days === null ? '—' : days.toLocaleString()
   const tone = days === null ? 'muted' : days >= 90 ? 'good' : days >= 30 ? 'ok' : 'attention'
   const bgClass =

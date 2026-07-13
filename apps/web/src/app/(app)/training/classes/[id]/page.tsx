@@ -40,8 +40,8 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'
-import { runModuleFlows } from '@/lib/flows/run-module-flows'
-import { emitTrainingClassCompleted } from '@beaconhs/integrations'
+import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
+import { trainingClassCompletedEvent } from '@beaconhs/integrations'
 import { isUuid } from '@/lib/list-params'
 import { PersonSelectField } from '@/components/person-select-field'
 import { addMonthsIso } from '../../_lib/dates'
@@ -146,6 +146,7 @@ async function markClassComplete(formData: FormData) {
       .from(trainingClasses)
       .where(eq(trainingClasses.id, classId))
       .limit(1)
+      .for('update')
     if (!cls) return null
     // Idempotency: a re-POST (double-click, stale tab, direct request) must not
     // mint a second set of training records for the whole roster.
@@ -161,8 +162,16 @@ async function markClassComplete(formData: FormData) {
     // Only people actually on the roster are processed — form field names are
     // caller-controlled and must not create records for arbitrary personIds.
     const roster = await tx
-      .select({ personId: trainingClassAttendees.personId })
+      .select({
+        personId: people.id,
+        externalEmployeeId: people.externalEmployeeId,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        departmentName: departments.name,
+      })
       .from(trainingClassAttendees)
+      .innerJoin(people, eq(people.id, trainingClassAttendees.personId))
+      .leftJoin(departments, eq(departments.id, people.departmentId))
       .where(eq(trainingClassAttendees.classId, classId))
 
     // Field names are attended__<personId>, grade__<personId>, passed__<personId>.
@@ -216,6 +225,55 @@ async function markClassComplete(formData: FormData) {
       .update(trainingClasses)
       .set({ completedAt: new Date() })
       .where(eq(trainingClasses.id, classId))
+    const attendedByPerson = new Map(
+      attendeeGrades.map((attendee) => [attendee.personId, attendee.attended]),
+    )
+    const startsAt = new Date(cls.startsAt)
+    const endsAt = new Date(cls.endsAt)
+    const startDay = Date.UTC(
+      startsAt.getUTCFullYear(),
+      startsAt.getUTCMonth(),
+      startsAt.getUTCDate(),
+    )
+    const endDay = Date.UTC(endsAt.getUTCFullYear(), endsAt.getUTCMonth(), endsAt.getUTCDate())
+    const spanDays = Math.max(1, Math.round((endDay - startDay) / 86_400_000) + 1)
+    const lengthDays = cls.lengthDays ?? spanDays
+    const hoursPerDay =
+      cls.hoursPerDay != null
+        ? Number(cls.hoursPerDay)
+        : spanDays === 1
+          ? Math.max(0, (endsAt.getTime() - startsAt.getTime()) / 3_600_000)
+          : 8
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'training.class.completed',
+      subjectId: classId,
+      dedupKey: `training.class.completed:${classId}`,
+      payload: {
+        integration: trainingClassCompletedEvent(ctx.tenantId, {
+          classId,
+          course: { code: course.code, name: course.name },
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          hoursPerDay,
+          lengthDays,
+          attendees: roster.map((person) => {
+            const attended = attendedByPerson.get(person.personId) ?? false
+            return {
+              ...person,
+              attended,
+              hours: attended ? hoursPerDay * lengthDays : 0,
+            }
+          }),
+        }),
+        web: moduleFlowCommand(ctx, {
+          subjectId: classId,
+          moduleKey: 'training-classes',
+          event: 'status_change',
+          toStatus: 'completed',
+        }),
+      },
+    })
     return { cls, course, attendeeGrades }
   })
   if (!completed) return
@@ -230,75 +288,6 @@ async function markClassComplete(formData: FormData) {
       attended: completed.attendeeGrades.filter((a) => a.attended).length,
       passed: completed.attendeeGrades.filter((a) => a.passed).length,
     },
-  })
-
-  // Emit a generic completion event for any enabled outbound integration
-  // (e.g. exporting training time to an external SQL system). Best-effort: an
-  // integration must never break class completion.
-  if (completed) {
-    try {
-      const { cls, course, attendeeGrades } = completed
-      const attendedByPerson = new Map(attendeeGrades.map((a) => [a.personId, a.attended]))
-      const startsAt = new Date(cls.startsAt)
-      const endsAt = new Date(cls.endsAt)
-      const startDay = Date.UTC(
-        startsAt.getUTCFullYear(),
-        startsAt.getUTCMonth(),
-        startsAt.getUTCDate(),
-      )
-      const endDay = Date.UTC(endsAt.getUTCFullYear(), endsAt.getUTCMonth(), endsAt.getUTCDate())
-      const spanDays = Math.max(1, Math.round((endDay - startDay) / 86_400_000) + 1)
-      const lengthDays = cls.lengthDays ?? spanDays
-      const hoursPerDay =
-        cls.hoursPerDay != null
-          ? Number(cls.hoursPerDay)
-          : spanDays === 1
-            ? Math.max(0, (endsAt.getTime() - startsAt.getTime()) / 3_600_000)
-            : 8
-      const roster = await ctx.db((tx) =>
-        tx
-          .select({
-            personId: people.id,
-            externalEmployeeId: people.externalEmployeeId,
-            firstName: people.firstName,
-            lastName: people.lastName,
-            departmentName: departments.name,
-          })
-          .from(trainingClassAttendees)
-          .innerJoin(people, eq(people.id, trainingClassAttendees.personId))
-          .leftJoin(departments, eq(departments.id, people.departmentId))
-          .where(eq(trainingClassAttendees.classId, classId)),
-      )
-      await emitTrainingClassCompleted(ctx, {
-        classId,
-        course: { code: course.code, name: course.name },
-        startsAt: startsAt.toISOString(),
-        endsAt: endsAt.toISOString(),
-        hoursPerDay,
-        lengthDays,
-        attendees: roster.map((r) => {
-          const attended = attendedByPerson.get(r.personId) ?? false
-          return {
-            personId: r.personId,
-            externalEmployeeId: r.externalEmployeeId,
-            firstName: r.firstName,
-            lastName: r.lastName,
-            departmentName: r.departmentName,
-            attended,
-            hours: attended ? hoursPerDay * lengthDays : 0,
-          }
-        }),
-      })
-    } catch {
-      // Swallow — completion already succeeded.
-    }
-  }
-
-  await runModuleFlows(ctx, {
-    moduleKey: 'training-classes',
-    event: 'status_change',
-    subjectId: classId,
-    toStatus: 'completed',
   })
 
   revalidatePath(`/training/classes/${classId}`)

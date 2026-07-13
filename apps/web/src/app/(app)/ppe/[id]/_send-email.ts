@@ -14,7 +14,7 @@ import {
   ppeItems,
   ppeTypes,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { formatDateTime } from '@/lib/datetime'

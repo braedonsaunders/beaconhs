@@ -7,13 +7,14 @@ import {
   correctiveActions,
   orgUnits,
   tenantUsers,
-  user,
+  users as user,
 } from '@beaconhs/db/schema'
-import { publicUrl } from '@beaconhs/storage'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
+import { RawImage } from '@/components/raw-image'
 
 export const metadata = { title: 'Corrective action — print' }
 export const dynamic = 'force-dynamic'
@@ -214,8 +215,8 @@ export default async function CorrectiveActionPrintPage({
             <div className="pca-photos">
               {photos.map((p) => (
                 <div key={p.link.id} className="pca-photo">
-                  <img
-                    src={publicUrl(p.attachment.r2Key)}
+                  <RawImage
+                    src={attachmentUrl(p.attachment.id)}
                     alt={p.link.caption ?? p.attachment.filename}
                   />
                   {p.link.caption ? <div className="cap">{p.link.caption}</div> : null}
@@ -239,8 +240,12 @@ export default async function CorrectiveActionPrintPage({
                     </span>
                   </div>
                   {s.step.description ? <div className="desc">{s.step.description}</div> : null}
-                  {s.step.signatureDataUrl ? (
-                    <img className="sig" src={s.step.signatureDataUrl} alt="Signature" />
+                  {s.step.signatureAttachmentId ? (
+                    <RawImage
+                      className="sig"
+                      src={attachmentUrl(s.step.signatureAttachmentId)}
+                      alt="Signature"
+                    />
                   ) : null}
                 </div>
               )
