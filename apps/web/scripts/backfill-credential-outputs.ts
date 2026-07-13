@@ -13,17 +13,17 @@ import { createClient } from '@beaconhs/db'
 import {
   createCertificateDesignDocument,
   createWalletDesignDocument,
+  isDesignDocument,
 } from '@beaconhs/design-studio'
 import {
   CREDENTIAL_OUTPUTS_SETTINGS_KEY,
   normalizeCredentialOutputs,
   type CredentialOutput,
 } from '../src/lib/credential-designs'
-
-const DATABASE_URL = process.env.SUPERADMIN_DATABASE_URL
-if (!DATABASE_URL) throw new Error('SUPERADMIN_DATABASE_URL is required')
+import { assertCutoverDatabaseSession, requireCutoverDatabaseTarget } from './cutover-target'
 
 const APPLY = process.argv.includes('--apply')
+const DATABASE_URL = requireCutoverDatabaseTarget(APPLY)
 const LEGACY_KEY = 'trainingCredentialDesign'
 const LOCK_NAME = 'beaconhs:credential-output-cutover:v1'
 const { sql } = createClient({ url: DATABASE_URL, max: 1 })
@@ -33,17 +33,32 @@ type TenantSettingsRow = {
   settings: Record<string, unknown>
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return JSON.stringify(value)
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Credential output contains a non-finite number')
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
+      left.localeCompare(right),
+    )
+    return `{${entries
+      .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+      .join(',')}}`
+  }
+  throw new Error(`Credential output contains unsupported ${typeof value}`)
+}
+
 function rawOutputs(settings: Record<string, unknown>): unknown[] {
   const configured = settings[CREDENTIAL_OUTPUTS_SETTINGS_KEY]
-  if (Array.isArray(configured)) return configured
-  if (
-    configured &&
-    typeof configured === 'object' &&
-    Array.isArray((configured as { outputs?: unknown }).outputs)
-  ) {
-    return (configured as { outputs: unknown[] }).outputs
+  if (!Array.isArray(configured) || configured.length === 0) {
+    throw new Error('Migration 0004 did not create a non-empty credential output array')
   }
-  throw new Error('Canonical credential outputs were not created by migration 0004')
+  return configured
 }
 
 function materializeDocuments(settings: Record<string, unknown>): CredentialOutput[] {
@@ -54,7 +69,7 @@ function materializeDocuments(settings: Record<string, unknown>): CredentialOutp
     const hasDocument =
       original !== null &&
       typeof original === 'object' &&
-      (original as Record<string, unknown>).document !== undefined
+      isDesignDocument((original as Record<string, unknown>).document)
     if (hasDocument) return output
     return {
       ...output,
@@ -68,10 +83,26 @@ function materializeDocuments(settings: Record<string, unknown>): CredentialOutp
 }
 
 async function assertComplete(): Promise<void> {
-  const [result] = await sql<{ legacy_settings: number; missing_documents: number }[]>`select
+  const [result] = await sql<
+    {
+      tenants: number
+      legacy_settings: number
+      invalid_outputs: number
+      missing_documents: number
+      duplicate_ids: number
+    }[]
+  >`select
+      count(*)::int as tenants,
       count(*) filter (where settings ? ${LEGACY_KEY})::int as legacy_settings,
       count(*) filter (
-        where exists (
+        where settings ? ${CREDENTIAL_OUTPUTS_SETTINGS_KEY} and case
+          when jsonb_typeof(settings->${CREDENTIAL_OUTPUTS_SETTINGS_KEY}) = 'array'
+            then jsonb_array_length(settings->${CREDENTIAL_OUTPUTS_SETTINGS_KEY}) = 0
+          else true
+        end
+      )::int as invalid_outputs,
+      count(*) filter (
+        where settings ? ${CREDENTIAL_OUTPUTS_SETTINGS_KEY} and exists (
           select 1
           from jsonb_array_elements(
             case
@@ -80,28 +111,72 @@ async function assertComplete(): Promise<void> {
               else '[]'::jsonb
             end
           ) output
-          where not (output ? 'document')
+          where jsonb_typeof(output) <> 'object'
+             or jsonb_typeof(output->'document') <> 'object'
         )
-      )::int as missing_documents
+      )::int as missing_documents,
+      count(*) filter (
+        where settings ? ${CREDENTIAL_OUTPUTS_SETTINGS_KEY} and case
+          when jsonb_typeof(settings->${CREDENTIAL_OUTPUTS_SETTINGS_KEY}) = 'array'
+            then (
+              select count(*)
+              from jsonb_array_elements(settings->${CREDENTIAL_OUTPUTS_SETTINGS_KEY}) output
+            ) <> (
+              select count(distinct output->>'id')
+              from jsonb_array_elements(settings->${CREDENTIAL_OUTPUTS_SETTINGS_KEY}) output
+            )
+          else false
+        end
+      )::int as duplicate_ids
     from tenants`
-  if (!result || result.legacy_settings !== 0 || result.missing_documents !== 0) {
+  if (
+    !result ||
+    result.tenants === 0 ||
+    result.legacy_settings !== 0 ||
+    result.invalid_outputs !== 0 ||
+    result.missing_documents !== 0 ||
+    result.duplicate_ids !== 0
+  ) {
     throw new Error(`Credential output cutover assertion failed: ${JSON.stringify(result ?? {})}`)
+  }
+  const rows = await sql<TenantSettingsRow[]>`
+    select id::text, settings from tenants
+    where settings ? ${CREDENTIAL_OUTPUTS_SETTINGS_KEY}
+    order by id
+  `
+  for (const row of rows) {
+    for (const [index, output] of rawOutputs(row.settings).entries()) {
+      if (
+        output === null ||
+        typeof output !== 'object' ||
+        !isDesignDocument((output as Record<string, unknown>).document)
+      ) {
+        throw new Error(`Tenant ${row.id} credential output ${index} has an invalid document`)
+      }
+    }
   }
 }
 
 async function main(): Promise<void> {
+  await assertCutoverDatabaseSession(sql)
   const rows = await sql<TenantSettingsRow[]>`
     select id::text, settings
     from tenants
-    where settings ? ${LEGACY_KEY}
+    where settings ? ${LEGACY_KEY} or settings ? ${CREDENTIAL_OUTPUTS_SETTINGS_KEY}
     order by id
   `
-  const materialized = rows.map((row) => ({
-    ...row,
-    outputs: materializeDocuments(row.settings),
-  }))
+  const materialized = rows.map((row) => {
+    const outputs = materializeDocuments(row.settings)
+    return {
+      ...row,
+      outputs,
+      changed:
+        Object.hasOwn(row.settings, LEGACY_KEY) ||
+        canonicalJson(rawOutputs(row.settings)) !== canonicalJson(outputs),
+    }
+  })
   console.log(
-    `[credential-output-cutover] mode=${APPLY ? 'APPLY' : 'AUDIT-ONLY'} tenants=${rows.length} outputs=${materialized.reduce((count, row) => count + row.outputs.length, 0)}`,
+    `[credential-output-cutover] mode=${APPLY ? 'APPLY' : 'AUDIT-ONLY'} tenants=${rows.length} changes=${materialized.filter((row) => row.changed).length} outputs=${materialized.reduce((count, row) => count + row.outputs.length, 0)}`,
   )
   if (!APPLY) {
     console.log('[credential-output-cutover] audit passed; rerun with --apply after migration 0004')
@@ -111,6 +186,7 @@ async function main(): Promise<void> {
   await sql.begin(async (tx) => {
     await tx`select pg_advisory_xact_lock(hashtextextended(${LOCK_NAME}, 0))`
     for (const row of materialized) {
+      if (!row.changed) continue
       const [current] = await tx<TenantSettingsRow[]>`
         select id::text, settings
         from tenants
@@ -134,7 +210,9 @@ async function main(): Promise<void> {
     }
   })
   await assertComplete()
-  console.log('[credential-output-cutover] complete')
+  console.log(
+    `[credential-output-cutover] complete: changed=${materialized.filter((row) => row.changed).length}`,
+  )
 }
 
 main()

@@ -17,15 +17,20 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { createClient } from '@beaconhs/db'
-import { BUCKET, deleteObject, getObject, headObject, putObject } from '@beaconhs/storage'
-
-const DATABASE_URL = process.env.SUPERADMIN_DATABASE_URL
-if (!DATABASE_URL) throw new Error('SUPERADMIN_DATABASE_URL is required')
+import {
+  assertCutoverDatabaseSession,
+  assertCutoverObjectPrivate,
+  requireCutoverDatabaseTarget,
+  requireCutoverStorageTarget,
+} from './cutover-target'
 
 const APPLY = process.argv.includes('--apply')
+const DATABASE_URL = requireCutoverDatabaseTarget(APPLY)
+const STORAGE_TARGET = requireCutoverStorageTarget()
 const BATCH_SIZE = 250
 const CONCURRENCY = 8
 const MAX_SIGNATURE_BYTES = 10 * 1024 * 1024
+const MAX_SIGNATURE_BASE64_CHARS = 4 * Math.ceil(MAX_SIGNATURE_BYTES / 3)
 const LOCK_NAME = 'beaconhs:signature-attachment-cutover:v1'
 
 const TARGETS = [
@@ -67,7 +72,7 @@ const TARGETS = [
 ] as const
 
 type Target = (typeof TARGETS)[number]
-type LegacyRow = { id: string; tenant_id: string; value: string }
+type LegacyRow = { id: string; tenant_id: string; value: string; attachment_id: string | null }
 type SignatureObject = {
   body: Buffer
   contentType: 'image/png' | 'image/jpeg'
@@ -82,12 +87,14 @@ type AuditSummary = {
   decodedBytes: number
   malformed: number
   oversize: number
+  dualPopulated: number
   mimeCounts: Record<string, number>
   failures: { table: string; id: string; reason: string }[]
 }
 
 const { sql } = createClient({ url: DATABASE_URL, max: CONCURRENCY + 2 })
 const { sql: lockSql } = createClient({ url: DATABASE_URL, max: 1 })
+let storage: typeof import('@beaconhs/storage')
 
 function quoteIdentifier(identifier: string): string {
   if (!/^[a-z][a-z0-9_]*$/.test(identifier)) throw new Error('Unsafe SQL identifier')
@@ -98,6 +105,20 @@ function hashesEqual(left: string, right: string): boolean {
   const a = Buffer.from(left, 'hex')
   const b = Buffer.from(right, 'hex')
   return a.length === b.length && timingSafeEqual(a, b)
+}
+
+function objectMetadataFingerprint(
+  value: NonNullable<Awaited<ReturnType<typeof storage.headObject>>>,
+): string {
+  return JSON.stringify({
+    contentLength: value.contentLength,
+    contentType: value.contentType,
+    contentDisposition: value.contentDisposition,
+    etag: value.etag,
+    metadata: Object.fromEntries(
+      Object.entries(value.metadata).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  })
 }
 
 function validateSignatureBytes(contentType: string, body: Buffer): SignatureObject {
@@ -124,9 +145,16 @@ function validateSignatureBytes(contentType: string, body: Buffer): SignatureObj
 }
 
 function decodeDataUrl(value: string): SignatureObject {
-  const match = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/]*={0,2})$/s.exec(value.trim())
+  const trimmed = value.trim()
+  if (trimmed.length > MAX_SIGNATURE_BASE64_CHARS + 32) {
+    throw new Error('signature exceeds 10 MiB')
+  }
+  const match = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/]*={0,2})$/s.exec(trimmed)
   if (!match || !match[2] || match[2].length % 4 !== 0) {
     throw new Error('malformed base64 PNG/JPEG data URL')
+  }
+  if (match[2].length > MAX_SIGNATURE_BASE64_CHARS) {
+    throw new Error('signature exceeds 10 MiB')
   }
   const body = Buffer.from(match[2], 'base64')
   if (body.toString('base64').replace(/=+$/, '') !== match[2].replace(/=+$/, '')) {
@@ -169,25 +197,44 @@ async function readLegacyObject(
   signature: SignatureObject
 }> {
   const key = tenantKeyFromLegacyUrl(value, tenantId)
-  const [metadata, body] = await Promise.all([headObject({ key }), getObject({ key })])
-  if (!metadata) throw new Error('legacy URL object does not exist')
-  const signature = validateSignatureBytes(metadata.contentType ?? '', body)
-  if (metadata.contentLength !== body.length) throw new Error('legacy object size mismatch')
+  const before = await storage.headObject({ key })
+  if (!before) throw new Error('legacy URL object does not exist')
+  if (before.contentLength <= 0 || before.contentLength > MAX_SIGNATURE_BYTES) {
+    throw new Error('legacy signature object has an invalid size')
+  }
+  const body = await storage.getObject({ key })
+  const after = await storage.headObject({ key })
+  if (!after || objectMetadataFingerprint(before) !== objectMetadataFingerprint(after)) {
+    throw new Error('legacy signature object changed while it was read')
+  }
+  const signature = validateSignatureBytes(before.contentType ?? '', body)
+  if (before.contentLength !== body.length) throw new Error('legacy object size mismatch')
   return { key, signature }
 }
 
 async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
   let cursor = 0
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      for (;;) {
-        const index = cursor++
-        const item = items[index]
-        if (item === undefined) return
+  let firstError: unknown
+  let failed = false
+  let aborted = false
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      if (aborted) return
+      const index = cursor++
+      const item = items[index]
+      if (item === undefined) return
+      try {
         await fn(item)
+      } catch (error) {
+        if (!failed) firstError = error
+        failed = true
+        aborted = true
+        return
       }
-    }),
-  )
+    }
+  })
+  await Promise.allSettled(workers)
+  if (failed) throw firstError
 }
 
 async function columnExists(table: string, column: string): Promise<boolean> {
@@ -207,14 +254,14 @@ async function rowsForTarget(
 ): Promise<LegacyRow[]> {
   const table = quoteIdentifier(target.table)
   const legacy = quoteIdentifier(target.legacyColumn)
-  const newColumnFilter = hasNewColumn ? `and ${quoteIdentifier(target.newColumn)} is null` : ''
+  const attachment = hasNewColumn ? `${quoteIdentifier(target.newColumn)}::text` : 'null::text'
   const afterFilter = afterId ? 'and id > $1::uuid' : ''
   const parameters = afterId ? [afterId, BATCH_SIZE] : [BATCH_SIZE]
   const limitParameter = afterId ? '$2' : '$1'
   return sql.unsafe(
-    `select id::text, tenant_id::text, ${legacy} as value
+    `select id::text, tenant_id::text, ${legacy} as value, ${attachment} as attachment_id
        from ${table}
-      where ${legacy} is not null ${newColumnFilter} ${afterFilter}
+      where ${legacy} is not null ${afterFilter}
       order by id
       limit ${limitParameter}`,
     parameters,
@@ -229,6 +276,7 @@ async function audit(): Promise<AuditSummary> {
     decodedBytes: 0,
     malformed: 0,
     oversize: 0,
+    dualPopulated: 0,
     mimeCounts: {},
     failures: [],
   }
@@ -243,6 +291,17 @@ async function audit(): Promise<AuditSummary> {
       for (const row of rows) {
         summary.rows++
         targetRows++
+        if (row.attachment_id) {
+          summary.dualPopulated++
+          if (summary.failures.length < 25) {
+            summary.failures.push({
+              table: target.table,
+              id: row.id,
+              reason: 'legacy signature and canonical attachment are both populated',
+            })
+          }
+          continue
+        }
         try {
           let signature: SignatureObject
           if (/^https?:\/\//i.test(row.value)) {
@@ -273,6 +332,36 @@ async function audit(): Promise<AuditSummary> {
   return summary
 }
 
+function reportAudit(summary: AuditSummary): void {
+  console.log(
+    JSON.stringify(
+      {
+        ...summary,
+        decodedMiB: Number((summary.decodedBytes / 1024 / 1024).toFixed(2)),
+      },
+      null,
+      2,
+    ),
+  )
+}
+
+function assertAuditPassed(summary: AuditSummary): void {
+  if (summary.malformed > 0 || summary.oversize > 0 || summary.dualPopulated > 0) {
+    throw new Error('Audit found invalid or dual-populated signatures; no writes were performed')
+  }
+}
+
+async function assertStoragePrivacy(): Promise<void> {
+  const [candidate] = await sql<{ r2_key: string }[]>`
+    select r2_key from attachments order by id limit 1
+  `
+  if (!candidate) throw new Error('Cannot prove object-store privacy without a known attachment')
+  if (!(await storage.headObject({ key: candidate.r2_key }))) {
+    throw new Error('Object-store privacy candidate is missing')
+  }
+  await assertCutoverObjectPrivate(candidate.r2_key, STORAGE_TARGET)
+}
+
 function deterministicMigrationKey(
   target: Target,
   row: LegacyRow,
@@ -283,21 +372,28 @@ function deterministicMigrationKey(
 }
 
 async function verifyObject(key: string, expected: SignatureObject): Promise<boolean> {
-  const metadata = await headObject({ key })
-  if (!metadata) return false
-  const body = await getObject({ key })
-  const hash = createHash('sha256').update(body).digest('hex')
+  const before = await storage.headObject({ key })
+  if (!before) return false
   if (
-    metadata.contentLength !== expected.body.length ||
-    metadata.contentType?.split(';', 1)[0]?.toLowerCase() !== expected.contentType ||
-    !hashesEqual(hash, expected.sha256)
+    before.contentLength !== expected.body.length ||
+    before.contentLength > MAX_SIGNATURE_BYTES ||
+    before.contentType?.split(';', 1)[0]?.toLowerCase() !== expected.contentType
   ) {
+    throw new Error(`existing object metadata failed integrity verification: ${key}`)
+  }
+  const body = await storage.getObject({ key })
+  const after = await storage.headObject({ key })
+  if (!after || objectMetadataFingerprint(before) !== objectMetadataFingerprint(after)) {
+    throw new Error(`existing object changed during integrity verification: ${key}`)
+  }
+  const hash = createHash('sha256').update(body).digest('hex')
+  if (body.length !== expected.body.length || !hashesEqual(hash, expected.sha256)) {
     throw new Error(`existing object failed integrity verification: ${key}`)
   }
   return true
 }
 
-async function migrateRow(target: Target, row: LegacyRow): Promise<'migrated' | 'already'> {
+async function migrateRow(target: Target, row: LegacyRow): Promise<void> {
   const fromUrl = /^https?:\/\//i.test(row.value)
   const source = fromUrl ? await readLegacyObject(row.value, row.tenant_id) : null
   const signature = source?.signature ?? decodeDataUrl(row.value)
@@ -306,21 +402,22 @@ async function migrateRow(target: Target, row: LegacyRow): Promise<'migrated' | 
     throw new Error('generated key escaped tenant')
 
   let createdObject = false
-  if (!(await verifyObject(key, signature))) {
-    if (source) throw new Error('legacy URL object disappeared during migration')
-    await putObject({
-      key,
-      body: signature.body,
-      contentType: signature.contentType,
-      contentDisposition: 'inline',
-    })
-    createdObject = true
-    if (!(await verifyObject(key, signature)))
-      throw new Error('uploaded object could not be verified')
-  }
-
   try {
-    return await sql.begin(async (tx) => {
+    if (!(await verifyObject(key, signature))) {
+      if (source) throw new Error('legacy URL object disappeared during migration')
+      await storage.putObject({
+        key,
+        body: signature.body,
+        contentType: signature.contentType,
+        contentDisposition: 'inline',
+      })
+      createdObject = true
+      if (!(await verifyObject(key, signature))) {
+        throw new Error('uploaded object could not be verified')
+      }
+    }
+
+    await sql.begin(async (tx) => {
       const table = quoteIdentifier(target.table)
       const legacy = quoteIdentifier(target.legacyColumn)
       const newColumn = quoteIdentifier(target.newColumn)
@@ -331,18 +428,26 @@ async function migrateRow(target: Target, row: LegacyRow): Promise<'migrated' | 
       )) as { tenant_id: string; legacy_value: string | null; attachment_id: string | null }[]
       if (!current || current.tenant_id !== row.tenant_id)
         throw new Error('source row changed tenant')
-      if (current.attachment_id) return 'already' as const
+      if (current.attachment_id)
+        throw new Error('source row became dual-populated after the locked preflight')
       if (current.legacy_value !== row.value)
         throw new Error('legacy value changed during migration')
 
       const [existingAttachment] = await tx<
-        { id: string; tenant_id: string; content_type: string; size_bytes: string }[]
-      >`select id::text, tenant_id::text, content_type, size_bytes::text
+        {
+          id: string
+          tenant_id: string
+          kind: string
+          content_type: string
+          size_bytes: string
+        }[]
+      >`select id::text, tenant_id::text, kind, content_type, size_bytes::text
           from attachments where r2_key = ${key} limit 1`
       let attachmentId: string
       if (existingAttachment) {
         if (
           existingAttachment.tenant_id !== row.tenant_id ||
+          existingAttachment.kind !== 'signature' ||
           existingAttachment.content_type !== signature.contentType ||
           Number(existingAttachment.size_bytes) !== signature.body.length
         ) {
@@ -370,22 +475,39 @@ async function migrateRow(target: Target, row: LegacyRow): Promise<'migrated' | 
         [attachmentId, row.id],
       )
       if (updated.length !== 1) throw new Error('source row was not linked exactly once')
-      return 'migrated' as const
     })
+    if (!(await verifyObject(key, signature))) {
+      throw new Error('linked signature object disappeared after commit')
+    }
   } catch (error) {
     if (createdObject) {
       try {
-        await deleteObject({ key })
-      } catch (cleanupError) {
-        console.error('[signature-cutover] compensation failed', { key, cleanupError })
+        const [persisted] = await sql<{ id: string }[]>`
+          select id::text from attachments where r2_key = ${key} limit 1
+        `
+        if (!persisted) {
+          await storage.deleteObject({ key })
+          if (await storage.headObject({ key })) {
+            throw new Error('compensated signature object still exists')
+          }
+        }
+      } catch {
+        // An ambiguous COMMIT must never cause a referenced object to be
+        // deleted. The deterministic key is safe for the next run to reuse.
+        console.error('[signature-cutover] compensation check failed', {
+          table: target.table,
+          id: row.id,
+        })
       }
     }
     throw error
   }
 }
 
-async function assertComplete(): Promise<void> {
+async function assertCanonicalIntegrity(allowLegacy: boolean): Promise<void> {
   const failures: string[] = []
+  const verifiedAttachmentIds = new Set<string>()
+  let verifiedObjects = 0
   for (const target of TARGETS) {
     if (!(await columnExists(target.table, target.newColumn))) {
       failures.push(`${target.table}.${target.newColumn} is missing`)
@@ -399,7 +521,10 @@ async function assertComplete(): Promise<void> {
          count(*) filter (where ${legacy} is not null)::int as legacy_values,
          count(*) filter (where ${newColumn} is not null and a.id is null)::int as broken_links,
          count(*) filter (where a.id is not null and a.tenant_id <> t.tenant_id)::int as cross_tenant_links,
-         count(*) filter (where a.id is not null and a.r2_key not like ('t/' || t.tenant_id::text || '/signature/%'))::int as invalid_keys
+         count(*) filter (where a.id is not null and a.r2_key not like ('t/' || t.tenant_id::text || '/signature/%'))::int as invalid_keys,
+         count(*) filter (where a.id is not null and a.kind <> 'signature')::int as invalid_kinds,
+         count(*) filter (where a.id is not null and a.content_type not in ('image/png', 'image/jpeg'))::int as invalid_types,
+         count(*) filter (where a.id is not null and (a.size_bytes <= 0 or a.size_bytes > ${MAX_SIGNATURE_BYTES}))::int as invalid_sizes
        from ${table} t
        left join attachments a on a.id = t.${newColumn}`,
     )) as {
@@ -407,80 +532,177 @@ async function assertComplete(): Promise<void> {
       broken_links: number
       cross_tenant_links: number
       invalid_keys: number
+      invalid_kinds: number
+      invalid_types: number
+      invalid_sizes: number
     }[]
     if (
       !counts ||
-      counts.legacy_values !== 0 ||
+      (!allowLegacy && counts.legacy_values !== 0) ||
       counts.broken_links !== 0 ||
       counts.cross_tenant_links !== 0 ||
-      counts.invalid_keys !== 0
+      counts.invalid_keys !== 0 ||
+      counts.invalid_kinds !== 0 ||
+      counts.invalid_types !== 0 ||
+      counts.invalid_sizes !== 0
     ) {
       failures.push(`${target.table}: ${JSON.stringify(counts ?? {})}`)
+    }
+
+    let afterId: string | null = null
+    for (;;) {
+      const afterFilter = afterId ? 'and t.id > $1::uuid' : ''
+      const parameters = afterId ? [afterId, BATCH_SIZE] : [BATCH_SIZE]
+      const limitParameter = afterId ? '$2' : '$1'
+      const rows = (await sql.unsafe(
+        `select t.id::text, t.tenant_id::text, a.id::text as attachment_id,
+                a.kind, a.r2_key, a.content_type, a.size_bytes::text
+           from ${table} t
+           join attachments a on a.id = t.${newColumn}
+          where t.${newColumn} is not null ${afterFilter}
+          order by t.id
+          limit ${limitParameter}`,
+        parameters,
+      )) as {
+        id: string
+        tenant_id: string
+        attachment_id: string
+        kind: string
+        r2_key: string
+        content_type: string
+        size_bytes: string
+      }[]
+      if (rows.length === 0) break
+      await mapLimit(rows, CONCURRENCY, async (row) => {
+        if (verifiedAttachmentIds.has(row.attachment_id)) return
+        if (row.kind !== 'signature' || !row.r2_key.startsWith(`t/${row.tenant_id}/signature/`)) {
+          throw new Error(`Canonical signature metadata is invalid for ${row.attachment_id}`)
+        }
+        const before = await storage.headObject({ key: row.r2_key })
+        const expectedBytes = Number(row.size_bytes)
+        if (
+          !before ||
+          !Number.isSafeInteger(expectedBytes) ||
+          expectedBytes > MAX_SIGNATURE_BYTES ||
+          before.contentLength !== expectedBytes ||
+          before.contentType?.split(';', 1)[0]?.toLowerCase() !== row.content_type
+        ) {
+          throw new Error(`Canonical signature object metadata is invalid for ${row.attachment_id}`)
+        }
+        const body = await storage.getObject({ key: row.r2_key })
+        const after = await storage.headObject({ key: row.r2_key })
+        if (!after || objectMetadataFingerprint(before) !== objectMetadataFingerprint(after)) {
+          throw new Error(`Canonical signature object changed while reading ${row.attachment_id}`)
+        }
+        if (body.length !== expectedBytes) {
+          throw new Error(`Canonical signature object size is invalid for ${row.attachment_id}`)
+        }
+        const signature = validateSignatureBytes(row.content_type, body)
+        const migrationPrefix = `t/${row.tenant_id}/signature/migration/${target.table.replace(/_/g, '-')}/${row.id}-`
+        if (row.r2_key.startsWith(migrationPrefix)) {
+          const keyHash = /^([0-9a-f]{24})\.(?:png|jpg)$/i.exec(
+            row.r2_key.slice(migrationPrefix.length),
+          )?.[1]
+          if (!keyHash || !signature.sha256.toLowerCase().startsWith(keyHash.toLowerCase())) {
+            throw new Error(`Canonical signature object hash is invalid for ${row.attachment_id}`)
+          }
+        }
+        verifiedAttachmentIds.add(row.attachment_id)
+        verifiedObjects++
+      })
+      afterId = rows.at(-1)!.id
     }
   }
   if (failures.length)
     throw new Error(`Signature cutover assertion failed:\n${failures.join('\n')}`)
+  console.log(`[signature-cutover] verified canonical objects=${verifiedObjects}`)
+}
+
+async function additiveColumnsReady(): Promise<boolean> {
+  const states = await Promise.all(
+    TARGETS.map(async (target) => ({
+      target,
+      present: await columnExists(target.table, target.newColumn),
+    })),
+  )
+  const present = states.filter((state) => state.present)
+  const isBaseline = present.length === 1 && present[0]?.target.table === 'form_response_steps'
+  if (!isBaseline && present.length !== TARGETS.length) {
+    throw new Error(
+      `Additive signature migration is partial (${present.length}/${TARGETS.length} columns)`,
+    )
+  }
+  return present.length === TARGETS.length
 }
 
 async function applyCutover(): Promise<void> {
-  for (const target of TARGETS) {
-    if (!(await columnExists(target.table, target.newColumn))) {
-      throw new Error(`Additive migration has not created ${target.table}.${target.newColumn}`)
-    }
-  }
-
-  const [lock] = await lockSql<{ locked: boolean }[]>`
-    select pg_try_advisory_lock(hashtextextended(${LOCK_NAME}, 0)) as locked
-  `
-  if (!lock?.locked) throw new Error('Another signature cutover process holds the advisory lock')
+  const lockConnection = await lockSql.reserve()
+  let locked = false
 
   try {
+    const [lock] = await lockConnection<{ locked: boolean }[]>`
+      select pg_try_advisory_lock(hashtextextended(${LOCK_NAME}, 0)) as locked
+    `
+    locked = lock?.locked ?? false
+    if (!locked) throw new Error('Another signature cutover process holds the advisory lock')
+
+    for (const target of TARGETS) {
+      if (!(await columnExists(target.table, target.newColumn))) {
+        throw new Error(`Additive migration has not created ${target.table}.${target.newColumn}`)
+      }
+    }
+    const preflight = await audit()
+    reportAudit(preflight)
+    assertAuditPassed(preflight)
+    await assertCanonicalIntegrity(true)
+
     let migrated = 0
-    let already = 0
     for (const target of TARGETS) {
       let afterId: string | null = null
       for (;;) {
         const rows = await rowsForTarget(target, afterId, true)
         if (rows.length === 0) break
         await mapLimit(rows, CONCURRENCY, async (row) => {
-          const status = await migrateRow(target, row)
-          if (status === 'migrated') migrated++
-          else already++
-          if ((migrated + already) % 500 === 0) {
-            console.log(`[signature-cutover] migrated=${migrated} already=${already}`)
+          await migrateRow(target, row)
+          migrated++
+          if (migrated % 500 === 0) {
+            console.log(`[signature-cutover] migrated=${migrated}`)
           }
         })
         afterId = rows.at(-1)!.id
       }
     }
-    await assertComplete()
-    console.log(`[signature-cutover] complete: migrated=${migrated}, already=${already}`)
+    await assertCanonicalIntegrity(false)
+    const postflight = await audit()
+    reportAudit(postflight)
+    assertAuditPassed(postflight)
+    if (postflight.rows !== 0) throw new Error('Legacy signature values remain after cutover')
+    console.log(`[signature-cutover] complete: migrated=${migrated}`)
   } finally {
-    await lockSql`select pg_advisory_unlock(hashtextextended(${LOCK_NAME}, 0))`
+    try {
+      if (locked) {
+        await lockConnection`select pg_advisory_unlock(hashtextextended(${LOCK_NAME}, 0))`
+      }
+    } finally {
+      lockConnection.release()
+    }
   }
 }
 
 async function main(): Promise<void> {
-  console.log(`[signature-cutover] mode=${APPLY ? 'APPLY' : 'AUDIT-ONLY'} bucket=${BUCKET}`)
+  storage = await import('@beaconhs/storage')
+  await assertCutoverDatabaseSession(sql)
+  console.log(`[signature-cutover] mode=${APPLY ? 'APPLY' : 'AUDIT-ONLY'} bucket=${storage.BUCKET}`)
+  await assertStoragePrivacy()
+  if (APPLY) return applyCutover()
+
   const summary = await audit()
-  console.log(
-    JSON.stringify(
-      {
-        ...summary,
-        decodedMiB: Number((summary.decodedBytes / 1024 / 1024).toFixed(2)),
-      },
-      null,
-      2,
-    ),
-  )
-  if (summary.malformed > 0 || summary.oversize > 0) {
-    throw new Error('Audit found malformed/oversize signatures; no writes were performed')
+  reportAudit(summary)
+  assertAuditPassed(summary)
+  if (await additiveColumnsReady()) {
+    await assertCanonicalIntegrity(summary.rows !== 0)
   }
-  if (!APPLY) {
-    console.log('[signature-cutover] audit passed; rerun with --apply after the additive migration')
-    return
-  }
-  await applyCutover()
+  console.log('[signature-cutover] audit passed; rerun with --apply after the additive migration')
 }
 
 main()

@@ -23,6 +23,7 @@ const config: KnipConfig = {
         'scripts/backfill-private-attachment-urls.ts',
         'scripts/backfill-signatures-to-storage.ts',
         'scripts/backfill-tenant-storage-keys.ts',
+        'scripts/clean-missing-demo-attachments.ts',
         'scripts/generate-brand-icons.mjs',
         'scripts/materialize-compliance.ts',
       ],
