@@ -24,6 +24,7 @@ import {
   type UpsertResult,
 } from './upsert'
 import type { CanonicalRecord, ConnectorPullResult, ConnectorRunContext, SyncLogger } from './types'
+import { planSnapshotArchives } from './snapshot-policy'
 
 const BATCH = 250
 
@@ -68,11 +69,21 @@ function policyOf(config: Record<string, unknown>): Required<SyncPolicy> {
 function normalizePull(
   pulled: CanonicalRecord[] | ConnectorPullResult,
 ): Required<ConnectorPullResult> {
-  if (Array.isArray(pulled)) return { records: pulled, nextCursor: null, mode: 'full' }
+  if (Array.isArray(pulled)) {
+    return {
+      records: pulled,
+      nextCursor: null,
+      mode: 'full',
+      authoritativeEntities: [...new Set(pulled.map((record) => record.entity))],
+    }
+  }
   return {
     records: pulled.records,
     nextCursor: pulled.nextCursor ?? null,
     mode: pulled.mode ?? 'full',
+    authoritativeEntities: pulled.authoritativeEntities ?? [
+      ...new Set(pulled.records.map((record) => record.entity)),
+    ],
   }
 }
 
@@ -237,7 +248,14 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
     equipment: new Set(),
     contact: new Set(),
   }
-  const lookups = await withTenant(db, tenantId, (tx) => loadLookups(tx))
+  let lookups: Awaited<ReturnType<typeof loadLookups>>
+  try {
+    lookups = await withTenant(db, tenantId, (tx) => loadLookups(tx))
+  } catch (error) {
+    const message = `Failed to load sync lookups: ${errMsg(error)}`
+    log('error', message)
+    return finalize('error', {}, message)
+  }
 
   async function recordChange(
     tx: Database,
@@ -335,56 +353,98 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
     }
   }
 
+  const processingFailures = Object.values(stats).reduce((total, stat) => total + stat.failed, 0)
+  const archiveSafetyErrors: string[] = []
   if (policy.missing === 'archive' && pulled.mode === 'full') {
-    await withTenant(db, tenantId, async (tx) => {
-      for (const entity of Object.keys(seen) as SyncEntityKey[]) {
-        const archived = await archiveMissingRecords(
-          tx,
-          {
-            tenantId,
-            connectionId,
-            sourceSystem: conn.connectorKey,
-            lookups,
-            log,
-            dryRun,
-            ownershipMode: policy.ownership,
-          },
-          entity,
-          seen[entity],
-        )
-        for (const res of archived) {
-          actionStat(stats, entity, 'archived')
-          if (!runId) continue
-          await tx.insert(syncRecordChanges).values({
-            tenantId,
-            connectionId,
-            runId,
-            entity,
-            externalId: res.externalId,
-            canonicalId: res.canonicalId,
-            action: res.action,
-            dryRun,
-            rowHash: res.rowHash ?? null,
-            before: res.before,
-            after: res.after,
-            diff: res.diff,
-            message: res.message,
-          })
+    const seenCounts = Object.fromEntries(
+      (Object.keys(seen) as SyncEntityKey[]).map((entity) => [entity, seen[entity].size]),
+    ) as Record<SyncEntityKey, number>
+    const archivePlan = planSnapshotArchives(
+      pulled.authoritativeEntities.filter((entity) => entity !== 'contact'),
+      seenCounts,
+      processingFailures,
+    )
+
+    if (archivePlan.blockedByFailures) {
+      log('warn', 'Skipping missing-record archive policy because record processing had failures.')
+    }
+    if (archivePlan.missingAuthority && pulled.authoritativeEntities.length === 0) {
+      const message =
+        'Missing-record archive skipped because the source identified no full snapshots.'
+      log('warn', message)
+      archiveSafetyErrors.push(message)
+    }
+    for (const entity of archivePlan.blockedEmpty) {
+      const message = `Missing-record archive blocked for ${entity}: the full snapshot contained no valid records.`
+      log('warn', message)
+      archiveSafetyErrors.push(message)
+    }
+
+    if (archivePlan.eligible.length > 0) {
+      try {
+        const archivedByEntity = await withTenant(db, tenantId, async (tx) => {
+          const committed: Array<{
+            entity: SyncEntityKey
+            results: Awaited<ReturnType<typeof archiveMissingRecords>>
+          }> = []
+          for (const entity of archivePlan.eligible) {
+            const results = await archiveMissingRecords(
+              tx,
+              {
+                tenantId,
+                connectionId,
+                sourceSystem: conn.connectorKey,
+                lookups,
+                log,
+                dryRun,
+                ownershipMode: policy.ownership,
+              },
+              entity,
+              seen[entity],
+            )
+            if (runId && results.length > 0) {
+              await tx.insert(syncRecordChanges).values(
+                results.map((res) => ({
+                  tenantId,
+                  connectionId,
+                  runId,
+                  entity,
+                  externalId: res.externalId,
+                  canonicalId: res.canonicalId,
+                  action: res.action,
+                  dryRun,
+                  rowHash: res.rowHash ?? null,
+                  before: res.before,
+                  after: res.after,
+                  diff: res.diff,
+                  message: res.message,
+                })),
+              )
+            }
+            committed.push({ entity, results })
+          }
+          return committed
+        })
+        for (const { entity, results } of archivedByEntity) {
+          for (const _result of results) actionStat(stats, entity, 'archived')
         }
+      } catch (error) {
+        const message = `Missing-record archive transaction failed: ${errMsg(error)}`
+        log('error', message)
+        archiveSafetyErrors.push(message)
       }
-    })
+    }
   } else if (policy.missing === 'archive' && pulled.mode === 'incremental') {
     log('info', 'Skipping missing-record archive policy on incremental pull.')
   }
 
   const failed = Object.values(stats).reduce((a, s) => a + s.failed, 0)
   const conflicts = Object.values(stats).reduce((a, s) => a + s.conflict, 0)
-  const status: SyncRunStatus = failed > 0 || conflicts > 0 ? 'partial' : 'success'
-  const error =
-    failed > 0
-      ? `${failed} record(s) failed.`
-      : conflicts > 0
-        ? `${conflicts} record(s) need conflict review.`
-        : null
+  const errors: string[] = []
+  if (failed > 0) errors.push(`${failed} record(s) failed.`)
+  if (conflicts > 0) errors.push(`${conflicts} record(s) need conflict review.`)
+  errors.push(...archiveSafetyErrors)
+  const status: SyncRunStatus = errors.length > 0 ? 'partial' : 'success'
+  const error = errors.length > 0 ? errors.join(' ') : null
   return finalize(status, stats, error, cursorAfter)
 }

@@ -58,7 +58,6 @@ function headingRow(title: string, colspan: number, gate?: string): string {
 
 // Long-form values read better on a full-width row than in a 2-up grid.
 const LONG_VALUE_TYPES = new Set([
-  'textarea',
   'rich_text',
   'matrix',
   'ranking',

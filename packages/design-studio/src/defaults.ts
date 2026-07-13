@@ -362,10 +362,7 @@ function walletBack(theme: DesignStudioTheme): DesignArtboard {
 // 3.6mm with uppercase 700 keys). All metrics below are the legacy mm values
 // converted to the studio's inch unit; fonts convert mm → pt (× 72 / 25.4).
 
-const MM_IN = 1 / 25.4 // mm → inches
-const PX_MM = 25.4 / 96 // 1 CSS px → mm (the legacy 1px borders)
 const PX_IN = 1 / 96 // 1 CSS px → inches
-const mmPt = (v: number) => Math.round(((v * 72) / 25.4) * 100) / 100 // mm font size → pt
 
 const LABEL_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
 

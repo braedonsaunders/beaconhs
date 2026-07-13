@@ -1,5 +1,5 @@
-// Per-automation delivery — the unit of work the worker (and the in-request
-// fallback) runs. Loads ONE automation, resolves its destination, hands it the
+// Per-automation delivery — the unit of work the worker runs. Loads ONE
+// automation, resolves its destination, hands it the
 // event's items + prior external refs, delivers, reconciles the ledger and the
 // row's status. Returns {ok,error} so the worker can throw → retry. Never throws
 // itself for a delivery failure (only a thrown infra error would propagate).
@@ -29,26 +29,49 @@ function unsealAll(secrets: Sealed | null | undefined): Record<string, string> {
   return out
 }
 
-export async function loadPriorRefs(
+interface PriorDelivery {
+  refs: string[]
+  retryRefs: string[]
+  complete: boolean
+}
+
+export function summarizePriorDelivery(
+  rows: readonly { externalRef: string | null; status: string }[],
+): PriorDelivery {
+  const refs = rows.map((row) => row.externalRef).filter((ref): ref is string => !!ref)
+  return {
+    refs,
+    retryRefs: rows
+      .filter((row) => row.status !== 'pushed')
+      .map((row) => row.externalRef)
+      .filter((ref): ref is string => !!ref),
+    complete: rows.length > 0 && rows.every((row) => row.status === 'pushed'),
+  }
+}
+
+async function loadPriorDelivery(
   ctx: DispatchCtx,
   automationId: string,
   triggerKey: string,
   subjectId: string,
-): Promise<string[]> {
+): Promise<PriorDelivery> {
   const rows = await ctx.db((tx) =>
     tx
-      .select({ externalRef: integrationExportLog.externalRef })
+      .select({
+        externalRef: integrationExportLog.externalRef,
+        status: integrationExportLog.status,
+      })
       .from(integrationExportLog)
       .where(
         and(
           eq(integrationExportLog.tenantId, ctx.tenantId),
-          eq(integrationExportLog.integrationKey, automationId),
+          eq(integrationExportLog.automationId, automationId),
           eq(integrationExportLog.subjectType, triggerKey),
           eq(integrationExportLog.subjectId, subjectId),
         ),
       ),
   )
-  return rows.map((r) => r.externalRef).filter((r): r is string => !!r)
+  return summarizePriorDelivery(rows)
 }
 
 async function replaceRefs(
@@ -58,6 +81,7 @@ async function replaceRefs(
   triggerKey: string,
   subjectId: string,
   refs: DeliverRef[],
+  status: 'pushed' | 'failed',
 ): Promise<void> {
   await ctx.db(async (tx) => {
     await tx
@@ -65,7 +89,7 @@ async function replaceRefs(
       .where(
         and(
           eq(integrationExportLog.tenantId, ctx.tenantId),
-          eq(integrationExportLog.integrationKey, automationId),
+          eq(integrationExportLog.automationId, automationId),
           eq(integrationExportLog.subjectType, triggerKey),
           eq(integrationExportLog.subjectId, subjectId),
         ),
@@ -74,12 +98,12 @@ async function replaceRefs(
       await tx.insert(integrationExportLog).values(
         refs.map((r) => ({
           tenantId: ctx.tenantId,
-          integrationKey: automationId,
+          automationId,
           subjectType: triggerKey,
           subjectId,
           externalSystem: destinationKey,
           externalRef: r.externalRef,
-          status: 'pushed' as const,
+          status,
           detail: r.detail,
         })),
       )
@@ -108,13 +132,16 @@ export async function dispatchOne(
   const mapping = (config.mapping as Record<string, unknown>) ?? {}
   const oncePerRecord = config.oncePerRecord === true
 
-  let priorRefs: string[] = []
+  let prior: PriorDelivery = { refs: [], retryRefs: [], complete: false }
   try {
-    priorRefs = await loadPriorRefs(ctx, automationId, event.type, event.subjectId)
-  } catch {
-    /* ledger optional */
+    prior = await loadPriorDelivery(ctx, automationId, event.type, event.subjectId)
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Cannot verify the outbound delivery ledger: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
-  if (oncePerRecord && priorRefs.length > 0) return { ok: true } // already delivered for this record
+  if (oncePerRecord && prior.complete) return { ok: true } // already delivered for this record
 
   const log = (level: 'info' | 'warn' | 'error', msg: string) => {
     const line = `[integration:${row.name ?? row.id}] ${msg}`
@@ -134,23 +161,35 @@ export async function dispatchOne(
       items: event.items,
       subjectId: event.subjectId,
       triggerKey: event.type,
-      priorRefs,
+      priorRefs: prior.refs,
+      retryRefs: prior.retryRefs,
+      oncePerRecord,
       log,
     })
   } catch (e) {
     result = { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 
-  // Persist refs whenever the destination returned any, even on a partial
-  // failure (ok:false with some items delivered). replaceRefs replaces the
-  // subject's refs atomically, so a subsequent retry can pass priorRefs to skip
-  // the already-delivered items instead of re-sending them, and oncePerRecord
-  // sees the partial delivery.
-  if (result.refs?.length) {
+  // Persist an explicitly returned ref set, including an empty one that clears
+  // stale refs. Partial results are marked failed: a retry receives those refs
+  // as retryRefs, while oncePerRecord only suppresses a fully pushed delivery.
+  if (result.refs !== undefined) {
     try {
-      await replaceRefs(ctx, automationId, dest.key, event.type, event.subjectId, result.refs)
-    } catch {
-      /* ledger bookkeeping is best-effort */
+      await replaceRefs(
+        ctx,
+        automationId,
+        dest.key,
+        event.type,
+        event.subjectId,
+        result.refs,
+        result.ok ? 'pushed' : 'failed',
+      )
+    } catch (error) {
+      result = {
+        ...result,
+        ok: false,
+        error: `Outbound delivery could not be recorded safely: ${error instanceof Error ? error.message : String(error)}`,
+      }
     }
   }
 

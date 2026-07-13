@@ -1,5 +1,5 @@
 import { Queue, QueueEvents, type JobsOptions } from 'bullmq'
-import { connection } from '../connection'
+import { getConnection } from '../connection'
 
 // When a PDF job carries an `email` payload, the worker emails the rendered PDF
 // as an attachment after rendering (used by the Flows send_email attachPdf path,
@@ -117,15 +117,20 @@ export type RenderedPdfArtifact = {
   filename: string
 }
 
-export const pdfQueue = new Queue<PdfJobData, unknown>('pdfs', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 15_000 },
-    removeOnComplete: { age: 3 * 24 * 3600 },
-    removeOnFail: { age: 30 * 24 * 3600 },
-  },
-})
+let pdfQueue: Queue<PdfJobData, unknown> | undefined
+
+function getPdfQueue(): Queue<PdfJobData, unknown> {
+  pdfQueue ??= new Queue<PdfJobData, unknown>('pdfs', {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 15_000 },
+      removeOnComplete: { age: 3 * 24 * 3600 },
+      removeOnFail: { age: 30 * 24 * 3600 },
+    },
+  })
+  return pdfQueue
+}
 
 function pdfJobId(data: PdfJobData): string {
   switch (data.kind) {
@@ -151,6 +156,7 @@ function pdfJobId(data: PdfJobData): string {
 }
 
 async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
+  const pdfQueue = getPdfQueue()
   const jobId = pdfJobId(data)
   const existing = await pdfQueue.getJob(jobId)
   if (existing) {
@@ -165,7 +171,14 @@ async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
   return pdfQueue.add(data.kind, data, { ...opts, jobId })
 }
 
-export async function enqueuePdf(data: PdfJobData) {
+export async function enqueuePdf(data: PdfJobData, deterministicJobId?: string) {
+  const pdfQueue = getPdfQueue()
+  if (deterministicJobId) {
+    const existing = await pdfQueue.getJob(deterministicJobId)
+    if (existing) return
+    await pdfQueue.add(data.kind, data, { jobId: deterministicJobId })
+    return
+  }
   await addPdfJob(data)
 }
 
@@ -191,7 +204,7 @@ export async function renderPdfOnDemand(
     removeOnComplete: { age: 3600 },
     removeOnFail: { age: 24 * 3600 },
   })
-  const events = new QueueEvents('pdfs', { connection })
+  const events = new QueueEvents('pdfs', { connection: getConnection() })
   await events.waitUntilReady()
   try {
     const result = await job.waitUntilFinished(events, opts.timeoutMs ?? 60_000)
@@ -215,8 +228,14 @@ export type PdfEmailableJobData = Extract<
   { kind: 'record_summary' | 'template_pdf' | 'document_bundle' }
 >
 
-export async function enqueuePdfEmail(pdf: PdfEmailableJobData, email: PdfEmailPayload) {
-  const jobId = `${pdfJobId(pdf)}|email|${Date.now()}-${Math.round(Math.random() * 1e6)}`
+export async function enqueuePdfEmail(
+  pdf: PdfEmailableJobData,
+  email: PdfEmailPayload,
+  deterministicJobId?: string,
+) {
+  const pdfQueue = getPdfQueue()
+  const jobId =
+    deterministicJobId ?? `${pdfJobId(pdf)}|email|${Date.now()}-${Math.round(Math.random() * 1e6)}`
   await pdfQueue.add(pdf.kind, { ...pdf, email }, { jobId, attempts: 2 })
 }
 
@@ -242,6 +261,7 @@ export async function enqueueDocumentVersionRender(
  * the master's version before persisting.
  */
 export async function enqueueSlidesRender(data: Extract<PdfJobData, { kind: 'slides_import' }>) {
+  const pdfQueue = getPdfQueue()
   const jobId = `${pdfJobId(data)}|r${Date.now()}-${Math.round(Math.random() * 1e6)}`
   await pdfQueue.add(data.kind, data, { attempts: 1, jobId })
 }

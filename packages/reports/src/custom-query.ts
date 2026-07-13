@@ -9,9 +9,8 @@
 // Both emit the same ReportRunResult shape (groups + summary), so the
 // viewer, PDF, CSV and XLSX consumers are identical.
 //
-// The entity whitelist is INJECTED by the caller (opts.entityMap — the discovered
-// catalog from @beaconhs/analytics/server) so every tenant-scoped table is
-// queryable, falling back to the static REPORT_ENTITY_MAP for legacy keys. This
+// The entity whitelist is INJECTED by the caller (opts.entityMap — the
+// permission-filtered discovered catalog from @beaconhs/analytics/server). This
 // package never depends on @beaconhs/analytics (the graph stays acyclic).
 //
 // Runs against a caller-provided transaction that is ALREADY tenant-scoped —
@@ -29,7 +28,7 @@ import {
   type ReportMeasure,
   type ReportTemporalBin,
 } from '@beaconhs/db/schema'
-import { REPORT_ENTITY_MAP, columnRef, entityColumnSql, type ReportEntity } from './entities'
+import { columnRef, entityColumnSql, type ReportEntity } from './entities'
 import { compileCustomFilters, compileRuleGroup } from './filters'
 import { formatLabel, type ReportGroup, type ReportRunResult } from './types'
 
@@ -38,9 +37,8 @@ const MAX_LIMIT = 10_000
 
 export type RunCustomQueryOpts = {
   maxRows?: number
-  /** Resolved entity whitelist (discovered catalog). Falls back to the static
-   *  REPORT_ENTITY_MAP per key so legacy saved reports keep resolving. */
-  entityMap?: Record<string, ReportEntity>
+  /** Permission-filtered resolved entity whitelist. */
+  entityMap: Record<string, ReportEntity>
 }
 
 /** AND the entity's implicit predicates into a compiled WHERE: the soft-delete
@@ -62,10 +60,10 @@ function withImplicitFilters(entity: ReportEntity, where: SQL | null): SQL | nul
 export async function runCustomQuery(
   tx: Database,
   customQuery: unknown,
-  opts: RunCustomQueryOpts = {},
+  opts: RunCustomQueryOpts,
 ): Promise<ReportRunResult> {
   const q = (customQuery ?? null) as ReportCustomQuery | null
-  const entity = q?.entity ? (opts.entityMap?.[q.entity] ?? REPORT_ENTITY_MAP[q.entity]) : null
+  const entity = q?.entity ? opts.entityMap[q.entity] : null
   if (!q || !entity) {
     throw new Error('Custom query missing or has unknown entity')
   }

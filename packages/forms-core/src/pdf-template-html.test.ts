@@ -29,7 +29,7 @@ const schema = validateFormSchema({
         { id: 'job_number', type: 'text', label: { en: 'Job number' } },
         { id: 'lift_date', type: 'datetime', label: { en: 'Lift date' } },
         { id: 'operator', type: 'person_picker', label: { en: 'Operator' } },
-        { id: 'scope', type: 'textarea', label: { en: 'Scope of work' } },
+        { id: 'scope', type: 'long_text', label: { en: 'Scope of work' } },
         { id: 'narrative', type: 'rich_text', label: { en: 'Narrative' } },
         { id: 'signoff', type: 'signature', label: { en: 'Supervisor signature' } },
         { id: 'diagram', type: 'sketch', label: { en: 'Rigging diagram' } },
@@ -76,7 +76,7 @@ describe('generateFormPdfTemplate', () => {
     // datetime + picker get a readable _text companion
     expect(out.sourceHtml).toContain('{{lift_date_text}}')
     expect(out.sourceHtml).toContain('{{operator_text}}')
-    // signature raw value IS the data URL; sketch exposes _image
+    // signature is projected to a signed URL; sketch exposes _image
     expect(out.sourceHtml).toContain('src="{{signoff}}"')
     expect(out.sourceHtml).toContain('src="{{diagram_image}}"')
     // rich text merges unescaped

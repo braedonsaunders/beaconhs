@@ -5,12 +5,10 @@
 // `metadata` column, so each column carries a server-generated `expr` that the
 // compiler resolves through `columnRef`.
 
-import { and, asc, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import { formTemplates } from '@beaconhs/db/schema'
 import { loadCustomFieldColumns, type ReportEntityColumn } from '@beaconhs/reports'
 import { deriveSemanticType, type AnalyticsColumn, type AnalyticsEntity } from '../semantic'
-import { discoverEntities, discoverEntityMap, scopedFormAppEntity } from './discover'
+import { discoverEntities, scopedFormAppEntity } from './discover'
 
 function decorate(col: ReportEntityColumn): AnalyticsColumn {
   const semanticType = deriveSemanticType(col)
@@ -52,45 +50,27 @@ export async function discoverEntityMapWithCustomFields(
   return Object.fromEntries(entities.map((e) => [e.key, e]))
 }
 
-/** The full studio source catalog: schema-discovered entities (with custom
- *  fields) PLUS one scoped entity per Builder app — the form_responses table
- *  scoped to that template via a baked-in template_id baseFilter, labeled with
- *  the app's own name. Shared by the Insights card studio and the Reports
- *  studio so both pickers present Builder apps identically. Runs under the
- *  caller's tenant-scoped tx (RLS bounds the template list). */
-export async function discoverEntitiesWithApps(tx: Database): Promise<AnalyticsEntity[]> {
-  const [base, apps] = await Promise.all([
-    discoverEntitiesWithCustomFields(tx),
-    tx
-      .select({ id: formTemplates.id, name: formTemplates.name })
-      .from(formTemplates)
-      .where(and(isNull(formTemplates.deletedAt)))
-      .orderBy(asc(formTemplates.name)),
-  ])
+/** Add only Builder apps already authorized by the caller. This function never
+ *  discovers templates itself: tenant RLS is not an app audience/lifecycle
+ *  policy, so authorization must happen before IDs reach this boundary. */
+export async function discoverEntitiesWithScopedApps(
+  tx: Database,
+  apps: readonly { id: string; name: string }[],
+): Promise<AnalyticsEntity[]> {
+  const base = await discoverEntitiesWithCustomFields(tx)
   const appEntities = apps
     .map((a) => scopedFormAppEntity(a.id, a.name))
     .filter((e): e is AnalyticsEntity => e != null)
   return [...base, ...appEntities]
 }
 
-/** Map form of {@link discoverEntitiesWithApps} for executors. Scoped per-app
- *  keys resolve to entities that CARRY their app title (so a per-app report
- *  prints "Lift Plan", not the generic form_responses label); any scoped key
- *  outside the tenant's current template list still resolves statelessly via
- *  the discoverEntityMap() proxy fallback. */
-export async function discoverEntityMapWithApps(
+/** Map form of {@link discoverEntitiesWithScopedApps}. Unknown scoped IDs stay
+ *  unknown; there is deliberately no proxy fallback. */
+export async function discoverEntityMapWithScopedApps(
   tx: Database,
+  apps: readonly { id: string; name: string }[],
 ): Promise<Record<string, AnalyticsEntity>> {
-  const entities = await discoverEntitiesWithApps(tx)
-  const own: Record<string, AnalyticsEntity> = Object.fromEntries(entities.map((e) => [e.key, e]))
-  const fallback = discoverEntityMap()
-  return new Proxy(own, {
-    get(target, prop) {
-      if (typeof prop === 'string' && !(prop in target)) return fallback[prop]
-      return target[prop as string]
-    },
-    has(target, prop) {
-      return prop in target || prop in fallback
-    },
-  })
+  return Object.fromEntries(
+    (await discoverEntitiesWithScopedApps(tx, apps)).map((entity) => [entity.key, entity]),
+  )
 }

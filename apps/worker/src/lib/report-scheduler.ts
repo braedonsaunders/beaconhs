@@ -5,15 +5,18 @@
 // rerunning before the next cadence boundary advances does nothing because
 // nextRunAt was already moved forward.
 
-import { and, eq, isNull, lte, or } from 'drizzle-orm'
+import { and, asc, eq, isNull, lte, or } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { reportSchedules } from '@beaconhs/db/schema'
+import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
-import { computeNextRunAt } from '@beaconhs/reports'
+import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
 
 export async function scanReportSchedules(now: Date = new Date()): Promise<void> {
-  const due = await withSuperAdmin(db, async (tx) => {
-    return tx
+  // Claim each occurrence and advance its cursor in ONE database transaction.
+  // Redis publication happens afterwards; if it fails, the queued run remains
+  // durable and every later scan retries the same deterministic BullMQ job.
+  const claimed = await withSuperAdmin(db, async (tx) => {
+    const due = await tx
       .select()
       .from(reportSchedules)
       .where(
@@ -22,40 +25,67 @@ export async function scanReportSchedules(now: Date = new Date()): Promise<void>
           or(isNull(reportSchedules.nextRunAt), lte(reportSchedules.nextRunAt, now)),
         ),
       )
+      .for('update', { skipLocked: true })
+
+    const runs: { id: string; tenantId: string; scheduleId: string }[] = []
+    for (const schedule of due) {
+      const occurrence = schedule.nextRunAt ?? new Date(Math.floor(now.getTime() / 60_000) * 60_000)
+      const run = await claimReportRun(tx, {
+        scheduleId: schedule.id,
+        scheduledFor: occurrence,
+        trigger: 'scheduled',
+      })
+      const next = computeNextRunAt(
+        {
+          cadence: schedule.cadence,
+          dayOfWeek: schedule.dayOfWeek,
+          dayOfMonth: schedule.dayOfMonth,
+          hour: schedule.hour,
+          minute: schedule.minute,
+          timezone: schedule.timezone,
+        },
+        now,
+      )
+      await tx
+        .update(reportSchedules)
+        .set({ nextRunAt: next })
+        .where(eq(reportSchedules.id, schedule.id))
+      runs.push({ id: run.id, tenantId: schedule.tenantId, scheduleId: schedule.id })
+    }
+    return runs
   })
 
-  if (!due.length) {
-    return
+  if (claimed.length > 0) {
+    console.log(`[reports] claimed ${claimed.length} due schedule(s)`)
   }
-  console.log(`[reports] enqueuing ${due.length} due schedule(s)`)
 
-  for (const s of due) {
-    const next = computeNextRunAt(
-      {
-        cadence: s.cadence,
-        dayOfWeek: s.dayOfWeek,
-        dayOfMonth: s.dayOfMonth,
-        hour: s.hour,
-        minute: s.minute,
-        timezone: s.timezone,
-      },
-      now,
-    )
-
-    // Roll forward first, then enqueue. If the enqueue fails the next tick
-    // will pick the schedule up again at its newly-set nextRunAt — fine,
-    // because the worker is idempotent at the schedule-id grain (runs are
-    // separate rows).
-    await withSuperAdmin(db, async (tx) => {
-      await tx.update(reportSchedules).set({ nextRunAt: next }).where(eq(reportSchedules.id, s.id))
-    })
-
+  // Recovery is intentionally independent of active schedules. Manual runs and
+  // a run claimed just before Redis went down are both represented by queued
+  // ledger rows and must be published once Redis returns.
+  const queued = await withSuperAdmin(db, (tx) =>
+    tx
+      .select({
+        id: reportRuns.id,
+        tenantId: reportRuns.tenantId,
+        scheduleId: reportRuns.scheduleId,
+      })
+      .from(reportRuns)
+      .where(eq(reportRuns.status, 'queued'))
+      .orderBy(asc(reportRuns.createdAt))
+      .limit(500),
+  )
+  const failures: string[] = []
+  for (const run of queued) {
     try {
-      await enqueueReportRun({ tenantId: s.tenantId, scheduleId: s.id })
-      console.log(`[reports] enqueued schedule ${s.id} (next=${next.toISOString()})`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[reports] failed to enqueue schedule ${s.id}: ${msg}`)
+      await enqueueReportRun({ tenantId: run.tenantId, scheduleId: run.scheduleId, runId: run.id })
+    } catch (error) {
+      failures.push(`${run.id}: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+  if (failures.length > 0) {
+    throw new Error(`Failed to publish ${failures.length} report run(s): ${failures.join('; ')}`)
+  }
+  if (queued.length > 0) {
+    console.log(`[reports] ensured ${queued.length} queued run(s) are published`)
   }
 }

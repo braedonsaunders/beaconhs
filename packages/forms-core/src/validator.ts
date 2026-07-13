@@ -54,7 +54,7 @@ export function validateResponse(
         const rowCtx: EvalContext = { ...ctx, values: { ...values, ...row } }
         for (const field of section.fields) {
           // Computed fields are derived at read time, never user-validated.
-          if (field.type === 'formula' || field.type === 'calc') continue
+          if (field.type === 'formula') continue
           if (field.showIf && !evaluateLogicRule(field.showIf, rowCtx)) continue
           const error = validateField(field, row[field.id], stage)
           if (error) {
@@ -70,7 +70,7 @@ export function validateResponse(
     }
 
     for (const field of section.fields) {
-      if (field.type === 'formula' || field.type === 'calc') continue
+      if (field.type === 'formula') continue
       if (field.showIf && !evaluateLogicRule(field.showIf, ctx)) continue
       const error = validateField(field, values[field.id], stage)
       if (error) errors.push({ fieldId: field.id, sectionId: section.id, message: error })
@@ -104,7 +104,6 @@ function validateField(field: FormField, value: unknown, stage: 'draft' | 'submi
       return null
     }
     case 'text':
-    case 'textarea':
     case 'long_text':
     case 'email':
     case 'phone':

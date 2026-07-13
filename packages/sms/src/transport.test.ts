@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { encryptSecret } from '@beaconhs/crypto'
+import { sealSecret } from '@beaconhs/crypto'
 import {
   buildSmsTransport,
   resolveEffectiveSmsTransport,
@@ -14,7 +14,7 @@ import {
 const INPUT: SendSmsInput = { to: '+15551234567', body: 'Hello' }
 
 function sealed(secret: string) {
-  const s = encryptSecret(secret)
+  const s = sealSecret(secret)
   return { keyCiphertext: s.ciphertext, keyNonce: s.nonce }
 }
 
@@ -81,7 +81,7 @@ describe('resolveSmsTransport (unseal)', () => {
   })
 })
 
-describe('resolveEffectiveSmsTransport (platform → tenant → env precedence)', () => {
+describe('resolveEffectiveSmsTransport (platform → tenant precedence)', () => {
   const platform: PlatformSmsConfig = {
     provider: 'twilio',
     fromNumber: '+1platform',
@@ -126,10 +126,16 @@ describe('resolveEffectiveSmsTransport (platform → tenant → env precedence)'
     ).toMatchObject({ kind: 'transport', source: 'platform' })
   })
 
-  it('tenant_optional with nothing configured → env fallback', () => {
+  it('reports missing configuration instead of pretending to send', () => {
     expect(resolveEffectiveSmsTransport(null, null, { tenantScoped: true })).toEqual({
-      kind: 'fallback',
+      kind: 'unconfigured',
     })
+  })
+
+  it('global_only requires a configured platform provider', () => {
+    expect(
+      resolveEffectiveSmsTransport({ mode: 'global_only' }, tenant, { tenantScoped: true }),
+    ).toEqual({ kind: 'unconfigured' })
   })
 
   it('platform send (not tenant-scoped) never uses a tenant provider', () => {

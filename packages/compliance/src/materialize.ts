@@ -154,7 +154,7 @@ export async function materializeObligation(
  * Provision the built-in obligations that aren't user-authored — currently the
  * corrective-action "closed by due date" rule. These are SYSTEM obligations (no
  * audience, per_record): the unified engine owns CA-overdue detection instead of
- * a per-module scan. Idempotent via the (legacyTable, legacyId) unique index, so
+ * a per-module scan. Idempotent via the (sourceKey, sourceId) unique index, so
  * it's safe to call on every scan. Keyed by tenantId → exactly one per tenant.
  */
 export async function ensureSystemObligations(tx: Tx, tenantId: string): Promise<void> {
@@ -169,11 +169,11 @@ export async function ensureSystemObligations(tx: Tx, tenantId: string): Promise
       targetRef: {},
       recurrence: { kind: 'event' } as never,
       recurrenceKind: 'event' as never,
-      legacyTable: 'system:corrective_action',
-      legacyId: tenantId,
+      sourceKey: 'system:corrective_action',
+      sourceId: tenantId,
     })
     .onConflictDoNothing({
-      target: [complianceObligations.legacyTable, complianceObligations.legacyId],
+      target: [complianceObligations.sourceKey, complianceObligations.sourceId],
     })
 }
 

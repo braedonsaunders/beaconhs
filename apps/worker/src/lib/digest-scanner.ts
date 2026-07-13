@@ -5,17 +5,18 @@
 // digest mode is on, so this is where they actually go out.
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { notifications, tenantNotificationPolicy, tenants, users } from '@beaconhs/db/schema'
 import { enqueueEmail } from '@beaconhs/jobs'
 import { appBaseUrl } from './app-base-url'
 import { escapeHtml } from './escape-html'
 
-export type DigestScanResult = { tenants: number; emails: number }
+type DigestScanResult = { tenants: number; emails: number }
 
-export async function scanDigests(): Promise<DigestScanResult> {
+export async function scanDigests(scheduledFor: Date = new Date()): Promise<DigestScanResult> {
   const result: DigestScanResult = { tenants: 0, emails: 0 }
-  const now = new Date()
+  const now = scheduledFor
   const hour = now.getUTCHours()
   const isMonday = now.getUTCDay() === 1
   const appUrl = appBaseUrl()
@@ -72,13 +73,20 @@ export async function scanDigests(): Promise<DigestScanResult> {
           )
           .join('')
         const subject = `Your ${pol.digestMode} summary — ${items.length} update${items.length === 1 ? '' : 's'}`
-        await enqueueEmail({
-          to: email,
-          subject,
-          html: `<p>${items.length} unread notification${items.length === 1 ? '' : 's'}:</p><ul>${list}</ul>`,
-          text: items.map((i) => `• ${i.title}`).join('\n'),
-          meta: { tenantId: t.id, category: 'digest' },
-        })
+        const period = `${pol.digestMode}|${now.toISOString().slice(0, 13)}`
+        const jobId = `digest-email|${createHash('sha256')
+          .update(`${t.id}\0${email.toLowerCase()}\0${period}`)
+          .digest('hex')}`
+        await enqueueEmail(
+          {
+            to: email,
+            subject,
+            html: `<p>${items.length} unread notification${items.length === 1 ? '' : 's'}:</p><ul>${list}</ul>`,
+            text: items.map((i) => `• ${i.title}`).join('\n'),
+            meta: { tenantId: t.id, category: 'digest' },
+          },
+          { jobId },
+        )
         result.emails += 1
       }
     })

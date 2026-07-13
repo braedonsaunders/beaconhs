@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { decryptSecret, encryptSecret, sealSecret, unsealSecret } from './index'
+import { sealSecret, unsealSecret } from './index'
 
 beforeAll(() => {
   // Deterministic key material for the round-trip tests.
@@ -32,12 +32,6 @@ describe('secret sealing', () => {
 
   it('returns null on malformed input rather than throwing', () => {
     expect(unsealSecret({ ciphertext: 'not-base64!!', nonce: 'nope' })).toBeNull()
-  })
-
-  it('exposes encrypt/decrypt aliases backed by the same implementation', () => {
-    expect(encryptSecret).toBe(sealSecret)
-    expect(decryptSecret).toBe(unsealSecret)
-    expect(decryptSecret(encryptSecret('via-alias'))).toBe('via-alias')
   })
 
   it('empty string round-trips', () => {

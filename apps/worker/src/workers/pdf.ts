@@ -37,7 +37,14 @@ import {
   type PdfJobData,
   type RenderedPdfArtifact,
 } from '@beaconhs/jobs'
-import { deleteObject, getObject, publicUrl, putObject } from '@beaconhs/storage'
+import {
+  deleteObject,
+  getObject,
+  newAttachmentKey,
+  newTenantObjectKey,
+  presignGet,
+  putObject,
+} from '@beaconhs/storage'
 import { importSlidesFromPptx } from './slides-import'
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
 import { pdfUnite } from '@beaconhs/office'
@@ -146,7 +153,11 @@ async function renderRecordSummary(
   const stamp = Date.now()
   const ref = data.reference || data.subjectId.slice(0, 8)
   const filename = data.filename || `${data.entityType}-${ref}-${stamp}.pdf`
-  const r2Key = `tmp/pdfs/record-summary/${data.tenantId}/${data.subjectId}-${stamp}.pdf`
+  const r2Key = newTenantObjectKey({
+    tenantId: data.tenantId,
+    scope: '_transient/pdfs/record-summary',
+    filename: `${data.subjectId}-${stamp}.pdf`,
+  })
   return storeTransientPdfArtifact({
     tenantId: data.tenantId,
     pdf,
@@ -179,7 +190,11 @@ async function renderTemplatePdf(
     tenantId: data.tenantId,
     pdf,
     filename,
-    r2Key: `tmp/pdfs/template/${data.tenantId}/${entityId}-${stamp}.pdf`,
+    r2Key: newTenantObjectKey({
+      tenantId: data.tenantId,
+      scope: '_transient/pdfs/template',
+      filename: `${entityId}-${stamp}.pdf`,
+    }),
     entityType,
     entityId,
     summary: 'Rendered PDF document template',
@@ -215,7 +230,11 @@ async function renderDocumentBundle(
     tenantId: data.tenantId,
     pdf,
     filename: data.filename,
-    r2Key: `tmp/pdfs/bundles/${data.tenantId}/${data.entityId}-${stamp}.pdf`,
+    r2Key: newTenantObjectKey({
+      tenantId: data.tenantId,
+      scope: '_transient/pdfs/bundles',
+      filename: `${data.entityId}-${stamp}.pdf`,
+    }),
     entityType: data.entityType,
     entityId: data.entityId,
     summary: `Rendered bundled PDF (${data.parts.length} parts)`,
@@ -262,7 +281,7 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
         .from(attachments)
         .where(eq(attachments.id, row.person.photoAttachmentId))
         .limit(1)
-      if (photoAtt) photoUrl = publicUrl(photoAtt.r2Key)
+      if (photoAtt) photoUrl = await presignGet({ key: photoAtt.r2Key, expiresInSeconds: 900 })
     }
     return { ...row, photoUrl }
   })
@@ -319,12 +338,22 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
   const stamp = Date.now()
   const certFilename = `certificate-${course.code}-${person.lastName}-${stamp}.pdf`
   const walletFilename = `wallet-${course.code}-${person.lastName}-${stamp}.pdf`
-  const certKey = `pdfs/certificates/${certificateId}-cert-${stamp}.pdf`
-  const walletKey = `pdfs/certificates/${certificateId}-wallet-${stamp}.pdf`
+  const certKey = newAttachmentKey({ tenantId, kind: 'document', filename: certFilename })
+  const walletKey = newAttachmentKey({ tenantId, kind: 'document', filename: walletFilename })
 
   await Promise.all([
-    putObject({ key: certKey, body: certificate, contentType: 'application/pdf' }),
-    putObject({ key: walletKey, body: wallet, contentType: 'application/pdf' }),
+    putObject({
+      key: certKey,
+      body: certificate,
+      contentType: 'application/pdf',
+      contentDisposition: 'inline',
+    }),
+    putObject({
+      key: walletKey,
+      body: wallet,
+      contentType: 'application/pdf',
+      contentDisposition: 'inline',
+    }),
   ])
 
   await withTenant(db, tenantId, async (tx) => {
@@ -365,8 +394,6 @@ async function renderCertificate(tenantId: string, certificateId: string): Promi
       metadata: {
         certificateAttachmentId: certAtt?.id,
         walletAttachmentId: walletAtt?.id,
-        certificateUrl: publicUrl(certKey),
-        walletUrl: publicUrl(walletKey),
         certificateBytes: certificate.length,
         walletBytes: wallet.length,
       },
@@ -421,7 +448,7 @@ async function renderSkillCertificate(tenantId: string, skillCertificateId: stri
         .from(attachments)
         .where(eq(attachments.id, row.person.photoAttachmentId))
         .limit(1)
-      if (photoAtt) photoUrl = publicUrl(photoAtt.r2Key)
+      if (photoAtt) photoUrl = await presignGet({ key: photoAtt.r2Key, expiresInSeconds: 900 })
     }
     return { ...row, photoUrl }
   })
@@ -472,12 +499,22 @@ async function renderSkillCertificate(tenantId: string, skillCertificateId: stri
   const safeSkill = (skillType.code || skillType.name).replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 40)
   const certFilename = `skill-certificate-${safeSkill}-${person.lastName}-${stamp}.pdf`
   const walletFilename = `skill-wallet-${safeSkill}-${person.lastName}-${stamp}.pdf`
-  const certKey = `pdfs/skill-certificates/${skillCertificateId}-cert-${stamp}.pdf`
-  const walletKey = `pdfs/skill-certificates/${skillCertificateId}-wallet-${stamp}.pdf`
+  const certKey = newAttachmentKey({ tenantId, kind: 'document', filename: certFilename })
+  const walletKey = newAttachmentKey({ tenantId, kind: 'document', filename: walletFilename })
 
   await Promise.all([
-    putObject({ key: certKey, body: certificate, contentType: 'application/pdf' }),
-    putObject({ key: walletKey, body: wallet, contentType: 'application/pdf' }),
+    putObject({
+      key: certKey,
+      body: certificate,
+      contentType: 'application/pdf',
+      contentDisposition: 'inline',
+    }),
+    putObject({
+      key: walletKey,
+      body: wallet,
+      contentType: 'application/pdf',
+      contentDisposition: 'inline',
+    }),
   ])
 
   await withTenant(db, tenantId, async (tx) => {
@@ -518,8 +555,6 @@ async function renderSkillCertificate(tenantId: string, skillCertificateId: stri
       metadata: {
         certificateAttachmentId: certAtt?.id,
         walletAttachmentId: walletAtt?.id,
-        certificateUrl: publicUrl(certKey),
-        walletUrl: publicUrl(walletKey),
         certificateBytes: certificate.length,
         walletBytes: wallet.length,
       },
@@ -549,7 +584,12 @@ async function storeTransientPdfArtifact(args: {
   entityId: string
   summary: string
 }): Promise<StoredPdfResult> {
-  await putObject({ key: args.r2Key, body: args.pdf, contentType: 'application/pdf' })
+  await putObject({
+    key: args.r2Key,
+    body: args.pdf,
+    contentType: 'application/pdf',
+    contentDisposition: 'inline',
+  })
 
   await withTenant(db, args.tenantId, async (tx) => {
     await audit(tx, {
@@ -563,7 +603,6 @@ async function storeTransientPdfArtifact(args: {
         r2Key: args.r2Key,
         sizeBytes: args.pdf.length,
         transient: true,
-        url: publicUrl(args.r2Key),
       },
     })
   })
@@ -642,7 +681,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
   }
 
   const b = data.b
-  const title = b.title || b.name || 'Document Book'
+  const title = b.title
   const toc = data.entries
     .map((e, i) => {
       const label = `${i + 1}. ${escapeBookHtml(e.title)}${e.version ? ` — v${e.version}` : ''}`
@@ -678,7 +717,11 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     tenantId,
     pdf,
     filename: `document-book-${bookId.slice(0, 8)}-${stamp}.pdf`,
-    r2Key: `tmp/pdfs/document-books/${tenantId}/${bookId}-${stamp}.pdf`,
+    r2Key: newTenantObjectKey({
+      tenantId,
+      scope: '_transient/pdfs/document-books',
+      filename: `${bookId}-${stamp}.pdf`,
+    }),
     entityType: 'document_book',
     entityId: bookId,
     summary: 'Rendered document book PDF',

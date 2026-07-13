@@ -8,7 +8,7 @@
 // SDKs); SMTP uses nodemailer (dynamically imported so it never loads unless an
 // SMTP transport is actually used).
 
-import { decryptSecret } from '@beaconhs/crypto'
+import { unsealSecret } from '@beaconhs/crypto'
 import type { EmailProvider } from './providers'
 
 export type EmailAttachment = {
@@ -150,7 +150,7 @@ export function resolveEmailTransport(
   if (!raw || !raw.provider || raw.enabled === false) return null
   let secret: string | undefined
   if (raw.keyCiphertext && raw.keyNonce) {
-    secret = decryptSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce }) ?? undefined
+    secret = unsealSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce }) ?? undefined
   }
   return buildTransport({ ...raw, secret })
 }

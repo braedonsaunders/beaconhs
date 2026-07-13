@@ -1,17 +1,18 @@
 // Equipment maintenance detection — runs inside the unified compliance scan's
 // per-tenant heartbeat (same tenant-configured cadence, no separate tick).
 // Finds inspection schedules and ad-hoc reminders whose due date has arrived
-// and that haven't been alerted for this due cycle, emits one batch through
-// the events dispatcher (assignee self-targets + audience rollup), then stamps
-// due_notified_for so a still-overdue item never re-alerts. Completing the
-// work advances the due date, which re-arms the stamp for the next cycle.
+// and that haven't been alerted for this due cycle, and atomically records a
+// durable dispatch snapshot. The publisher queues a retry-safe batch and only
+// then stamps the exact due cycle. Completing the work advances the due date,
+// which re-arms the stamp for the next cycle.
 
-import { and, eq, inArray, isNull, lte, notInArray, sql } from 'drizzle-orm'
-import { db, withTenant } from '@beaconhs/db'
+import { and, asc, eq, isNull, lte, notInArray, sql } from 'drizzle-orm'
+import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import {
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
+  equipmentMaintenanceDispatches,
   equipmentReminders,
 } from '@beaconhs/db/schema'
 import { emitEquipmentMaintenanceDue, type EquipmentMaintenanceDueEntry } from '@beaconhs/events'
@@ -26,7 +27,7 @@ export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<
     notInArray(equipmentItems.status, ['retired', 'lost']),
   ]
 
-  const { entries, scheduleIds, reminderIds } = await withTenant(db, tenantId, async (tx) => {
+  const entries = await withTenant(db, tenantId, async (tx) => {
     const dueSchedules = await tx
       .select({
         id: equipmentInspectionSchedules.id,
@@ -95,34 +96,113 @@ export async function scanTenantEquipmentMaintenance(tenantId: string): Promise<
         assigneePersonId: r.assigneePersonId,
       })),
     ]
-    return {
-      entries,
-      scheduleIds: dueSchedules.map((s) => s.id),
-      reminderIds: dueReminders.map((r) => r.id),
-    }
-  })
-
-  if (entries.length === 0) return 0
-
-  // emit* never throws — a notification failure must not stop the stamps below
-  // from being written (the next scan would double-alert otherwise is the
-  // wrong trade; we prefer at-most-once per cycle).
-  await emitEquipmentMaintenanceDue(tenantId, entries)
-
-  await withTenant(db, tenantId, async (tx) => {
-    if (scheduleIds.length > 0) {
-      await tx
-        .update(equipmentInspectionSchedules)
-        .set({ dueNotifiedFor: sql`${equipmentInspectionSchedules.nextDueOn}` })
-        .where(inArray(equipmentInspectionSchedules.id, scheduleIds))
-    }
-    if (reminderIds.length > 0) {
-      await tx
-        .update(equipmentReminders)
-        .set({ dueNotifiedFor: sql`${equipmentReminders.dueOn}` })
-        .where(inArray(equipmentReminders.id, reminderIds))
-    }
+    if (entries.length === 0) return entries
+    const scheduleCycles = dueSchedules.map((schedule) => ({
+      id: schedule.id,
+      dueOn: schedule.dueOn,
+    }))
+    const reminderCycles = dueReminders.map((reminder) => ({
+      id: reminder.id,
+      dueOn: reminder.dueOn,
+    }))
+    const deliveryKey = [
+      ...scheduleCycles.map((cycle) => `s:${cycle.id}@${cycle.dueOn}`),
+      ...reminderCycles.map((cycle) => `r:${cycle.id}@${cycle.dueOn}`),
+    ]
+      .sort()
+      .join('|')
+    await tx
+      .insert(equipmentMaintenanceDispatches)
+      .values({
+        tenantId,
+        deliveryKey,
+        entries,
+        scheduleCycles,
+        reminderCycles,
+      })
+      .onConflictDoNothing({
+        target: [
+          equipmentMaintenanceDispatches.tenantId,
+          equipmentMaintenanceDispatches.deliveryKey,
+        ],
+      })
+    return entries
   })
 
   return entries.length
+}
+
+/** Publish durable due-cycle snapshots and stamp only the exact cycles sent. */
+export async function publishQueuedEquipmentMaintenance(): Promise<{
+  published: number
+  errors: number
+}> {
+  const result = { published: 0, errors: 0 }
+  const queued = await withSuperAdmin(db, (tx) =>
+    tx
+      .select()
+      .from(equipmentMaintenanceDispatches)
+      .where(eq(equipmentMaintenanceDispatches.status, 'queued'))
+      .orderBy(asc(equipmentMaintenanceDispatches.createdAt))
+      .limit(500),
+  )
+  for (const dispatch of queued) {
+    if (dispatch.entries.length === 0) {
+      result.errors += 1
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(equipmentMaintenanceDispatches)
+          .set({ status: 'failed', error: 'Equipment maintenance dispatch has no entries' })
+          .where(eq(equipmentMaintenanceDispatches.id, dispatch.id)),
+      )
+      continue
+    }
+    try {
+      await emitEquipmentMaintenanceDue(dispatch.tenantId, dispatch.entries, dispatch.deliveryKey)
+      await withTenant(db, dispatch.tenantId, async (tx) => {
+        for (const cycle of dispatch.scheduleCycles) {
+          await tx
+            .update(equipmentInspectionSchedules)
+            .set({ dueNotifiedFor: cycle.dueOn })
+            .where(
+              and(
+                eq(equipmentInspectionSchedules.id, cycle.id),
+                eq(equipmentInspectionSchedules.nextDueOn, cycle.dueOn),
+              ),
+            )
+        }
+        for (const cycle of dispatch.reminderCycles) {
+          await tx
+            .update(equipmentReminders)
+            .set({ dueNotifiedFor: cycle.dueOn })
+            .where(
+              and(
+                eq(equipmentReminders.id, cycle.id),
+                eq(equipmentReminders.dueOn, cycle.dueOn),
+                isNull(equipmentReminders.completedAt),
+              ),
+            )
+        }
+        await tx
+          .update(equipmentMaintenanceDispatches)
+          .set({ status: 'enqueued', error: null })
+          .where(
+            and(
+              eq(equipmentMaintenanceDispatches.id, dispatch.id),
+              eq(equipmentMaintenanceDispatches.status, 'queued'),
+            ),
+          )
+      })
+      result.published += 1
+    } catch (error) {
+      result.errors += 1
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(equipmentMaintenanceDispatches)
+          .set({ error: error instanceof Error ? error.message : String(error) })
+          .where(eq(equipmentMaintenanceDispatches.id, dispatch.id)),
+      )
+    }
+  }
+  return result
 }

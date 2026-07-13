@@ -84,6 +84,12 @@ export interface DeliverContext extends DestinationTestContext {
   items: Item[]
   mapping: Record<string, unknown>
   priorRefs: string[]
+  // Successful refs from an earlier partial attempt. Destinations with
+  // multi-request delivery use these to resume without replaying known
+  // successes. Completed prior deliveries are excluded so intentional re-fires
+  // still work when oncePerRecord is off.
+  retryRefs: string[]
+  oncePerRecord: boolean
   log: (level: 'info' | 'warn' | 'error', msg: string) => void
 }
 

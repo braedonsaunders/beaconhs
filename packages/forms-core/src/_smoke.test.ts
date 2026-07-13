@@ -85,7 +85,7 @@ const LIFT_PLAN_SCHEMA: FormSchemaV1 = {
         },
         {
           id: 'critical_control',
-          type: 'textarea',
+          type: 'long_text',
           label: { en: 'Additional control' },
           required: true,
           showIf: { op: 'eq', field: 'residual_risk', value: 'critical' },
@@ -132,5 +132,29 @@ describe('lift-plan-style schema integration', () => {
     const gen = parsed.sections.find((s) => s.id === 'general_info')!
     const liftDate = gen.fields.find((f) => f.id === 'lift_date')!
     expect(liftDate.defaultValue?.kind).toBe('today')
+  })
+
+  it.each(['textarea', 'calc'])('rejects retired %s field types', (type) => {
+    expect(() =>
+      validateFormSchema({
+        schemaVersion: 1,
+        title: { en: 'Retired field type' },
+        sections: [
+          {
+            id: 'section',
+            fields: [{ id: 'retired', type, label: { en: 'Retired' } }],
+          },
+        ],
+        workflow: {
+          steps: [
+            {
+              key: 'submit',
+              title: { en: 'Submit' },
+              assignee: { type: 'expression', expr: '$submitter' },
+            },
+          ],
+        },
+      }),
+    ).toThrow()
   })
 })

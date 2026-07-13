@@ -14,6 +14,7 @@ import {
   correctiveActions,
   documentAcknowledgments,
   documentAssignments,
+  documentCategories,
   documents,
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
@@ -364,11 +365,12 @@ export async function queryDocumentsOverdueReview(
       id: documents.id,
       key: documents.key,
       title: documents.title,
-      category: documents.category,
+      category: documentCategories.name,
       nextReviewOn: documents.nextReviewOn,
       owner: tenantUsers.displayName,
     })
     .from(documents)
+    .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
     .leftJoin(tenantUsers, eq(tenantUsers.id, documents.ownerTenantUserId))
     .where(
       and(

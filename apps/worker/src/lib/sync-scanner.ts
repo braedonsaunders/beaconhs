@@ -14,7 +14,7 @@
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { syncConnections, syncRuns } from '@beaconhs/db/schema'
-import { type ScheduledTick, scheduledQueue } from '@beaconhs/jobs'
+import { enqueueScheduled, type ScheduledTick } from '@beaconhs/jobs'
 import { type RunSyncResult, runSync } from '@beaconhs/sync'
 
 // Friendly cadence keys (stored in sync_connections.schedule) → minutes.
@@ -30,7 +30,7 @@ const CADENCE_MINUTES: Record<string, number> = {
 // before finalize) and no longer blocks scheduling.
 const STALLED_RUN_MINUTES = 6 * 60
 
-export type SyncScanResult = { candidates: number; enqueued: number }
+type SyncScanResult = { candidates: number; enqueued: number }
 
 export async function scanSyncConnections(now: Date = new Date()): Promise<SyncScanResult> {
   const result: SyncScanResult = { candidates: 0, enqueued: 0 }
@@ -73,7 +73,7 @@ export async function scanSyncConnections(now: Date = new Date()): Promise<SyncS
     if (inFlight.has(c.id)) continue
     const due = !c.lastRunAt || now.getTime() - c.lastRunAt.getTime() >= mins * 60_000
     if (!due) continue
-    await scheduledQueue.add(
+    await enqueueScheduled(
       'sync_run',
       {
         kind: 'sync_run',
@@ -84,7 +84,9 @@ export async function scanSyncConnections(now: Date = new Date()): Promise<SyncS
       // Deterministic id: while a run for this connection is queued/active the
       // add is a no-op. removeOnComplete/removeOnFail free the id afterwards
       // (the sync_runs ledger is the durable history, not BullMQ).
-      { jobId: `sync_run:${c.id}`, removeOnComplete: true, removeOnFail: true },
+      // BullMQ rejects custom job ids containing a colon (except a legacy
+      // three-segment repeat-job shape). Use the platform's `|` delimiter.
+      { jobId: `sync-run|${c.id}`, removeOnComplete: true, removeOnFail: true },
     )
     result.enqueued += 1
   }

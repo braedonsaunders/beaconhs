@@ -9,6 +9,7 @@
     "build": "node build.mjs",
     "start": "node dist/index.js",
     "scheduler:start": "node dist/scheduler.js",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
@@ -29,9 +30,11 @@
     "@beaconhs/sms": "workspace:*",
     "@beaconhs/storage": "workspace:*",
     "@beaconhs/sync": "workspace:*",
+    "@beaconhs/tenant": "workspace:*",
+    "@sentry/node": "10.65.0",
     "bullmq": "^5.79.1",
+    "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.45.2",
-    "ioredis": "^5.11.1",
     "jszip": "^3.10.1",
     "qrcode": "^1.5.4",
     "web-push": "^3.6.7"
@@ -40,8 +43,9 @@
     "@types/node": "^24.13.2",
     "@types/qrcode": "^1.5.6",
     "@types/web-push": "^3.6.4",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.1",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

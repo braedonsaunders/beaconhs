@@ -42,7 +42,6 @@ const EXCLUDE_TABLES = new Set<string>([
   'notifications',
   'notification_preferences',
   'webpush_subscriptions',
-  'tenant_notification_recipients',
   'ai_conversations',
   'ai_messages',
   'user_dashboard_layouts',
@@ -56,6 +55,8 @@ const EXCLUDE_TABLES = new Set<string>([
   'sync_runs',
   'report_schedules',
   'report_runs',
+  'domain_event_outbox',
+  'domain_event_effects',
   // The BI tables themselves aren't analytical data.
   'insight_dashboards',
   'insight_cards',
@@ -221,9 +222,15 @@ let CACHE: AnalyticsEntity[] | null = null
 
 /** All queryable entities, discovered from the schema + the curated overlay +
  *  the hand-built reporting VIEWs (training matrix, skills roster). Memoized. */
-export function discoverEntities(): AnalyticsEntity[] {
+function discoverSchemaEntities(): AnalyticsEntity[] {
   if (CACHE) return CACHE
   const entities: AnalyticsEntity[] = []
+  const curatedEntities = buildAnalyticsEntities()
+  const curatedByTable = new Map(
+    curatedEntities
+      .filter((entity) => !entity.table.startsWith('report_'))
+      .map((entity) => [entity.table, entity]),
+  )
 
   for (const value of Object.values(schema)) {
     if (!is(value, PgTable)) continue
@@ -279,21 +286,33 @@ export function discoverEntities(): AnalyticsEntity[] {
     }
     if (columns.length === 0) continue
 
+    const curated = curatedByTable.get(table)
+    const curatedColumns = new Map(curated?.columns.map((column) => [column.key, column]) ?? [])
+    const mergedColumns = columns.map((column) => {
+      const authored = curatedColumns.get(column.key)
+      return authored ? { ...column, ...authored } : column
+    })
+    const curatedCategory = curated
+      ? curated.category.charAt(0).toUpperCase() + curated.category.slice(1)
+      : null
+
     entities.push({
       key: table,
-      label: overlay.label ?? humanize(table),
-      category: overlay.category ?? categoryFor(table),
-      description: overlay.description ?? '',
+      label: curated?.label ?? overlay.label ?? humanize(table),
+      category: curatedCategory ?? overlay.category ?? categoryFor(table),
+      description: curated?.description ?? overlay.description ?? '',
       table,
-      columns,
+      columns: mergedColumns,
       primary: overlay.primary ?? false,
       relations: relationsFor(value, hide),
+      ...(curated?.defaultSort ? { defaultSort: curated.defaultSort } : {}),
+      ...(curated?.softDelete ? { softDelete: true } : {}),
     })
   }
 
   // The reporting VIEWs aren't Drizzle tables — pull the curated ones in.
   // Normalize their (lower-case) report category to match the discovered ones.
-  for (const e of buildAnalyticsEntities()) {
+  for (const e of curatedEntities) {
     if (e.table.startsWith('report_')) {
       const category = e.category.charAt(0).toUpperCase() + e.category.slice(1)
       entities.push({ ...e, category, primary: true })
@@ -319,20 +338,38 @@ export function discoverEntities(): AnalyticsEntity[] {
   return entities
 }
 
+/**
+ * Public analytics catalog.
+ *
+ * Builder storage is deliberately absent. A caller may only add a scoped
+ * `form_responses:<templateId>` entity after it has authorized that template.
+ * Keeping the raw tables out here also prevents relation traversal from
+ * smuggling a query into form plumbing.
+ */
+export function discoverEntities(): AnalyticsEntity[] {
+  const safe = discoverSchemaEntities().filter((entity) => !entity.table.startsWith('form_'))
+  const keys = new Set(safe.map((entity) => entity.key))
+  return safe.map((entity) => ({
+    ...entity,
+    relations: entity.relations?.filter((relation) => keys.has(relation.target)),
+  }))
+}
+
 const FORM_ENTITY_KEY = 'form_responses'
-const SCOPED_FORM_RE = /^form_responses:([0-9a-fA-F-]{36})$/
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 let MAP_CACHE: Record<string, AnalyticsEntity> | null = null
 function baseEntityMap(): Record<string, AnalyticsEntity> {
-  if (!MAP_CACHE) MAP_CACHE = Object.fromEntries(discoverEntities().map((e) => [e.key, e]))
+  if (!MAP_CACHE) MAP_CACHE = Object.fromEntries(discoverSchemaEntities().map((e) => [e.key, e]))
   return MAP_CACHE
 }
 
 /** Build a per-app entity: the real form_responses table scoped to ONE Builder
  *  app via an implicit template_id filter. `label` (the app name) is shown in the
- *  studio source picker; it's omitted for stateless compile/render resolution
- *  (the scope lives entirely in the `form_responses:<templateId>` key). */
+ *  studio source picker. The scope lives in the
+ *  `form_responses:<templateId>` key and its implicit template filter. */
 export function scopedFormAppEntity(templateId: string, label?: string): AnalyticsEntity | null {
+  if (!UUID_RE.test(templateId)) return null
   const base = baseEntityMap()[FORM_ENTITY_KEY]
   if (!base) return null
   return {
@@ -348,22 +385,19 @@ export function scopedFormAppEntity(templateId: string, label?: string): Analyti
   }
 }
 
-/** Entity map for validate/compile. A Proxy resolves `form_responses:<templateId>`
- *  source keys to a scoped per-app entity on demand — so a card saved against one
- *  Builder app re-renders later with NO tenant lookup (the template id is in the
- *  key, the columns come from the static form_responses entity). */
+/** Safe default entity map for validation/compilation. Builder app entities are
+ *  intentionally absent and must be injected by an authorization-aware caller. */
 export function discoverEntityMap(): Record<string, AnalyticsEntity> {
-  const base = baseEntityMap()
-  return new Proxy(base, {
-    get(target, prop) {
-      if (typeof prop === 'string' && !(prop in target)) {
-        const m = SCOPED_FORM_RE.exec(prop)
-        if (m) return scopedFormAppEntity(m[1]!) ?? undefined
-      }
-      return target[prop as string]
-    },
-    has(target, prop) {
-      return prop in target || (typeof prop === 'string' && SCOPED_FORM_RE.test(prop))
-    },
-  })
+  return Object.fromEntries(discoverEntities().map((entity) => [entity.key, entity]))
+}
+
+/**
+ * Narrowly trusted addition for code-owned system cards. Never use this for a
+ * stored/custom query: it intentionally exposes a tenant-wide aggregate source.
+ */
+export function addTrustedSystemFormEntity(
+  entityMap: Record<string, AnalyticsEntity>,
+): Record<string, AnalyticsEntity> {
+  const formResponses = baseEntityMap()[FORM_ENTITY_KEY]
+  return formResponses ? { ...entityMap, [FORM_ENTITY_KEY]: formResponses } : { ...entityMap }
 }

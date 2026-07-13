@@ -149,10 +149,3 @@ export async function resolveObligationAudience(
 function toList(byId: Map<string, string | null>): ResolvedMember[] {
   return Array.from(byId.entries()).map(([personId, userId]) => ({ personId, userId }))
 }
-
-/**
- * Notification-friendly alias for the canonical resolver. The SAME engine drives
- * compliance obligation audiences AND reusable notification groups — both are
- * just a list of {kind, entityKey} audience items.
- */
-export const resolveAudienceMembers = resolveObligationAudience

@@ -1,5 +1,5 @@
-import { Queue } from 'bullmq'
-import { connection } from '../connection'
+import { Queue, type JobsOptions } from 'bullmq'
+import { getConnection } from '../connection'
 
 export type NotifyJobData = {
   tenantId: string
@@ -15,16 +15,21 @@ export type NotifyJobData = {
   channels?: ('in_app' | 'email' | 'push' | 'sms')[]
 }
 
-export const notifyQueue = new Queue<NotifyJobData>('notifications', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'fixed', delay: 5_000 },
-    removeOnComplete: { age: 24 * 3600 },
-    removeOnFail: { age: 7 * 24 * 3600 },
-  },
-})
+let notifyQueue: Queue<NotifyJobData> | undefined
 
-export async function enqueueNotification(data: NotifyJobData) {
-  await notifyQueue.add('dispatch', data)
+function getNotifyQueue(): Queue<NotifyJobData> {
+  notifyQueue ??= new Queue<NotifyJobData>('notifications', {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'fixed', delay: 5_000 },
+      removeOnComplete: { age: 24 * 3600 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  })
+  return notifyQueue
+}
+
+export async function enqueueNotification(data: NotifyJobData, options?: JobsOptions) {
+  return getNotifyQueue().add('dispatch', data, options)
 }

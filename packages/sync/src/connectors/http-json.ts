@@ -16,6 +16,7 @@ import {
   splitName,
   type SourceRow,
 } from '../transform'
+import { secureFetch } from '../egress'
 
 type HttpMethod = 'GET' | 'POST'
 
@@ -64,6 +65,16 @@ function parseMapping(raw: string | undefined): Mapping {
         ? (parsed.values as Record<string, string>)
         : {},
   }
+}
+
+function parseHeaders(raw: string | undefined): Record<string, string> {
+  const parsed = parseJsonObject(raw, 'Headers JSON')
+  const headers: Record<string, string> = {}
+  for (const [name, value] of Object.entries(parsed)) {
+    if (typeof value !== 'string') throw new Error(`Header "${name}" must have a string value.`)
+    headers[name] = value
+  }
+  return headers
 }
 
 function rowsAt(payload: unknown, path: string | undefined): SourceRow[] {
@@ -225,8 +236,8 @@ async function fetchJson(
   }
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    ...parseJsonObject(cfg.headersJson, 'Headers JSON'),
-  } as Record<string, string>
+    ...parseHeaders(cfg.headersJson),
+  }
   if (ctx.secrets.bearerToken) headers.Authorization = `Bearer ${ctx.secrets.bearerToken}`
   if (ctx.secrets.apiKey && cfg.apiKeyHeader?.trim())
     headers[cfg.apiKeyHeader.trim()] = ctx.secrets.apiKey
@@ -238,7 +249,14 @@ async function fetchJson(
       : undefined
   if (body) headers['Content-Type'] = headers['Content-Type'] ?? 'application/json'
 
-  const res = await fetch(url, { method, headers, body })
+  const res = await secureFetch(url, {
+    method,
+    headers,
+    body,
+    timeoutMs: 20_000,
+    maxResponseBytes: 8 * 1024 * 1024,
+    maxRedirects: 2,
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
   return res.json()
 }
@@ -258,6 +276,7 @@ export const httpJsonConnector: Connector = {
       type: 'text',
       required: true,
       placeholder: 'https://api.example.com/workers',
+      help: 'Must be a public HTTPS URL. Local and private network addresses are blocked.',
     },
     {
       key: 'method',
@@ -324,8 +343,7 @@ export const httpJsonConnector: Connector = {
     const cfg = ctx.config as HttpJsonConfig
     const entity = cfg.entity
     if (!entity) {
-      ctx.log('warn', 'No target entity selected.')
-      return []
+      throw new Error('No target entity selected.')
     }
     const mapping = parseMapping(cfg.mappingJson)
     const out: CanonicalRecord[] = []
@@ -364,6 +382,7 @@ export const httpJsonConnector: Connector = {
       records: out,
       nextCursor: nextCursor ? { default: nextCursor } : undefined,
       mode: ctx.since?.default || truncated ? 'incremental' : 'full',
+      authoritativeEntities: [entity],
     }
   },
 }

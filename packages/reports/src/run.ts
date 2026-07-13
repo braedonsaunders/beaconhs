@@ -31,8 +31,8 @@ export type RunReportInput = {
   customQuery?: ReportCustomQuery | null
   /** Viewer/preview cap; scheduled runs leave it unset. Custom queries only. */
   maxRows?: number
-  /** Discovered entity whitelist injected by the caller (web/worker) so custom
-   *  reports can target any tenant-scoped table. Falls back to the static map. */
+  /** Permission-filtered entity whitelist injected by the caller. Required for
+   *  custom queries; built-in query kinds do not use it. */
   entityMap?: Record<string, ReportEntity>
 }
 
@@ -65,11 +65,13 @@ export async function runReport(tx: Database, input: RunReportInput): Promise<Re
       return queryIncidentsTrend12m(tx, filters)
     case 'osha_300_log':
       return queryOsha300Log(tx, filters, range)
-    case 'custom_query':
+    case 'custom_query': {
+      if (!input.entityMap) throw new Error('Custom query requires an authorized entity map')
       return runCustomQuery(tx, customQuery ?? null, {
         maxRows: input.maxRows,
         entityMap: input.entityMap,
       })
+    }
     default:
       throw new Error(`Unknown queryKind: ${queryKind}`)
   }

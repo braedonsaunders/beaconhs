@@ -1,5 +1,5 @@
-import { Queue } from 'bullmq'
-import { connection } from '../connection'
+import { Queue, type JobsOptions } from 'bullmq'
+import { getConnection } from '../connection'
 
 export type EmailAttachment = {
   filename: string
@@ -17,19 +17,29 @@ export type EmailJobData = {
   replyTo?: string
   attachments?: EmailAttachment[]
   // For audit-log fan-out
-  meta?: { tenantId?: string; userId?: string; category?: string }
+  meta?: {
+    tenantId?: string
+    userId?: string
+    category?: string
+    reportRunDeliveryId?: string
+  }
 }
 
-export const emailQueue = new Queue<EmailJobData>('emails', {
-  connection,
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: 'exponential', delay: 30_000 },
-    removeOnComplete: { age: 7 * 24 * 3600 },
-    removeOnFail: { age: 30 * 24 * 3600 },
-  },
-})
+let emailQueue: Queue<EmailJobData> | undefined
 
-export async function enqueueEmail(data: EmailJobData) {
-  await emailQueue.add('send', data)
+function getEmailQueue(): Queue<EmailJobData> {
+  emailQueue ??= new Queue<EmailJobData>('emails', {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 30_000 },
+      removeOnComplete: { age: 7 * 24 * 3600 },
+      removeOnFail: { age: 30 * 24 * 3600 },
+    },
+  })
+  return emailQueue
+}
+
+export async function enqueueEmail(data: EmailJobData, options?: JobsOptions) {
+  return getEmailQueue().add('send', data, options)
 }

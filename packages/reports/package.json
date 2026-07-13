@@ -12,6 +12,7 @@
     "./filters": "./src/filters.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
@@ -21,6 +22,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vite": "8.1.0",
+    "vitest": "4.1.9"
   }
 }

@@ -165,8 +165,7 @@ export const defaultValueExpressionSchema: z.ZodType<DefaultValueExpression> = z
 export const fieldTypeSchema = z.enum([
   // standard
   'text',
-  'textarea',
-  'long_text', // alias of textarea — preferred name for multi-line in canonical templates
+  'long_text',
   'number',
   'slider', // numeric value picked on a min–max range slider
   'date',
@@ -219,7 +218,6 @@ export const fieldTypeSchema = z.enum([
   'typed_attestation',
   // computed
   'formula',
-  'calc', // alias of formula — preferred name for computed cells
   'risk_matrix',
   // data-bound (read a tenant DATA SOURCE via field.binding)
   'lookup', // data-bound dropdown — pick a row, optionally auto-fill other fields
@@ -461,26 +459,6 @@ export const scoreRoutingSchema = z.object({
 
 export type ScoreRouting = z.infer<typeof scoreRoutingSchema>
 
-// --- Monitored-session config ----------------------------------------------
-//
-// When present (+ enabled), submitting this app starts a live MONITORED SESSION:
-// the response gets a recurring check-in timer and is escalated if a check-in is
-// missed past the grace period. Powers Lone Worker, permit timers, periodic
-// checks, etc. Interval / grace / duration are literals OR bound to a fill field
-// (so the worker picks them at start). Escalation is configured in Flows via the
-// `session_overdue` trigger. See docs/monitored-sessions-design.md.
-export const monitorConfigSchema = z.object({
-  enabled: z.literal(true),
-  intervalMinutes: z.number().int().positive(),
-  intervalFieldKey: z.string().optional(),
-  graceMinutes: z.number().int().nonnegative(),
-  graceFieldKey: z.string().optional(),
-  durationMinutes: z.number().int().positive().optional(),
-  durationFieldKey: z.string().optional(),
-  requireGeo: z.boolean().optional(),
-})
-export type MonitorConfig = z.infer<typeof monitorConfigSchema>
-
 export const formSchemaV1 = z.object({
   schemaVersion: z.literal(1),
   title: i18nStringSchema,
@@ -508,8 +486,6 @@ export const formSchemaV1 = z.object({
     })
     .optional(),
   metadata: z.object({ riskMatrixKey: z.string().optional() }).optional(),
-  // Optional monitored-session config — turns this app into a live timed session.
-  monitor: monitorConfigSchema.optional(),
 })
 
 export type FormSchemaV1 = z.infer<typeof formSchemaV1>

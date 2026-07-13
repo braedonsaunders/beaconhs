@@ -1,12 +1,10 @@
-// Emit helpers — one per trigger. Each builds the event's flat Item(s) from data
-// already in scope at the source action and hands it to the dispatcher. Keeping
+// Event builders — one per trigger. Each builds flat Item(s) from data already
+// in scope at the source action. Keeping
 // payload-shaping here means the trigger registry stays pure and the source
-// actions stay one-liners. All are best-effort: callers wrap in try/catch (the
-// dispatcher also never throws).
+// actions stay compact. These builders are pure: the originating mutation
+// stores the returned event in domain_event_outbox inside its DB transaction.
 
-import type { RequestContext } from '@beaconhs/tenant'
-import { runIntegrations } from '../run'
-import type { Item, Scalar } from '../types'
+import type { IntegrationEvent, Item, Scalar } from '../types'
 
 function iso(d: unknown): string {
   if (!d) return ''
@@ -36,10 +34,6 @@ function link(path: string): string {
   return b ? `${b}${path}` : path
 }
 
-async function fire(ctx: RequestContext, type: string, subjectId: string, items: Item[]) {
-  await runIntegrations(ctx, { type, tenantId: ctx.tenantId, subjectId, items })
-}
-
 // --- training --------------------------------------------------------------
 
 export interface TrainingAttendeeFact {
@@ -52,8 +46,8 @@ export interface TrainingAttendeeFact {
   hours: number
 }
 
-export async function emitTrainingClassCompleted(
-  ctx: RequestContext,
+export function trainingClassCompletedEvent(
+  tenantId: string,
   e: {
     classId: string
     course: { code: string; name: string }
@@ -63,7 +57,7 @@ export async function emitTrainingClassCompleted(
     lengthDays: number
     attendees: TrainingAttendeeFact[]
   },
-): Promise<void> {
+): IntegrationEvent {
   const items: Item[] = e.attendees.map((a) => ({
     classId: e.classId,
     'course.code': s(e.course.code),
@@ -81,13 +75,13 @@ export async function emitTrainingClassCompleted(
     hours: a.hours,
     attended: a.attended,
   }))
-  await fire(ctx, 'training.class.completed', e.classId, items)
+  return { type: 'training.class.completed', tenantId, subjectId: e.classId, items }
 }
 
 // --- incidents -------------------------------------------------------------
 
-export async function emitIncidentCreated(
-  ctx: RequestContext,
+export function incidentCreatedEvent(
+  tenantId: string,
   i: {
     id: string
     reference?: string | null
@@ -100,27 +94,32 @@ export async function emitIncidentCreated(
     location?: string | null
     reportedByName?: string | null
   },
-): Promise<void> {
-  await fire(ctx, 'incident.created', i.id, [
-    {
-      incidentId: i.id,
-      reference: s(i.reference),
-      type: s(i.type),
-      severity: s(i.severity),
-      status: s(i.status),
-      title: s(i.title),
-      description: s(i.description),
-      occurredAt: iso(i.occurredAt),
-      location: s(i.location),
-      reportedByName: s(i.reportedByName),
-      createdAt: iso(new Date()),
-      url: link(`/incidents/${i.id}`),
-    },
-  ])
+): IntegrationEvent {
+  return {
+    type: 'incident.created',
+    tenantId,
+    subjectId: i.id,
+    items: [
+      {
+        incidentId: i.id,
+        reference: s(i.reference),
+        type: s(i.type),
+        severity: s(i.severity),
+        status: s(i.status),
+        title: s(i.title),
+        description: s(i.description),
+        occurredAt: iso(i.occurredAt),
+        location: s(i.location),
+        reportedByName: s(i.reportedByName),
+        createdAt: iso(new Date()),
+        url: link(`/incidents/${i.id}`),
+      },
+    ],
+  }
 }
 
-export async function emitIncidentStatusChanged(
-  ctx: RequestContext,
+export function incidentStatusChangedEvent(
+  tenantId: string,
   i: {
     id: string
     reference?: string | null
@@ -130,26 +129,31 @@ export async function emitIncidentStatusChanged(
     fromStatus?: string | null
     toStatus: string
   },
-): Promise<void> {
-  await fire(ctx, 'incident.status_changed', i.id, [
-    {
-      incidentId: i.id,
-      reference: s(i.reference),
-      title: s(i.title),
-      type: s(i.type),
-      severity: s(i.severity),
-      fromStatus: s(i.fromStatus),
-      toStatus: s(i.toStatus),
-      changedAt: iso(new Date()),
-      url: link(`/incidents/${i.id}`),
-    },
-  ])
+): IntegrationEvent {
+  return {
+    type: 'incident.status_changed',
+    tenantId,
+    subjectId: i.id,
+    items: [
+      {
+        incidentId: i.id,
+        reference: s(i.reference),
+        title: s(i.title),
+        type: s(i.type),
+        severity: s(i.severity),
+        fromStatus: s(i.fromStatus),
+        toStatus: s(i.toStatus),
+        changedAt: iso(new Date()),
+        url: link(`/incidents/${i.id}`),
+      },
+    ],
+  }
 }
 
 // --- corrective actions ----------------------------------------------------
 
-export async function emitCorrectiveActionCreated(
-  ctx: RequestContext,
+export function correctiveActionCreatedEvent(
+  tenantId: string,
   c: {
     id: string
     reference?: string | null
@@ -162,26 +166,31 @@ export async function emitCorrectiveActionCreated(
     ownerName?: string | null
     assignedByName?: string | null
   },
-): Promise<void> {
-  await fire(ctx, 'corrective_action.created', c.id, [
-    {
-      caId: c.id,
-      reference: s(c.reference),
-      title: s(c.title),
-      status: s(c.status),
-      severity: s(c.severity),
-      source: s(c.source),
-      dueOn: iso(c.dueOn),
-      assignedOn: iso(c.assignedOn),
-      ownerName: s(c.ownerName),
-      assignedByName: s(c.assignedByName),
-      url: link(`/corrective-actions/${c.id}`),
-    },
-  ])
+): IntegrationEvent {
+  return {
+    type: 'corrective_action.created',
+    tenantId,
+    subjectId: c.id,
+    items: [
+      {
+        caId: c.id,
+        reference: s(c.reference),
+        title: s(c.title),
+        status: s(c.status),
+        severity: s(c.severity),
+        source: s(c.source),
+        dueOn: iso(c.dueOn),
+        assignedOn: iso(c.assignedOn),
+        ownerName: s(c.ownerName),
+        assignedByName: s(c.assignedByName),
+        url: link(`/corrective-actions/${c.id}`),
+      },
+    ],
+  }
 }
 
-export async function emitCorrectiveActionClosed(
-  ctx: RequestContext,
+export function correctiveActionClosedEvent(
+  tenantId: string,
   c: {
     id: string
     reference?: string | null
@@ -191,25 +200,30 @@ export async function emitCorrectiveActionClosed(
     closedAt?: unknown
     ownerName?: string | null
   },
-): Promise<void> {
-  await fire(ctx, 'corrective_action.closed', c.id, [
-    {
-      caId: c.id,
-      reference: s(c.reference),
-      title: s(c.title),
-      status: s(c.status ?? 'closed'),
-      severity: s(c.severity),
-      closedAt: iso(c.closedAt ?? new Date()),
-      ownerName: s(c.ownerName),
-      url: link(`/corrective-actions/${c.id}`),
-    },
-  ])
+): IntegrationEvent {
+  return {
+    type: 'corrective_action.closed',
+    tenantId,
+    subjectId: c.id,
+    items: [
+      {
+        caId: c.id,
+        reference: s(c.reference),
+        title: s(c.title),
+        status: s(c.status ?? 'closed'),
+        severity: s(c.severity),
+        closedAt: iso(c.closedAt ?? new Date()),
+        ownerName: s(c.ownerName),
+        url: link(`/corrective-actions/${c.id}`),
+      },
+    ],
+  }
 }
 
 // --- forms -----------------------------------------------------------------
 
-export async function emitFormSubmitted(
-  ctx: RequestContext,
+export function formSubmittedEvent(
+  tenantId: string,
   r: {
     id: string
     templateId?: string | null
@@ -221,7 +235,7 @@ export async function emitFormSubmitted(
     complianceStatus?: string | null
     data?: Record<string, unknown> | null
   },
-): Promise<void> {
+): IntegrationEvent {
   const item: Item = {
     responseId: r.id,
     templateId: s(r.templateId),
@@ -237,13 +251,13 @@ export async function emitFormSubmitted(
   for (const [k, v] of Object.entries(r.data ?? {})) {
     item[`data.${k}`] = s(typeof v === 'object' ? JSON.stringify(v) : v)
   }
-  await fire(ctx, 'form.submitted', r.id, [item])
+  return { type: 'form.submitted', tenantId, subjectId: r.id, items: [item] }
 }
 
 // --- hazard assessments ----------------------------------------------------
 
-export async function emitHazardAssessmentCreated(
-  ctx: RequestContext,
+export function hazardAssessmentCreatedEvent(
+  tenantId: string,
   h: {
     id: string
     reference?: string | null
@@ -254,26 +268,31 @@ export async function emitHazardAssessmentCreated(
     supervisorName?: string | null
     reportedByName?: string | null
   },
-): Promise<void> {
-  await fire(ctx, 'hazard_assessment.created', h.id, [
-    {
-      assessmentId: h.id,
-      reference: s(h.reference),
-      status: s(h.status),
-      typeName: s(h.typeName),
-      occurredAt: iso(h.occurredAt),
-      locationOnSite: s(h.locationOnSite),
-      supervisorName: s(h.supervisorName),
-      reportedByName: s(h.reportedByName),
-      url: link(`/hazard-assessments/${h.id}`),
-    },
-  ])
+): IntegrationEvent {
+  return {
+    type: 'hazard_assessment.created',
+    tenantId,
+    subjectId: h.id,
+    items: [
+      {
+        assessmentId: h.id,
+        reference: s(h.reference),
+        status: s(h.status),
+        typeName: s(h.typeName),
+        occurredAt: iso(h.occurredAt),
+        locationOnSite: s(h.locationOnSite),
+        supervisorName: s(h.supervisorName),
+        reportedByName: s(h.reportedByName),
+        url: link(`/hazard-assessments/${h.id}`),
+      },
+    ],
+  }
 }
 
 // --- journals --------------------------------------------------------------
 
-export async function emitJournalEntrySubmitted(
-  ctx: RequestContext,
+export function journalEntrySubmittedEvent(
+  tenantId: string,
   j: {
     id: string
     reference?: string | null
@@ -285,19 +304,24 @@ export async function emitJournalEntrySubmitted(
     siteName?: string | null
     summary?: string | null
   },
-): Promise<void> {
-  await fire(ctx, 'journal_entry.submitted', j.id, [
-    {
-      entryId: j.id,
-      reference: s(j.reference),
-      title: s(j.title),
-      status: s(j.status ?? 'submitted'),
-      submittedAt: iso(j.submittedAt ?? new Date()),
-      entryDate: iso(j.entryDate),
-      authorName: s(j.authorName),
-      siteName: s(j.siteName),
-      summary: s(j.summary),
-      url: link(`/journals/${j.id}`),
-    },
-  ])
+): IntegrationEvent {
+  return {
+    type: 'journal_entry.submitted',
+    tenantId,
+    subjectId: j.id,
+    items: [
+      {
+        entryId: j.id,
+        reference: s(j.reference),
+        title: s(j.title),
+        status: s(j.status ?? 'submitted'),
+        submittedAt: iso(j.submittedAt ?? new Date()),
+        entryDate: iso(j.entryDate),
+        authorName: s(j.authorName),
+        siteName: s(j.siteName),
+        summary: s(j.summary),
+        url: link(`/journals/${j.id}`),
+      },
+    ],
+  }
 }

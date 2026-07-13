@@ -11,6 +11,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
+    "deadcode:check": "knip --treat-config-hints-as-errors",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:generate": "pnpm --filter @beaconhs/db generate",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
+    "knip": "^5.88.1",
     "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.9.16",

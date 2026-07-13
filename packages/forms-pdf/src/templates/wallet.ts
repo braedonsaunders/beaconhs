@@ -14,7 +14,6 @@
 
 import { credentialFontFaces } from './fonts'
 import {
-  GOLD,
   type CredentialDesignOptions,
   esc,
   formatDateShort,

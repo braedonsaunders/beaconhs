@@ -9,6 +9,7 @@
 // here, so only the escalation-relevant actions are executed. Fully guarded.
 
 import { and, eq } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import { planAutomation, type EmailTarget } from '@beaconhs/forms-core'
 import { formAutomations, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
@@ -66,7 +67,8 @@ export async function resolveEmails(
 /**
  * Run the template's `session_overdue` Flow escalation actions for an overdue
  * monitored response. Returns true if any action ran (caller skips the default
- * alert). Never throws.
+ * alert). Queue failures throw so the caller's status transaction rolls back;
+ * deterministic job ids make a partial publication safe to retry.
  */
 export async function runSessionOverdueFlows(args: {
   tx: any
@@ -78,35 +80,29 @@ export async function runSessionOverdueFlows(args: {
 }): Promise<boolean> {
   const { tx, tenantId, responseId, templateId, data, submitterEmail } = args
   let ran = false
-  let flows: { graph: any }[] = []
-  try {
-    flows = await tx
-      .select({ graph: formAutomations.graph })
-      .from(formAutomations)
-      .where(and(eq(formAutomations.templateId, templateId), eq(formAutomations.enabled, true)))
-  } catch (err) {
-    console.warn(
-      `[session_overdue] tenant ${tenantId} template ${templateId}: could not load flows — ${err instanceof Error ? err.message : err}`,
-    )
-    return false
-  }
+  const flows = await tx
+    .select({ id: formAutomations.id, graph: formAutomations.graph })
+    .from(formAutomations)
+    .where(and(eq(formAutomations.templateId, templateId), eq(formAutomations.enabled, true)))
   for (const flow of flows) {
-    let plan
-    try {
-      plan = planAutomation(flow.graph, 'session_overdue', { values: data, rows: {}, entities: {} })
-    } catch (err) {
-      console.warn(
-        `[session_overdue] tenant ${tenantId} template ${templateId}: bad flow graph — ${err instanceof Error ? err.message : err}`,
-      )
-      continue
+    const plan = planAutomation(flow.graph, 'session_overdue', {
+      values: data,
+      rows: {},
+      entities: {},
+    })
+    if (plan.gates.length > 0) {
+      throw new Error('Session-overdue flows cannot enter a human approval gate')
     }
-    for (const action of plan.actions) {
-      try {
-        if (action.action === 'notify_role') {
-          const recipients = await roleUserIds(tx, tenantId, action.role)
-          const userIds = recipients.map((r: { userId: string }) => r.userId)
-          if (userIds.length > 0) {
-            await enqueueNotification({
+    for (const [index, action] of plan.actions.entries()) {
+      const suffix = createHash('sha256')
+        .update(`${responseId}\0${flow.id}\0${index}`)
+        .digest('hex')
+      if (action.action === 'notify_role') {
+        const recipients = await roleUserIds(tx, tenantId, action.role)
+        const userIds = recipients.map((r: { userId: string }) => r.userId)
+        if (userIds.length > 0) {
+          await enqueueNotification(
+            {
               tenantId,
               userIds,
               category: 'monitored_session',
@@ -115,39 +111,37 @@ export async function runSessionOverdueFlows(args: {
               linkPath: `/apps/responses/${responseId}`,
               isCritical: true,
               channels: action.channel === 'email' ? ['in_app', 'email'] : ['in_app'],
-            })
-            ran = true
-          }
-        } else if (action.action === 'send_email') {
-          const to = await resolveEmails(tx, tenantId, action.to, submitterEmail, data)
-          if (to.length > 0) {
-            // Worker handles inline email only; template/design modes (DB-backed)
-            // are a web-side concern. Guard the now-optional inline fields.
-            const rendered = renderEmail(
-              {
-                mode: 'inline',
-                subject: action.subject || 'Monitored session check-in overdue',
-                bodyTemplate: action.bodyTemplate ?? '',
-              },
-              data,
-            )
-            await enqueueEmail({
+            },
+            { jobId: `session-overdue-notify|${suffix}` },
+          )
+          ran = true
+        }
+      } else if (action.action === 'send_email') {
+        const to = await resolveEmails(tx, tenantId, action.to, submitterEmail, data)
+        if (to.length > 0) {
+          const rendered = renderEmail(
+            {
+              mode: 'inline',
+              subject: action.subject || 'Monitored session check-in overdue',
+              bodyTemplate: action.bodyTemplate ?? '',
+            },
+            data,
+          )
+          await enqueueEmail(
+            {
               to,
               subject: rendered.subject,
               text: rendered.text,
               html: rendered.html,
               meta: { tenantId, category: 'lone_worker' },
-            })
-            ran = true
-          }
+            },
+            { jobId: `session-overdue-email|${suffix}` },
+          )
+          ran = true
         }
-        // Other action kinds (CAPA, incident, webhook, …) need web-side
-        // primitives and are intentionally skipped in the worker overdue path.
-      } catch (err) {
-        // Guarded — one bad action never blocks escalation, but the failure
-        // must be visible: this IS the escalation path.
-        console.warn(
-          `[session_overdue] tenant ${tenantId} response ${responseId}: ${action.action} action failed — ${err instanceof Error ? err.message : err}`,
+      } else {
+        throw new Error(
+          `${action.action} is not supported for a session-overdue worker flow; use notify_role or send_email`,
         )
       }
     }

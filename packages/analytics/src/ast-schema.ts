@@ -16,7 +16,7 @@ import {
   type ReportEntity,
   type ReportEntityColumn,
 } from '@beaconhs/reports/entities'
-import type { BhqlMeasure, BhqlQuery, BhqlStage } from '@beaconhs/db/schema'
+import type { BhqlMeasure, BhqlQuery } from '@beaconhs/db/schema'
 
 export class BhqlValidationError extends Error {
   constructor(message: string) {

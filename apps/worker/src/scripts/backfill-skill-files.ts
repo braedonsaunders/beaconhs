@@ -27,7 +27,7 @@ import {
   trainingSkillAssignmentFiles,
   trainingSkillAssignments,
 } from '@beaconhs/db/schema'
-import { ensureBucket, newAttachmentKey, putObject } from '@beaconhs/storage'
+import { ensureBucket, newAttachmentKey, newTenantObjectKey, putObject } from '@beaconhs/storage'
 
 // ---------- args ----------
 const args = process.argv.slice(2)
@@ -254,7 +254,12 @@ async function processSkills(tenantId: string) {
     }
     const kind = kindFromType(got.contentType)
     const key = newAttachmentKey({ tenantId, kind, filename: got.filename })
-    await putObject({ key, body: got.buffer, contentType: got.contentType })
+    await putObject({
+      key,
+      body: got.buffer,
+      contentType: got.contentType,
+      contentDisposition: kind === 'image' ? 'inline' : 'attachment',
+    })
     await withTenant(db, tenantId, async (tx) => {
       const [att] = await tx
         .insert(attachments)
@@ -317,7 +322,7 @@ async function processRecords(tenantId: string) {
       .select({ caption: attachments.caption })
       .from(attachments)
       .where(
-        sql`${attachments.r2Key} like 'training/records/%' and ${attachments.caption} is not null`,
+        sql`${attachments.r2Key} like ${`t/${tenantId}/document/training-records/%`} and ${attachments.caption} is not null`,
       ),
   )
   const done = new Set(existing.map((e) => e.caption))
@@ -347,9 +352,17 @@ async function processRecords(tenantId: string) {
         continue
       }
       // Records list attachments by r2Key prefix + kind='document'.
-      const safe = got.filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
-      const key = `training/records/${row.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
-      await putObject({ key, body: got.buffer, contentType: got.contentType })
+      const key = newTenantObjectKey({
+        tenantId,
+        scope: `document/training-records/${row.id}`,
+        filename: got.filename,
+      })
+      await putObject({
+        key,
+        body: got.buffer,
+        contentType: got.contentType,
+        contentDisposition: 'attachment',
+      })
       await withTenant(db, tenantId, async (tx) => {
         await tx.insert(attachments).values({
           tenantId,

@@ -17,17 +17,11 @@ export type RequestUploadAction = (input: {
   filename: string
   contentType: string
   sizeBytes: number
-}) => Promise<
-  { ok: true; key: string; putUrl: string; publicUrl: string } | { ok: false; error: string }
->
+}) => Promise<{ ok: true; uploadId: string; putUrl: string } | { ok: false; error: string }>
 
 export type FinalizeUploadAction = (input: {
-  kind: AttachmentKind
-  key: string
-  filename: string
-  contentType: string
-  sizeBytes: number
-}) => Promise<{ ok: true; attachmentId: string } | { ok: false; error: string }>
+  uploadId: string
+}) => Promise<{ ok: true; attachmentId: string; url: string } | { ok: false; error: string }>
 
 export type AttachmentKind = 'image' | 'document' | 'video' | 'audio' | 'signature' | 'other'
 
@@ -37,7 +31,7 @@ export type UploadedFile = {
   contentType: string
   sizeBytes: number
   kind: AttachmentKind
-  publicUrl: string
+  url: string
 }
 
 export type FileUploaderProps = {
@@ -148,11 +142,7 @@ export function FileUploader({
       updateItem({ status: 'finalising', progress: 100 })
 
       const finalise = await finalizeUploadAction({
-        kind,
-        key: req.key,
-        filename: file.name,
-        contentType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
+        uploadId: req.uploadId,
       })
       if (!finalise.ok) {
         updateItem({ status: 'error', error: finalise.error })
@@ -166,7 +156,7 @@ export function FileUploader({
         contentType: file.type || 'application/octet-stream',
         sizeBytes: file.size,
         kind,
-        publicUrl: req.publicUrl,
+        url: finalise.url,
       })
     },
     [finalizeUploadAction, kind, effectiveMaxSize, onUploaded, requestUploadAction],

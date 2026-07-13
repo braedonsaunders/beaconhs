@@ -99,7 +99,12 @@ function roles(
   graph: AutomationGraph,
   trigger: TriggerData['trigger'],
   ctx: EvalContext,
-  opts?: { buttonId?: string; fromStatus?: string | null; toStatus?: string },
+  opts?: {
+    buttonId?: string
+    fromStatus?: string | null
+    toStatus?: string
+    triggerNodeIds?: string[]
+  },
 ): string[] {
   return planAutomation(graph, trigger, ctx, opts).actions.flatMap((a) =>
     a.action === 'notify_role' ? [a.role] : [],
@@ -166,5 +171,13 @@ describe('planAutomation', () => {
       },
     ])
     expect(roles(graph, 'manual', emptyCtx, { buttonId: 'b2' })).toEqual(['two'])
+  })
+
+  it('scheduled planning targets only trigger nodes that are due', () => {
+    const graph = graphOf([
+      { trigger: { trigger: 'scheduled', cron: '0 8 * * *' }, role: 'daily' },
+      { trigger: { trigger: 'scheduled', cron: '0 8 * * 1' }, role: 'weekly' },
+    ])
+    expect(roles(graph, 'scheduled', emptyCtx, { triggerNodeIds: ['t1'] })).toEqual(['weekly'])
   })
 })

@@ -7,7 +7,7 @@
 //   - `evaluateLogicRule(rule, ctx)` — evaluates a LogicRule against the
 //     EvalContext (flat values + repeating-section rows).
 //   - `evaluateFormulaTree(expr, ctx)` — walks a typed FormulaExpression tree.
-//     Designer-built calc fields store this on `field.formula`.
+//     Designer-built formula fields store this on `field.formula`.
 //   - `resolveDefaultValue(expr, ctx)` — produces an initial value for a field
 //     from a typed DefaultValueExpression.
 //

@@ -3,7 +3,9 @@
 // collection trigger is combined into one message by default (one line per
 // item) to avoid flooding the channel.
 
+import { secureFetch } from '@beaconhs/sync'
 import { resolveText } from '../resolve'
+import { deliveryRef } from '../idempotency'
 import type {
   DeliverContext,
   DeliverResult,
@@ -18,11 +20,13 @@ async function post(
   url: string,
   payload: Record<string, unknown>,
 ): Promise<{ ok: boolean; status: number; body: string }> {
-  const res = await fetch(url, {
+  const res = await secureFetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    timeoutMs: TIMEOUT_MS,
+    maxResponseBytes: 64 * 1024,
+    maxRedirects: 1,
   })
   const body = await res.text().catch(() => '')
   return { ok: res.ok, status: res.status, body }
@@ -84,12 +88,18 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
 
   let sent = 0
   const errors: string[] = []
-  for (const payload of payloads) {
+  const refs = ctx.retryRefs.map((externalRef) => ({ externalRef }))
+  for (let index = 0; index < payloads.length; index++) {
+    const payload = payloads[index]!
     if (!payload.text && !payload.blocks) continue
+    const ref = deliveryRef('chat', ctx.triggerKey, ctx.subjectId, index)
+    if (ctx.retryRefs.includes(ref)) continue
     try {
       const r = await post(url, payload)
-      if (r.ok) sent++
-      else errors.push(`HTTP ${r.status}`)
+      if (r.ok) {
+        sent++
+        refs.push({ externalRef: ref })
+      } else errors.push(`HTTP ${r.status}`)
     } catch (e) {
       errors.push(e instanceof Error ? e.message : String(e))
     }
@@ -99,7 +109,7 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
   return {
     ok: errors.length === 0,
     summary: `Posted ${sent} message(s)${note}.`,
-    refs: sent > 0 ? [{ externalRef: `slack:${ctx.subjectId}` }] : undefined,
+    refs,
   }
 }
 
@@ -107,7 +117,7 @@ export const slackDestination: DestinationDef = {
   key: 'slack',
   name: 'Slack / Teams message',
   description:
-    'Post a formatted message to a Slack or Microsoft Teams channel via an incoming-webhook URL. Combine a multi-item trigger into one message or send one each.',
+    'Post a formatted message to a Slack or Microsoft Teams channel via a public HTTPS incoming-webhook URL. Combine a multi-item trigger into one message or send one each.',
   iconKey: 'message-square',
   mappingKind: 'slack',
   reversible: false,
@@ -129,7 +139,14 @@ export const slackDestination: DestinationDef = {
       help: 'On (default): one message, one line per item. Off: one message per item.',
     },
   ],
-  secretFields: [{ key: 'webhookUrl', label: 'Incoming webhook URL', required: true }],
+  secretFields: [
+    {
+      key: 'webhookUrl',
+      label: 'Incoming webhook URL',
+      required: true,
+      help: 'Must be a public HTTPS URL.',
+    },
+  ],
   test,
   deliver,
 }

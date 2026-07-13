@@ -54,6 +54,6 @@ export async function resolveSmsDelivery(tenantId: string | null): Promise<Effec
 }
 
 /** Test seam: drop the cached platform row (used after a config save in-process). */
-export function clearPlatformSmsCache(): void {
+function clearPlatformSmsCache(): void {
   platformCache = null
 }

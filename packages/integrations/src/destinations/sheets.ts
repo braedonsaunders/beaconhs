@@ -5,6 +5,7 @@
 // the service account's client_email as an Editor.
 
 import { createSign } from 'node:crypto'
+import { secureFetch } from '@beaconhs/sync'
 import { resolveValue } from '../resolve'
 import type {
   DeliverContext,
@@ -61,14 +62,16 @@ async function mintToken(sa: ServiceAccount): Promise<string> {
   const signature = b64url(createSign('RSA-SHA256').update(signingInput).sign(sa.private_key))
   const assertion = `${signingInput}.${signature}`
 
-  const res = await fetch(tokenUri, {
+  const res = await secureFetch(tokenUri, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
       assertion,
     }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    timeoutMs: TIMEOUT_MS,
+    maxResponseBytes: 1024 * 1024,
+    maxRedirects: 1,
   })
   const json = (await res.json().catch(() => ({}))) as {
     access_token?: string
@@ -95,9 +98,14 @@ async function test(ctx: DestinationTestContext): Promise<IntegrationResult> {
   if (!spreadsheetId) return { ok: false, error: 'A spreadsheet id is required.' }
   try {
     const token = await mintToken(sa)
-    const res = await fetch(
+    const res = await secureFetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=properties.title`,
-      { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(TIMEOUT_MS) },
+      {
+        headers: { authorization: `Bearer ${token}` },
+        timeoutMs: TIMEOUT_MS,
+        maxResponseBytes: 1024 * 1024,
+        maxRedirects: 1,
+      },
     )
     const json = (await res.json().catch(() => ({}))) as {
       properties?: { title?: string }
@@ -135,11 +143,13 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
       spreadsheetId,
     )}/values/${encodeURIComponent(range)}:append?valueInputOption=${valueInputOption}&insertDataOption=INSERT_ROWS`
-    const res = await fetch(url, {
+    const res = await secureFetch(url, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ values: rows }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      timeoutMs: TIMEOUT_MS,
+      maxResponseBytes: 1024 * 1024,
+      maxRedirects: 1,
     })
     const json = (await res.json().catch(() => ({}))) as {
       updates?: { updatedRange?: string; updatedRows?: number }

@@ -8,9 +8,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./server": "./src/server.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./invites": "./src/invites.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
@@ -18,11 +20,13 @@
     "@beaconhs/db": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "better-auth": "^1.6.20",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
     "@types/pg": "^8.20.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

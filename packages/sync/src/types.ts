@@ -118,6 +118,10 @@ export interface ConnectorPullResult {
   records: CanonicalRecord[]
   nextCursor?: Record<string, unknown> | null
   mode?: 'full' | 'incremental'
+  // Entities for which a full pull is an authoritative snapshot. The
+  // orchestrator only applies the missing-record policy to this explicit set;
+  // an empty entity snapshot is still fail-closed and never archived.
+  authoritativeEntities?: SyncEntityKey[]
 }
 
 // --- Declarative settings form (simple connectors render from these) ------

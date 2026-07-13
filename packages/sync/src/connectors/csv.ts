@@ -4,7 +4,13 @@
 
 import { parseCsv } from '../csv'
 import { datePart, hashRow, splitName } from '../transform'
-import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
+import type {
+  CanonicalRecord,
+  Connector,
+  ConnectorPullResult,
+  ConnectorRunContext,
+  SyncEntityKey,
+} from '../types'
 
 type CsvConfig = {
   entity?: SyncEntityKey
@@ -94,17 +100,16 @@ export const csvConnector: Connector = {
   kind: 'native',
   iconKey: 'file-spreadsheet',
   entities: ['people', 'org_unit', 'equipment'],
-  async pull(ctx: ConnectorRunContext): Promise<CanonicalRecord[]> {
+  async pull(ctx: ConnectorRunContext): Promise<ConnectorPullResult> {
     const cfg = ctx.config as CsvConfig
     const entity = cfg.entity
     if (!entity) {
-      ctx.log('warn', 'No target entity selected for the CSV connection.')
-      return []
+      throw new Error('No target entity selected for the CSV connection.')
     }
     const { headers, rows } = parseCsv(cfg.csv ?? '', cfg.delimiter || ',')
     if (rows.length === 0) {
       ctx.log('warn', 'CSV has no data rows.')
-      return []
+      return { records: [], mode: 'full', authoritativeEntities: [entity] }
     }
     const aliases =
       entity === 'people' ? PEOPLE_ALIASES : entity === 'org_unit' ? ORG_ALIASES : EQUIP_ALIASES
@@ -175,6 +180,6 @@ export const csvConnector: Connector = {
         }
       }
     }
-    return out
+    return { records: out, mode: 'full', authoritativeEntities: [entity] }
   },
 }

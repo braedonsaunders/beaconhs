@@ -12,6 +12,7 @@ import { scanScheduledFlows } from '../lib/scheduled-flow-runner'
 import { runSyncConnection, scanSyncConnections } from '../lib/sync-scanner'
 import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
 import { runDatabaseMaintenance } from '../lib/db-maintenance'
+import { drainDomainEventOutbox } from '../lib/domain-event-outbox'
 
 export async function processScheduledTick(job: Job<ScheduledTick>): Promise<void> {
   switch (job.data.kind) {
@@ -39,14 +40,17 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       return
     }
     case 'digest_scan': {
-      const r = await scanDigests()
+      const slotMs = job.timestamp + (job.opts.delay ?? 0)
+      const r = await scanDigests(Number.isFinite(slotMs) ? new Date(slotMs) : new Date())
       console.log(`[scheduled] digest_scan: ${r.emails} digest emails across ${r.tenants} tenants`)
       return
     }
     case 'scheduled_flow_scan': {
       const r = await scanScheduledFlows()
-      if (r.flows > 0)
-        console.log(`[scheduled] scheduled_flow_scan: ${r.flows} flows fired / ${r.ran} actions`)
+      if (r.flows > 0 || r.errors > 0)
+        console.log(
+          `[scheduled] scheduled_flow_scan: ${r.flows} flows fired / ${r.ran} actions / ${r.errors} errors`,
+        )
       return
     }
     case 'report_schedule_scan':
@@ -58,11 +62,6 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       )
       return
     }
-    case 'report_run':
-      console.log(
-        '[scheduled] report_run tick is a no-op (per-run dispatch handled by reports queue)',
-      )
-      return
     case 'sync_scan': {
       const r = await scanSyncConnections()
       console.log(`[scheduled] sync_scan: ${r.enqueued} enqueued / ${r.candidates} candidates`)
@@ -77,6 +76,15 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
     }
     case 'db_maintenance': {
       await runDatabaseMaintenance(job.data.trigger ?? 'scheduled')
+      return
+    }
+    case 'domain_event_outbox_scan': {
+      const result = await drainDomainEventOutbox()
+      if (result.claimed > 0) {
+        console.log(
+          `[scheduled] domain_event_outbox: ${result.published} published / ${result.retried} retrying`,
+        )
+      }
       return
     }
   }
@@ -107,11 +115,14 @@ async function scanFormSessionOverdue(): Promise<void> {
         ),
       )
     for (const s of overdue) {
-      // Flip first so we don't re-fire next minute.
-      await tx
+      // Claim atomically so two worker replicas cannot both insert a missed
+      // check-in. A queue failure throws and rolls this transaction back.
+      const [claimed] = await tx
         .update(formResponses)
         .set({ monitorStatus: 'escalated', escalatedAt: now })
-        .where(eq(formResponses.id, s.id))
+        .where(and(eq(formResponses.id, s.id), eq(formResponses.monitorStatus, 'active')))
+        .returning({ id: formResponses.id })
+      if (!claimed) continue
       await tx.insert(formResponseCheckins).values({
         tenantId: s.tenantId,
         responseId: s.id,

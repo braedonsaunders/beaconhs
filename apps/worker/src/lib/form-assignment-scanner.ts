@@ -3,136 +3,26 @@
 // Walks every active form_assignments row where mode='scheduled' and a cron
 // expression is present. For each, computes "is the cron due now" relative to
 // the latest dispatch (or the assignment's createdAt if no dispatches yet).
-// Each due assignment:
-//   1. inserts a form_assignment_dispatches row
-//   2. resolves an audience from targetPersonIds / targetOrgUnitIds /
-//      targetRoleKeys and enqueues an in-app notification per assignee
+// Each due assignment is first claimed in form_assignment_dispatches with an
+// immutable audience/payload snapshot. A separate publication pass sends every
+// queued row to BullMQ using its deterministic dispatch id.
 //
 // Missed occurrences (worker downtime, assignment re-enabled after a gap) are
 // FAST-FORWARDED: one dispatch fires at the most recent occurrence <= now
 // instead of replaying every missed slot one per tick.
 //
-// Idempotency: the scanner re-checks max(occurredAt) per assignment before
-// inserting, so a tick that fires twice in the same minute will only insert
-// once. Multiple worker replicas could still race; we'd add an advisory lock
-// per assignment if/when that matters.
+// Idempotency: a database unique constraint on (assignmentId, occurredAt)
+// closes the multi-replica race. If Redis is unavailable after the claim
+// commits, the next scan republishes the still-queued dispatch.
 
-import { and, asc, desc, eq, isNotNull, max, type SQL } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, max } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { formAssignmentDispatches, formAssignments, formTemplates } from '@beaconhs/db/schema'
 import { resolveObligationAudience, type AudienceItem } from '@beaconhs/compliance'
 import { enqueueNotification } from '@beaconhs/jobs'
+import { lastCronOccurrenceBetween, parseCron, type CronFields } from './cron'
 
-export type CronFields = {
-  minute: number[]
-  hour: number[]
-  dayOfMonth: number[]
-  month: number[]
-  dayOfWeek: number[]
-}
-
-/**
- * Parse a small subset of cron syntax: `m h dom mon dow` with `*`, single
- * numbers, `a,b,c` lists, and step syntax like `* / n`. No ranges, no named
- * months/days. Throws on parse error; callers catch and skip the assignment.
- */
-export function parseCron(expr: string): CronFields {
-  const parts = expr.trim().split(/\s+/)
-  if (parts.length !== 5) throw new Error(`cron must have 5 fields, got ${parts.length}: ${expr}`)
-  const [m, h, dom, mon, dow] = parts as [string, string, string, string, string]
-  return {
-    minute: parseField(m, 0, 59),
-    hour: parseField(h, 0, 23),
-    dayOfMonth: parseField(dom, 1, 31),
-    month: parseField(mon, 1, 12),
-    dayOfWeek: parseField(dow, 0, 6),
-  }
-}
-
-function parseField(s: string, min: number, max: number): number[] {
-  const out: number[] = []
-  for (const part of s.split(',')) {
-    const stepMatch = /^(\*|\d+)\/(\d+)$/.exec(part)
-    if (stepMatch) {
-      const base = stepMatch[1] === '*' ? min : Number(stepMatch[1])
-      const step = Number(stepMatch[2])
-      if (!Number.isFinite(base) || !Number.isFinite(step) || step <= 0) {
-        throw new Error(`bad cron step: ${part}`)
-      }
-      for (let i = base; i <= max; i += step) out.push(i)
-      continue
-    }
-    if (part === '*') {
-      for (let i = min; i <= max; i++) out.push(i)
-      continue
-    }
-    const n = Number(part)
-    if (!Number.isFinite(n) || n < min || n > max) {
-      throw new Error(`bad cron value: ${part}`)
-    }
-    out.push(n)
-  }
-  return Array.from(new Set(out)).sort((a, b) => a - b)
-}
-
-/**
- * Find the next time at or after `from` (exclusive of `from` itself) when the
- * cron fields match. Returns null if no match within ~1 year (defensive — a
- * well-formed cron always has a match within a year).
- */
-export function nextCronAfter(c: CronFields, from: Date): Date | null {
-  // Walk minute-by-minute. Cheap enough for a 1-year ceiling because we skip
-  // forward on mismatches at coarser granularity.
-  const max = new Date(from.getTime() + 366 * 24 * 60 * 60 * 1000)
-  // Start at the next minute boundary after `from`.
-  const candidate = new Date(from.getTime() + 60_000)
-  candidate.setUTCSeconds(0, 0)
-  while (candidate.getTime() <= max.getTime()) {
-    if (!c.month.includes(candidate.getUTCMonth() + 1)) {
-      // Jump to the 1st of the next month.
-      candidate.setUTCMonth(candidate.getUTCMonth() + 1, 1)
-      candidate.setUTCHours(0, 0, 0, 0)
-      continue
-    }
-    if (
-      !c.dayOfMonth.includes(candidate.getUTCDate()) ||
-      !c.dayOfWeek.includes(candidate.getUTCDay())
-    ) {
-      candidate.setUTCDate(candidate.getUTCDate() + 1)
-      candidate.setUTCHours(0, 0, 0, 0)
-      continue
-    }
-    if (!c.hour.includes(candidate.getUTCHours())) {
-      candidate.setUTCHours(candidate.getUTCHours() + 1, 0, 0, 0)
-      continue
-    }
-    if (!c.minute.includes(candidate.getUTCMinutes())) {
-      candidate.setUTCMinutes(candidate.getUTCMinutes() + 1, 0, 0)
-      continue
-    }
-    return new Date(candidate)
-  }
-  return null
-}
-
-/**
- * Most recent cron occurrence in `(after, now]`, or null when the cron has no
- * occurrence in that window. Used to fast-forward past missed occurrences
- * (worker downtime) so a scanner dispatches ONCE instead of replaying every
- * missed slot. Walks occurrence-by-occurrence — bounded by the elapsed window.
- */
-export function lastCronOccurrenceBetween(c: CronFields, after: Date, now: Date): Date | null {
-  let latest: Date | null = null
-  let cursor = after
-  for (;;) {
-    const next = nextCronAfter(c, cursor)
-    if (!next || next.getTime() > now.getTime()) return latest
-    latest = next
-    cursor = next
-  }
-}
-
-export type FormAssignmentScanResult = {
+type FormAssignmentScanResult = {
   candidates: number
   dispatched: number
   skipped: number
@@ -202,38 +92,101 @@ export async function scanFormAssignments(
 
     try {
       const audience = await resolveAssigneeUserIds(assignment)
-      await withSuperAdmin(db, (tx) =>
-        tx.insert(formAssignmentDispatches).values({
-          tenantId: assignment.tenantId,
-          assignmentId: assignment.id,
-          occurredAt: due,
-          status: audience.length > 0 ? 'scheduled' : 'skipped',
-          audienceUserIds: audience,
-          error: audience.length === 0 ? 'no audience' : null,
-        }),
+      const notificationPayload =
+        audience.length > 0
+          ? {
+              title: `Form due: ${templateName}`,
+              body: assignment.dueOffsetMinutes
+                ? `Please complete within ${assignment.dueOffsetMinutes} minutes.`
+                : undefined,
+              linkPath: `/apps/templates/${assignment.templateId}/fill?assignment=${assignment.id}`,
+              data: { assignmentId: assignment.id, templateId: assignment.templateId },
+            }
+          : null
+      const [claimed] = await withSuperAdmin(db, (tx) =>
+        tx
+          .insert(formAssignmentDispatches)
+          .values({
+            tenantId: assignment.tenantId,
+            assignmentId: assignment.id,
+            occurredAt: due,
+            status: audience.length > 0 ? 'queued' : 'skipped',
+            audienceUserIds: audience,
+            notificationPayload,
+            error: audience.length === 0 ? 'no audience' : null,
+          })
+          .onConflictDoNothing({
+            target: [formAssignmentDispatches.assignmentId, formAssignmentDispatches.occurredAt],
+          })
+          .returning({ id: formAssignmentDispatches.id }),
       )
-
-      if (audience.length > 0) {
-        await enqueueNotification({
-          tenantId: assignment.tenantId,
-          userIds: audience,
-          category: 'forms',
-          type: 'form_assignment.due',
-          title: `Form due: ${templateName}`,
-          body: assignment.dueOffsetMinutes
-            ? `Please complete within ${assignment.dueOffsetMinutes} minutes.`
-            : undefined,
-          linkPath: `/apps/templates/${assignment.templateId}/fill?assignment=${assignment.id}`,
-          data: { assignmentId: assignment.id, templateId: assignment.templateId },
-        })
-        result.dispatched += 1
-      } else {
+      if (!claimed || audience.length === 0) {
         result.skipped += 1
       }
     } catch (err) {
       result.errors += 1
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[form_assignment_scan] dispatch ${assignment.id} failed: ${msg}`)
+    }
+  }
+
+  // Publish every durable queued claim, including rows left behind by an
+  // earlier Redis outage. The deterministic job id makes a crash between
+  // Queue.add and the status update safe.
+  const queued = await withSuperAdmin(db, (tx) =>
+    tx
+      .select()
+      .from(formAssignmentDispatches)
+      .where(eq(formAssignmentDispatches.status, 'queued'))
+      .orderBy(asc(formAssignmentDispatches.createdAt))
+      .limit(500),
+  )
+  for (const dispatch of queued) {
+    if (!dispatch.notificationPayload || dispatch.audienceUserIds.length === 0) {
+      result.errors += 1
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(formAssignmentDispatches)
+          .set({
+            status: 'failed',
+            error: 'Queued dispatch has no notification payload or audience',
+          })
+          .where(eq(formAssignmentDispatches.id, dispatch.id)),
+      )
+      continue
+    }
+    const notificationJobId = `form-assignment|${dispatch.id}`
+    try {
+      await enqueueNotification(
+        {
+          tenantId: dispatch.tenantId,
+          userIds: dispatch.audienceUserIds,
+          category: 'forms',
+          type: 'form_assignment.due',
+          ...dispatch.notificationPayload,
+        },
+        { jobId: notificationJobId },
+      )
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(formAssignmentDispatches)
+          .set({ status: 'enqueued', notificationJobId, error: null })
+          .where(
+            and(
+              eq(formAssignmentDispatches.id, dispatch.id),
+              eq(formAssignmentDispatches.status, 'queued'),
+            ),
+          ),
+      )
+      result.dispatched += 1
+    } catch (error) {
+      result.errors += 1
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(formAssignmentDispatches)
+          .set({ error: error instanceof Error ? error.message : String(error) })
+          .where(eq(formAssignmentDispatches.id, dispatch.id)),
+      )
     }
   }
 

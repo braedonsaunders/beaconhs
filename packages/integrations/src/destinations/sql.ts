@@ -165,10 +165,6 @@ async function insertRow(
   valuesSql: string,
   idColumn: string,
 ): Promise<string | null> {
-  if (!idColumn) {
-    await conn.query(`INSERT INTO ${tableQ} (${colListQ}) VALUES (${valuesSql})`)
-    return null
-  }
   const idQ = quoteId(dbKind, idColumn)
   if (dbKind === 'mssql') {
     return firstVal(
@@ -231,7 +227,7 @@ function weeklySubItems(item: Item): Item[] {
 // (per dialect) without a live server. Production never sets this.
 type ConnectFn = (c: Conn, password: string) => Promise<DbConn>
 let connectOverride: ConnectFn | null = null
-export function __setSqlConnectOverride(fn: ConnectFn | null): void {
+function __setSqlConnectOverride(fn: ConnectFn | null): void {
   connectOverride = fn
 }
 
@@ -272,6 +268,12 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
   if (missing) return { ok: false, error: `Connection is not configured. ${missing}` }
   const m = parseMapping(ctx.mapping)
   if (!m.table) return { ok: false, error: 'No target table configured.' }
+  if (!m.idColumn) {
+    return {
+      ok: false,
+      error: 'An identity column is required so retries can reverse completed inserts safely.',
+    }
+  }
   const colNames = Object.keys(m.columns)
   if (colNames.length === 0) return { ok: false, error: 'No column mapping configured.' }
 
@@ -292,7 +294,7 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
   let conn: DbConn | null = null
   try {
     conn = await connect(c, password)
-    if (m.idColumn && ctx.priorRefs.length > 0) {
+    if (ctx.priorRefs.length > 0) {
       const inList = ctx.priorRefs.map((r) => (/^\d+$/.test(r) ? r : lit(c.dbKind, r))).join(',')
       await conn.query(
         `DELETE FROM ${tableQ} WHERE ${quoteId(c.dbKind, m.idColumn)} IN (${inList})`,
@@ -306,23 +308,22 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
           .map((col) => lit(c.dbKind, resolveValue(m.columns[col], row)))
           .join(',')
         const ref = await insertRow(conn, c.dbKind, tableQ, colListQ, valuesSql, m.idColumn)
-        if (m.idColumn && ref) {
-          refs.push({ externalRef: ref, detail: { dateStart: row.dateStart ?? null } })
-        }
+        if (!ref)
+          throw new Error(`Insert did not return ${m.idColumn}; the row cannot be retried safely.`)
+        refs.push({ externalRef: ref, detail: { dateStart: row.dateStart ?? null } })
       }
     }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, error: e instanceof Error ? e.message : String(e), refs }
   } finally {
     if (conn) await conn.close().catch(() => {})
   }
 
   const skipNote = skipped.length ? ` (${skipped.length} skipped)` : ''
-  const count = m.idColumn ? refs.length : toPost.length
   return {
     ok: true,
-    summary: `Inserted ${count} row(s) into ${m.table}${skipNote}.`,
-    refs: m.idColumn ? refs : undefined,
+    summary: `Inserted ${refs.length} row(s) into ${m.table}${skipNote}.`,
+    refs,
   }
 }
 
@@ -330,7 +331,7 @@ export const sqlDestination: DestinationDef = {
   key: 'sql',
   name: 'External SQL database',
   description:
-    'Insert a row into an external PostgreSQL, MySQL, MariaDB or SQL Server table. Map any columns; optionally one weekly timesheet row per item. Reversible re-posting when an identity column is set.',
+    'Insert a row into an external PostgreSQL, MySQL, MariaDB or SQL Server table over verified TLS. Map any columns; optionally one weekly timesheet row per item. An identity column makes every retry reversible.',
   iconKey: 'database',
   mappingKind: 'sql',
   reversible: true,
@@ -352,7 +353,8 @@ export const sqlDestination: DestinationDef = {
       label: 'Host',
       type: 'text',
       required: true,
-      placeholder: 'db.internal.example.com',
+      placeholder: 'db.example.com',
+      help: 'Must be a public DNS name. Local, private, and IP-literal hosts are blocked.',
     },
     { key: 'port', label: 'Port', type: 'number', placeholder: 'default for the database type' },
     { key: 'database', label: 'Database', type: 'text', required: true, placeholder: 'payroll' },
@@ -367,7 +369,8 @@ export const sqlDestination: DestinationDef = {
       key: 'ssl',
       label: 'Encrypt the connection (SSL/TLS)',
       type: 'boolean',
-      help: 'Trusts the server certificate.',
+      required: true,
+      help: 'Required. The database certificate must be valid for the host name above.',
     },
   ],
   secretFields: [{ key: 'password', label: 'Password', required: true }],
@@ -376,4 +379,4 @@ export const sqlDestination: DestinationDef = {
 }
 
 // Reused by the SQL mapping editor for token validation.
-export const sqlInternal = { buildWeekRows, parseColumns }
+const sqlInternal = { buildWeekRows, parseColumns }

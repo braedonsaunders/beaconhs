@@ -6,6 +6,7 @@
 // manager after 3 days, then the safety lead after 7".
 
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import {
   complianceObligations,
@@ -19,7 +20,7 @@ import {
 } from '@beaconhs/db/schema'
 import { enqueueNotification } from '@beaconhs/jobs'
 
-export type EscalationScanResult = { tenants: number; escalated: number }
+type EscalationScanResult = { tenants: number; escalated: number }
 
 export async function scanEscalations(): Promise<EscalationScanResult> {
   const result: EscalationScanResult = { tenants: 0, escalated: 0 }
@@ -99,17 +100,23 @@ export async function scanEscalations(): Promise<EscalationScanResult> {
           const userIds = [...new Set(members.map((m) => m.userId).filter(Boolean))] as string[]
           if (userIds.length === 0) continue
 
-          await enqueueNotification({
-            tenantId: t.id,
-            userIds,
-            category: 'compliance',
-            type: 'compliance.escalation',
-            title: `Escalation: ${r.title} overdue ${daysOverdue}d`,
-            body: `Overdue ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} — escalated to ${s.roleKeys.join(', ')}.`,
-            linkPath: `/compliance/obligations/${r.obligationId}`,
-            data: { obligationId: r.obligationId, subjectKey: r.subjectKey, step, daysOverdue },
-            isCritical: daysOverdue >= 14,
-          })
+          const jobId = `compliance-escalation|${createHash('sha256')
+            .update(`${t.id}\0${r.obligationId}\0${r.subjectKey}\0${step}`)
+            .digest('hex')}`
+          await enqueueNotification(
+            {
+              tenantId: t.id,
+              userIds,
+              category: 'compliance',
+              type: 'compliance.escalation',
+              title: `Escalation: ${r.title} overdue ${daysOverdue}d`,
+              body: `Overdue ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} — escalated to ${s.roleKeys.join(', ')}.`,
+              linkPath: `/compliance/obligations/${r.obligationId}`,
+              data: { obligationId: r.obligationId, subjectKey: r.subjectKey, step, daysOverdue },
+              isCritical: daysOverdue >= 14,
+            },
+            { jobId },
+          )
           result.escalated += 1
         }
       }

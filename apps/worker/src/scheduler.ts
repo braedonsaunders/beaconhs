@@ -1,4 +1,6 @@
+import './instrument'
 import { registerSchedules } from '@beaconhs/jobs'
+import { captureWorkerFailure, flushObservability } from './instrument'
 
 async function main() {
   console.log('[scheduler] registering repeatable jobs…')
@@ -8,6 +10,7 @@ async function main() {
 }
 
 main().catch((err) => {
+  captureWorkerFailure(err, { queue: 'scheduler', jobName: 'register-schedules' })
   console.error(err)
-  process.exit(1)
+  void flushObservability().finally(() => process.exit(1))
 })

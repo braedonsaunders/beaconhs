@@ -65,7 +65,7 @@ export interface UpsertResult {
   message?: string
 }
 
-export interface ArchiveMissingResult {
+interface ArchiveMissingResult {
   entity: SyncEntityKey
   externalId: string
   canonicalId: string

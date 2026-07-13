@@ -12,14 +12,12 @@ export type ExtractedParticipant = {
   role: string | null
 }
 
-// A signature field stores an attachment ref ({ attachmentId, url }) once drawn;
-// be defensive about other shapes (plain id string, data URL).
+// A signature field stores an attachment ref ({ attachmentId, url }) once drawn.
 function isSignedValue(v: unknown): boolean {
   if (v == null) return false
-  if (typeof v === 'string') return v.trim().length > 0
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>
-    return Boolean(o.attachmentId || o.url || o.dataUrl || o.signatureDataUrl)
+    return Boolean(o.attachmentId || o.url)
   }
   return false
 }

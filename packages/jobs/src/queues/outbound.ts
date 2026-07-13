@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq'
-import { connection } from '../connection'
+import { getConnection } from '../connection'
 
 // One job per (automation, event): the worker delivers that single automation
 // and retries it in isolation, so one failing destination never re-fires the
@@ -17,16 +17,21 @@ export type OutboundDispatchJob = {
   event: OutboundEvent
 }
 
-export const outboundQueue = new Queue<OutboundDispatchJob>('outbound', {
-  connection,
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: 'exponential', delay: 15_000 },
-    removeOnComplete: { age: 7 * 24 * 3600 },
-    removeOnFail: { age: 30 * 24 * 3600 },
-  },
-})
+let outboundQueue: Queue<OutboundDispatchJob> | undefined
 
-export async function enqueueOutboundDispatch(data: OutboundDispatchJob) {
-  await outboundQueue.add('dispatch', data)
+function getOutboundQueue(): Queue<OutboundDispatchJob> {
+  outboundQueue ??= new Queue<OutboundDispatchJob>('outbound', {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 15_000 },
+      removeOnComplete: { age: 7 * 24 * 3600 },
+      removeOnFail: { age: 30 * 24 * 3600 },
+    },
+  })
+  return outboundQueue
+}
+
+export async function enqueueOutboundDispatch(data: OutboundDispatchJob, jobId?: string) {
+  return getOutboundQueue().add('dispatch', data, jobId ? { jobId } : undefined)
 }

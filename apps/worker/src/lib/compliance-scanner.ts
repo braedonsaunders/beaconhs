@@ -7,21 +7,24 @@
 // alerts for the subjects whose status changed this run (pending→overdue,
 // →expiring). Firing only on transitions means a still-overdue item never
 // re-spams; running twice in the same minute is harmless (the second pass sees
-// no transition). Tenants that never touched their schedule keep the legacy
-// daily-06:00-UTC cadence via the defaults.
+// no transition). Tenants without a policy row use the documented daily
+// 06:00-UTC default.
 
-import { eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
-import { tenantNotificationPolicy, tenants } from '@beaconhs/db/schema'
+import { complianceDispatches, tenantNotificationPolicy, tenants } from '@beaconhs/db/schema'
 import { materializeTenant } from '@beaconhs/compliance'
 import { emitComplianceTransitions } from '@beaconhs/events'
-import { scanTenantEquipmentMaintenance } from './equipment-maintenance-scanner'
-import { parseCron, type CronFields } from './form-assignment-scanner'
+import {
+  publishQueuedEquipmentMaintenance,
+  scanTenantEquipmentMaintenance,
+} from './equipment-maintenance-scanner'
+import { cronOccursAt } from './cron'
 
 const DEFAULT_CRON = '0 6 * * *'
 const DEFAULT_TZ = 'UTC'
 
-export type ComplianceScanResult = {
+type ComplianceScanResult = {
   tenants: number
   due: number
   obligations: number
@@ -31,51 +34,12 @@ export type ComplianceScanResult = {
   errors: number
 }
 
-// Wall-clock fields in `tz`, so a tenant's "06:00" means their local 06:00, not
-// UTC. Falls back to UTC for an unknown/empty zone.
-function fieldsInZone(now: Date, tz: string) {
-  const fmt = (zone: string) =>
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: zone,
-      hour12: false,
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      weekday: 'short',
-    }).formatToParts(now)
-  let parts: Intl.DateTimeFormatPart[]
-  try {
-    parts = fmt(tz || 'UTC')
-  } catch {
-    parts = fmt('UTC')
-  }
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
-  const dow: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  return {
-    minute: Number(get('minute')),
-    hour: Number(get('hour')) % 24, // hour12:false can emit '24' at midnight in some ICU builds
-    dayOfMonth: Number(get('day')),
-    month: Number(get('month')),
-    dayOfWeek: dow[get('weekday')] ?? 0,
-  }
-}
-
 function cronDueNow(cron: string, tz: string, now: Date): boolean {
-  let f: CronFields
   try {
-    f = parseCron(cron)
+    return cronOccursAt(cron, now, tz || 'UTC')
   } catch {
     return false
   }
-  const t = fieldsInZone(now, tz)
-  return (
-    f.minute.includes(t.minute) &&
-    f.hour.includes(t.hour) &&
-    f.dayOfMonth.includes(t.dayOfMonth) &&
-    f.month.includes(t.month) &&
-    f.dayOfWeek.includes(t.dayOfWeek)
-  )
 }
 
 // `scheduledFor` is the minute the tick was SCHEDULED to run (the caller passes
@@ -96,30 +60,24 @@ export async function scanCompliance(
   }
   const now = scheduledFor
 
-  // One cross-tenant read of each tenant's detection schedule (left join: tenants
-  // with no policy row fall back to the legacy default). Guarded so a pre-DDL
-  // window can never break the whole scan.
-  let schedules: { id: string; cron: string; tz: string }[]
-  try {
-    const rows = await withSuperAdmin(db, (tx) =>
-      tx
-        .select({
-          id: tenants.id,
-          cron: tenantNotificationPolicy.scanCron,
-          tz: tenantNotificationPolicy.scanTimezone,
-        })
-        .from(tenants)
-        .leftJoin(tenantNotificationPolicy, eq(tenantNotificationPolicy.tenantId, tenants.id)),
-    )
-    schedules = rows.map((r) => ({
-      id: r.id,
-      cron: r.cron ?? DEFAULT_CRON,
-      tz: r.tz ?? DEFAULT_TZ,
-    }))
-  } catch {
-    const rows = await withSuperAdmin(db, (tx) => tx.select({ id: tenants.id }).from(tenants))
-    schedules = rows.map((r) => ({ id: r.id, cron: DEFAULT_CRON, tz: DEFAULT_TZ }))
-  }
+  // One cross-tenant read of each tenant's detection schedule. Deployment runs
+  // migrations before starting the worker, so a missing policy table is a hard
+  // deployment error rather than a second, silently degraded execution mode.
+  const rows = await withSuperAdmin(db, (tx) =>
+    tx
+      .select({
+        id: tenants.id,
+        cron: tenantNotificationPolicy.scanCron,
+        tz: tenantNotificationPolicy.scanTimezone,
+      })
+      .from(tenants)
+      .leftJoin(tenantNotificationPolicy, eq(tenantNotificationPolicy.tenantId, tenants.id)),
+  )
+  const schedules = rows.map((r) => ({
+    id: r.id,
+    cron: r.cron ?? DEFAULT_CRON,
+    tz: r.tz ?? DEFAULT_TZ,
+  }))
 
   for (const s of schedules) {
     result.tenants += 1
@@ -129,7 +87,28 @@ export async function scanCompliance(
     let materialized: Awaited<ReturnType<typeof materializeTenant>> = []
     try {
       // Per-tenant RLS context so reads + the compliance_status upsert are scoped.
-      materialized = await withTenant(db, s.id, (tx) => materializeTenant(tx, s.id))
+      materialized = await withTenant(db, s.id, async (tx) => {
+        const rows = await materializeTenant(tx, s.id)
+        for (const { obligation, transitions } of rows) {
+          const actionable = transitions.filter((t) => t.to === 'overdue' || t.to === 'expiring')
+          if (actionable.length === 0) continue
+          const [claimed] = await tx
+            .insert(complianceDispatches)
+            .values({
+              tenantId: s.id,
+              obligationId: obligation.id,
+              occurredAt: new Date(Math.floor(now.getTime() / 60_000) * 60_000),
+              status: 'queued',
+              alertPayload: { transitions: actionable },
+            })
+            .onConflictDoNothing({
+              target: [complianceDispatches.obligationId, complianceDispatches.occurredAt],
+            })
+            .returning({ id: complianceDispatches.id })
+          if (claimed) result.reminders += 1
+        }
+        return rows
+      })
     } catch (err) {
       result.errors += 1
       console.warn(
@@ -138,14 +117,6 @@ export async function scanCompliance(
       continue
     }
     result.obligations += materialized.length
-    for (const { obligation, transitions } of materialized) {
-      const actionable = transitions.filter((t) => t.to === 'overdue' || t.to === 'expiring')
-      if (actionable.length > 0) {
-        await emitComplianceTransitions(s.id, obligation.id, actionable)
-        result.reminders += 1
-      }
-    }
-
     // Equipment maintenance rides the same per-tenant heartbeat — inspection
     // schedules + ad-hoc reminders whose due date arrived alert once per due
     // cycle (see the scanner's due_notified_for stamps).
@@ -158,5 +129,59 @@ export async function scanCompliance(
       )
     }
   }
+  await publishQueuedComplianceDispatches(result)
+  const maintenanceDelivery = await publishQueuedEquipmentMaintenance()
+  result.errors += maintenanceDelivery.errors
   return result
+}
+
+async function publishQueuedComplianceDispatches(result: ComplianceScanResult): Promise<void> {
+  const queued = await withSuperAdmin(db, (tx) =>
+    tx
+      .select()
+      .from(complianceDispatches)
+      .where(eq(complianceDispatches.status, 'queued'))
+      .orderBy(asc(complianceDispatches.createdAt))
+      .limit(500),
+  )
+  for (const dispatch of queued) {
+    const transitions = dispatch.alertPayload?.transitions
+    if (!transitions?.length) {
+      result.errors += 1
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(complianceDispatches)
+          .set({ status: 'failed', error: 'Queued compliance dispatch has no alert payload' })
+          .where(eq(complianceDispatches.id, dispatch.id)),
+      )
+      continue
+    }
+    try {
+      await emitComplianceTransitions(
+        dispatch.tenantId,
+        dispatch.obligationId,
+        transitions,
+        dispatch.id,
+      )
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(complianceDispatches)
+          .set({ status: 'enqueued', error: null })
+          .where(
+            and(
+              eq(complianceDispatches.id, dispatch.id),
+              eq(complianceDispatches.status, 'queued'),
+            ),
+          ),
+      )
+    } catch (error) {
+      result.errors += 1
+      await withSuperAdmin(db, (tx) =>
+        tx
+          .update(complianceDispatches)
+          .set({ error: error instanceof Error ? error.message : String(error) })
+          .where(eq(complianceDispatches.id, dispatch.id)),
+      )
+    }
+  }
 }

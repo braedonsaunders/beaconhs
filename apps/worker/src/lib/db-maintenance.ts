@@ -19,7 +19,7 @@ import { PLATFORM_SETTINGS_ID, platformSettings } from '@beaconhs/db/schema'
 
 const DELETE_BATCH = 5000
 
-export type DbMaintenanceResult = {
+type DbMaintenanceResult = {
   ok: boolean
   durationMs: number
   perTable: DbMaintenancePerTableResult[]
@@ -36,7 +36,12 @@ async function readSettings(): Promise<DbMaintenanceSettings> {
   })
 }
 
-async function pruneTable(table: string, timeCol: string, retentionDays: number): Promise<number> {
+async function pruneTable(
+  table: string,
+  timeCol: string,
+  retentionDays: number,
+  retentionWhere?: string,
+): Promise<number> {
   const days = Math.max(1, Math.floor(retentionDays))
   let total = 0
   for (;;) {
@@ -46,6 +51,7 @@ async function pruneTable(table: string, timeCol: string, retentionDays: number)
           `WITH doomed AS (
              SELECT ctid FROM ${table}
              WHERE ${timeCol} < now() - interval '${days} days'
+             ${retentionWhere ? `AND (${retentionWhere})` : ''}
              LIMIT ${DELETE_BATCH}
            ), del AS (
              DELETE FROM ${table} WHERE ctid IN (SELECT ctid FROM doomed) RETURNING 1
@@ -106,7 +112,7 @@ export async function runDatabaseMaintenance(
     }
     try {
       if (retentionDays != null && retentionDays > 0) {
-        result.deleted = await pruneTable(t.table, t.timeColumn, retentionDays)
+        result.deleted = await pruneTable(t.table, t.timeColumn, retentionDays, t.retentionWhere)
       }
       await analyzeTable(t.table)
       result.analyzed = true

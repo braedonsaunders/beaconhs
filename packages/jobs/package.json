@@ -10,10 +10,12 @@
     "./email": "./src/queues/email.ts",
     "./pdf": "./src/queues/pdf.ts",
     "./notify": "./src/queues/notify.ts",
+    "./health": "./src/health.ts",
     "./rate-limit": "./src/rate-limit.ts",
     "./scheduled": "./src/queues/scheduled.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

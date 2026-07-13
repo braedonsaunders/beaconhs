@@ -1,8 +1,9 @@
 // Email delivery. The provider abstraction (Resend, SendGrid, Mailgun, Postmark,
 // SMTP) lives in ./providers + ./transport. This file keeps `sendEmail` as the
-// ENVIRONMENT fallback — used for platform sends that have no tenant/platform
-// provider configured (e.g. auth magic-links) — plus all the built-in
-// transactional templates.
+// environment fallback — used for platform sends that have no tenant/platform
+// provider configured (for example auth magic links) — plus all the built-in
+// transactional templates. Missing configuration is an error: callers must
+// never record a delivery that no provider accepted.
 
 import { sendVia, type SendEmailInput } from './transport'
 
@@ -13,18 +14,13 @@ const defaultFrom = process.env.RESEND_FROM ?? 'BeaconHS <noreply@beaconhs.app>'
 
 // The worker resolves a tenant/platform transport first (see
 // @beaconhs/worker resolve-email-transport) and only falls back to this when
-// none is configured: a Resend key in the environment, or a dev stdout log.
+// none is configured. A real Resend key is required for this fallback.
 export async function sendEmail(input: SendEmailInput): Promise<{ id: string }> {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
-    // Dev fallback: log to stdout so engineers can see what would have been sent.
-    console.log(
-      '[emails] (no provider configured) →',
-      input.to,
-      input.subject,
-      input.attachments?.length ? `(+${input.attachments.length} attachment)` : '',
+    throw new Error(
+      'Email delivery is not configured: set a tenant/platform provider or RESEND_API_KEY',
     )
-    return { id: 'dev-skipped' }
   }
   return sendVia({ provider: 'resend', apiKey, from: input.from ?? defaultFrom }, input)
 }

@@ -12,5 +12,17 @@ export { parseCsv } from './csv'
 export type { CsvParsed } from './csv'
 export { connectDb } from './db-drivers'
 export type { DbConn, DbConnectConfig, DbKind } from './db-drivers'
+export {
+  isPublicIpAddress,
+  normalizeOutboundHostname,
+  resolvePublicHost,
+  secureFetch,
+} from './egress'
+export type {
+  OutboundDnsResolver,
+  ResolvePublicHostOptions,
+  ResolvedPublicHost,
+  SecureFetchOptions,
+} from './egress'
 export { loadLookups, upsertRecord } from './upsert'
 export type { Lookups, UpsertAction, UpsertCtx, UpsertResult } from './upsert'

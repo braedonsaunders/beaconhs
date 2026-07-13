@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { encryptSecret } from '@beaconhs/crypto'
+import { sealSecret } from '@beaconhs/crypto'
 import {
   buildTransport,
   resolveEffectiveTransport,
@@ -19,7 +19,7 @@ const INPUT: SendEmailInput = {
 }
 
 function sealed(secret: string) {
-  const s = encryptSecret(secret)
+  const s = sealSecret(secret)
   return { keyCiphertext: s.ciphertext, keyNonce: s.nonce }
 }
 

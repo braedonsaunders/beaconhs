@@ -8,12 +8,12 @@
 import { build } from 'esbuild'
 
 await build({
-  entryPoints: ['src/index.ts', 'src/scheduler.ts'],
+  entryPoints: ['src/index.ts', 'src/scheduler.ts', 'src/health.ts', 'src/storage-init.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',
   format: 'esm',
-  target: 'node22',
+  target: 'node24',
   sourcemap: true,
   logLevel: 'info',
   plugins: [

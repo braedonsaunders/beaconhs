@@ -1,16 +1,12 @@
-// Filter → SQL compilation for custom reports. Two stored shapes compile
-// through the same leaf compiler:
-//
-//   v1 — flat ReportCustomFilter[] (implicit AND), written by the original
-//        builder and still honoured for existing definitions.
-//   v2 — ReportRuleGroup, a nested and/or tree written by the report studio.
+// Filter → SQL compilation for custom reports. The report studio stores one
+// canonical nested and/or rule tree.
 //
 // Identifiers are never interpolated from user input: column keys must
 // resolve through the entity whitelist, and values always bind as
 // parameters via drizzle's sql template.
 
 import { sql, type SQL } from 'drizzle-orm'
-import type { ReportCustomFilter, ReportRule, ReportRuleGroup } from '@beaconhs/db/schema'
+import type { ReportRule, ReportRuleGroup } from '@beaconhs/db/schema'
 import { columnRef, type ReportEntity } from './entities'
 
 const MAX_TREE_DEPTH = 5
@@ -54,8 +50,8 @@ function defaultColumnSql(entity: ReportEntity, column: string): SQL | null {
 }
 
 /** Compile one leaf clause. Returns null when the clause is invalid or a
- *  no-op (unknown column, missing value) — mirroring the v1 executor's
- *  skip-don't-throw behaviour so half-built filters degrade gracefully.
+ *  no-op (unknown column, missing value) so half-built filters degrade
+ *  gracefully.
  *
  *  `resolveColumn` lets a caller (the BHQL engine) resolve a field that may
  *  point through a foreign-key relation; when omitted, the column is the
@@ -148,19 +144,7 @@ export function compileRule(
   }
 }
 
-/** v1: flat filter list, implicit AND. */
-export function compileFlatFilters(
-  entity: ReportEntity,
-  filters: ReportCustomFilter[],
-): SQL | null {
-  const parts = filters
-    .map((f) => compileRule(entity, { column: f.column, op: f.op, value: f.value }))
-    .filter((p): p is SQL => p !== null)
-  if (!parts.length) return null
-  return sql.join(parts, sql.raw(' AND '))
-}
-
-/** v2: nested and/or tree. Throws on absurd trees (depth/size caps) since
+/** Nested and/or tree. Throws on absurd trees (depth/size caps) since
  *  those only arise from hand-crafted payloads, not the studio UI. */
 export function compileRuleGroup(
   entity: ReportEntity,
@@ -191,14 +175,13 @@ export function compileRuleGroup(
   return walk(group, 1)
 }
 
-/** Resolve whichever filter shape a stored plan carries into one WHERE SQL. */
+/** Resolve a stored canonical filter tree into one WHERE SQL. */
 export function compileCustomFilters(
   entity: ReportEntity,
-  plan: { filters?: ReportCustomFilter[]; filtersV2?: ReportRuleGroup | null },
+  plan: { filters?: ReportRuleGroup | null },
 ): SQL | null {
-  if (plan.filtersV2 && Array.isArray(plan.filtersV2.rules) && plan.filtersV2.rules.length) {
-    return compileRuleGroup(entity, plan.filtersV2)
+  if (plan.filters && Array.isArray(plan.filters.rules) && plan.filters.rules.length) {
+    return compileRuleGroup(entity, plan.filters)
   }
-  if (plan.filters?.length) return compileFlatFilters(entity, plan.filters)
   return null
 }

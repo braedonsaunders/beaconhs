@@ -53,6 +53,6 @@ export async function resolveEmailDelivery(tenantId: string | null): Promise<Eff
 }
 
 /** Test seam: drop the cached platform row (used after a config save in-process). */
-export function clearPlatformEmailCache(): void {
+function clearPlatformEmailCache(): void {
   platformCache = null
 }

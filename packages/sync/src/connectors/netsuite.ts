@@ -10,6 +10,7 @@
 
 import { createHmac, randomBytes } from 'node:crypto'
 import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
+import { secureFetch } from '../egress'
 
 interface NsCreds {
   accountId: string
@@ -70,13 +71,17 @@ function rfc3986(s: string): string {
   )
 }
 
-export function nsHost(accountId: string): string {
-  return `${accountId.toLowerCase().replace(/_/g, '-')}.suitetalk.api.netsuite.com`
+function nsHost(accountId: string): string {
+  const normalized = accountId.trim()
+  if (!/^[a-z0-9_-]{1,64}$/i.test(normalized)) {
+    throw new Error('NetSuite account ID contains unsupported characters.')
+  }
+  return `${normalized.toLowerCase().replace(/_/g, '-')}.suitetalk.api.netsuite.com`
 }
 
 // Build the OAuth 1.0a (HMAC-SHA256) Authorization header for a NetSuite REST
 // request. nonce/timestamp are injectable for deterministic testing.
-export function signOAuth1a(
+function signOAuth1a(
   method: string,
   fullUrl: string,
   creds: NsCreds,
@@ -124,7 +129,7 @@ async function suiteql(
   offset: number,
 ): Promise<{ items: Record<string, unknown>[]; hasMore: boolean }> {
   const url = `https://${nsHost(creds.accountId)}/services/rest/query/v1/suiteql?limit=${limit}&offset=${offset}`
-  const res = await fetch(url, {
+  const res = await secureFetch(url, {
     method: 'POST',
     headers: {
       Authorization: signOAuth1a('POST', url, creds),
@@ -132,6 +137,9 @@ async function suiteql(
       Prefer: 'transient',
     },
     body: JSON.stringify({ q }),
+    timeoutMs: 20_000,
+    maxResponseBytes: 8 * 1024 * 1024,
+    maxRedirects: 0,
   })
   if (!res.ok) {
     const t = await res.text().catch(() => '')
@@ -157,7 +165,7 @@ function datePart(v: string | null): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10)
 }
 
-export function mapNetsuiteRow(
+function mapNetsuiteRow(
   entity: SyncEntityKey,
   m: NsEntityMap,
   row: Record<string, unknown>,
@@ -271,11 +279,12 @@ export const netsuiteConnector: Connector = {
     const cfg = ctx.config as NsConfig
     const creds = credsOf(ctx)
     if (!creds.accountId || !creds.consumerKey || !creds.tokenId) {
-      ctx.log('warn', 'NetSuite credentials are incomplete.')
-      return []
+      throw new Error('NetSuite credentials are incomplete.')
     }
     const out: CanonicalRecord[] = []
-    for (const [entity, m] of resolveEntities(cfg)) {
+    const entities = resolveEntities(cfg)
+    let truncated = false
+    for (const [entity, m] of entities) {
       const cols = [...new Set([m.idColumn, ...Object.values(m.columns)])]
       const q = `SELECT ${cols.join(', ')} FROM ${m.table}${m.where ? ` WHERE ${m.where}` : ''}`
       ctx.log('info', `${entity}: ${q}`)
@@ -293,10 +302,19 @@ export const netsuiteConnector: Connector = {
         total += items.length
         offset += limit
         page += 1
-        if (!hasMore || items.length === 0 || page >= 100) break
+        if (!hasMore || items.length === 0) break
+        if (page >= 100) {
+          truncated = true
+          ctx.log('warn', `${entity}: stopped at the 100-page safety cap.`)
+          break
+        }
       }
       ctx.log('info', `${entity}: ${total} row(s) from ${m.table}`)
     }
-    return out
+    return {
+      records: out,
+      mode: truncated ? 'incremental' : 'full',
+      authoritativeEntities: entities.map(([entity]) => entity),
+    }
   },
 }

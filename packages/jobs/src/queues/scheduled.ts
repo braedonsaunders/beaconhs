@@ -1,5 +1,5 @@
-import { Queue } from 'bullmq'
-import { connection } from '../connection'
+import { Queue, type JobsOptions } from 'bullmq'
+import { getConnection } from '../connection'
 
 // Generic "tick" queue for scheduled work that fires on a cron. The
 // scheduler process registers repeatable jobs; worker process consumes them.
@@ -8,7 +8,6 @@ export type ScheduledTick =
   | { kind: 'form_assignment_scan' }
   | { kind: 'form_session_overdue_scan' }
   | { kind: 'report_schedule_scan' }
-  | { kind: 'report_run'; tenantId: string; scheduleId: string }
   | { kind: 'compliance_scan' }
   | { kind: 'escalation_scan' }
   | { kind: 'digest_scan' }
@@ -16,89 +15,117 @@ export type ScheduledTick =
   | { kind: 'sync_scan' }
   | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
   | { kind: 'db_maintenance'; trigger?: 'scheduled' | 'manual' }
+  | { kind: 'domain_event_outbox_scan' }
 
-export const scheduledQueue = new Queue<ScheduledTick>('scheduled', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    removeOnComplete: { age: 24 * 3600 },
-    removeOnFail: { age: 7 * 24 * 3600 },
+let scheduledQueue: Queue<ScheduledTick> | undefined
+
+function getScheduledQueue(): Queue<ScheduledTick> {
+  scheduledQueue ??= new Queue<ScheduledTick>('scheduled', {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 10_000 },
+      removeOnComplete: { age: 24 * 3600 },
+      removeOnFail: { age: 7 * 24 * 3600 },
+    },
+  })
+  return scheduledQueue
+}
+
+export async function enqueueScheduled(name: string, data: ScheduledTick, options?: JobsOptions) {
+  return getScheduledQueue().add(name, data, options)
+}
+
+const SCHEDULES: Array<{
+  name: string
+  data: ScheduledTick
+  pattern: string
+  jobId: string
+}> = [
+  {
+    name: 'tick:every_minute',
+    data: { kind: 'form_assignment_scan' },
+    pattern: '* * * * *',
+    jobId: 'tick:form_assignment_scan',
   },
-})
+  {
+    name: 'tick:form_session',
+    data: { kind: 'form_session_overdue_scan' },
+    pattern: '* * * * *',
+    jobId: 'tick:form_session_overdue',
+  },
+  {
+    name: 'tick:reports',
+    data: { kind: 'report_schedule_scan' },
+    pattern: '*/5 * * * *',
+    jobId: 'tick:reports',
+  },
+  {
+    name: 'tick:compliance_scan',
+    data: { kind: 'compliance_scan' },
+    pattern: '* * * * *',
+    jobId: 'tick:compliance_scan',
+  },
+  {
+    name: 'tick:escalation',
+    data: { kind: 'escalation_scan' },
+    pattern: '30 6 * * *',
+    jobId: 'tick:escalation',
+  },
+  {
+    name: 'tick:digest',
+    data: { kind: 'digest_scan' },
+    pattern: '5 * * * *',
+    jobId: 'tick:digest',
+  },
+  {
+    name: 'tick:scheduled_flow',
+    data: { kind: 'scheduled_flow_scan' },
+    pattern: '* * * * *',
+    jobId: 'tick:scheduled_flow',
+  },
+  {
+    name: 'tick:sync_scan',
+    data: { kind: 'sync_scan' },
+    pattern: '*/15 * * * *',
+    jobId: 'tick:sync_scan',
+  },
+  {
+    name: 'tick:db_maintenance',
+    data: { kind: 'db_maintenance', trigger: 'scheduled' },
+    pattern: '30 3 * * *',
+    jobId: 'tick:db_maintenance',
+  },
+  {
+    name: 'tick:domain_event_outbox',
+    data: { kind: 'domain_event_outbox_scan' },
+    pattern: '* * * * *',
+    jobId: 'tick:domain_event_outbox',
+  },
+]
 
-async function removeRetiredPluginCronSchedules() {
+async function removeUnconfiguredSchedules() {
+  const scheduledQueue = getScheduledQueue()
   const repeatables = await scheduledQueue.getRepeatableJobs()
   await Promise.all(
     repeatables
-      .filter(
-        (job) =>
-          job.id?.startsWith('tick:plugin_') ||
-          job.name?.startsWith('tick:plugin_') ||
-          job.key.includes('tick:plugin_'),
+      .filter((job) =>
+        SCHEDULES.every(
+          (expected) => job.name !== expected.name || job.pattern !== expected.pattern,
+        ),
       )
       .map((job) => scheduledQueue.removeRepeatableByKey(job.key)),
   )
 }
 
 export async function registerSchedules() {
-  await removeRetiredPluginCronSchedules()
-
-  // Every minute: form assignment dispatch
-  await scheduledQueue.add('tick:every_minute', { kind: 'form_assignment_scan' } as ScheduledTick, {
-    repeat: { pattern: '* * * * *' },
-    jobId: 'tick:form_assignment_scan',
-  })
-  // Every minute: generic monitored-session overdue scan — escalates overdue
-  // check-ins for the Lone Worker app + any monitored Builder app. (Successor to
-  // the retired native lone_worker_overdue_scan.) See docs/monitored-sessions-design.md.
-  await scheduledQueue.add(
-    'tick:form_session',
-    { kind: 'form_session_overdue_scan' } as ScheduledTick,
-    { repeat: { pattern: '* * * * *' }, jobId: 'tick:form_session_overdue' },
-  )
-  // Every 5 minutes: report scheduler scan
-  await scheduledQueue.add('tick:reports', { kind: 'report_schedule_scan' } as ScheduledTick, {
-    repeat: { pattern: '*/5 * * * *' },
-    jobId: 'tick:reports',
-  })
-  // Every minute: compliance detection. The scan self-gates each tenant against
-  // its configured schedule (tenant_notification_policy.scan_cron, in scan_timezone),
-  // so the per-tenant cadence is data-driven — the tick just provides the heartbeat.
-  // Untouched tenants keep the legacy daily-06:00-UTC cadence via the default cron.
-  await scheduledQueue.add('tick:compliance_scan', { kind: 'compliance_scan' } as ScheduledTick, {
-    repeat: { pattern: '* * * * *' },
-    jobId: 'tick:compliance_scan',
-  })
-  // Daily 06:30: escalation ladder — re-alert higher roles for items that have
-  // stayed overdue past each ladder step (runs after the compliance scan).
-  await scheduledQueue.add('tick:escalation', { kind: 'escalation_scan' } as ScheduledTick, {
-    repeat: { pattern: '30 6 * * *' },
-    jobId: 'tick:escalation',
-  })
-  // Hourly: digest dispatch — self-gates to each tenant's configured digest hour.
-  await scheduledQueue.add('tick:digest', { kind: 'digest_scan' } as ScheduledTick, {
-    repeat: { pattern: '5 * * * *' },
-    jobId: 'tick:digest',
-  })
-  // Every minute: run flows whose `scheduled` cron matches this minute (Phase 4).
-  await scheduledQueue.add(
-    'tick:scheduled_flow',
-    { kind: 'scheduled_flow_scan' } as ScheduledTick,
-    {
-      repeat: { pattern: '* * * * *' },
-      jobId: 'tick:scheduled_flow',
-    },
-  )
-  // Every 15 minutes: scan external sync connections and enqueue the ones due.
-  await scheduledQueue.add('tick:sync_scan', { kind: 'sync_scan' } as ScheduledTick, {
-    repeat: { pattern: '*/15 * * * *' },
-    jobId: 'tick:sync_scan',
-  })
-  // Daily 03:30 UTC: database maintenance — prune unbounded tables past their
-  // configured retention window + refresh planner statistics (see /platform/database).
-  await scheduledQueue.add(
-    'tick:db_maintenance',
-    { kind: 'db_maintenance', trigger: 'scheduled' } as ScheduledTick,
-    { repeat: { pattern: '30 3 * * *' }, jobId: 'tick:db_maintenance' },
-  )
+  // Reconcile Redis to this exact registry. Pattern/name changes replace their
+  // old repeat key instead of leaving shadow schedules firing indefinitely.
+  await removeUnconfiguredSchedules()
+  for (const schedule of SCHEDULES) {
+    await enqueueScheduled(schedule.name, schedule.data, {
+      repeat: { pattern: schedule.pattern },
+      jobId: schedule.jobId,
+    })
+  }
 }

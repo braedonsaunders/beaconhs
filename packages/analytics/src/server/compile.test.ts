@@ -1,19 +1,22 @@
-// Offline compile smoke — proves the multi-source compiler emits valid SQL
-// without touching the DB. Run: pnpm exec tsx packages/analytics/scripts/compile-smoke.ts
 import { PgDialect } from 'drizzle-orm/pg-core'
-import type { BhqlQuery } from '@beaconhs/db/schema'
-import { compileBhql } from '../src/server/compile'
-import { discoverEntityMap } from '../src/server/discover'
-import { parseBhqlQuery } from '../src/ast-schema'
+import { expect, it } from 'vitest'
+import type { BhqlExpr, BhqlQuery } from '@beaconhs/db/schema'
+import { parseBhqlQuery } from '../ast-schema'
+import { compileBhql } from './compile'
+import { discoverEntityMap } from './discover'
 
 const entityMap = discoverEntityMap()
 const dialect = new PgDialect()
 const show = (label: string, q: BhqlQuery) => {
-  const parsed = parseBhqlQuery(q, entityMap)
-  const compiled = compileBhql(parsed, { entityMap })
-  console.log(`\n=== ${label} ===`)
-  console.log(dialect.sqlToQuery(compiled.sql).sql)
-  console.log('columns:', compiled.columns.map((c) => `${c.key}:${c.dataType}`).join(', '))
+  it(label, () => {
+    const parsed = parseBhqlQuery(q, entityMap)
+    const compiled = compileBhql(parsed, { entityMap })
+    const query = dialect.sqlToQuery(compiled.sql)
+
+    expect(query.sql.trim()).not.toBe('')
+    expect(compiled.columns.length).toBeGreaterThan(0)
+    expect(compiled.columns.every((column) => column.key.length > 0)).toBe(true)
+  })
 }
 
 // 1) TRIR by month — recordables (incidents) ÷ hours (incident_hours_periods) × 200000
@@ -120,7 +123,7 @@ show('TRIR scalar (no grain)', {
 
 // 3) Training matrix — view-free rebuild of report_training_matrix (people ×
 //    courses ⟕ latest training record → coverage status). Must match the view.
-const cd = { ex: 'call', fn: 'current_date', args: [] } as const
+const cd: BhqlExpr = { ex: 'call', fn: 'current_date', args: [] }
 show('Training matrix (spine, view-free)', {
   version: 'bhql/1',
   display: 'pivot',

@@ -8,15 +8,23 @@
 //   • resolveGroupEmails   → string[]               (email channel)
 //   • previewAudience      → {count, names}         (the Groups UI live preview)
 //
-// All resolution funnels through the ONE canonical `resolveAudienceMembers`
+// All resolution funnels through the ONE canonical `resolveObligationAudience`
 // (packages/compliance) so groups behave identically to compliance audiences.
 // Server-only (queries the db) — never import from a client component.
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import { notificationGroupMembers, people, users } from '@beaconhs/db/schema'
 import {
-  resolveAudienceMembers,
+  notificationGroupMembers,
+  people,
+  roleAssignments,
+  roles,
+  tenantNotificationSettings,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
+import {
+  resolveObligationAudience,
   type AudienceItem,
   type ResolvedMember,
 } from '@beaconhs/compliance'
@@ -25,6 +33,97 @@ export type AudienceMemberInput = {
   kind: AudienceItem['kind']
   entityKey: string
   mode: 'include' | 'exclude'
+}
+
+export const DEFAULT_ROLES_BY_CATEGORY: Readonly<Record<string, string[]>> = {
+  incident: ['safety_manager', 'tenant_admin'],
+  ca: ['safety_manager', 'tenant_admin'],
+  compliance: ['safety_manager', 'tenant_admin'],
+  equipment: ['safety_manager', 'tenant_admin'],
+}
+
+/**
+ * Canonical automatic-notification audience resolver. A saved category row is
+ * authoritative; a missing row uses the built-in roles. Every returned user is
+ * an active member of this tenant.
+ */
+export async function resolveNotificationAudienceUserIds(
+  tx: Database,
+  tenantId: string,
+  category: string,
+  extraUserIds: string[] = [],
+): Promise<string[]> {
+  const [settings] = await tx
+    .select()
+    .from(tenantNotificationSettings)
+    .where(
+      and(
+        eq(tenantNotificationSettings.tenantId, tenantId),
+        eq(tenantNotificationSettings.category, category),
+      ),
+    )
+    .limit(1)
+  if (settings?.enabled === false) return []
+
+  const candidates = new Set([...extraUserIds, ...(settings?.userIds ?? [])].filter(Boolean))
+  if (settings?.groupIds.length) {
+    for (const userId of await resolveGroupUserIds(tx, tenantId, settings.groupIds)) {
+      candidates.add(userId)
+    }
+  }
+  const roleKeys = settings
+    ? settings.roleKeys
+    : (DEFAULT_ROLES_BY_CATEGORY[category] ?? ['tenant_admin'])
+  if (roleKeys.length > 0) {
+    const members = await tx
+      .select({ userId: tenantUsers.userId })
+      .from(tenantUsers)
+      .innerJoin(roleAssignments, eq(roleAssignments.tenantUserId, tenantUsers.id))
+      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+      .where(
+        and(
+          eq(tenantUsers.tenantId, tenantId),
+          eq(tenantUsers.status, 'active'),
+          inArray(roles.key, roleKeys),
+        ),
+      )
+    for (const member of members) candidates.add(member.userId)
+  }
+  if (candidates.size === 0) return []
+
+  const active = await tx
+    .select({ userId: tenantUsers.userId })
+    .from(tenantUsers)
+    .where(
+      and(
+        eq(tenantUsers.tenantId, tenantId),
+        eq(tenantUsers.status, 'active'),
+        inArray(tenantUsers.userId, [...candidates]),
+      ),
+    )
+  return [...new Set(active.map((member) => member.userId))]
+}
+
+export async function resolveNotificationAudienceEmails(
+  tx: Database,
+  tenantId: string,
+  category: string,
+  extraUserIds: string[] = [],
+): Promise<string[]> {
+  const userIds = await resolveNotificationAudienceUserIds(tx, tenantId, category, extraUserIds)
+  if (userIds.length === 0) return []
+  const rows = await tx
+    .select({ email: users.email })
+    .from(tenantUsers)
+    .innerJoin(users, eq(users.id, tenantUsers.userId))
+    .where(
+      and(
+        eq(tenantUsers.tenantId, tenantId),
+        eq(tenantUsers.status, 'active'),
+        inArray(tenantUsers.userId, userIds),
+      ),
+    )
+  return [...new Set(rows.map((row) => row.email.trim().toLowerCase()).filter(Boolean))]
 }
 
 /**
@@ -46,8 +145,8 @@ export async function resolveAudienceFromMembers(
   if (includes.length === 0) return []
 
   const [included, excluded] = await Promise.all([
-    resolveAudienceMembers(tx, tenantId, includes),
-    excludes.length > 0 ? resolveAudienceMembers(tx, tenantId, excludes) : Promise.resolve([]),
+    resolveObligationAudience(tx, tenantId, includes),
+    excludes.length > 0 ? resolveObligationAudience(tx, tenantId, excludes) : Promise.resolve([]),
   ])
   if (excluded.length === 0) return included
   const drop = new Set(excluded.map((m) => m.personId))

@@ -3,7 +3,9 @@
 // One request per item; the URL, headers and body are all token-templated. An
 // optional sealed auth header value carries a bearer token / API key.
 
+import { secureFetch } from '@beaconhs/sync'
 import { resolveText } from '../resolve'
+import { deliveryRef } from '../idempotency'
 import type {
   DeliverContext,
   DeliverRef,
@@ -38,6 +40,7 @@ function headersFor(
   authValue: string,
   mapping: Record<string, unknown>,
   item: Item,
+  idempotencyKey?: string,
 ): Record<string, string> {
   const out: Record<string, string> = { 'content-type': cfg.contentType }
   if (authValue) out[cfg.authHeaderName] = authValue
@@ -45,10 +48,16 @@ function headersFor(
   for (const [k, v] of Object.entries(extra)) {
     if (k.trim()) out[k.trim()] = resolveText(String(v ?? ''), item)
   }
+  if (
+    idempotencyKey &&
+    !Object.keys(out).some((name) => name.toLowerCase() === 'idempotency-key')
+  ) {
+    out['Idempotency-Key'] = idempotencyKey
+  }
   return out
 }
 
-function bodyFor(cfg: HttpConfig, mapping: Record<string, unknown>, item: Item): string {
+function bodyFor(mapping: Record<string, unknown>, item: Item): string {
   const tpl = String(mapping.body ?? '')
   if (!tpl.trim()) return JSON.stringify(item)
   return resolveText(tpl, item)
@@ -67,7 +76,12 @@ async function test(ctx: DestinationTestContext): Promise<IntegrationResult> {
   // 4xx/405 — that still proves the host is reachable, so we report the status
   // rather than failing on a non-2xx.
   try {
-    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(TIMEOUT_MS) })
+    const res = await secureFetch(url, {
+      method: 'HEAD',
+      timeoutMs: TIMEOUT_MS,
+      maxResponseBytes: 0,
+      maxRedirects: 2,
+    })
     return { ok: true, summary: `Endpoint reachable (HTTP ${res.status}).` }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
@@ -86,8 +100,9 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
   // body. URL + headers resolve against the first item.
   if (batch && ctx.items.length > 0) {
     const sample = ctx.items[0] as (typeof ctx.items)[number]
+    const ref = deliveryRef('http-batch', ctx.triggerKey, ctx.subjectId, 0)
     const arr = ctx.items.map((it) => {
-      const raw = bodyFor(cfg, ctx.mapping, it)
+      const raw = bodyFor(ctx.mapping, it)
       try {
         return JSON.parse(raw) as unknown
       } catch {
@@ -95,11 +110,19 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
       }
     })
     try {
-      const res = await fetch(resolveText(cfg.url, sample), {
+      const res = await secureFetch(resolveText(cfg.url, sample), {
         method: cfg.method,
-        headers: headersFor(cfg, authValue, ctx.mapping, sample),
+        headers: headersFor(
+          cfg,
+          authValue,
+          ctx.mapping,
+          sample,
+          ctx.oncePerRecord ? ref : undefined,
+        ),
         body: JSON.stringify(arr),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        timeoutMs: TIMEOUT_MS,
+        maxResponseBytes: 256 * 1024,
+        maxRedirects: 2,
       })
       if (!res.ok) {
         const text = await res.text().catch(() => '')
@@ -108,21 +131,30 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
       return {
         ok: true,
         summary: `Sent 1 batch request with ${arr.length} item(s).`,
-        refs: [{ externalRef: `batch:${ctx.subjectId}` }],
+        refs: [{ externalRef: ref }],
       }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
   }
 
-  for (const item of ctx.items) {
+  let sent = 0
+  for (let index = 0; index < ctx.items.length; index++) {
+    const item = ctx.items[index]!
+    const ref = deliveryRef('http', ctx.triggerKey, ctx.subjectId, index)
+    if (ctx.retryRefs.includes(ref)) {
+      refs.push({ externalRef: ref })
+      continue
+    }
     const url = resolveText(cfg.url, item)
     try {
-      const res = await fetch(url, {
+      const res = await secureFetch(url, {
         method: cfg.method,
-        headers: headersFor(cfg, authValue, ctx.mapping, item),
-        body: bodyFor(cfg, ctx.mapping, item),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        headers: headersFor(cfg, authValue, ctx.mapping, item, ctx.oncePerRecord ? ref : undefined),
+        body: bodyFor(ctx.mapping, item),
+        timeoutMs: TIMEOUT_MS,
+        maxResponseBytes: 256 * 1024,
+        maxRedirects: 2,
       })
       if (!res.ok) {
         const text = await res.text().catch(() => '')
@@ -130,17 +162,18 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
         continue
       }
       // Best-effort external ref from a JSON {id}.
-      let ref = `${res.status}`
+      let remoteRef = `${res.status}`
       const body = await res.text().catch(() => '')
       if (body) {
         try {
           const json = JSON.parse(body) as { id?: unknown }
-          if (json && json.id != null) ref = String(json.id)
+          if (json && json.id != null) remoteRef = String(json.id)
         } catch {
           /* non-JSON response — keep the status */
         }
       }
-      refs.push({ externalRef: ref })
+      refs.push({ externalRef: ref, detail: { remoteRef } })
+      sent++
     } catch (e) {
       errors.push(e instanceof Error ? e.message : String(e))
     }
@@ -149,15 +182,21 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
   if (errors.length > 0 && refs.length === 0) {
     return { ok: false, error: errors[0] }
   }
+  const resumed = refs.length - sent
+  const resumeNote = resumed > 0 ? `; ${resumed} already succeeded on an earlier attempt` : ''
   const note = errors.length ? ` (${errors.length} failed: ${errors[0]})` : ''
-  return { ok: errors.length === 0, summary: `Sent ${refs.length} request(s)${note}.`, refs }
+  return {
+    ok: errors.length === 0,
+    summary: `Sent ${sent} request(s)${resumeNote}${note}.`,
+    refs,
+  }
 }
 
 export const httpDestination: DestinationDef = {
   key: 'http',
   name: 'HTTP / REST request',
   description:
-    'POST, PUT or PATCH a token-templated body to any URL with custom headers and an optional bearer/API-key. Use for REST APIs, webhooks and automation hooks.',
+    'POST, PUT or PATCH a token-templated body to a public HTTPS URL with custom headers and an optional bearer/API-key. Use for REST APIs, webhooks and automation hooks.',
   iconKey: 'webhook',
   mappingKind: 'http',
   reversible: false,
@@ -179,7 +218,7 @@ export const httpDestination: DestinationDef = {
       type: 'text',
       required: true,
       placeholder: 'https://api.example.com/events',
-      help: 'May contain {{tokens}}.',
+      help: 'Must be public HTTPS. May contain {{tokens}}.',
     },
     {
       key: 'contentType',

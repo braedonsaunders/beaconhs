@@ -2,22 +2,26 @@
 // Same code path either way — only the endpoint changes.
 
 import {
+  CopyObjectCommand,
   CreateBucketCommand,
+  DeleteBucketPolicyCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  GetBucketLifecycleConfigurationCommand,
   HeadObjectCommand,
   HeadBucketCommand,
-  PutBucketPolicyCommand,
+  PutBucketLifecycleConfigurationCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import type { LifecycleRule } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { randomUUID } from 'node:crypto'
 
 const accountId = process.env.R2_ACCOUNT_ID ?? 'local'
 const accessKeyId = process.env.R2_ACCESS_KEY_ID ?? 'beaconhs'
 const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY ?? 'beaconhs-dev-secret'
 const bucket = process.env.R2_BUCKET ?? 'beaconhs-dev'
-const publicBaseUrl = process.env.R2_PUBLIC_URL ?? 'http://localhost:9000/beaconhs-dev'
 
 // In dev we point at MinIO. R2 uses https://{account}.r2.cloudflarestorage.com.
 const endpoint =
@@ -35,57 +39,142 @@ const client = new S3Client({
 
 export const BUCKET = bucket
 
-// R2 exposes objects through a public bucket / custom domain configured in the
-// dashboard — never via a bucket policy. Every other S3 backend this app runs
-// against (MinIO in dev) must be anonymous-read, because the app links to
-// objects directly with publicUrl() everywhere (inline <img>, file links, …).
 const isR2 = endpoint.includes('r2.cloudflarestorage.com')
 
-/** Idempotently ensure the bucket exists (used in dev/MinIO + by the migration). */
-export async function ensureBucket(): Promise<void> {
-  try {
-    await client.send(new HeadBucketCommand({ Bucket: bucket }))
-  } catch {
-    await client.send(new CreateBucketCommand({ Bucket: bucket })).catch(() => {})
-  }
-  await ensurePublicReadPolicy()
+function storageErrorCode(error: unknown): string | undefined {
+  const value = error as { name?: string; code?: string; Code?: string }
+  return value.name ?? value.code ?? value.Code
+}
+
+function storageErrorStatus(error: unknown): number | undefined {
+  return (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+}
+
+function isMissingBucketError(error: unknown): boolean {
+  const code = storageErrorCode(error)
+  return storageErrorStatus(error) === 404 || code === 'NotFound' || code === 'NoSuchBucket'
+}
+
+function isMissingPolicyError(error: unknown): boolean {
+  const code = storageErrorCode(error)
+  return (
+    storageErrorStatus(error) === 404 ||
+    code === 'NoSuchBucketPolicy' ||
+    code === 'NoSuchLifecycleConfiguration' ||
+    code === 'NoSuchPolicy' ||
+    code === 'NotFound'
+  )
+}
+
+function anonymousObjectUrl(key: string): string {
+  const base = endpoint.replace(/\/$/, '')
+  const encodedKey = key.split('/').map(encodeURIComponent).join('/')
+  return `${base}/${encodeURIComponent(bucket)}/${encodedKey}`
 }
 
 /**
- * Make the bucket anonymously readable (GetObject) so publicUrl() links resolve.
- * No-op on R2 (public access is domain-configured there). Best-effort: if the
- * credentials can't set a policy we swallow the error rather than break uploads.
+ * Idempotently establish the storage security baseline.
+ *
+ * MinIO/S3 buckets are made private by removing their bucket policy, then an
+ * unsigned canary read proves the endpoint does not expose objects. Cloudflare
+ * R2 public domains are configured outside the S3 API, so production must set
+ * R2_PRIVATE_BUCKET_CONFIRMED=true only after r2.dev/custom-domain access has
+ * been disabled and independently verified.
  */
-export async function ensurePublicReadPolicy(): Promise<void> {
-  if (isR2) return
-  const policy = JSON.stringify({
-    Version: '2012-10-17',
-    Statement: [
-      {
-        Sid: 'PublicRead',
-        Effect: 'Allow',
-        Principal: { AWS: ['*'] },
-        Action: ['s3:GetObject'],
-        Resource: [`arn:aws:s3:::${bucket}/*`],
+export async function ensureBucket(): Promise<void> {
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }))
+  } catch (error) {
+    if (!isMissingBucketError(error)) throw error
+    await client.send(new CreateBucketCommand({ Bucket: bucket }))
+  }
+  await ensurePrivateBucketReady()
+}
+
+/** Remove anonymous access, configure pending-upload expiry, and prove privacy. */
+export async function ensurePrivateBucketReady(): Promise<void> {
+  if (process.env.R2_PUBLIC_URL) {
+    throw new Error(
+      'R2_PUBLIC_URL must be removed: BeaconHS storage is private and objects are served through authorized or expiring URLs',
+    )
+  }
+
+  if (isR2) {
+    if (process.env.R2_PRIVATE_BUCKET_CONFIRMED !== 'true') {
+      throw new Error(
+        'R2_PRIVATE_BUCKET_CONFIRMED=true is required after disabling every R2 public development URL and custom domain',
+      )
+    }
+  } else {
+    try {
+      await client.send(new DeleteBucketPolicyCommand({ Bucket: bucket }))
+    } catch (error) {
+      if (!isMissingPolicyError(error)) throw error
+    }
+  }
+
+  let existingRules: LifecycleRule[] = []
+  try {
+    const lifecycle = await client.send(
+      new GetBucketLifecycleConfigurationCommand({ Bucket: bucket }),
+    )
+    existingRules = lifecycle.Rules ?? []
+  } catch (error) {
+    if (!isMissingPolicyError(error)) throw error
+  }
+
+  await client.send(
+    new PutBucketLifecycleConfigurationCommand({
+      Bucket: bucket,
+      LifecycleConfiguration: {
+        Rules: [
+          ...existingRules.filter((rule) => rule.ID !== 'expire-unfinalized-uploads'),
+          {
+            ID: 'expire-unfinalized-uploads',
+            Status: 'Enabled',
+            Filter: { Tag: { Key: 'beaconhs-state', Value: 'pending' } },
+            Expiration: { Days: 1 },
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
+          },
+        ],
       },
-    ],
+    }),
+  )
+
+  const probeKey = `_privacy-probe/${randomUUID()}`
+  await putObject({
+    key: probeKey,
+    body: new Uint8Array([1]),
+    contentType: 'application/octet-stream',
   })
   try {
-    await client.send(new PutBucketPolicyCommand({ Bucket: bucket, Policy: policy }))
-  } catch {
-    // Shared MinIO may forbid policy changes for this key — leave as-is.
+    const response = await fetch(anonymousObjectUrl(probeKey), {
+      method: 'GET',
+      redirect: 'manual',
+      cache: 'no-store',
+    })
+    if (response.status >= 200 && response.status < 400) {
+      throw new Error(
+        `Storage privacy verification failed: anonymous read returned HTTP ${response.status}`,
+      )
+    }
+  } finally {
+    await deleteObject({ key: probeKey })
   }
 }
 
 export async function presignPut(args: {
   key: string
   contentType: string
+  uploadToken: string
   expiresInSeconds?: number
 }): Promise<string> {
   const cmd = new PutObjectCommand({
     Bucket: bucket,
     Key: args.key,
     ContentType: args.contentType,
+    Metadata: { 'upload-token': args.uploadToken },
+    Tagging: 'beaconhs-state=pending',
   })
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 300 })
 }
@@ -98,6 +187,7 @@ export async function putObject(args: {
   key: string
   body: Buffer | Uint8Array
   contentType: string
+  contentDisposition?: 'inline' | 'attachment'
 }): Promise<void> {
   await client.send(
     new PutObjectCommand({
@@ -105,6 +195,7 @@ export async function putObject(args: {
       Key: args.key,
       Body: args.body,
       ContentType: args.contentType,
+      ContentDisposition: args.contentDisposition ?? 'attachment',
     }),
   )
 }
@@ -115,6 +206,76 @@ export async function presignGet(args: {
 }): Promise<string> {
   const cmd = new GetObjectCommand({ Bucket: bucket, Key: args.key })
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 600 })
+}
+
+export type StoredObjectMetadata = {
+  contentLength: number
+  contentType: string | null
+  contentDisposition: string | null
+  metadata: Readonly<Record<string, string>>
+  etag: string | null
+}
+
+export async function headObject(args: { key: string }): Promise<StoredObjectMetadata | null> {
+  try {
+    const result = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: args.key }))
+    return {
+      contentLength: result.ContentLength ?? 0,
+      contentType: result.ContentType ?? null,
+      contentDisposition: result.ContentDisposition ?? null,
+      metadata: result.Metadata ?? {},
+      etag: result.ETag ?? null,
+    }
+  } catch (error) {
+    if (isMissingObjectError(error)) return null
+    throw error
+  }
+}
+
+/**
+ * Promote a verified staging object to its immutable attachment key. The copy
+ * deliberately strips the upload-token metadata from the final object.
+ */
+export async function promoteObject(args: {
+  sourceKey: string
+  destinationKey: string
+  contentType: string
+  contentDisposition: 'inline' | 'attachment'
+}): Promise<void> {
+  const source = `${bucket}/${args.sourceKey}`
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      Key: args.destinationKey,
+      CopySource: source,
+      ContentType: args.contentType,
+      ContentDisposition: args.contentDisposition,
+      MetadataDirective: 'REPLACE',
+      Metadata: {},
+      TaggingDirective: 'REPLACE',
+      Tagging: '',
+    }),
+  )
+}
+
+export async function getObjectRange(args: {
+  key: string
+  start: number
+  end: number
+}): Promise<Buffer> {
+  if (args.start < 0 || args.end < args.start) throw new Error('Invalid object byte range')
+  const result = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: args.key,
+      Range: `bytes=${args.start}-${args.end}`,
+    }),
+  )
+  if (!result.Body) throw new Error(`Object not found: ${args.key}`)
+  return Buffer.from(await result.Body.transformToByteArray())
 }
 
 function isMissingObjectError(error: unknown): boolean {
@@ -134,13 +295,7 @@ function isMissingObjectError(error: unknown): boolean {
 }
 
 export async function objectExists(args: { key: string }): Promise<boolean> {
-  try {
-    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: args.key }))
-    return true
-  } catch (error) {
-    if (isMissingObjectError(error)) return false
-    throw error
-  }
+  return (await headObject(args)) !== null
 }
 
 export async function presignExistingGet(args: {
@@ -182,19 +337,41 @@ export async function deleteObject(args: { key: string }): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: args.key }))
 }
 
-export function publicUrl(key: string): string {
-  return `${publicBaseUrl}/${key}`
-}
-
 export function newAttachmentKey(args: {
   tenantId: string
   kind: 'image' | 'document' | 'video' | 'audio' | 'signature' | 'other'
   filename: string
 }): string {
-  const safe = args.filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
-  const stamp = Date.now()
-  const rand = Math.random().toString(36).slice(2, 10)
-  return `t/${args.tenantId}/${args.kind}/${stamp}-${rand}-${safe}`
+  return newTenantObjectKey({
+    tenantId: args.tenantId,
+    scope: args.kind,
+    filename: args.filename,
+  })
+}
+
+export function newPendingUploadKey(args: { tenantId: string; uploadId: string }): string {
+  if (!UUID_RE.test(args.uploadId)) throw new Error('Upload id must be a UUID')
+  return newTenantObjectKey({
+    tenantId: args.tenantId,
+    scope: '_pending',
+    filename: args.uploadId,
+  })
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const SCOPE_RE = /^[a-z0-9_](?:[a-z0-9_/-]*[a-z0-9_])?$/
+
+export function newTenantObjectKey(args: {
+  tenantId: string
+  scope: string
+  filename: string
+}): string {
+  if (!UUID_RE.test(args.tenantId)) throw new Error('Tenant id must be a UUID')
+  if (!SCOPE_RE.test(args.scope) || args.scope.split('/').some((part) => !part || part === '..')) {
+    throw new Error('Object scope is invalid')
+  }
+  const safe = args.filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || 'file'
+  return `t/${args.tenantId}/${args.scope}/${randomUUID()}-${safe}`
 }
 
 export { client as s3Client }

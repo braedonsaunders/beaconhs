@@ -185,10 +185,9 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   }),
   // Turn the submitted response into a LIVE monitored session: a recurring
   // check-in timer that escalates (via the `session_overdue` trigger) if a
-  // check-in is missed past the grace period. This is the native-flow
-  // replacement for the old per-template `schema.monitor` config — pair it with
-  // an `on_submit` trigger. interval/grace/duration can be fixed or bound to a
-  // submitted number field.
+  // check-in is missed past the grace period. Pair it with an `on_submit`
+  // trigger. Interval/grace/duration can be fixed or bound to a submitted
+  // number field.
   z.object({
     action: z.literal('start_monitored_session'),
     intervalMinutes: z.number().int().positive(),
@@ -389,7 +388,12 @@ export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[]
 // step keyed back to the exact node and RESUME the correct branch on a human
 // decision.
 export type PlannedGate = { nodeId: string; gate: GateData }
-export type AutomationPlan = { actions: ActionData[]; gates: PlannedGate[] }
+export type PlannedAction = { nodeId: string; action: ActionData }
+export type AutomationPlan = {
+  actions: ActionData[]
+  actionNodes: PlannedAction[]
+  gates: PlannedGate[]
+}
 
 // Shared traversal: from each start node, collect ordered Actions and pause at
 // Gates. Conditions branch then/else; gates pause (their approve/reject branch
@@ -398,6 +402,7 @@ function collect(graph: AutomationGraph, evalCtx: EvalContext, startIds: string[
   const byId = new Map(graph.nodes.map((n) => [n.id, n]))
   const out = (id: string) => graph.edges.filter((e) => e.source === id)
   const actions: ActionData[] = []
+  const actionNodes: PlannedAction[] = []
   const gates: PlannedGate[] = []
   const seen = new Set<string>()
 
@@ -409,6 +414,7 @@ function collect(graph: AutomationGraph, evalCtx: EvalContext, startIds: string[
     const d = node.data
     if (d.kind === 'action') {
       actions.push(d.action)
+      actionNodes.push({ nodeId: id, action: d.action })
       for (const e of out(id)) walk(e.target)
       return
     }
@@ -428,7 +434,7 @@ function collect(graph: AutomationGraph, evalCtx: EvalContext, startIds: string[
     for (const e of out(id)) walk(e.target)
   }
   for (const id of startIds) walk(id)
-  return { actions, gates }
+  return { actions, actionNodes, gates }
 }
 
 /**
@@ -456,11 +462,18 @@ export function planAutomation(
   graph: AutomationGraph,
   trigger: TriggerData['trigger'],
   evalCtx: EvalContext,
-  opts?: { buttonId?: string; fromStatus?: string | null; toStatus?: string },
+  opts?: {
+    buttonId?: string
+    fromStatus?: string | null
+    toStatus?: string
+    /** Restrict same-kind planning to these exact trigger node ids. */
+    triggerNodeIds?: string[]
+  },
 ): AutomationPlan {
   const startIds: string[] = []
   for (const node of graph.nodes) {
     if (node.data.kind !== 'trigger' || node.data.trigger.trigger !== trigger) continue
+    if (opts?.triggerNodeIds && !opts.triggerNodeIds.includes(node.id)) continue
     const td = node.data.trigger
 
     if (td.trigger === 'manual' && opts?.buttonId !== undefined) {
@@ -474,7 +487,7 @@ export function planAutomation(
 
     startIds.push(node.id)
   }
-  if (startIds.length === 0) return { actions: [], gates: [] }
+  if (startIds.length === 0) return { actions: [], actionNodes: [], gates: [] }
   return collect(graph, evalCtx, startIds)
 }
 

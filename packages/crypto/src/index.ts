@@ -15,13 +15,13 @@ const HKDF_INFO = 'beaconhs.secret.v1'
 
 function sourceSecret(): string {
   const secret = process.env.BETTER_AUTH_SECRET
-  if (secret) return secret
+  if (secret && (process.env.NODE_ENV !== 'production' || secret.length >= 32)) return secret
   // Never let a real deployment seal secrets under a publicly-known key: the
   // ciphertext would be trivially decryptable by anyone with the source. Local
   // dev (NODE_ENV !== 'production') keeps the convenience fallback.
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
-      '[crypto] BETTER_AUTH_SECRET is required in production to seal tenant secrets. ' +
+      '[crypto] BETTER_AUTH_SECRET must contain at least 32 characters in production to seal tenant secrets. ' +
         'Set it to the same value across every service sharing this database.',
     )
   }
@@ -67,8 +67,3 @@ export function unsealSecret(sealed: SealedSecret): string | null {
     return null
   }
 }
-
-// Historical aliases: web/emails/sms called these encryptSecret/decryptSecret.
-// Kept so both naming conventions resolve to the one implementation.
-export const encryptSecret = sealSecret
-export const decryptSecret = unsealSecret

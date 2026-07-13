@@ -12,7 +12,7 @@
 import { eq } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
-import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
+import { getObject, newAttachmentKey, newTenantObjectKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 import { sofficeConvert } from '@beaconhs/office'
 
@@ -70,7 +70,12 @@ export async function renderDocumentVersion(args: {
     const baseName = (data.doc?.key || data.doc?.title || 'document').replace(/[^\w.\- ]+/g, '')
     const filename = `${baseName}-v${data.versionNumber}.pdf`
     const key = newAttachmentKey({ tenantId, kind: 'document', filename })
-    await putObject({ key, body: pdf, contentType: 'application/pdf' })
+    await putObject({
+      key,
+      body: pdf,
+      contentType: 'application/pdf',
+      contentDisposition: 'inline',
+    })
 
     await withTenant(db, tenantId, async (tx) => {
       const [pdfAtt] = await tx
@@ -147,8 +152,17 @@ export async function renderDocumentMasterPdf(args: {
 
   const stamp = Date.now()
   const base = (data.doc.key || data.doc.title || 'document').replace(/[^\w.\- ]+/g, '')
-  const key = `tmp/pdfs/documents/${tenantId}/${documentId}-draft-${stamp}.pdf`
-  await putObject({ key, body: pdf, contentType: 'application/pdf' })
+  const key = newTenantObjectKey({
+    tenantId,
+    scope: '_transient/pdfs/documents',
+    filename: `${documentId}-draft-${stamp}.pdf`,
+  })
+  await putObject({
+    key,
+    body: pdf,
+    contentType: 'application/pdf',
+    contentDisposition: 'inline',
+  })
   console.log(`[document-render] draft pdf ${documentId} rendered (${pdf.length} bytes)`)
   return { r2Key: key, sizeBytes: pdf.length, filename: `${base}-draft.pdf` }
 }

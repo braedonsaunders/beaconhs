@@ -8,6 +8,7 @@
 
 import { datePart, hashRow } from '../transform'
 import type { CanonicalRecord, Connector, ConnectorRunContext, SyncEntityKey } from '../types'
+import { secureFetch } from '../egress'
 
 interface NangoConfig {
   integrationId?: string
@@ -19,7 +20,11 @@ interface NangoConfig {
 
 function host(ctx: ConnectorRunContext): string {
   const cfg = ctx.config as NangoConfig
-  return cfg.host?.trim() || process.env.NANGO_HOST || 'https://api.nango.dev'
+  const configured = cfg.host?.trim()
+  if (configured && !ctx.secrets.secretKey) {
+    throw new Error('A custom Nango host requires a connection-specific secret key.')
+  }
+  return configured || process.env.NANGO_HOST || 'https://api.nango.dev'
 }
 function secretKey(ctx: ConnectorRunContext): string {
   return ctx.secrets.secretKey || process.env.NANGO_SECRET_KEY || ''
@@ -28,11 +33,23 @@ function secretKey(ctx: ConnectorRunContext): string {
 async function nangoFetch(
   ctx: ConnectorRunContext,
   path: string,
-  init?: { method?: string; body?: string; headers?: Record<string, string> },
+  init?: { method?: 'GET' | 'POST'; body?: string; headers?: Record<string, string> },
 ): Promise<Response> {
   const key = secretKey(ctx)
   if (!key) throw new Error('NANGO_SECRET_KEY is not configured on the server.')
-  const res = await fetch(`${host(ctx)}${path}`, {
+  const base = new URL(host(ctx))
+  if (
+    base.protocol !== 'https:' ||
+    base.username ||
+    base.password ||
+    base.pathname !== '/' ||
+    base.search ||
+    base.hash
+  ) {
+    throw new Error('Nango host must be an HTTPS origin without credentials, a path, or a query.')
+  }
+  const url = new URL(path, `${base.origin}/`)
+  const res = await secureFetch(url, {
     method: init?.method ?? 'GET',
     body: init?.body,
     headers: {
@@ -40,6 +57,9 @@ async function nangoFetch(
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
     },
+    timeoutMs: 15_000,
+    maxResponseBytes: 8 * 1024 * 1024,
+    maxRedirects: 1,
   })
   if (!res.ok) {
     const t = await res.text().catch(() => '')
@@ -156,7 +176,7 @@ export const nangoConnector: Connector = {
       label: 'Nango host',
       type: 'text',
       placeholder: 'https://api.nango.dev',
-      help: 'Optional. Defaults to Nango Cloud; set this for a self-hosted Nango.',
+      help: 'Optional public HTTPS origin. A custom host requires its own connection-specific secret key.',
     },
   ],
   secretFields: [
@@ -201,13 +221,17 @@ export const nangoConnector: Connector = {
     const cfg = ctx.config as NangoConfig
     const models = cfg.models ?? {}
     if (!cfg.connectionId || !cfg.integrationId) {
-      ctx.log('warn', 'Nango connection is not fully configured.')
-      return []
+      throw new Error('Nango connection is not fully configured.')
     }
     const connectionId = cfg.connectionId
     const integrationId = cfg.integrationId
+    const entities = (Object.keys(models) as SyncEntityKey[]).filter((entity) =>
+      ['people', 'org_unit', 'equipment'].includes(entity),
+    )
+    if (entities.length === 0) throw new Error('No Nango models are configured for sync.')
     const out: CanonicalRecord[] = []
-    for (const entity of Object.keys(models) as SyncEntityKey[]) {
+    let truncated = false
+    for (const entity of entities) {
       const model = models[entity]
       if (!model) continue
       let cursor: string | null = null
@@ -230,8 +254,16 @@ export const nangoConnector: Connector = {
         cursor = json.next_cursor ?? null
         page++
       } while (cursor && page < 50)
+      if (cursor) {
+        truncated = true
+        ctx.log('warn', `${entity}: stopped at the 50-page safety cap.`)
+      }
       ctx.log('info', `${entity}: pulled from Nango model "${model}".`)
     }
-    return out
+    return {
+      records: out,
+      mode: truncated ? 'incremental' : 'full',
+      authoritativeEntities: entities,
+    }
   },
 }

@@ -1,6 +1,6 @@
 // Barrel for the outbound automation framework (trigger → mapping → destination).
 export * from './types'
-export { runIntegrations } from './run'
+export { publishIntegrationEvent } from './run'
 export { dispatchOne } from './dispatch'
 export type { DispatchCtx } from './dispatch'
 export { listTriggers, getTrigger, sampleItem, TRIGGERS } from './triggers/registry'

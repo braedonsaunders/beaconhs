@@ -6,8 +6,8 @@
 // Conventions:
 //   {{<fieldId>}}          the raw stored value
 //   {{<fieldId>_text}}     human-readable text (pickers → names, joins, …)
-//   {{<fieldId>_image}}    an embeddable image URL (sketch; signature raw
-//                          values are already PNG data URLs)
+//   {{<fieldId>_image}}    an embeddable image URL (sketch; signature values
+//                          are projected to a signed URL at render time)
 //   {{#each <fieldId>}}    photo/file fields — AttachedFile {url, filename}
 //   {{#each <fieldId>_photos}}  photo_ai / photo_annotated attachments
 //   {{#each <sectionId>}}  repeating-section rows keyed by field id

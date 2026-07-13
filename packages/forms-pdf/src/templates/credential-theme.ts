@@ -16,7 +16,7 @@ export function esc(s: string | number | null | undefined): string {
 
 // Tenant branding colours are admin-entered JSON; only let well-formed hex
 // through to the stylesheet.
-export function safeColor(hex: string | null | undefined, fallback: string): string {
+function safeColor(hex: string | null | undefined, fallback: string): string {
   if (hex && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex.trim())) return hex.trim()
   return fallback
 }
@@ -38,7 +38,7 @@ export type CredentialDesignOptions = {
   showSeal?: boolean
 }
 
-export type NormalizedCredentialDesignOptions = Required<CredentialDesignOptions>
+type NormalizedCredentialDesignOptions = Required<CredentialDesignOptions>
 
 const designFormats: CredentialDesignFormat[] = ['letter-landscape', 'letter-portrait', 'wallet']
 const designTemplates: CredentialDesignTemplateId[] = [

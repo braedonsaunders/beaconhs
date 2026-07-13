@@ -1,4 +1,5 @@
 import type { Job } from 'bullmq'
+import { createHash } from 'node:crypto'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import {
@@ -12,9 +13,8 @@ import {
   users,
   webpushSubscriptions,
 } from '@beaconhs/db/schema'
-import { emailQueue, type NotifyJobData } from '@beaconhs/jobs'
-import webpush from 'web-push'
-import { sendSms, sendSmsVia } from '@beaconhs/sms'
+import { enqueueEmail, enqueuePush, type NotifyJobData } from '@beaconhs/jobs'
+import { sendSmsVia } from '@beaconhs/sms'
 import { resolveSmsDelivery } from '../lib/resolve-sms-transport'
 import { appBaseUrl } from '../lib/app-base-url'
 import { escapeHtml } from '../lib/escape-html'
@@ -36,24 +36,13 @@ function msUntilQuietHoursEnd(qh: { start: number; end: number }, now: Date): nu
   return end.getTime() - now.getTime()
 }
 
-const vapidPub = process.env.VAPID_PUBLIC_KEY
-const vapidPriv = process.env.VAPID_PRIVATE_KEY
-if (vapidPub && vapidPriv) {
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT ?? 'mailto:ops@beaconhs.app',
-    vapidPub,
-    vapidPriv,
-  )
-}
-
 export async function processNotification(job: Job<NotifyJobData>): Promise<void> {
   const d = job.data
+  const sourceJobId = String(job.id ?? '')
+  if (!sourceJobId) throw new Error('Notification worker requires a durable BullMQ job id')
   const critical = d.isCritical ?? false
   const requestedUserIds = [...new Set(d.userIds.map((id) => id.trim()).filter(Boolean))]
-  await withTenant(db, d.tenantId, async (tx) => {
-    // Routing policy (Phase 2): per-category channel allow-list + tenant-wide
-    // digest/quiet-hours. Channels configured for the category override the
-    // emitter's defaults; digest + quiet hours defer non-critical email/push.
+  const plan = await withTenant(db, d.tenantId, async (tx) => {
     const [catCfg] = await tx
       .select({ channels: tenantNotificationSettings.channels })
       .from(tenantNotificationSettings)
@@ -78,23 +67,12 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     const quietHours = policy?.quietHours ?? null
     const quietNow = inQuietHours(quietHours, now.getUTCHours())
     const digestOn = (policy?.digestMode ?? 'off') !== 'off'
-    // Non-critical email holds for the digest (the digest scan re-sends it from
-    // the in-app rows). When digest is off and quiet hours are active, the email
-    // is DEFERRED to the end of the quiet window (queue delay), never dropped.
-    // In-app always lands (it's the digest's source) and critical always sends
-    // immediately.
     const emailAllowed = allowed.includes('email') && (critical || !digestOn)
     const emailDelayMs =
       !critical && quietNow && quietHours ? msUntilQuietHoursEnd(quietHours, now) : 0
-    // Push is an immediacy channel: during quiet hours non-critical pushes are
-    // intentionally suppressed (not deferred) — the in-app notification remains
-    // as the record, so nothing is lost and phones stay silent overnight.
     const pushAllowed = allowed.includes('push') && (critical || !quietNow)
     const smsAllowed = allowed.includes('sms')
 
-    // Resolve targets. The queue is a trust boundary: every producer supplies
-    // userIds, so the worker enforces active tenant membership before writing
-    // in-app rows or sending external channels.
     const targets =
       requestedUserIds.length > 0
         ? await tx
@@ -111,9 +89,6 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
         : []
     const targetUserIds = targets.map((target) => target.user.id)
 
-    // Per-user channel preferences for this category — one row per (user,
-    // channel). A missing row means "enabled"; an explicit enabled=false row
-    // opts that user out of that channel for this category.
     const prefRows =
       targetUserIds.length > 0
         ? await tx
@@ -131,156 +106,205 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
               ),
             )
         : []
-    const prefsByUser = new Map<string, Map<string, boolean>>()
-    for (const row of prefRows) {
-      const byChannel = prefsByUser.get(row.userId) ?? new Map<string, boolean>()
-      byChannel.set(row.channel, row.enabled)
-      prefsByUser.set(row.userId, byChannel)
-    }
-    const channelEnabled = (userId: string, channel: 'email' | 'push' | 'sms'): boolean =>
-      prefsByUser.get(userId)?.get(channel) !== false
-
-    // 1. Always insert in_app
     for (const u of targetUserIds) {
-      await tx.insert(notifications).values({
-        tenantId: d.tenantId,
-        userId: u,
-        category: d.category,
-        type: d.type,
-        title: d.title,
-        body: d.body,
-        linkPath: d.linkPath,
-        data: d.data ?? {},
-        isCritical: d.isCritical ?? false,
-      })
+      await tx
+        .insert(notifications)
+        .values({
+          tenantId: d.tenantId,
+          userId: u,
+          category: d.category,
+          type: d.type,
+          title: d.title,
+          body: d.body,
+          linkPath: d.linkPath,
+          data: d.data ?? {},
+          isCritical: d.isCritical ?? false,
+          sourceJobId,
+        })
+        .onConflictDoNothing({
+          target: [notifications.tenantId, notifications.sourceJobId, notifications.userId],
+        })
     }
+    return { targets, prefRows, emailAllowed, emailDelayMs, pushAllowed, smsAllowed }
+  })
 
-    // SMS transport resolved once per job (tenant constant): platform → tenant →
-    // env. Critical-only by design — SMS costs money, so it is reserved for the
-    // notifications a tenant routes to SMS and that are flagged critical.
-    const smsDelivery = critical && smsAllowed ? await resolveSmsDelivery(d.tenantId) : null
-    if (smsDelivery?.kind === 'suppressed') {
-      // Kill switch: record one suppressed row for the whole job (no per-recipient
-      // phone lookups) so the SMS log shows the deliberate non-delivery.
-      const body = d.body ? `${d.title}\n${d.body}` : d.title
-      await tx.insert(smsLog).values({
-        tenantId: d.tenantId,
-        jobId: String(job.id ?? ''),
-        status: 'suppressed',
-        categoryKey: d.category,
-        body,
-        bodyLength: body.length,
-        errorMessage: 'SMS delivery is disabled by the platform administrator.',
-        meta: { recipients: targetUserIds.length },
-      })
-      console.log('[sms] suppressed: SMS is disabled by the platform administrator')
-    }
+  const prefsByUser = new Map<string, Map<string, boolean>>()
+  for (const row of plan.prefRows) {
+    const byChannel = prefsByUser.get(row.userId) ?? new Map<string, boolean>()
+    byChannel.set(row.channel, row.enabled)
+    prefsByUser.set(row.userId, byChannel)
+  }
+  const channelEnabled = (userId: string, channel: 'email' | 'push' | 'sms'): boolean =>
+    prefsByUser.get(userId)?.get(channel) !== false
+  const baseUrl = appBaseUrl()
 
-    // 2. Email + push fan-out
-    const baseUrl = appBaseUrl()
-    for (const t of targets) {
-      if (emailAllowed && channelEnabled(t.user.id, 'email')) {
-        await emailQueue.add(
-          'send',
-          {
-            to: t.user.email,
-            subject: d.title,
-            html: `<p>${escapeHtml(d.body ?? d.title)}</p>${d.linkPath ? `<p><a href="${escapeHtml(`${baseUrl}${d.linkPath}`)}">Open in app</a></p>` : ''}`,
-            text: `${d.body ?? d.title}${d.linkPath ? `\n${baseUrl}${d.linkPath}` : ''}`,
-            meta: { tenantId: d.tenantId, userId: t.user.id, category: d.category },
-          },
-          emailDelayMs > 0 ? { delay: emailDelayMs } : undefined,
-        )
-      }
+  // Publish all email jobs before contacting non-idempotent providers. Queue
+  // ids are deterministic, so a later retry cannot fan out duplicate emails.
+  for (const target of plan.targets) {
+    if (!plan.emailAllowed || !channelEnabled(target.user.id, 'email')) continue
+    await enqueueEmail(
+      {
+        to: target.user.email,
+        subject: d.title,
+        html: `<p>${escapeHtml(d.body ?? d.title)}</p>${d.linkPath ? `<p><a href="${escapeHtml(`${baseUrl}${d.linkPath}`)}">Open in app</a></p>` : ''}`,
+        text: `${d.body ?? d.title}${d.linkPath ? `\n${baseUrl}${d.linkPath}` : ''}`,
+        meta: { tenantId: d.tenantId, userId: target.user.id, category: d.category },
+      },
+      {
+        ...(plan.emailDelayMs > 0 ? { delay: plan.emailDelayMs } : {}),
+        jobId: `notification-email|${createHash('sha256')
+          .update(`${sourceJobId}\0${target.user.id}`)
+          .digest('hex')}`,
+      },
+    )
+  }
 
-      if (pushAllowed && channelEnabled(t.user.id, 'push') && vapidPub && vapidPriv) {
-        const subs = await tx
+  // Push has its own retry queue. One dead endpoint cannot replay in-app,
+  // email, or SMS delivery.
+  if (plan.pushAllowed) {
+    for (const target of plan.targets) {
+      if (!channelEnabled(target.user.id, 'push')) continue
+      const subscriptions = await withTenant(db, d.tenantId, (tx) =>
+        tx
           .select()
           .from(webpushSubscriptions)
-          .where(eq(webpushSubscriptions.userId, t.user.id))
-        for (const sub of subs) {
-          try {
-            await webpush.sendNotification(
-              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-              JSON.stringify({ title: d.title, body: d.body, linkPath: d.linkPath }),
-            )
-          } catch (err) {
-            const statusCode = (err as { statusCode?: number }).statusCode
-            if (statusCode === 404 || statusCode === 410) {
-              // Endpoint gone (unsubscribed or expired) — prune it so we stop
-              // retrying a dead subscription on every future notification.
-              await tx.delete(webpushSubscriptions).where(eq(webpushSubscriptions.id, sub.id))
-            } else {
-              const msg = err instanceof Error ? err.message : String(err)
-              console.warn(`[push] failed for ${t.user.email}: ${msg}`)
-            }
-          }
-        }
+          .where(eq(webpushSubscriptions.userId, target.user.id)),
+      )
+      for (const subscription of subscriptions) {
+        const pushJobId = `notification-push|${createHash('sha256')
+          .update(`${sourceJobId}\0${subscription.id}`)
+          .digest('hex')}`
+        await enqueuePush(
+          {
+            tenantId: d.tenantId,
+            userId: target.user.id,
+            subscriptionId: subscription.id,
+            title: d.title,
+            body: d.body,
+            linkPath: d.linkPath,
+          },
+          pushJobId,
+        )
       }
+    }
+  }
 
-      // SMS via the resolved provider (tenant → platform → env Twilio fallback).
-      // Every attempt is written to sms_log so the support team can answer "did
-      // X get the text?" — mirrors the email_log audit trail.
-      if (smsDelivery && smsDelivery.kind !== 'suppressed' && channelEnabled(t.user.id, 'sms')) {
-        const via = smsDelivery.kind === 'transport' ? smsDelivery.transport.provider : 'env'
-        const text = (d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1500)
-        const [person] = await tx
+  const smsDelivery = critical && plan.smsAllowed ? await resolveSmsDelivery(d.tenantId) : null
+  if (smsDelivery?.kind === 'suppressed') {
+    const [existing] = await withTenant(db, d.tenantId, (tx) =>
+      tx
+        .select({ id: smsLog.id })
+        .from(smsLog)
+        .where(and(eq(smsLog.jobId, sourceJobId), eq(smsLog.status, 'suppressed')))
+        .limit(1),
+    )
+    if (!existing) {
+      const body = d.body ? `${d.title}\n${d.body}` : d.title
+      await withTenant(db, d.tenantId, (tx) =>
+        tx.insert(smsLog).values({
+          tenantId: d.tenantId,
+          jobId: sourceJobId,
+          status: 'suppressed',
+          categoryKey: d.category,
+          body,
+          bodyLength: body.length,
+          errorMessage: 'SMS delivery is disabled by the platform administrator.',
+          meta: { recipients: plan.targets.length },
+        }),
+      )
+    }
+    return
+  }
+
+  const smsFailures: string[] = []
+  if (smsDelivery) {
+    const via = smsDelivery.kind === 'transport' ? smsDelivery.transport.provider : 'unconfigured'
+    const text = (d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1500)
+    for (const target of plan.targets) {
+      if (!channelEnabled(target.user.id, 'sms')) continue
+      const [person] = await withTenant(db, d.tenantId, (tx) =>
+        tx
           .select({ phone: people.phone })
           .from(people)
-          .where(eq(people.userId, t.user.id))
-          .limit(1)
-        const phone = person?.phone?.trim()
-        if (!phone) {
-          await tx.insert(smsLog).values({
+          .where(and(eq(people.tenantId, d.tenantId), eq(people.userId, target.user.id)))
+          .limit(1),
+      )
+      const phone = person?.phone?.trim()
+      if (!phone) {
+        await withTenant(db, d.tenantId, (tx) =>
+          tx.insert(smsLog).values({
             tenantId: d.tenantId,
-            jobId: String(job.id ?? ''),
+            jobId: sourceJobId,
             provider: via,
             status: 'skipped',
             categoryKey: d.category,
             body: text,
             bodyLength: text.length,
             errorMessage: 'No phone number on file for this user.',
-            meta: { userEmail: t.user.email },
-          })
-          console.log(`[sms] skipped: no phone on file for ${t.user.email}`)
-        } else {
-          try {
-            const result =
-              smsDelivery.kind === 'transport'
-                ? await sendSmsVia(smsDelivery.transport, { to: phone, body: text })
-                : await sendSms({ to: phone, body: text })
-            await tx.insert(smsLog).values({
-              tenantId: d.tenantId,
-              jobId: String(job.id ?? ''),
-              provider: via,
-              providerMessageId: result.id || null,
-              recipient: phone,
-              status: 'sent',
-              categoryKey: d.category,
-              body: text,
-              bodyLength: text.length,
-              sentAt: new Date(),
-              meta: { userEmail: t.user.email },
-            })
-            console.log(`[sms] sent ${result.id || '(no id)'} to ${t.user.email} via ${via}`)
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            await tx.insert(smsLog).values({
-              tenantId: d.tenantId,
-              jobId: String(job.id ?? ''),
-              provider: via,
-              recipient: phone,
-              status: 'failed',
-              categoryKey: d.category,
-              body: text,
-              bodyLength: text.length,
-              errorMessage: msg,
-              meta: { userEmail: t.user.email },
-            })
-            console.warn(`[sms] failed for ${t.user.email}: ${msg}`)
-          }
+            meta: { userEmail: target.user.email },
+          }),
+        )
+        continue
+      }
+      const [alreadySent] = await withTenant(db, d.tenantId, (tx) =>
+        tx
+          .select({ id: smsLog.id })
+          .from(smsLog)
+          .where(
+            and(
+              eq(smsLog.jobId, sourceJobId),
+              eq(smsLog.recipient, phone),
+              eq(smsLog.status, 'sent'),
+            ),
+          )
+          .limit(1),
+      )
+      if (alreadySent) continue
+      try {
+        if (smsDelivery.kind !== 'transport') {
+          throw new Error(
+            'SMS delivery is not configured. Configure a platform or tenant SMS provider.',
+          )
         }
+        const sent = await sendSmsVia(smsDelivery.transport, { to: phone, body: text })
+        await withTenant(db, d.tenantId, (tx) =>
+          tx.insert(smsLog).values({
+            tenantId: d.tenantId,
+            jobId: sourceJobId,
+            provider: via,
+            providerMessageId: sent.id || null,
+            recipient: phone,
+            status: 'sent',
+            categoryKey: d.category,
+            body: text,
+            bodyLength: text.length,
+            sentAt: new Date(),
+            meta: { userEmail: target.user.email },
+          }),
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        smsFailures.push(`${target.user.email}: ${message}`)
+        await withTenant(db, d.tenantId, (tx) =>
+          tx.insert(smsLog).values({
+            tenantId: d.tenantId,
+            jobId: sourceJobId,
+            provider: via,
+            recipient: phone,
+            status: 'failed',
+            categoryKey: d.category,
+            body: text,
+            bodyLength: text.length,
+            errorMessage: message,
+            meta: { userEmail: target.user.email },
+          }),
+        )
       }
     }
-  })
+  }
+  if (smsFailures.length > 0) {
+    throw new Error(
+      `SMS delivery failed for ${smsFailures.length} recipient(s): ${smsFailures.join('; ')}`,
+    )
+  }
 }

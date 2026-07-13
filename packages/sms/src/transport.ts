@@ -7,7 +7,7 @@
 // the network send, switching on provider. Every provider goes through `fetch`
 // (no SDKs), so the package stays dependency-free and bundles into the worker.
 
-import { decryptSecret } from '@beaconhs/crypto'
+import { unsealSecret } from '@beaconhs/crypto'
 import type { SmsProvider } from './providers'
 
 export type SendSmsInput = {
@@ -109,7 +109,7 @@ export function resolveSmsTransport(raw: RawSmsConfig | null | undefined): SmsTr
   if (!raw || !raw.provider || raw.enabled === false) return null
   let secret: string | undefined
   if (raw.keyCiphertext && raw.keyNonce) {
-    secret = decryptSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce }) ?? undefined
+    secret = unsealSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce }) ?? undefined
   }
   return buildSmsTransport({ ...raw, secret })
 }
@@ -118,7 +118,7 @@ export function resolveSmsTransport(raw: RawSmsConfig | null | undefined): SmsTr
 export type EffectiveSms =
   | { kind: 'suppressed' }
   | { kind: 'transport'; transport: SmsTransport; source: 'tenant' | 'platform' }
-  | { kind: 'fallback' }
+  | { kind: 'unconfigured' }
 
 /**
  * The platform → tenant → env resolution policy, as a pure function so it can be
@@ -127,9 +127,9 @@ export type EffectiveSms =
  * is never used to send a non-tenant message.
  *
  *   mode 'disabled'        → suppressed (kill switch; do not send, do not retry)
- *   mode 'global_only'     → platform provider, else env fallback
+ *   mode 'global_only'     → platform provider, else configuration error
  *   mode 'tenant_optional' → tenant provider (if scoped + configured),
- *                            else platform provider, else env fallback
+ *                            else platform provider, else configuration error
  */
 export function resolveEffectiveSmsTransport(
   platform: PlatformSmsConfig | null | undefined,
@@ -143,7 +143,7 @@ export function resolveEffectiveSmsTransport(
   if (mode === 'global_only') {
     return platformTransport
       ? { kind: 'transport', transport: platformTransport, source: 'platform' }
-      : { kind: 'fallback' }
+      : { kind: 'unconfigured' }
   }
 
   // tenant_optional
@@ -153,7 +153,7 @@ export function resolveEffectiveSmsTransport(
   }
   if (platformTransport)
     return { kind: 'transport', transport: platformTransport, source: 'platform' }
-  return { kind: 'fallback' }
+  return { kind: 'unconfigured' }
 }
 
 // ---------------------------------------------------------------------------

@@ -243,7 +243,7 @@ export async function importSlidesFromPptx(args: {
         kind: 'image',
         filename: `${baseName}-slide-${i + 1}.png`,
       })
-      await putObject({ key, body: png, contentType: 'image/png' })
+      await putObject({ key, body: png, contentType: 'image/png', contentDisposition: 'inline' })
       const attachmentRowId = await withTenant(db, tenantId, async (tx) => {
         const [row] = await tx
           .insert(attachments)

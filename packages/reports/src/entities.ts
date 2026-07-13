@@ -137,7 +137,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'expires_on', direction: 'asc' },
   },
   {
-    key: 'inspections',
+    key: 'inspection_records',
     label: 'Inspection records',
     category: 'inspections',
     description: 'Inspection records performed against an inspection_type.',
@@ -162,14 +162,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     columns: [
       { key: 'key', label: 'Document key', kind: 'text' },
       { key: 'title', label: 'Title', kind: 'text' },
-      { key: 'category', label: 'Category', kind: 'enum' },
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'next_review_on', label: 'Next review on', kind: 'date' },
     ],
     defaultSort: { column: 'next_review_on', direction: 'asc' },
   },
   {
-    key: 'equipment',
+    key: 'equipment_items',
     label: 'Equipment',
     category: 'equipment',
     description: 'Equipment items in the fleet.',
@@ -290,7 +289,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'month', direction: 'desc' },
   },
   {
-    key: 'ppe',
+    key: 'ppe_items',
     label: 'PPE items',
     category: 'ppe',
     description: 'Individual PPE assets.',
@@ -308,38 +307,6 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'expires_on', label: 'Expires on', kind: 'date' },
     ],
     defaultSort: { column: 'next_inspection_due', direction: 'asc' },
-  },
-  {
-    key: 'form_responses',
-    label: 'Form responses',
-    category: 'forms',
-    description:
-      'Submitted form responses across all templates (JSHA, toolbox, inspections, custom).',
-    table: 'form_responses',
-    softDelete: true,
-    columns: [
-      { key: 'template_id', label: 'Template (id)', kind: 'uuid' },
-      { key: 'status', label: 'Status', kind: 'enum' },
-      { key: 'compliance_status', label: 'Compliance', kind: 'enum' },
-      { key: 'submitted_at', label: 'Submitted at', kind: 'timestamp' },
-      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'uuid' },
-    ],
-    defaultSort: { column: 'submitted_at', direction: 'desc' },
-  },
-  {
-    key: 'form_participants',
-    label: 'Form participants',
-    category: 'forms',
-    description: 'Who participated in / signed which forms (replaces toolbox attendees).',
-    table: 'form_response_participants',
-    columns: [
-      { key: 'person_id', label: 'Person (id)', kind: 'uuid' },
-      { key: 'template_id', label: 'Template (id)', kind: 'uuid' },
-      { key: 'category', label: 'Category', kind: 'enum' },
-      { key: 'signed', label: 'Signed', kind: 'enum' },
-      { key: 'occurred_on', label: 'Occurred on', kind: 'date' },
-    ],
-    defaultSort: { column: 'occurred_on', direction: 'desc' },
   },
   {
     key: 'training_matrix',

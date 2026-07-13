@@ -292,11 +292,24 @@ export const databaseConnector: Connector = {
         { value: 'mssql', label: 'SQL Server (MSSQL)' },
       ],
     },
-    { key: 'host', label: 'Host', type: 'text', required: true, placeholder: 'db.example.com' },
+    {
+      key: 'host',
+      label: 'Host',
+      type: 'text',
+      required: true,
+      placeholder: 'db.example.com',
+      help: 'Must be a public DNS name. Local, private, and IP-literal hosts are blocked.',
+    },
     { key: 'port', label: 'Port', type: 'number', placeholder: '5432 / 3306 / 1433' },
     { key: 'database', label: 'Database', type: 'text', required: true },
     { key: 'username', label: 'Username', type: 'text', required: true },
-    { key: 'ssl', label: 'Use SSL/TLS', type: 'boolean' },
+    {
+      key: 'ssl',
+      label: 'Use SSL/TLS',
+      type: 'boolean',
+      required: true,
+      help: 'Required. The database certificate must be valid for the host name above.',
+    },
   ],
   secretFields: [{ key: 'password', label: 'Password', required: true }],
 
@@ -338,8 +351,7 @@ export const databaseConnector: Connector = {
       (e) => mappingList(mappings, e).length > 0,
     )
     if (entities.length === 0) {
-      ctx.log('warn', 'No table mappings configured.')
-      return []
+      throw new Error('No table mappings configured.')
     }
     const conn = await open(ctx)
     const out: CanonicalRecord[] = []
@@ -375,6 +387,7 @@ export const databaseConnector: Connector = {
       records: out,
       nextCursor: hasCursorMapping ? nextCursor : undefined,
       mode: hasCursorMapping && usedCursor ? 'incremental' : 'full',
+      authoritativeEntities: entities,
     }
   },
 }

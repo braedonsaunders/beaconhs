@@ -35,7 +35,7 @@ export function resolveText(tpl: string, item: Item): string {
 
 // Collect the token keys referenced in a template — used to validate a mapping
 // against the selected trigger's fields.
-export function tokensIn(tpl: string): string[] {
+function tokensIn(tpl: string): string[] {
   const out = new Set<string>()
   for (const m of tpl.matchAll(ANY)) if (m[1]) out.add(m[1])
   return [...out]
