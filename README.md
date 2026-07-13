@@ -63,8 +63,9 @@ your safety program.**
   visualization suite, shareable dashboards) ships in-app — no third-party
   Metabase to bolt on.
 - **An audit trail by default.** Every mutation writes a before/after diff.
-- **Field-first.** Mobile-first UI for crews on site, offline-tolerant
-  save-and-resume drafts, QR-driven equipment and kiosk flows.
+- **Field-first.** Mobile-first UI for crews on site. The app is online-only;
+  continuous autosave and resumable drafts protect work through intermittent
+  connections, alongside QR-driven equipment and kiosk flows.
 
 ## Features
 
@@ -255,6 +256,8 @@ Sign in as the seeded super-admin `admin@beaconhs.local` via the **Magic link**
 tab — the link arrives in Mailpit.
 
 Full details, ports, and gotchas: **[`docs/QUICKSTART.md`](docs/QUICKSTART.md)**.
+Production backup, restore, deployment, and incident procedures:
+**[`docs/PRODUCTION_RUNBOOK.md`](docs/PRODUCTION_RUNBOOK.md)**.
 
 > [!TIP]
 > AI providers, model, and API key are configured **per tenant** in

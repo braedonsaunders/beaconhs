@@ -11,19 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
         env:
-          POSTGRES_USER: beaconhs
-          POSTGRES_PASSWORD: beaconhs
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: beaconhs_test
         ports: ['5432:5432']
         options: >-
-          --health-cmd="pg_isready -U beaconhs"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=10
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
         ports: ['6379:6379']
         options: >-
           --health-cmd="redis-cli ping"
@@ -31,26 +31,54 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      DATABASE_URL: postgresql://beaconhs:beaconhs@localhost:5432/beaconhs_test
+      DATABASE_URL: postgresql://beaconhs_app:beaconhs_app@localhost:5432/beaconhs_test
+      MIGRATION_DATABASE_URL: postgresql://beaconhs_migrator:beaconhs_migrator@localhost:5432/beaconhs_test
+      SUPERADMIN_DATABASE_URL: postgresql://beaconhs_super:beaconhs_super@localhost:5432/beaconhs_test
+      DATABASE_OWNER_ROLE: beaconhs_owner
+      DATABASE_BACKUP_ROLE: beaconhs_backup
       REDIS_URL: redis://localhost:6379
       BETTER_AUTH_SECRET: ci-secret-not-used-in-prod
+      ATTACHMENT_CAPABILITY_SECRET: ci-attachment-capability-secret-32-chars
       BETTER_AUTH_URL: http://localhost:3000
       APP_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       # No version here — package.json's packageManager field pins pnpm; passing
       # both errors "Multiple versions of pnpm specified". Node 24 matches the
       # deploy image and package engines.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Provision isolated owner, migration, and RLS roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE beaconhs_owner NOLOGIN NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE beaconhs_migrator LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS PASSWORD 'beaconhs_migrator';
+          CREATE ROLE beaconhs_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS PASSWORD 'beaconhs_app';
+          CREATE ROLE beaconhs_super LOGIN NOINHERIT NOSUPERUSER BYPASSRLS PASSWORD 'beaconhs_super';
+          CREATE ROLE beaconhs_backup LOGIN NOINHERIT NOSUPERUSER BYPASSRLS PASSWORD 'beaconhs_backup';
+          ALTER ROLE beaconhs_backup SET default_transaction_read_only = 'on';
+          GRANT beaconhs_owner TO beaconhs_migrator;
+          ALTER DATABASE beaconhs_test OWNER TO beaconhs_owner;
+          REVOKE ALL ON DATABASE beaconhs_test FROM PUBLIC;
+          GRANT CONNECT ON DATABASE beaconhs_test TO beaconhs_migrator, beaconhs_app, beaconhs_super, beaconhs_backup;
+          \connect beaconhs_test
+          ALTER SCHEMA public OWNER TO beaconhs_owner;
+          REVOKE ALL ON SCHEMA public FROM PUBLIC;
+          SQL
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm db:push:ci
+      - run: pnpm deadcode:check
+      - name: Apply the production migration path
+        run: pnpm --filter @beaconhs/db exec tsx src/migrate.ts
+      - name: Prove migrations are idempotent
+        run: pnpm --filter @beaconhs/db exec tsx src/migrate.ts
       - run: pnpm test
       - run: pnpm build
 

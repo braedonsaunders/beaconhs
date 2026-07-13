@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+# Exact non-secret expressions that otherwise trip the generic-api-key rule.
+# Keep this narrow so a real storage key or capability value is still blocked.
+[[allowlists]]
+description = "Drizzle column references and the public CI-only capability fixture"
+regexTarget = "secret"
+regexes = [
+  '''^(?:attachments|reservation)\.r2Key$''',
+  '''^ci-attachment-capability-secret-32-chars$''',
+]

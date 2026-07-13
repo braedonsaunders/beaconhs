@@ -8,15 +8,17 @@ services:
     profiles:
       - local-db
     environment:
-      POSTGRES_USER: beaconhs
-      POSTGRES_PASSWORD: beaconhs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: beaconhs
     ports:
       - '5433:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./scripts/cluster/local-init.sh:/docker-entrypoint-initdb.d/10-beaconhs-roles.sh:ro
+      - ./scripts/cluster/provision.sql:/opt/beaconhs/provision.sql:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U beaconhs -d beaconhs']
+      test: ['CMD-SHELL', 'pg_isready -U beaconhs_app -d beaconhs']
       interval: 5s
       timeout: 5s
       retries: 10

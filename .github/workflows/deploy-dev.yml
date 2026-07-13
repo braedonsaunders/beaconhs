@@ -31,6 +31,7 @@ jobs:
   rotate-compose-refresh-token:
     name: Rotate Dokploy compose refresh token
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'rotate-compose-refresh-token'
+    permissions: {}
     runs-on: [self-hosted, dokploy]
     timeout-minutes: 5
     steps:
@@ -76,26 +77,132 @@ jobs:
           fi
           echo "Dokploy compose refresh token rotated and verified"
 
+  preflight:
+    name: Validate dev deployment contract
+    if: github.event_name == 'workflow_call'
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DEV_APP_URL: ${{ secrets.DEV_APP_URL }}
+      DEV_ATTACHMENT_CAPABILITY_SECRET: ${{ secrets.DEV_ATTACHMENT_CAPABILITY_SECRET }}
+      DEV_BETTER_AUTH_SECRET: ${{ secrets.DEV_BETTER_AUTH_SECRET }}
+      DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+      DEV_MIGRATION_DATABASE_URL: ${{ secrets.DEV_MIGRATION_DATABASE_URL }}
+      DEV_REDIS_URL: ${{ secrets.DEV_REDIS_URL }}
+      DEV_SUPERADMIN_DATABASE_URL: ${{ secrets.DEV_SUPERADMIN_DATABASE_URL }}
+      DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+      DOKPLOY_REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
+      DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_PRIVATE_BUCKET_CONFIRMED: ${{ secrets.R2_PRIVATE_BUCKET_CONFIRMED }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+    steps:
+      - name: Validate required names without printing values
+        run: |
+          set -euo pipefail
+          required=(
+            DEV_APP_URL DEV_ATTACHMENT_CAPABILITY_SECRET DEV_BETTER_AUTH_SECRET
+            DEV_DATABASE_URL DEV_MIGRATION_DATABASE_URL DEV_REDIS_URL
+            DEV_SUPERADMIN_DATABASE_URL DOKPLOY_COMPOSE_ID DOKPLOY_REGISTRY_ID
+            DOKPLOY_TOKEN DOKPLOY_URL R2_ACCESS_KEY_ID R2_BUCKET R2_ENDPOINT
+            R2_SECRET_ACCESS_KEY RESEND_API_KEY VAPID_PRIVATE_KEY VAPID_PUBLIC_KEY
+            VAPID_SUBJECT
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            for name in "${missing[@]}"; do
+              echo "::error::Required deployment secret ${name} is missing"
+            done
+            exit 1
+          fi
+
+          case "$R2_ENDPOINT" in
+            *r2.cloudflarestorage.com*)
+              if [ "$R2_PRIVATE_BUCKET_CONFIRMED" != true ]; then
+                echo "::error::R2_PRIVATE_BUCKET_CONFIRMED must be exactly true after every R2 public development/custom domain has been disabled"
+                exit 1
+              fi
+              ;;
+          esac
+          if [ "${#DEV_ATTACHMENT_CAPABILITY_SECRET}" -lt 32 ]; then
+            echo "::error::DEV_ATTACHMENT_CAPABILITY_SECRET must contain at least 32 characters"
+            exit 1
+          fi
+          if [ "${#DEV_BETTER_AUTH_SECRET}" -lt 32 ]; then
+            echo "::error::DEV_BETTER_AUTH_SECRET must contain at least 32 characters"
+            exit 1
+          fi
+          if [ "$DEV_DATABASE_URL" = "$DEV_MIGRATION_DATABASE_URL" ] \
+            || [ "$DEV_DATABASE_URL" = "$DEV_SUPERADMIN_DATABASE_URL" ] \
+            || [ "$DEV_MIGRATION_DATABASE_URL" = "$DEV_SUPERADMIN_DATABASE_URL" ]; then
+            echo "::error::Runtime, migration, and cross-tenant database credentials must be distinct"
+            exit 1
+          fi
+          if [ "$DEV_BETTER_AUTH_SECRET" = "$DEV_ATTACHMENT_CAPABILITY_SECRET" ]; then
+            echo "::error::Authentication and attachment-capability secrets must be distinct"
+            exit 1
+          fi
+          case "$DEV_APP_URL" in https://*) ;; *) echo "::error::DEV_APP_URL must use HTTPS"; exit 1 ;; esac
+          case "$DOKPLOY_URL" in https://*) ;; *) echo "::error::DOKPLOY_URL must use HTTPS"; exit 1 ;; esac
+          case "$R2_ENDPOINT" in https://*) ;; *) echo "::error::R2_ENDPOINT must use HTTPS"; exit 1 ;; esac
+          for name in DEV_DATABASE_URL DEV_MIGRATION_DATABASE_URL DEV_SUPERADMIN_DATABASE_URL; do
+            case "${!name}" in
+              postgres://*|postgresql://*) ;;
+              *) echo "::error::${name} must be a PostgreSQL URL"; exit 1 ;;
+            esac
+          done
+          case "$DEV_REDIS_URL" in
+            redis://*|rediss://*) ;;
+            *) echo "::error::DEV_REDIS_URL must be a Redis URL"; exit 1 ;;
+          esac
+          case "$VAPID_SUBJECT" in
+            mailto:*|https://*) ;;
+            *) echo "::error::VAPID_SUBJECT must use mailto: or HTTPS"; exit 1 ;;
+          esac
+          if [ -z "$SENTRY_DSN" ]; then
+            echo "::warning::SENTRY_DSN is not configured; dev error monitoring will be inactive"
+          fi
+          echo "Deployment secret contract passed"
+
   build:
     if: github.event_name == 'workflow_call'
+    needs: preflight
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:dev
           cache-from: type=gha
+          build-args: |
+            NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
           # ignore-error: the GHA cache backend intermittently fails the blob
           # write ("error writing layer blob: not_found") AFTER the image is
           # already pushed — don't let a cache hiccup fail the build/deploy.
@@ -103,27 +210,53 @@ jobs:
 
   deploy:
     needs: build
+    permissions:
+      contents: read
+      packages: read
     runs-on: [self-hosted, dokploy]
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       # No version here — package.json's packageManager field pins pnpm, and
       # passing both errors with "Multiple versions of pnpm specified".
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24.18.0 }
       - run: pnpm install --frozen-lockfile
 
-      - name: Migrate (schema + RLS + views)
+      - name: Verify Dokploy control-plane target before downtime
         env:
-          # Migrations + DDL connect DIRECT to Postgres (not the PgBouncer
-          # pooler) as the table owner. migrate.ts prefers DIRECT_DATABASE_URL.
-          DIRECT_DATABASE_URL: ${{ secrets.DEV_DIRECT_DATABASE_URL }}
-          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
-        run: pnpm --filter @beaconhs/db exec tsx src/migrate.ts
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::docker CLI not present on runner (socket mount expected)"
+            exit 1
+          fi
+          manager_arch="$(docker info --format '{{.Architecture}}')"
+          case "$manager_arch" in
+            x86_64|amd64) ;;
+            *)
+              echo "::error::Dokploy manager architecture is unsupported; BeaconHS requires linux/amd64 for the pinned Chrome and Collabora runtimes"
+              exit 1
+              ;;
+          esac
+          response="$(mktemp)"
+          trap 'rm -f "$response"' EXIT
+          curl -sS --fail -G -o "$response" "${DOKPLOY_URL%/}/api/compose.one" \
+            -H "x-api-key: $DOKPLOY_TOKEN" \
+            --data-urlencode "composeId=$COMPOSE_ID"
+          if ! jq -e --arg id "$COMPOSE_ID" '.composeId == $id' "$response" >/dev/null; then
+            echo "::error::Dokploy compose.one did not return the configured compose target"
+            exit 1
+          fi
+          echo "Dokploy credentials and compose target verified"
 
-      # Ensure the deployment host can pull the just-built image before
-      # updating Dokploy's stored compose definition.
+      # Prove the deployment host can pull the just-built image before taking
+      # any existing application-database writers offline.
       - name: Pre-pull image onto swarm manager
         env:
           GHCR_USER: ${{ github.actor }}
@@ -136,6 +269,295 @@ jobs:
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           docker pull "${IMAGE_NAME}:${GITHUB_SHA}"
           docker image inspect "${IMAGE_NAME}:${GITHUB_SHA}" --format 'pulled {{.Id}}'
+
+      # Prepare the host bind mount before database downtime. coolwsd caches
+      # browser assets at startup, so a changed file also restarts the current
+      # Collabora service while the existing app is still fully available.
+      - name: Install Collabora branding on the swarm manager
+        run: |
+          set -euo pipefail
+          before="$(docker run --rm -v /etc/dokploy/beaconhs:/target alpine:3@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b \
+            sh -c 'sha256sum /target/collabora-branding.js 2>/dev/null | cut -d" " -f1' || true)"
+          docker run --rm -i -v /etc/dokploy/beaconhs:/target alpine:3@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b \
+            sh -c 'cat > /target/collabora-branding.js && chmod 0644 /target/collabora-branding.js' \
+            < deploy/collabora-branding.js
+          after="$(sha256sum deploy/collabora-branding.js | cut -d' ' -f1)"
+          echo "branding installed ($(wc -c < deploy/collabora-branding.js) bytes)"
+          if [ "$before" != "$after" ]; then
+            services="$(docker service ls --format '{{.Name}}' | grep -E '_collabora$' || true)"
+            count="$(printf '%s\n' "$services" | awk 'NF { count++ } END { print count + 0 }')"
+            if [ "$count" -gt 1 ]; then
+              echo "::error::multiple Collabora services found; refusing an ambiguous restart"
+              exit 1
+            fi
+            if [ "$count" -eq 1 ]; then
+              echo "branding changed — restarting the current Collabora service"
+              docker service update --force "$services" >/dev/null
+            else
+              echo "No existing Collabora service found; the new deployment will load the branding"
+            fi
+          else
+            echo "branding unchanged — no restart needed"
+          fi
+
+      - name: Drain database writers and migrate (schema + RLS + views)
+        env:
+          # The unpooled migrator login can SET ROLE to a NOLOGIN owner. Neither
+          # credential reaches the long-running deployment containers.
+          MIGRATION_DATABASE_URL: ${{ secrets.DEV_MIGRATION_DATABASE_URL }}
+          DATABASE_OWNER_ROLE: beaconhs_owner
+          SUPERADMIN_DATABASE_URL: ${{ secrets.DEV_SUPERADMIN_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::docker CLI not present on runner (socket mount expected)"
+            exit 1
+          fi
+          if [ "$(docker info --format '{{.Swarm.LocalNodeState}}')" != active ]; then
+            echo "::error::deployment runner is not attached to an active Docker Swarm"
+            exit 1
+          fi
+
+          # Persist only service names, roles, and replica counts. The file is
+          # private to this run on the self-hosted runner and is always removed.
+          state_file="${RUNNER_TEMP}/beaconhs-writer-replicas-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tsv"
+          : > "$state_file"
+          chmod 0600 "$state_file"
+          drain_started=false
+          safe_to_restore=true
+
+          migration_ledger_fingerprint() {
+            pnpm --silent --filter @beaconhs/db exec tsx -e '
+              import postgres from "postgres";
+              (async () => {
+                const url = process.env.MIGRATION_DATABASE_URL;
+                const role = process.env.DATABASE_OWNER_ROLE;
+                if (!url) throw new Error("MIGRATION_DATABASE_URL is required");
+                if (
+                  !role ||
+                  role.length > 63 ||
+                  !/^[a-z_]/.test(role) ||
+                  /[^a-z0-9_]/.test(role)
+                ) {
+                  throw new Error("DATABASE_OWNER_ROLE is invalid");
+                }
+                const client = postgres(url, { max: 1, prepare: false });
+                try {
+                  await client.unsafe("SET ROLE \"" + role + "\"");
+                  const quote = String.fromCharCode(39);
+                  const [{ tracker }] = await client.unsafe(
+                    "select to_regclass(" +
+                      quote +
+                      "drizzle.__drizzle_migrations" +
+                      quote +
+                      ")::text as tracker",
+                  );
+                  if (!tracker) {
+                    process.stdout.write("absent");
+                  } else {
+                    const rows = await client.unsafe(
+                      "select id, hash, created_at::text as created_at " +
+                        "from drizzle.__drizzle_migrations order by created_at, id",
+                    );
+                    process.stdout.write(JSON.stringify(rows));
+                  }
+                } finally {
+                  await client.end();
+                }
+              })().catch((error) => {
+                console.error(error);
+                process.exitCode = 1;
+              });
+            '
+          }
+
+          running_tasks() {
+            docker service ps --no-trunc --filter desired-state=running \
+              --format '{{.CurrentState}}' "$1" \
+              | awk '$1 == "Running" { count++ } END { print count + 0 }'
+          }
+
+          wait_for_drain() {
+            local service deadline desired active
+            service="$1"
+            deadline=$((SECONDS + 180))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              desired="$(docker service inspect --format '{{.Spec.Mode.Replicated.Replicas}}' "$service")"
+              active="$(docker service ps --no-trunc --filter desired-state=running -q "$service")"
+              if [ "$desired" = 0 ] && [ -z "$active" ]; then
+                return 0
+              fi
+              sleep 2
+            done
+            echo "::error::service ${service} did not drain within 3 minutes"
+            docker service ps --no-trunc \
+              --format '{{.Name}} | {{.DesiredState}} | {{.CurrentState}} | {{.Error}}' \
+              "$service" || true
+            return 1
+          }
+
+          wait_for_restore() {
+            local role service replicas deadline desired running all_restored
+            deadline=$((SECONDS + 180))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              all_restored=true
+              while IFS=$'\t' read -r role service replicas; do
+                [ -n "$service" ] || continue
+                desired="$(docker service inspect --format '{{.Spec.Mode.Replicated.Replicas}}' "$service" 2>/dev/null || true)"
+                if [ "$desired" != "$replicas" ]; then
+                  all_restored=false
+                  continue
+                fi
+                # The scheduler is intentionally one-shot and may complete
+                # before this check; matching its desired count is sufficient.
+                if [ "$role" != scheduler ] && [ "$replicas" -gt 0 ]; then
+                  running="$(running_tasks "$service")"
+                  if [ "$running" -lt "$replicas" ]; then
+                    all_restored=false
+                  fi
+                fi
+              done < "$state_file"
+              if [ "$all_restored" = true ]; then
+                return 0
+              fi
+              sleep 3
+            done
+            return 1
+          }
+
+          restore_previous_replicas() {
+            local role service replicas restore_failed
+            restore_failed=false
+            echo "::warning::migration did not complete; restoring the previous writer replica counts"
+            while IFS=$'\t' read -r role service replicas; do
+              [ -n "$service" ] || continue
+              if ! docker service scale "${service}=${replicas}" >/dev/null; then
+                echo "::error::failed to restore ${service} to ${replicas} replicas"
+                restore_failed=true
+              fi
+            done < "$state_file"
+            if [ "$restore_failed" = false ] && wait_for_restore; then
+              echo "Previous web, worker, and scheduler replica counts restored"
+              return 0
+            fi
+            echo "::error::one or more previous services did not recover; inspect the Swarm immediately"
+            while IFS=$'\t' read -r _role service _replicas; do
+              [ -n "$service" ] || continue
+              docker service ps --no-trunc \
+                --format '{{.Name}} | {{.DesiredState}} | {{.CurrentState}} | {{.Error}}' \
+                "$service" || true
+            done < "$state_file"
+            return 1
+          }
+
+          cleanup() {
+            local status="$1"
+            trap - EXIT
+            if [ "$status" -ne 0 ] && [ "$drain_started" = true ] \
+              && [ "$safe_to_restore" = true ]; then
+              restore_previous_replicas || status=1
+            fi
+            rm -f "$state_file"
+            exit "$status"
+          }
+          trap 'cleanup "$?"' EXIT
+
+          # A service must match all three independent signals before it is
+          # touched: BeaconHS image repository, Docker stack service suffix,
+          # and the APP_ROLE embedded in its container environment.
+          declare -A service_by_role=()
+          service_ids="$(docker service ls -q)" || {
+            echo "::error::unable to enumerate Docker Swarm services"
+            exit 1
+          }
+          while read -r service_id; do
+            [ -n "$service_id" ] || continue
+            name="$(docker service inspect --format '{{.Spec.Name}}' "$service_id")"
+            image="$(docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' "$service_id")"
+            case "$image" in
+              "${IMAGE_NAME}:"*|"${IMAGE_NAME}@"*) ;;
+              *) continue ;;
+            esac
+
+            role=""
+            case "$name" in
+              *_web) role=web ;;
+              *_worker) role=worker ;;
+              *_scheduler) role=scheduler ;;
+              *) continue ;;
+            esac
+            service_env="$(docker service inspect \
+              --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
+              "$service_id")"
+            if ! grep -Fqx "APP_ROLE=${role}" <<< "$service_env"; then
+              echo "::error::${name} matches the BeaconHS image and ${role} service name but not APP_ROLE=${role}; refusing to assume it is safe to ignore"
+              exit 1
+            fi
+            if [ -n "${service_by_role[$role]:-}" ]; then
+              echo "::error::multiple BeaconHS ${role} services found; refusing an ambiguous drain"
+              exit 1
+            fi
+            replicas="$(docker service inspect \
+              --format '{{if .Spec.Mode.Replicated}}{{.Spec.Mode.Replicated.Replicas}}{{else}}global{{end}}' \
+              "$service_id")"
+            case "$replicas" in
+              ''|*[!0-9]*)
+                echo "::error::${name} is not a replicated service; refusing to drain it"
+                exit 1
+                ;;
+            esac
+            service_by_role[$role]="$name"
+            printf '%s\t%s\t%s\n' "$role" "$name" "$replicas" >> "$state_file"
+          done <<< "$service_ids"
+
+          if [ ! -s "$state_file" ]; then
+            echo "No existing BeaconHS writer services found; treating this as a fresh deployment"
+          else
+            scale_args=()
+            while IFS=$'\t' read -r role service replicas; do
+              echo "Draining existing ${role} service ${service} (previous replicas: ${replicas})"
+              scale_args+=("${service}=0")
+            done < "$state_file"
+            drain_started=true
+            docker service scale "${scale_args[@]}" >/dev/null
+            while IFS=$'\t' read -r _role service _replicas; do
+              wait_for_drain "$service"
+            done < "$state_file"
+            echo "All existing application-database writers are drained"
+          fi
+
+          ledger_before="$(migration_ledger_fingerprint)"
+          set +e
+          pnpm --filter @beaconhs/db exec tsx src/migrate.ts
+          migration_status=$?
+          set -e
+          if [ "$migration_status" -ne 0 ]; then
+            # The Drizzle migration files are atomic, but migrate.ts performs
+            # additional post-migration transactions. Prove the schema ledger
+            # did not advance before allowing old code to return.
+            safe_to_restore=false
+            ledger_after="$(migration_ledger_fingerprint)" || {
+              echo "::error::migration failed and its ledger state could not be verified; keeping old writers stopped"
+              exit "$migration_status"
+            }
+            if [ "$ledger_before" = "$ledger_after" ]; then
+              safe_to_restore=true
+              echo "Migration ledger is unchanged; the failed schema transaction rolled back"
+            else
+              echo 'BEACONHS_SCHEMA_CUTOVER_COMMITTED=true' >> "$GITHUB_ENV"
+              echo "::error::migration command failed after the schema ledger advanced; keeping old writers stopped"
+            fi
+            exit "$migration_status"
+          fi
+
+          safe_to_restore=false
+          echo 'BEACONHS_SCHEMA_CUTOVER_COMMITTED=true' >> "$GITHUB_ENV"
+          rm -f "$state_file"
+          trap - EXIT
+          echo "Migration completed; old writer replicas will remain stopped until Dokploy replaces the stack"
 
       # Best-effort refresh for Dokploy's stored registry credential. The
       # image is already pre-pulled onto the constrained swarm manager above,
@@ -162,33 +584,6 @@ jobs:
             echo "::warning::Dokploy registry.update returned HTTP ${status}; continuing because the image was pre-pulled on the deployment host."
           fi
 
-      # The collabora service bind-mounts this file over its stock branding.js
-      # (BeaconHS theme). The runner only has the docker socket, so write the
-      # host file through a helper container. coolwsd caches browser assets in
-      # memory at startup, so a changed file needs the collabora service
-      # force-updated before it is actually served.
-      - name: Install Collabora branding on the swarm manager
-        run: |
-          set -euo pipefail
-          before="$(docker run --rm -v /etc/dokploy/beaconhs:/target alpine:3 \
-            sh -c 'sha256sum /target/collabora-branding.js 2>/dev/null | cut -d" " -f1' || true)"
-          docker run --rm -i -v /etc/dokploy/beaconhs:/target alpine:3 \
-            sh -c 'cat > /target/collabora-branding.js && chmod 0644 /target/collabora-branding.js' \
-            < deploy/collabora-branding.js
-          after="$(sha256sum deploy/collabora-branding.js | cut -d' ' -f1)"
-          echo "branding installed ($(wc -c < deploy/collabora-branding.js) bytes)"
-          if [ "$before" != "$after" ]; then
-            svc="$(docker service ls --format '{{.Name}}' | grep -i collabora | head -1 || true)"
-            if [ -n "$svc" ]; then
-              echo "branding changed — restarting $svc so coolwsd re-caches it"
-              docker service update --force "$svc" >/dev/null
-            else
-              echo "::warning::branding changed but no collabora service found to restart"
-            fi
-          else
-            echo "branding unchanged — no restart needed"
-          fi
-
       - name: Update env + redeploy on Dokploy
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
@@ -197,19 +592,20 @@ jobs:
           REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
           DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
           DEV_SUPERADMIN_DATABASE_URL: ${{ secrets.DEV_SUPERADMIN_DATABASE_URL }}
-          DEV_DIRECT_DATABASE_URL: ${{ secrets.DEV_DIRECT_DATABASE_URL }}
           REDIS_URL: ${{ secrets.DEV_REDIS_URL }}
           APP_URL: ${{ secrets.DEV_APP_URL }}
           BETTER_AUTH_SECRET: ${{ secrets.DEV_BETTER_AUTH_SECRET }}
+          ATTACHMENT_CAPABILITY_SECRET: ${{ secrets.DEV_ATTACHMENT_CAPABILITY_SECRET }}
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          R2_PRIVATE_BUCKET_CONFIRMED: ${{ secrets.R2_PRIVATE_BUCKET_CONFIRMED }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           set -euo pipefail
           IMAGE="${IMAGE_NAME}:${GITHUB_SHA}"
@@ -219,24 +615,26 @@ jobs:
           # server_name is the bare host for Collabora's generated URLs.
           APP_HOST="$(printf '%s' "$APP_URL" | sed -E 's~^https?://~~; s~/+$~~')"
           ENV_BLOCK="IMAGE=${IMAGE}
+          APP_VERSION=${GITHUB_SHA}
           COLLABORA_URL=${APP_URL}
           COLLABORA_WOPI_URL=${APP_URL}
           COLLABORA_SERVER_NAME=${APP_HOST}
           DATABASE_URL=${DEV_DATABASE_URL}
           SUPERADMIN_DATABASE_URL=${DEV_SUPERADMIN_DATABASE_URL}
-          DIRECT_DATABASE_URL=${DEV_DIRECT_DATABASE_URL}
           REDIS_URL=${REDIS_URL}
           APP_URL=${APP_URL}
           BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+          ATTACHMENT_CAPABILITY_SECRET=${ATTACHMENT_CAPABILITY_SECRET}
           R2_ENDPOINT=${R2_ENDPOINT}
           R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
           R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
           R2_BUCKET=${R2_BUCKET}
-          R2_PUBLIC_URL=${R2_PUBLIC_URL}
+          R2_PRIVATE_BUCKET_CONFIRMED=${R2_PRIVATE_BUCKET_CONFIRMED}
           RESEND_API_KEY=${RESEND_API_KEY}
           VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
           VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
-          VAPID_SUBJECT=${VAPID_SUBJECT}"
+          VAPID_SUBJECT=${VAPID_SUBJECT}
+          SENTRY_DSN=${SENTRY_DSN}"
           update_status="$(
             jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" --arg reg "$REGISTRY_ID" \
               '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env, registryId:$reg}' \
@@ -261,8 +659,6 @@ jobs:
       # Same-origin Traefik routes for the Collabora editor: /browser, /cool
       # and /hosting on the app domain → collabora:9980. Idempotent (skips
       # paths that already exist) and cloned from the app domain's TLS config.
-      # Best-effort: a Dokploy API shape mismatch must not fail the app deploy —
-      # without these routes the editor just reports "not configured".
       - name: Ensure Collabora path routes
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
@@ -270,15 +666,19 @@ jobs:
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
           APP_URL: ${{ secrets.DEV_APP_URL }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           host="$(printf '%s' "$APP_URL" | sed -E 's~^https?://~~; s~/+$~~')"
           existing="$(curl -sS "$DOKPLOY_URL/api/domain.byComposeId?composeId=$COMPOSE_ID" \
-            -H "x-api-key: $DOKPLOY_TOKEN")" || { echo "::warning::domain.byComposeId failed"; exit 0; }
+            -H "x-api-key: $DOKPLOY_TOKEN")" || { echo "::error::domain.byComposeId failed"; exit 1; }
           if ! echo "$existing" | jq -e 'type=="array"' >/dev/null 2>&1; then
             response_type="$(echo "$existing" | jq -r 'type' 2>/dev/null || echo invalid-json)"
-            echo "::warning::unexpected domain list response type: ${response_type}"; exit 0
+            echo "::error::unexpected domain list response type: ${response_type}"; exit 1
           fi
           webdom="$(echo "$existing" | jq -c --arg h "$host" '[.[] | select(.host==$h)][0] // empty')"
+          if [ -z "$webdom" ]; then
+            echo "::error::No primary Dokploy domain found for the configured app host"
+            exit 1
+          fi
           https="$(echo "$webdom" | jq -r 'if .https == false then "false" else "true" end' 2>/dev/null || echo true)"
           cert="$(echo "$webdom" | jq -r '.certificateType // "none"' 2>/dev/null || echo none)"
           for path in /browser /cool /hosting; do
@@ -295,6 +695,108 @@ jobs:
             if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
               echo "created route $path -> collabora:9980"
             else
-              echo "::warning::domain.create $path returned HTTP $status"
+              echo "::error::domain.create $path returned HTTP $status"
+              exit 1
             fi
           done
+
+      - name: Wait for Swarm convergence and external readiness
+        env:
+          APP_URL: ${{ secrets.DEV_APP_URL }}
+        run: |
+          set -euo pipefail
+          IMAGE="${IMAGE_NAME}:${GITHUB_SHA}"
+
+          service_for_role() {
+            local role="$1" service_id name image
+            while read -r service_id; do
+              [ -n "$service_id" ] || continue
+              name="$(docker service inspect --format '{{.Spec.Name}}' "$service_id")"
+              image="$(docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' "$service_id")"
+              case "$name" in
+                *_"$role")
+                  case "$image" in
+                    "$IMAGE"|"$IMAGE"@*) printf '%s\n' "$name"; return 0 ;;
+                  esac
+                  ;;
+              esac
+            done < <(docker service ls -q)
+            return 1
+          }
+
+          service_is_healthy() {
+            local service="$1" task container health
+            task="$(docker service ps --no-trunc --filter desired-state=running \
+              --format '{{.ID}}|{{.CurrentState}}' "$service" \
+              | awk -F'|' '$2 ~ /^Running / { print $1; exit }')"
+            [ -n "$task" ] || return 1
+            container="$(docker inspect --format '{{.Status.ContainerStatus.ContainerID}}' "$task")"
+            [ -n "$container" ] || return 1
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")"
+            [ "$health" = healthy ]
+          }
+
+          scheduler_completed() {
+            local service="$1" state
+            state="$(docker service ps --no-trunc --format '{{.CurrentState}}' "$service" | head -1)"
+            case "$state" in Complete\ *) return 0 ;; *) return 1 ;; esac
+          }
+
+          deadline=$((SECONDS + 900))
+          web_service=""
+          worker_service=""
+          scheduler_service=""
+          storage_init_service=""
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            web_service="$(service_for_role web || true)"
+            worker_service="$(service_for_role worker || true)"
+            scheduler_service="$(service_for_role scheduler || true)"
+            storage_init_service="$(service_for_role storage-init || true)"
+            if [ -n "$web_service" ] && [ -n "$worker_service" ] \
+              && [ -n "$scheduler_service" ] && [ -n "$storage_init_service" ] \
+              && service_is_healthy "$web_service" \
+              && service_is_healthy "$worker_service" \
+              && scheduler_completed "$scheduler_service" \
+              && scheduler_completed "$storage_init_service"; then
+              echo "Swarm services converged on ${GITHUB_SHA}"
+              break
+            fi
+            sleep 10
+          done
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "::error::Swarm did not converge on ${GITHUB_SHA} within 15 minutes"
+            for service in \
+              "$web_service" "$worker_service" "$scheduler_service" "$storage_init_service"; do
+              [ -n "$service" ] || continue
+              docker service ps --no-trunc --format '{{.Name}} | {{.CurrentState}} | {{.Error}}' "$service" || true
+            done
+            exit 1
+          fi
+
+          response="$(mktemp)"
+          trap 'rm -f "$response"' EXIT
+          ready=false
+          for _attempt in $(seq 1 40); do
+            status="$(curl -sS --max-time 10 -o "$response" -w '%{http_code}' \
+              "${APP_URL%/}/api/health/ready" || true)"
+            version="$(jq -r '.version // empty' "$response" 2>/dev/null || true)"
+            health="$(jq -r '.status // empty' "$response" 2>/dev/null || true)"
+            if [ "$status" = 200 ] && [ "$health" = ready ] && [ "$version" = "$GITHUB_SHA" ]; then
+              ready=true
+              break
+            fi
+            sleep 15
+          done
+          if [ "$ready" != true ]; then
+            echo "::error::External readiness did not confirm ${GITHUB_SHA}"
+            exit 1
+          fi
+
+          curl -sS --fail --max-time 15 -o /dev/null "${APP_URL%/}/login"
+          curl -sS --fail --max-time 30 -o /dev/null "${APP_URL%/}/hosting/discovery"
+          echo "External web, auth entrypoint, and Collabora discovery checks passed"
+
+      - name: Report forward-only deployment failure after schema cutover
+        if: failure() && env.BEACONHS_SCHEMA_CUTOVER_COMMITTED == 'true'
+        run: |
+          echo "::error::The schema migration transaction committed, but a later migration or Dokploy deployment phase failed. The incompatible old web/worker services were intentionally NOT restarted. Redeploy ${IMAGE_NAME}:${GITHUB_SHA} or perform an explicit database restore/cutover; do not manually revive the prior application image against the migrated schema."

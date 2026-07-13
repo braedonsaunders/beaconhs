@@ -9,7 +9,7 @@
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET",
-    "R2_PUBLIC_URL",
+    "R2_PRIVATE_BUCKET_CONFIRMED",
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
     "RESEND_API_KEY",
@@ -41,7 +41,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": []
     },
     "clean": {
       "cache": false

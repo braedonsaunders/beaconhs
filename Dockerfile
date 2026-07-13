@@ -1,14 +1,16 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # Multi-stage build for beaconhs Next.js app + worker.
-# Single image, two entrypoints, selected via $APP_ROLE (web | worker).
+# Single image, role-specific entrypoints selected by $APP_ROLE
+# (web | worker | scheduler | storage-init).
 
 # Node 24 LTS matches local/CI runtime metadata and keeps the image on the
 # supported production line.
 ARG NODE_VERSION=24.18.0
-FROM node:${NODE_VERSION}-bookworm-slim AS base
+ARG NODE_IMAGE_DIGEST=sha256:cb4e8f7c443347358b7875e717c29e27bf9befc8f5a26cf18af3c3dec80e58c5
+FROM node:${NODE_VERSION}-bookworm-slim@${NODE_IMAGE_DIGEST} AS base
 # Upgrade corepack first: bundled versions can ship stale pnpm signing keys and
 # fail `pnpm install` with "Cannot find matching keyid".
-RUN npm install -g corepack@latest && corepack enable && corepack prepare pnpm@10.30.3 --activate
+RUN npm install -g corepack@0.35.0 && corepack enable && corepack prepare pnpm@10.30.3 --activate
 WORKDIR /app
 
 # --- Builder ---
@@ -17,6 +19,12 @@ WORKDIR /app
 # copied only the ROOT node_modules, so workspace bins went missing → "next:
 # not found". .dockerignore keeps node_modules/.next out of the context.
 FROM base AS builder
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
+# The production type-analysis graph now exceeds V8's container default heap
+# on clean BuildKit workers. Keep the larger ceiling in the builder only; the
+# runtime image retains Node's normal memory policy.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 COPY . .
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
@@ -33,6 +41,8 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 
 # --- Runtime ---
 FROM base AS runner
+ARG TARGETARCH
+RUN test "$TARGETARCH" = amd64 || { echo "BeaconHS runtime requires linux/amd64" >&2; exit 1; }
 ENV NODE_ENV=production
 
 # Headless-browser shared libs for PDF rendering (worker), plus LibreOffice
@@ -50,18 +60,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # silently broke every PDF render. The pinned shell build is version-locked,
 # print-oriented (no dbus/profile/signin subsystems), and puppeteer-tested.
 ARG HEADLESS_SHELL_VERSION=140.0.7339.207
-RUN npx --yes @puppeteer/browsers install chrome-headless-shell@${HEADLESS_SHELL_VERSION} --path /opt/chrome \
-    && ln -s "/opt/chrome/chrome-headless-shell/linux-${HEADLESS_SHELL_VERSION}/chrome-headless-shell-linux64/chrome-headless-shell" /usr/local/bin/chrome-headless-shell
+RUN npx --yes @puppeteer/browsers@3.0.6 install chrome-headless-shell@${HEADLESS_SHELL_VERSION} --path /opt/chrome \
+    && shell_path="$(find /opt/chrome/chrome-headless-shell -type f -name chrome-headless-shell -perm -111 -print -quit)" \
+    && test -n "$shell_path" \
+    && ln -s "$shell_path" /usr/local/bin/chrome-headless-shell
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chrome-headless-shell
 
-COPY --from=builder /app/apps/web/.next/standalone ./
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder /prod/worker ./apps/worker
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY --chown=node:node --from=builder /app/apps/web/.next/standalone ./
+COPY --chown=node:node --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --chown=node:node --from=builder /app/apps/web/public ./apps/web/public
+COPY --chown=node:node --from=builder /prod/worker ./apps/worker
+COPY --chown=node:node docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENV APP_ROLE=web
+ENV HOME=/home/node
 EXPOSE 3000
+USER node
 ENTRYPOINT ["/entrypoint.sh"]

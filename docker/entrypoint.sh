@@ -11,6 +11,9 @@ case "${APP_ROLE:-web}" in
   scheduler)
     exec node apps/worker/dist/scheduler.js
     ;;
+  storage-init)
+    exec node apps/worker/dist/storage-init.js
+    ;;
   *)
     echo "Unknown APP_ROLE: ${APP_ROLE}" >&2
     exit 1

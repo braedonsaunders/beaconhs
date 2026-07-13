@@ -1,0 +1,2 @@
+# Historical UI-only example credential token, not an authentication secret.
+3e175baad5c52957402b69c24c1001a9d182f39a:apps/web/src/app/(app)/training/credential-designs/studio.tsx:generic-api-key:82

@@ -29,7 +29,7 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ✅ Audit log helper + first wiring on incidents (status changes + lock/unlock)
 - ⬜ Audit log wired into every other mutation (CAs, PPE, equipment, etc.)
 - ⬜ R2 file storage actually wired (signed PUT + image-optimization job)
-- ✅ **Notifications worker wired into module events**: `@beaconhs/events` package with `emit*` functions for incident.reported / incident.statusChanged / ca.assigned / ca.completed / ca.overdue / training.expiring / training.expired / document.reviewDue / loneWorker.overdue / csPermit.expiring. Audience resolution: tenant-overridable via `tenant_notification_recipients`, falls back to safety_manager + tenant_admin roles. Scheduled-tick worker actually emits now (incl. a new hourly CA-overdue scan). Each event fan-outs to in-app + push (via notify queue) **and** a properly-templated email (subject + body + Open-in-app button)
+- ✅ **Notifications worker wired into module events**: `@beaconhs/events` package with `emit*` functions for incident.reported / incident.statusChanged / ca.assigned / ca.completed and unified compliance/equipment reminders. Audience resolution uses the canonical per-category notification settings and reusable groups, with active-role defaults for unconfigured categories. Each event fans out through the notification and email queues with an audit trail.
 
 ### Phase 1 — Form builder
 
@@ -88,13 +88,13 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 ### Admin
 
 - ✅ Admin landing page
-- ✅ /admin/tenants list + "View as"
+- ✅ `/platform/tenants` list + "View as"
 - ✅ /admin/users — every member with roles + status + joined date
 - ✅ /admin/audit — full audit log viewer with filters
 - ✅ **/admin/org** — org-units tree with add/delete per level + crews/departments/trades CRUD
 - ✅ **/admin/settings** — identity, branding (logo URL + primary color + PDF letterhead + live preview), languages (enable + default), hierarchy depth toggles, risk matrix preview grid
 - ✅ **/admin/api-keys** — generate (with one-time secret reveal in a 60s cookie), prefix-only listing, last-used, revoke
-- ✅ **/admin/integrations** — sync connections plus outbound automation builder. `/admin/plugins` redirects here for stale bookmarks.
+- ✅ **/admin/integrations** — sync connections plus outbound automation builder.
 
 ### Cross-cutting
 
@@ -585,8 +585,7 @@ The earlier plugin plan was consolidated into two production integration systems
 - `packages/integrations`: outbound event automations, trigger registry, destination registry, delivery worker, and idempotent export ledger.
 - `/admin/integrations`: one admin hub for creating sync connections and outbound automations.
 
-`/admin/plugins` remains only as a temporary redirect to `/admin/integrations` for
-stale bookmarks. Plugin-era packages and tables are retired.
+Plugin-era packages, tables, routes, and compatibility redirects are retired.
 
 ### 9.5 Public REST API
 
@@ -789,7 +788,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Pricing / billing — explicitly out of scope.
 - Mobile app store presence — PWA only.
 - Field equipment maintenance/financial features — out of scope.
-- Disaster recovery / backup-restore procedures — needed before production, separate runbook.
+- Disaster recovery / backup-restore procedures — see `docs/PRODUCTION_RUNBOOK.md`.
 - Tenant offboarding / data export — needed before any external tenant launches.
 
 ---

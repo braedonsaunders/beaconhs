@@ -50,6 +50,12 @@ Then open:
 > with an existing `.env` that points at an external Postgres cluster can run
 > `docker compose up -d` without the `local-db` profile and keep using that
 > database.
+>
+> Fresh local Postgres volumes provision four separate roles automatically:
+> the DML-only app login, the BYPASSRLS maintenance login, a migration-only
+> login, and a NOLOGIN object owner. If your `postgres-data` volume predates
+> this role split, back it up and run `scripts/cluster/provision.sql` as that
+> volume's existing PostgreSQL superuser before using the current `.env`.
 
 Maintainers using the shared dev PG cluster should keep their real `.env`
 `DATABASE_URL` pointed at that cluster and start only the supporting services:
@@ -65,27 +71,15 @@ After `pnpm db:seed`, sign in as `admin@beaconhs.local`. Use the **Magic link**
 tab on the login form — the link will arrive in Mailpit at
 <http://localhost:8025>.
 
-## What's wired vs scaffolded
+## What is included
 
-| Area                                                         | State                           |
-| ------------------------------------------------------------ | ------------------------------- |
-| Monorepo + Turbo + pnpm workspaces                           | ✅                              |
-| Postgres + Drizzle schema for every module                   | ✅                              |
-| Row-level security policies                                  | ✅ (applied by `db:migrate`)    |
-| Better-Auth (email/password + magic link)                    | ✅                              |
-| Tenant context + permission catalogue + built-in roles       | ✅                              |
-| Forms core (schema, validators, scoring, formula evaluator)  | ✅                              |
-| Auto-PDF renderer via Puppeteer                              | ✅                              |
-| BullMQ queues (emails, pdfs, notifications, scheduled ticks) | ✅                              |
-| Worker process with handlers                                 | ✅                              |
-| Integrations hub (sync in + outbound automations)            | ✅                              |
-| Web app shell + login + module list pages                    | ✅                              |
-| **Form designer UI**                                         | 🟡 stub — Phase 1 build         |
-| **Form renderer UI**                                         | 🟡 stub — Phase 1 build         |
-| **Module CRUD screens (incidents, training, etc.)**          | 🟡 stubs — Phase 2–3            |
-| Dashboard widget builder                                     | 🟡 default tiles only — Phase 4 |
-| Report builder                                               | 🟡 — Phase 4                    |
-| Plugin SDK / first-party plugins                             | Retired; use Integrations       |
-| External migration adapters                                  | 🟡 project-specific             |
+The workspace contains the complete web app, worker, scheduler, database
+schema/migrations/RLS, authentication and tenant permissions, Builder form
+designer and runtime, compliance engine, Insights dashboards, printable report
+studio, document and training editors, storage, notifications, and integration
+sync/outbound automation. The old plugin system is retired; use
+**Integrations**. Company-specific migration adapters belong in the ignored
+private ETL package and are not part of the public repository.
 
-See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full phased plan.
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) is historical design context.
+Verify any old phase/status note against current code before relying on it.
