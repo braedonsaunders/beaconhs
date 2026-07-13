@@ -1,8 +1,9 @@
 name: Deploy (dev)
 
-# Reusable deployment called only after the CI job for the same main-branch
-# commit succeeds. It builds the BeaconHS image on GitHub-hosted runners, then
-# asks the self-hosted Dokploy runner to migrate and redeploy the dev stack.
+# Normal deployments are called after CI succeeds for the same main-branch
+# commit. The explicit manual cutover operation reuses that complete path and
+# adds the one-time data cutover while writers are drained. Images are built on
+# GitHub-hosted runners; migration and deployment run on the Dokploy runner.
 # All deployment-specific values live in repository secrets.
 
 on:
@@ -16,11 +17,12 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Maintenance operation to run without deploying
+        description: Deployment or maintenance operation to run
         required: true
         type: choice
         options:
           - rotate-compose-refresh-token
+          - deploy-and-cutover
 
 concurrency:
   group: deploy-dev
@@ -44,17 +46,44 @@ jobs:
       - name: Rotate and verify without logging either token
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_RESOLVE_IP: ${{ secrets.DOKPLOY_RESOLVE_IP }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
         run: |
           set -euo pipefail
           umask 077
+          dokploy_host="${DOKPLOY_URL#https://}"
+          if [ "$dokploy_host" = "$DOKPLOY_URL" ] \
+            || [ "${#dokploy_host}" -gt 253 ] \
+            || ! [[ "$dokploy_host" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]; then
+            echo "::error::DOKPLOY_URL must be an HTTPS origin with a DNS hostname, no port, path, query, fragment, or trailing slash"
+            exit 1
+          fi
+          if ! [[ "$DOKPLOY_RESOLVE_IP" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]]; then
+            echo "::error::DOKPLOY_RESOLVE_IP must be a canonical private IPv4 address"
+            exit 1
+          fi
+          IFS=. read -r ip_a ip_b ip_c ip_d <<< "$DOKPLOY_RESOLVE_IP"
+          for octet in "$ip_a" "$ip_b" "$ip_c" "$ip_d"; do
+            if [ "$((10#$octet))" -gt 255 ]; then
+              echo "::error::DOKPLOY_RESOLVE_IP must be a canonical private IPv4 address"
+              exit 1
+            fi
+          done
+          if ! (( ip_a == 10 \
+            || (ip_a == 172 && ip_b >= 16 && ip_b <= 31) \
+            || (ip_a == 192 && ip_b == 168) )); then
+            echo "::error::DOKPLOY_RESOLVE_IP must be an RFC 1918 private IPv4 address"
+            exit 1
+          fi
+          dokploy_curl_resolve="${dokploy_host}:443:${DOKPLOY_RESOLVE_IP}"
           before="$(mktemp)"
           after="$(mktemp)"
           trap 'rm -f "$before" "$after"' EXIT
           base="${DOKPLOY_URL%/}"
 
-          curl -sS --fail -G -o "$before" "$base/api/compose.one" \
+          curl -sS --fail --noproxy "$dokploy_host" --resolve "$dokploy_curl_resolve" \
+            -G -o "$before" "$base/api/compose.one" \
             -H "x-api-key: $DOKPLOY_TOKEN" \
             --data-urlencode "composeId=$COMPOSE_ID"
           old_token="$(jq -er '.refreshToken | select(type == "string" and length > 0)' "$before")"
@@ -62,7 +91,8 @@ jobs:
 
           rotate_status="$(
             jq -n --arg id "$COMPOSE_ID" '{composeId:$id}' \
-              | curl -sS -o /dev/null -w "%{http_code}" \
+              | curl -sS --noproxy "$dokploy_host" --resolve "$dokploy_curl_resolve" \
+                  -o /dev/null -w "%{http_code}" \
                   -X POST "$base/api/compose.refreshToken" \
                   -H "x-api-key: $DOKPLOY_TOKEN" \
                   -H "content-type: application/json" --data @-
@@ -72,7 +102,8 @@ jobs:
             exit 1
           fi
 
-          curl -sS --fail -G -o "$after" "$base/api/compose.one" \
+          curl -sS --fail --noproxy "$dokploy_host" --resolve "$dokploy_curl_resolve" \
+            -G -o "$after" "$base/api/compose.one" \
             -H "x-api-key: $DOKPLOY_TOKEN" \
             --data-urlencode "composeId=$COMPOSE_ID"
           new_token="$(jq -er '.refreshToken | select(type == "string" and length > 0)' "$after")"
@@ -85,7 +116,7 @@ jobs:
 
   preflight:
     name: Validate dev deployment contract
-    if: inputs.operation == 'deploy'
+    if: inputs.operation == 'deploy' || inputs.operation == 'deploy-and-cutover'
     permissions: {}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -99,6 +130,7 @@ jobs:
       DEV_SUPERADMIN_DATABASE_URL: ${{ secrets.DEV_SUPERADMIN_DATABASE_URL }}
       DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
       DOKPLOY_REGISTRY_ID: ${{ secrets.DOKPLOY_REGISTRY_ID }}
+      DOKPLOY_RESOLVE_IP: ${{ secrets.DOKPLOY_RESOLVE_IP }}
       DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
       DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -111,6 +143,15 @@ jobs:
       VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
       VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
     steps:
+      - name: Require main for the one-time data cutover
+        if: inputs.operation == 'deploy-and-cutover'
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+            echo "::error::The one-time dev data cutover may run only from refs/heads/main"
+            exit 1
+          fi
+
       - name: Validate required names without printing values
         run: |
           set -euo pipefail
@@ -118,7 +159,8 @@ jobs:
             DEV_APP_URL DEV_ATTACHMENT_CAPABILITY_SECRET DEV_BETTER_AUTH_SECRET
             DEV_DATABASE_URL DEV_MIGRATION_DATABASE_URL DEV_REDIS_URL
             DEV_SUPERADMIN_DATABASE_URL DOKPLOY_COMPOSE_ID DOKPLOY_REGISTRY_ID
-            DOKPLOY_TOKEN DOKPLOY_URL R2_ACCESS_KEY_ID R2_BUCKET R2_ENDPOINT
+            DOKPLOY_RESOLVE_IP DOKPLOY_TOKEN DOKPLOY_URL R2_ACCESS_KEY_ID
+            R2_BUCKET R2_ENDPOINT
             R2_SECRET_ACCESS_KEY VAPID_PRIVATE_KEY VAPID_PUBLIC_KEY
             VAPID_SUBJECT
           )
@@ -160,7 +202,30 @@ jobs:
             exit 1
           fi
           case "$DEV_APP_URL" in https://*) ;; *) echo "::error::DEV_APP_URL must use HTTPS"; exit 1 ;; esac
-          case "$DOKPLOY_URL" in https://*) ;; *) echo "::error::DOKPLOY_URL must use HTTPS"; exit 1 ;; esac
+          dokploy_host="${DOKPLOY_URL#https://}"
+          if [ "$dokploy_host" = "$DOKPLOY_URL" ] \
+            || [ "${#dokploy_host}" -gt 253 ] \
+            || ! [[ "$dokploy_host" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]; then
+            echo "::error::DOKPLOY_URL must be an HTTPS origin with a DNS hostname, no port, path, query, fragment, or trailing slash"
+            exit 1
+          fi
+          if ! [[ "$DOKPLOY_RESOLVE_IP" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]]; then
+            echo "::error::DOKPLOY_RESOLVE_IP must be a canonical private IPv4 address"
+            exit 1
+          fi
+          IFS=. read -r ip_a ip_b ip_c ip_d <<< "$DOKPLOY_RESOLVE_IP"
+          for octet in "$ip_a" "$ip_b" "$ip_c" "$ip_d"; do
+            if [ "$((10#$octet))" -gt 255 ]; then
+              echo "::error::DOKPLOY_RESOLVE_IP must be a canonical private IPv4 address"
+              exit 1
+            fi
+          done
+          if ! (( ip_a == 10 \
+            || (ip_a == 172 && ip_b >= 16 && ip_b <= 31) \
+            || (ip_a == 192 && ip_b == 168) )); then
+            echo "::error::DOKPLOY_RESOLVE_IP must be an RFC 1918 private IPv4 address"
+            exit 1
+          fi
           case "$R2_ENDPOINT" in https://*) ;; *) echo "::error::R2_ENDPOINT must use HTTPS"; exit 1 ;; esac
           for name in DEV_DATABASE_URL DEV_MIGRATION_DATABASE_URL DEV_SUPERADMIN_DATABASE_URL; do
             case "${!name}" in
@@ -182,7 +247,7 @@ jobs:
           echo "Deployment secret contract passed"
 
   build:
-    if: inputs.operation == 'deploy'
+    if: inputs.operation == 'deploy' || inputs.operation == 'deploy-and-cutover'
     needs: preflight
     permissions:
       contents: read
@@ -214,12 +279,13 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true
 
   deploy:
+    if: inputs.operation == 'deploy' || inputs.operation == 'deploy-and-cutover'
     needs: build
     permissions:
       contents: read
       packages: read
     runs-on: [self-hosted, dokploy]
-    timeout-minutes: 45
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       # No version here — package.json's packageManager field pins pnpm, and
@@ -228,6 +294,39 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with: { node-version: 24.18.0 }
       - run: pnpm install --frozen-lockfile
+
+      - name: Configure TLS-preserving Dokploy split-DNS resolution
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_RESOLVE_IP: ${{ secrets.DOKPLOY_RESOLVE_IP }}
+        run: |
+          set -euo pipefail
+          dokploy_host="${DOKPLOY_URL#https://}"
+          if [ "$dokploy_host" = "$DOKPLOY_URL" ] \
+            || [ "${#dokploy_host}" -gt 253 ] \
+            || ! [[ "$dokploy_host" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]; then
+            echo "::error::DOKPLOY_URL must be an HTTPS origin with a DNS hostname, no port, path, query, fragment, or trailing slash"
+            exit 1
+          fi
+          if ! [[ "$DOKPLOY_RESOLVE_IP" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]]; then
+            echo "::error::DOKPLOY_RESOLVE_IP must be a canonical private IPv4 address"
+            exit 1
+          fi
+          IFS=. read -r ip_a ip_b ip_c ip_d <<< "$DOKPLOY_RESOLVE_IP"
+          for octet in "$ip_a" "$ip_b" "$ip_c" "$ip_d"; do
+            if [ "$((10#$octet))" -gt 255 ]; then
+              echo "::error::DOKPLOY_RESOLVE_IP must be a canonical private IPv4 address"
+              exit 1
+            fi
+          done
+          if ! (( ip_a == 10 \
+            || (ip_a == 172 && ip_b >= 16 && ip_b <= 31) \
+            || (ip_a == 192 && ip_b == 168) )); then
+            echo "::error::DOKPLOY_RESOLVE_IP must be an RFC 1918 private IPv4 address"
+            exit 1
+          fi
+          printf 'DOKPLOY_CURL_RESOLVE=%s\n' \
+            "${dokploy_host}:443:${DOKPLOY_RESOLVE_IP}" >> "$GITHUB_ENV"
 
       - name: Verify database-managed platform email before downtime
         env:
@@ -258,7 +357,9 @@ jobs:
           esac
           response="$(mktemp)"
           trap 'rm -f "$response"' EXIT
-          curl -sS --fail -G -o "$response" "${DOKPLOY_URL%/}/api/compose.one" \
+          curl -sS --fail --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
+            --resolve "$DOKPLOY_CURL_RESOLVE" -G -o "$response" \
+            "${DOKPLOY_URL%/}/api/compose.one" \
             -H "x-api-key: $DOKPLOY_TOKEN" \
             --data-urlencode "composeId=$COMPOSE_ID"
           if ! jq -e --arg id "$COMPOSE_ID" '.composeId == $id' "$response" >/dev/null; then
@@ -571,6 +672,75 @@ jobs:
           trap - EXIT
           echo "Migration completed; old writer replicas will remain stopped until Dokploy replaces the stack"
 
+      - name: Run audited one-time dev data cutover
+        if: inputs.operation == 'deploy-and-cutover'
+        env:
+          NODE_ENV: production
+          BEACONHS_CUTOVER_TARGET: beaconhs-dev
+          BEACONHS_CUTOVER_WRITERS_DRAINED: 'true'
+          DEV_SUPERADMIN_DATABASE_URL: ${{ secrets.DEV_SUPERADMIN_DATABASE_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PRIVATE_BUCKET_CONFIRMED: ${{ secrets.R2_PRIVATE_BUCKET_CONFIRMED }}
+          ATTACHMENT_CAPABILITY_SECRET: ${{ secrets.DEV_ATTACHMENT_CAPABILITY_SECRET }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          SUPERADMIN_DATABASE_URL="$(
+            node --input-type=module -e '
+              const value = process.env.DEV_SUPERADMIN_DATABASE_URL;
+              if (!value) throw new Error("DEV_SUPERADMIN_DATABASE_URL is required");
+              let url;
+              try {
+                url = new URL(value);
+              } catch {
+                throw new Error("DEV_SUPERADMIN_DATABASE_URL is not a valid URL");
+              }
+              if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
+                throw new Error("DEV_SUPERADMIN_DATABASE_URL must be a PostgreSQL URL");
+              }
+              url.port = "5432";
+              process.stdout.write(url.toString());
+            '
+          )"
+          if [ -z "$SUPERADMIN_DATABASE_URL" ]; then
+            echo "::error::Failed to derive the direct maintenance database URL"
+            exit 1
+          fi
+          echo "::add-mask::$SUPERADMIN_DATABASE_URL"
+          export SUPERADMIN_DATABASE_URL
+          unset DEV_SUPERADMIN_DATABASE_URL
+
+          run_cutover() {
+            local label="$1"
+            local script="$2"
+
+            echo "::group::${label}: pre-apply audit"
+            pnpm --filter @beaconhs/web exec tsx "$script"
+            echo "::endgroup::"
+
+            echo "::group::${label}: apply"
+            pnpm --filter @beaconhs/web exec tsx "$script" --apply
+            echo "::endgroup::"
+
+            echo "::group::${label}: post-apply audit"
+            pnpm --filter @beaconhs/web exec tsx "$script"
+            echo "::endgroup::"
+
+            echo "::group::${label}: idempotency apply"
+            pnpm --filter @beaconhs/web exec tsx "$script" --apply
+            echo "::endgroup::"
+          }
+
+          run_cutover "Missing demo attachments" scripts/clean-missing-demo-attachments.ts
+          run_cutover "Credential outputs" scripts/backfill-credential-outputs.ts
+          run_cutover "Tenant storage keys" scripts/backfill-tenant-storage-keys.ts
+          run_cutover "Stored signatures" scripts/backfill-signatures-to-storage.ts
+          run_cutover "Private attachment URLs" scripts/backfill-private-attachment-urls.ts
+
       # Best-effort refresh for Dokploy's stored registry credential. The
       # image is already pre-pulled onto the constrained swarm manager above,
       # so a Dokploy API shape/version mismatch here should not block deploy.
@@ -587,7 +757,9 @@ jobs:
             jq -n --arg id "$REGISTRY_ID" --arg u "$GHCR_USER" --arg p "$GHCR_TOKEN" \
               '{registryId:$id, registryName:"ghcr-beaconhs", username:$u, password:$p,
                 registryUrl:"ghcr.io", imagePrefix:"braedonsaunders", registryType:"cloud"}' \
-              | curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/registry.update" \
+              | curl -sS --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
+                  --resolve "$DOKPLOY_CURL_RESOLVE" -o /dev/null -w "%{http_code}" \
+                  -X POST "$DOKPLOY_URL/api/registry.update" \
                   -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @- || true
           )"
           if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
@@ -648,7 +820,9 @@ jobs:
           update_status="$(
             jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" --arg env "$ENV_BLOCK" --arg reg "$REGISTRY_ID" \
               '{composeId:$id, sourceType:"raw", composeType:"stack", composeFile:$cf, env:$env, registryId:$reg}' \
-              | curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/compose.update" \
+              | curl -sS --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
+                  --resolve "$DOKPLOY_CURL_RESOLVE" -o /dev/null -w "%{http_code}" \
+                  -X POST "$DOKPLOY_URL/api/compose.update" \
                   -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-
           )" || { echo "::error::Dokploy compose.update request failed"; exit 1; }
           if [ "$update_status" -lt 200 ] || [ "$update_status" -ge 300 ]; then
@@ -656,7 +830,9 @@ jobs:
             exit 1
           fi
           deploy_status="$(
-            curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/compose.deploy" \
+            curl -sS --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
+              --resolve "$DOKPLOY_CURL_RESOLVE" -o /dev/null -w "%{http_code}" \
+              -X POST "$DOKPLOY_URL/api/compose.deploy" \
               -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" \
               -d "{\"composeId\":\"$COMPOSE_ID\"}"
           )" || { echo "::error::Dokploy compose.deploy request failed"; exit 1; }
@@ -678,7 +854,9 @@ jobs:
         run: |
           set -euo pipefail
           host="$(printf '%s' "$APP_URL" | sed -E 's~^https?://~~; s~/+$~~')"
-          existing="$(curl -sS "$DOKPLOY_URL/api/domain.byComposeId?composeId=$COMPOSE_ID" \
+          existing="$(curl -sS --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
+            --resolve "$DOKPLOY_CURL_RESOLVE" \
+            "$DOKPLOY_URL/api/domain.byComposeId?composeId=$COMPOSE_ID" \
             -H "x-api-key: $DOKPLOY_TOKEN")" || { echo "::error::domain.byComposeId failed"; exit 1; }
           if ! echo "$existing" | jq -e 'type=="array"' >/dev/null 2>&1; then
             response_type="$(echo "$existing" | jq -r 'type' 2>/dev/null || echo invalid-json)"
@@ -700,7 +878,9 @@ jobs:
                 --argjson https "$https" --arg cert "$cert" \
                 '{composeId:$cid, host:$h, path:$p, port:9980, https:$https,
                   certificateType:$cert, serviceName:"collabora", domainType:"compose"}' \
-              | curl -sS -o /dev/null -w "%{http_code}" -X POST "$DOKPLOY_URL/api/domain.create" \
+              | curl -sS --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
+                  --resolve "$DOKPLOY_CURL_RESOLVE" -o /dev/null -w "%{http_code}" \
+                  -X POST "$DOKPLOY_URL/api/domain.create" \
                   -H "x-api-key: $DOKPLOY_TOKEN" -H "content-type: application/json" --data @-)"
             if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
               echo "created route $path -> collabora:9980"
@@ -809,4 +989,4 @@ jobs:
       - name: Report forward-only deployment failure after schema cutover
         if: failure() && env.BEACONHS_SCHEMA_CUTOVER_COMMITTED == 'true'
         run: |
-          echo "::error::The schema migration transaction committed, but a later migration or Dokploy deployment phase failed. The incompatible old web/worker services were intentionally NOT restarted. Redeploy ${IMAGE_NAME}:${GITHUB_SHA} or perform an explicit database restore/cutover; do not manually revive the prior application image against the migrated schema."
+          echo "::error::The schema migration transaction committed, but a later migration, data-cutover, or Dokploy deployment phase failed. The incompatible old web/worker services were intentionally NOT restarted. Redeploy ${IMAGE_NAME}:${GITHUB_SHA} or perform an explicit database restore/cutover; do not manually revive the prior application image against the migrated schema."
