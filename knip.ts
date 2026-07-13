@@ -1,0 +1,42 @@
+import { existsSync } from 'node:fs'
+import type { KnipConfig } from 'knip'
+
+// The company-specific ETL workspace is deliberately local and gitignored. Do
+// not make public CI carry a stale ignore for a workspace that is not present;
+// when an authorized local checkout includes it, keep the private package out
+// of the public application's dead-code graph.
+const privateEtlWorkspace = 'packages/etl'
+
+const config: KnipConfig = {
+  $schema: 'https://unpkg.com/knip@5/schema.json',
+  ...(existsSync(`${privateEtlWorkspace}/package.json`)
+    ? { ignoreWorkspaces: [privateEtlWorkspace] }
+    : {}),
+  workspaces: {
+    '.': {
+      entry: ['deploy/collabora-branding.js'],
+    },
+    'apps/web': {
+      entry: [
+        'public/sw.js',
+        'scripts/backfill-credential-outputs.ts',
+        'scripts/backfill-private-attachment-urls.ts',
+        'scripts/backfill-signatures-to-storage.ts',
+        'scripts/backfill-tenant-storage-keys.ts',
+        'scripts/generate-brand-icons.mjs',
+        'scripts/materialize-compliance.ts',
+      ],
+    },
+    'apps/worker': {
+      entry: ['src/health.ts', 'src/scripts/backfill-skill-files.ts', 'src/storage-init.ts'],
+    },
+    'packages/db': {
+      entry: ['src/scripts/backfill-compliance.ts', 'src/scripts/reseed-lift-plan.ts'],
+    },
+    'packages/sync': {
+      ignoreDependencies: ['mssql'],
+    },
+  },
+}
+
+export default config
