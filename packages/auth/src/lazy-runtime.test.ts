@@ -2,16 +2,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const instance = { api: { getSession: vi.fn() }, handler: vi.fn() }
-  const state: { options?: { hooks?: { after?: (ctx: unknown) => Promise<unknown> } } } = {}
+  const state: {
+    options?: {
+      emailAndPassword?: {
+        sendResetPassword?: (args: { user: { email: string }; url: string }) => Promise<void>
+      }
+      hooks?: { after?: (ctx: unknown) => Promise<unknown> }
+    }
+    magicLinkOptions?: {
+      sendMagicLink?: (args: {
+        email: string
+        url: string
+        metadata?: Record<string, unknown>
+      }) => Promise<void>
+    }
+  } = {}
   return {
     betterAuth: vi.fn((options) => {
       state.options = options
       return instance
     }),
+    enqueueEmail: vi.fn(),
     instance,
-    magicLink: vi.fn(() => ({ id: 'magic-link' })),
+    magicLink: vi.fn((options) => {
+      state.magicLinkOptions = options
+      return { id: 'magic-link' }
+    }),
     nextCookies: vi.fn(() => ({ id: 'next-cookies' })),
     pool: vi.fn(),
+    sendVia: vi.fn(),
     state,
   }
 })
@@ -19,6 +38,8 @@ const mocks = vi.hoisted(() => {
 vi.mock('better-auth', () => ({ betterAuth: mocks.betterAuth }))
 vi.mock('better-auth/plugins', () => ({ magicLink: mocks.magicLink }))
 vi.mock('better-auth/next-js', () => ({ nextCookies: mocks.nextCookies }))
+vi.mock('@beaconhs/emails', () => ({ sendVia: mocks.sendVia }))
+vi.mock('@beaconhs/jobs', () => ({ enqueueEmail: mocks.enqueueEmail }))
 vi.mock('pg', () => ({
   Pool: class MockPool {
     constructor(...args: unknown[]) {
@@ -38,6 +59,8 @@ beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
   process.env = { ...originalEnv }
+  mocks.enqueueEmail.mockResolvedValue({ id: 'job-1' })
+  mocks.sendVia.mockResolvedValue({ id: 'smtp-1' })
 })
 
 afterEach(() => {
@@ -86,6 +109,63 @@ describe('lazy auth runtime', () => {
     await expect(after?.({ path: '/get-session', context: { newSession: null } })).resolves.toEqual(
       {},
     )
+  })
+
+  it('durably enqueues production password-reset email without provider environment state', async () => {
+    process.env.DATABASE_URL = 'postgresql://app:secret@db.example.test/beaconhs'
+    process.env.BETTER_AUTH_SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    process.env.NODE_ENV = 'production'
+    const { getAuth } = await import('./server')
+    getAuth()
+
+    const sendResetPassword = mocks.state.options?.emailAndPassword?.sendResetPassword
+    expect(sendResetPassword).toBeTypeOf('function')
+    await sendResetPassword?.({
+      user: { email: 'operator@example.com' },
+      url: 'https://app.example.test/reset?token=secret-token',
+    })
+
+    expect(mocks.enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'operator@example.com',
+        subject: 'Reset your BeaconHS password',
+        meta: { category: 'auth' },
+      }),
+    )
+    expect(mocks.sendVia).not.toHaveBeenCalled()
+  })
+
+  it('uses the explicit loopback-only SMTP transport for local magic links', async () => {
+    process.env.DATABASE_URL = 'postgresql://app:secret@db.example.test/beaconhs'
+    process.env.NODE_ENV = 'development'
+    process.env.SMTP_HOST = 'localhost'
+    process.env.SMTP_PORT = '1025'
+    process.env.SMTP_FROM = 'BeaconHS <noreply@beaconhs.local>'
+    const { getAuth } = await import('./server')
+    getAuth()
+
+    const sendMagicLink = mocks.state.magicLinkOptions?.sendMagicLink
+    expect(sendMagicLink).toBeTypeOf('function')
+    await sendMagicLink?.({
+      email: 'operator@example.com',
+      url: 'http://localhost:3000/api/auth/magic-link/verify?token=secret-token',
+    })
+
+    expect(mocks.sendVia).toHaveBeenCalledWith(
+      {
+        provider: 'smtp',
+        mode: 'local-dev',
+        host: 'localhost',
+        port: 1025,
+        secure: false,
+        from: 'BeaconHS <noreply@beaconhs.local>',
+      },
+      expect.objectContaining({
+        to: 'operator@example.com',
+        subject: 'Sign in to BeaconHS',
+      }),
+    )
+    expect(mocks.enqueueEmail).not.toHaveBeenCalled()
   })
 
   it('fails closed at runtime when production configuration is missing', async () => {

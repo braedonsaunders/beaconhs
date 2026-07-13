@@ -30,10 +30,10 @@ export const emailLog = pgTable(
     // Nullable: some platform sends (magic-link, signup confirmation) are
     // not tenant-scoped. Tenant-scoped rows MUST have this set.
     tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
-    // BullMQ job id, if the send went through the queue (most do).
-    // Some sends go straight through `sendEmail()`; for those this is null.
+    // BullMQ job id. Nullable for historical or externally imported records;
+    // current application deliveries are created by the queued worker.
     jobId: text('job_id'),
-    // Provider message id from Resend, eg. 'msg_…' — null until 'sent'.
+    // Provider message id returned by the configured transport — null until sent.
     providerMessageId: text('provider_message_id'),
     // Recipients are stored as a jsonb array of email strings so we can
     // index/filter by membership later. `recipientPrimary` is denormalised
@@ -52,8 +52,8 @@ export const emailLog = pgTable(
     htmlBody: text('html_body'),
     textBody: text('text_body'),
     status: emailLogStatus('status').default('queued').notNull(),
-    // Category for filtering — e.g. 'incident_reported', 'ca_assigned',
-    // 'document_send', 'magic_link', 'training_expiring'.
+    // Category for filtering — e.g. 'auth', 'incident', 'ca', 'report',
+    // 'compliance', 'forms', or 'integration'.
     categoryKey: text('category_key'),
     // Free-form metadata: { incidentId, retryAttempt, etc. }
     meta: jsonb('meta').$type<Record<string, unknown>>().default({}).notNull(),

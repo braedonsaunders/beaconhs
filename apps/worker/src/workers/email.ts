@@ -1,24 +1,25 @@
 import type { Job } from 'bullmq'
 import { and, eq } from 'drizzle-orm'
-import { sendEmail, sendVia } from '@beaconhs/emails'
+import { sendVia } from '@beaconhs/emails'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { emailLog, reportRunDeliveries, reportRuns } from '@beaconhs/db/schema'
 import type { EmailJobData } from '@beaconhs/jobs'
-import { resolveEmailDelivery } from '../lib/resolve-email-transport'
+import { requireEmailTransport, resolveEmailDelivery } from '../lib/resolve-email-transport'
 
 // Email worker.
 //
 // On every dispatch we instrument an `email_log` row so the support team
 // can answer "did X get this email?" from the /admin/email-log viewer.
-// The row is upserted: first inserted with status='queued' / sent timestamps
-// null, then updated to 'sent' (+ provider message id) on success or
-// 'failed' (+ errorMessage) on exception. We never throw away the audit
-// row even when the upstream send blows up; the row exists so the failure
-// shows up in the viewer.
+// Each delivery attempt inserts a row with status='queued' / sent timestamps
+// null, then updates that row to 'sent' (+ provider message id) on success or
+// 'failed' (+ errorMessage) on exception. We never throw away an attempt row
+// when the upstream send blows up, so its failure remains visible in the
+// viewer. A completed row for the same durable job prevents a retry from
+// contacting the provider twice.
 //
 // The transport is resolved per send from the platform + tenant config
-// (resolve-email-transport): a tenant's own provider, the platform global
-// default, or the RESEND_* environment fallback. When the platform admin has
+// (resolve-email-transport): a tenant's own provider or the platform global
+// default. When the platform admin has
 // globally DISABLED email, the send is recorded as suppressed and skipped (no
 // retry). `withSuperAdmin(db, ...)` runs the writes outside any tenant scope —
 // tenantId is materialised from the job payload meta (else null = platform send).
@@ -95,9 +96,8 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
   const delivery = await resolveEmailDelivery(tenantId)
   const suppressed = delivery.kind === 'suppressed'
   const transport = delivery.kind === 'transport' ? delivery.transport : null
-  const providerKey = suppressed ? 'suppressed' : (transport?.provider ?? 'env')
-  const from =
-    job.data.from ?? transport?.from ?? process.env.RESEND_FROM ?? 'BeaconHS <noreply@beaconhs.app>'
+  const providerKey = suppressed ? 'suppressed' : (transport?.provider ?? 'unconfigured')
+  const from = transport?.from ?? 'unconfigured'
 
   // 1. Insert the log row. For a suppressed send it is terminal (failed +
   // suppressed flag); otherwise it starts 'queued' so the viewer shows it in
@@ -113,7 +113,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
         cc: [],
         bcc: [],
         fromAddr: from,
-        replyToAddr: job.data.replyTo ?? null,
+        replyToAddr: transport?.replyTo ?? null,
         subject: job.data.subject,
         htmlSize: byteLen(job.data.html),
         textSize: byteLen(job.data.text),
@@ -144,7 +144,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
     return
   }
 
-  // 2. Actually send via the resolved transport (or the env fallback). On
+  // 2. Actually send via the resolved database-managed transport. On
   // failure we update the row + rethrow so BullMQ can retry; on success we
   // update with the provider message id.
   try {
@@ -153,11 +153,9 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
       subject: job.data.subject,
       html: job.data.html,
       text: job.data.text,
-      from,
-      replyTo: job.data.replyTo,
       attachments: job.data.attachments,
     }
-    const result = transport ? await sendVia(transport, payload) : await sendEmail(payload)
+    const result = await sendVia(requireEmailTransport(delivery), payload)
 
     if (logId) {
       await withSuperAdmin(db, (tx) =>

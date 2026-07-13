@@ -147,14 +147,13 @@ function escapeHtml(value: string): string {
 }
 
 // Shared sender for transactional auth emails (magic link, password reset).
-// In production (or whenever a Resend env key hints at a real provider) the
-// email is enqueued on the shared job queue: the worker resolves the effective
-// transport per send from the platform/tenant email config (Resend, SendGrid,
-// Mailgun, Postmark, SMTP — see apps/worker resolveEmailDelivery), so no
-// specific provider env var is required here. The direct-SMTP path below is
-// strictly the local-dev fallback that delivers to Mailpit. Delivery failures
-// propagate so auth never reports success for an email that was not accepted,
-// and secret-bearing auth URLs are never written to application logs.
+// In production the email is durably enqueued on the shared job queue. The
+// worker resolves the effective transport per send from the platform/tenant
+// email config (Resend, SendGrid, Mailgun, Postmark, or SMTP), so no specific
+// provider env var is required here. The direct-SMTP path below is strictly the
+// local-dev path that delivers to Mailpit. Queue failures and local SMTP
+// failures propagate; production provider acceptance happens later in the
+// worker. Secret-bearing auth URLs are never written to application logs.
 async function sendAuthEmail(args: {
   to: string
   subject: string
@@ -163,97 +162,36 @@ async function sendAuthEmail(args: {
   label: string
 }) {
   const { to, subject, html, text, label } = args
-  if (process.env.NODE_ENV === 'production' || process.env.RESEND_API_KEY) {
+  if (process.env.NODE_ENV === 'production') {
     const { enqueueEmail } = await import('@beaconhs/jobs')
     await enqueueEmail({ to, subject, html, text, meta: { category: 'auth' } })
     return
+  }
+  if (process.env.NODE_ENV !== 'development') {
+    throw new Error('[auth] Direct SMTP delivery is available only in local development.')
   }
   await sendViaSmtp({ to, subject, html, text })
   console.log(`[auth] ${label} accepted by the local SMTP server for ${to}`)
 }
 
-// Minimal SMTP client for Mailpit (no auth, plain text). Avoids pulling a
-// full mail library when we just need dev delivery.
+// Local Mailpit uses the same tested SMTP transport as production providers so
+// multiline replies, fragmented packets, timeouts, MIME encoding and dot
+// stuffing are handled by Nodemailer rather than a bespoke protocol client.
 async function sendViaSmtp(args: {
   to: string | string[]
   subject: string
   html: string
   text: string
 }) {
-  const { createConnection } = await import('node:net')
+  const { sendVia } = await import('@beaconhs/emails')
   const host = process.env.SMTP_HOST ?? 'localhost'
   const port = Number(process.env.SMTP_PORT ?? 1025)
-  const from = process.env.RESEND_FROM ?? 'BeaconHS <noreply@beaconhs.local>'
-  const tos = Array.isArray(args.to) ? args.to : [args.to]
-  const fromAddr = from.match(/<(.+)>/)?.[1] ?? from
-
-  return new Promise<void>((resolve, reject) => {
-    const sock = createConnection({ host, port })
-    const lines: string[] = []
-    let step = 0
-    const send = (s: string) => sock.write(s + '\r\n')
-
-    sock.on('data', (chunk) => {
-      lines.push(chunk.toString())
-      const data = chunk.toString()
-      if (!data.startsWith('2') && !data.startsWith('3')) {
-        sock.end()
-        reject(new Error(`SMTP error: ${data.trim()}`))
-        return
-      }
-      switch (step) {
-        case 0:
-          send(`EHLO beaconhs`)
-          step++
-          break
-        case 1:
-          send(`MAIL FROM:<${fromAddr}>`)
-          step++
-          break
-        case 2:
-          send(`RCPT TO:<${tos[0]}>`)
-          step++
-          break
-        case 3:
-          send(`DATA`)
-          step++
-          break
-        case 4: {
-          const boundary = '----=_BeaconHS' + Math.random().toString(36).slice(2)
-          const body = [
-            `From: ${from}`,
-            `To: ${tos.join(', ')}`,
-            `Subject: ${args.subject}`,
-            `MIME-Version: 1.0`,
-            `Content-Type: multipart/alternative; boundary="${boundary}"`,
-            ``,
-            `--${boundary}`,
-            `Content-Type: text/plain; charset=utf-8`,
-            ``,
-            args.text,
-            ``,
-            `--${boundary}`,
-            `Content-Type: text/html; charset=utf-8`,
-            ``,
-            args.html,
-            ``,
-            `--${boundary}--`,
-            `.`,
-          ].join('\r\n')
-          send(body)
-          step++
-          break
-        }
-        case 5:
-          send(`QUIT`)
-          step++
-          break
-        case 6:
-          sock.end()
-          resolve()
-          break
-      }
-    })
-    sock.on('error', reject)
-  })
+  const from = process.env.SMTP_FROM ?? 'BeaconHS <noreply@beaconhs.local>'
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error('[auth] SMTP_PORT must be a whole number from 1 to 65535.')
+  }
+  await sendVia(
+    { provider: 'smtp', mode: 'local-dev', host, port, secure: false, from },
+    { to: args.to, subject: args.subject, html: args.html, text: args.text },
+  )
 }

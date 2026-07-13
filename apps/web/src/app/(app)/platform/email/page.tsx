@@ -17,7 +17,6 @@ export default async function PlatformEmailPage() {
   const specs: EmailProviderSpecLite[] = EMAIL_PROVIDER_SPECS.map((p) => ({
     value: p.value,
     label: p.label,
-    transport: p.transport,
     hasSecret: p.hasSecret,
     secretLabel: p.secretLabel,
     keyHint: p.keyHint,
@@ -58,7 +57,12 @@ export default async function PlatformEmailPage() {
               <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
                 Send a test through the platform provider
               </p>
-              <EmailTestButton scope="platform" />
+              <EmailTestButton scope="platform" disabled={platform.mode === 'disabled'} />
+              {platform.mode === 'disabled' ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  The global kill switch blocks test messages. Save a live policy before testing.
+                </p>
+              ) : null}
             </div>
           </CardContent>
         </Card>

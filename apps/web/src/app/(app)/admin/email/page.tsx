@@ -23,7 +23,6 @@ export default async function EmailSettingsPage() {
   const specs: EmailProviderSpecLite[] = EMAIL_PROVIDER_SPECS.map((p) => ({
     value: p.value,
     label: p.label,
-    transport: p.transport,
     hasSecret: p.hasSecret,
     secretLabel: p.secretLabel,
     keyHint: p.keyHint,

@@ -13,8 +13,6 @@ export type EmailJobData = {
   subject: string
   html: string
   text: string
-  from?: string
-  replyTo?: string
   attachments?: EmailAttachment[]
   // For audit-log fan-out
   meta?: {

@@ -82,7 +82,6 @@ R2_ACCESS_KEY_ID
 R2_BUCKET
 R2_ENDPOINT
 R2_SECRET_ACCESS_KEY
-RESEND_API_KEY
 VAPID_PRIVATE_KEY
 VAPID_PUBLIC_KEY
 VAPID_SUBJECT
@@ -91,6 +90,19 @@ VAPID_SUBJECT
 `R2_PRIVATE_BUCKET_CONFIRMED` is additionally required when `R2_ENDPOINT` is a
 Cloudflare `r2.cloudflarestorage.com` endpoint. It is unused for the private dev
 MinIO-compatible endpoint.
+
+Production email providers are configured in **Platform email** and their
+credentials are encrypted in PostgreSQL with a key derived from the runtime
+`BETTER_AUTH_SECRET` (supplied by the `DEV_BETTER_AUTH_SECRET` GitHub secret in
+the dev workflow). The private deployment runner verifies that the platform
+provider is enabled, complete, and decryptable before it stops any writers. Do
+not add provider API keys to the container environment. Before cutover, verify
+the sender identity or domain with the selected provider, allow the deployment
+egress addresses when the provider uses an IP allowlist, and send a test from
+**Platform email** to an independently monitored mailbox. Custom SMTP must use
+an externally resolvable public DNS hostname and a certificate that validates
+for that hostname. BeaconHS blocks private, local, reserved, and IP-literal
+SMTP targets and requires verified implicit TLS or STARTTLS.
 
 `SENTRY_DSN` is warning-only for the dev deployment so a monitoring-provider
 outage does not block schema recovery, but it remains mandatory before

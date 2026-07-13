@@ -470,6 +470,9 @@ importers:
       '@beaconhs/db':
         specifier: workspace:*
         version: link:../db
+      '@beaconhs/emails':
+        specifier: workspace:*
+        version: link:../emails
       '@beaconhs/jobs':
         specifier: workspace:*
         version: link:../jobs
@@ -592,6 +595,9 @@ importers:
       '@beaconhs/crypto':
         specifier: workspace:*
         version: link:../crypto
+      '@beaconhs/sync':
+        specifier: workspace:*
+        version: link:../sync
       nodemailer:
         specifier: ^9.0.1
         version: 9.0.1

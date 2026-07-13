@@ -7,7 +7,6 @@ import { Button, Input, Label, SearchSelect, Select } from '@beaconhs/ui'
 export type EmailProviderSpecLite = {
   value: string
   label: string
-  transport: 'http' | 'smtp'
   hasSecret: boolean
   secretLabel: string
   keyHint: string
@@ -69,12 +68,17 @@ export function EmailSettingsForm({
   initial: EmailFormInitial
   scope: 'tenant' | 'platform'
 }) {
+  const [enabled, setEnabled] = useState(initial.enabled)
   const [provider, setProvider] = useState(initial.provider)
   const [mode, setMode] = useState(initial.mode ?? 'tenant_optional')
+  const platformLive = scope === 'platform' && mode !== 'disabled'
+  const requiresCompleteProvider = scope === 'platform' ? platformLive : enabled
 
   const spec = specs.find((s) => s.value === provider) ?? specs[0]
   if (!spec) return null
   const savedProvider = provider === initial.provider
+  const savedProviderLabel =
+    specs.find((candidate) => candidate.value === initial.provider)?.label ?? initial.provider
   const keyPlaceholder =
     initial.hasKey && savedProvider
       ? '•••••••••••• (saved — type to replace)'
@@ -99,19 +103,29 @@ export function EmailSettingsForm({
 
   return (
     <form action={action} className="space-y-5">
+      {platformLive ? <input type="hidden" name="enabled" value="on" /> : null}
       <label className="flex items-center gap-2.5">
         <input
           type="checkbox"
-          name="enabled"
-          defaultChecked={initial.enabled}
+          name={platformLive ? undefined : 'enabled'}
+          checked={platformLive || enabled}
+          disabled={platformLive}
+          onChange={(event) => setEnabled(event.currentTarget.checked)}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
         />
         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
           {scope === 'platform'
             ? 'Enable the platform default provider'
-            : 'Enable email sending for this tenant'}
+            : 'Enable this tenant provider override'}
         </span>
       </label>
+      <p className="-mt-3 text-xs text-slate-500 dark:text-slate-400">
+        {scope === 'tenant'
+          ? 'When this override is off, the tenant uses the platform default provider.'
+          : platformLive
+            ? 'A live policy requires the platform default provider, so it remains enabled.'
+            : 'The kill switch stops delivery even if you keep this provider ready for later.'}
+      </p>
 
       {scope === 'platform' ? (
         <div className="space-y-1.5">
@@ -141,12 +155,25 @@ export function EmailSettingsForm({
         {spec.docsHint ? (
           <p className="text-xs text-slate-400 dark:text-slate-500">{spec.docsHint}</p>
         ) : null}
+        {!savedProvider ? (
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            The saved {savedProviderLabel} credential will not be reused for {spec.label}.{' '}
+            {spec.secretRequired
+              ? `Enter a new ${spec.secretLabel.toLowerCase()} before enabling this provider.`
+              : `Enter a new ${spec.secretLabel.toLowerCase()} only if this provider requires authentication.`}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>From name</Label>
-          <Input name="fromName" defaultValue={initial.fromName} placeholder="BeaconHS" />
+          <Input
+            name="fromName"
+            maxLength={128}
+            defaultValue={initial.fromName}
+            placeholder="BeaconHS"
+          />
         </div>
         <div className="space-y-1.5">
           <Label>
@@ -156,6 +183,8 @@ export function EmailSettingsForm({
           <Input
             name="fromEmail"
             type="email"
+            required={requiresCompleteProvider}
+            maxLength={254}
             defaultValue={initial.fromEmail}
             placeholder="no-reply@yourcompany.com"
           />
@@ -170,6 +199,7 @@ export function EmailSettingsForm({
         <Input
           name="replyTo"
           type="email"
+          maxLength={254}
           defaultValue={initial.replyTo}
           placeholder="safety@yourcompany.com"
         />
@@ -179,15 +209,34 @@ export function EmailSettingsForm({
         <div className="space-y-1.5">
           <Label>
             {spec.secretLabel}
-            {spec.secretRequired ? null : (
+            {spec.secretRequired ? (
+              <span className="font-normal text-slate-400 dark:text-slate-500">
+                {' '}
+                (required when enabled)
+              </span>
+            ) : (
               <span className="font-normal text-slate-400 dark:text-slate-500"> (optional)</span>
             )}
           </Label>
-          <Input type="password" name="secret" autoComplete="off" placeholder={keyPlaceholder} />
+          <Input
+            key={provider}
+            type="password"
+            name="secret"
+            autoComplete="off"
+            maxLength={4096}
+            placeholder={keyPlaceholder}
+            required={
+              requiresCompleteProvider && spec.secretRequired && !(initial.hasKey && savedProvider)
+            }
+          />
           <p className="text-xs text-slate-400 dark:text-slate-500">
             {initial.hasKey && savedProvider
               ? 'A credential is stored, encrypted (AES-256-GCM). Leave blank to keep the existing one.'
-              : 'Stored encrypted with a key derived from the app secret — never written to env or shown again.'}
+              : !savedProvider
+                ? spec.secretRequired
+                  ? `Enter a new ${spec.secretLabel.toLowerCase()} for ${spec.label}. The previous provider credential will be discarded when you save.`
+                  : `The previous provider credential will be discarded when you save. Leave this blank only when ${spec.label} accepts unauthenticated delivery.`
+                : 'Stored encrypted with a key derived from the app secret — never written to env or shown again.'}
           </p>
         </div>
       ) : null}
@@ -231,7 +280,12 @@ export function EmailSettingsForm({
               <div key={f.key} className="space-y-1.5">
                 <Label>
                   {f.label}
-                  {f.required ? null : (
+                  {f.required ? (
+                    <span className="font-normal text-slate-400 dark:text-slate-500">
+                      {' '}
+                      (required when enabled)
+                    </span>
+                  ) : (
                     <span className="font-normal text-slate-400 dark:text-slate-500">
                       {' '}
                       (optional)
@@ -241,6 +295,25 @@ export function EmailSettingsForm({
                 <Input
                   name={f.key}
                   type={f.kind === 'number' ? 'number' : 'text'}
+                  required={requiresCompleteProvider && Boolean(f.required)}
+                  min={f.kind === 'number' ? 1 : undefined}
+                  max={f.kind === 'number' ? 65_535 : undefined}
+                  maxLength={f.kind === 'text' ? (f.key === 'smtpUsername' ? 320 : 253) : undefined}
+                  step={f.kind === 'number' ? 1 : undefined}
+                  pattern={
+                    f.key === 'mailgunDomain'
+                      ? '^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$'
+                      : f.key === 'smtpHost'
+                        ? '^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$'
+                        : undefined
+                  }
+                  title={
+                    f.key === 'mailgunDomain'
+                      ? 'Enter a domain such as mg.example.com, without a protocol or path.'
+                      : f.key === 'smtpHost'
+                        ? 'Enter a host such as smtp.example.com, without a protocol or path.'
+                        : undefined
+                  }
                   defaultValue={initialField(f.key)}
                   placeholder={f.placeholder}
                 />

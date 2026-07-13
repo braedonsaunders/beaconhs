@@ -278,7 +278,7 @@ Monorepo with Turborepo. Single deploy target (Next.js) for v1.
 - **File pipeline:** R2 + presigned PUT for direct browser uploads (chunked for big videos). Image optimization in a job (sharp). Video transcoding deferred (just store the original for v1; transcode later).
 - **Search:** Postgres `tsvector` generated columns + pg_trgm for fuzzy. One central `search_index` table with `(tenant_id, entity_type, entity_id, tsv)`. Add Meilisearch later if needed.
 - **PDF:** Puppeteer in a dedicated worker container, rendering a React component tree to PDF. One renderer for everything (forms, reports, certificates) — branded with the tenant's logo + colors.
-- **Email:** Resend (or self-hosted Postal). React Email for templates.
+- **Email:** database-managed Resend, SendGrid, Mailgun, Postmark, or SMTP transport.
 - **Push:** Web Push via VAPID; service worker registers subscriptions; queue worker fans out.
 - **SMS:** Twilio, gated to a "critical" channel. Off by default.
 - **Observability:** OpenTelemetry → self-host Grafana stack (Loki + Tempo + Mimir) or paid (Axiom / Highlight). Sentry for errors stays.

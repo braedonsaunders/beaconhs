@@ -1,8 +1,9 @@
 // Resolve the effective email transport for a send, applying the platform →
-// tenant → environment policy. The decision logic itself is the pure
+// tenant policy. The decision logic itself is the pure
 // `resolveEffectiveTransport` in @beaconhs/emails; this module only fetches the
 // two stored configs (platform singleton + the tenant's settings.email) from the
-// database. The platform row is cached briefly since it changes rarely.
+// database. The platform policy is read for every job so the global kill switch
+// takes effect immediately.
 
 import { eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
@@ -10,17 +11,13 @@ import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/sc
 import {
   resolveEffectiveTransport,
   type EffectiveEmail,
+  type EmailTransport,
   type PlatformEmailConfig,
   type RawEmailConfig,
 } from '@beaconhs/emails'
 
-let platformCache: { value: PlatformEmailConfig | null; at: number } | null = null
-const PLATFORM_TTL_MS = 30_000
-
 async function readPlatformEmail(): Promise<PlatformEmailConfig | null> {
-  const now = Date.now()
-  if (platformCache && now - platformCache.at < PLATFORM_TTL_MS) return platformCache.value
-  const value = await withSuperAdmin(db, async (tx) => {
+  return withSuperAdmin(db, async (tx) => {
     const [row] = await tx
       .select({ email: platformSettings.email })
       .from(platformSettings)
@@ -29,8 +26,6 @@ async function readPlatformEmail(): Promise<PlatformEmailConfig | null> {
     const raw = row?.email
     return raw && typeof raw === 'object' ? (raw as PlatformEmailConfig) : null
   })
-  platformCache = { value, at: now }
-  return value
 }
 
 async function readTenantEmail(tenantId: string): Promise<RawEmailConfig | null> {
@@ -52,7 +47,13 @@ export async function resolveEmailDelivery(tenantId: string | null): Promise<Eff
   return resolveEffectiveTransport(platform, tenant, { tenantScoped: Boolean(tenantId) })
 }
 
-/** Test seam: drop the cached platform row (used after a config save in-process). */
-function clearPlatformEmailCache(): void {
-  platformCache = null
+/** Production sends must resolve through the database-managed provider system. */
+export function requireEmailTransport(delivery: EffectiveEmail): EmailTransport {
+  if (delivery.kind === 'transport') return delivery.transport
+  if (delivery.kind === 'suppressed') {
+    throw new Error('Email delivery is disabled by the platform administrator.')
+  }
+  throw new Error(
+    'Email delivery is not configured: configure an enabled platform or tenant provider.',
+  )
 }

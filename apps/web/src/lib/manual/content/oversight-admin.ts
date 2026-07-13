@@ -536,11 +536,42 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
 
+On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing.
+
 ## Integrations
 
 - **AI**, **Email**, and **SMS** — pick a provider and store its credentials securely.
 - **Integrations** — sync data in and send events out to other systems.
 - **API keys** — credentials for the public REST API. Search by key name or prefix and filter by active, expired, or revoked status. Choose the smallest permissions and explicitly select every Builder app the integration may access; forms permissions alone expose no apps. Write requests require an **Idempotency-Key**, and keys are rate-limited. API keys stop authenticating while the workspace is suspended or archived.
+
+## Configure the platform email provider
+
+Platform super-admins set the default provider used for sign-in links, invitations, password resets, and tenants without their own provider.
+
+1. Open **Platform**, then click **Platform email**.
+2. Choose the **Policy**. **Tenants choose their own (recommended)** lets a tenant override the default. **Force the platform default for all tenants** sends every tenant's email through this provider. **Disable all email (kill switch)** is the emergency stop.
+3. Choose the **Provider** and enter a verified **From email**. Enter **Reply-to** only when replies should go somewhere else.
+4. Enter the provider credential. If you change providers, enter the new provider's credential in the same save. BeaconHS never reuses one provider's saved credential with another provider. An unauthenticated custom SMTP relay is the only exception and does not need a password.
+5. Turn on **Enable the platform default provider**.
+6. Click **Save platform email**.
+7. Under **Send a test through the platform provider**, enter an address you can check and click **Send test**.
+
+A successful test means the provider accepted the message. Check the inbox as well. Provider accounts can still suppress delivery when the sender or sending domain has not been verified. The global kill switch blocks test messages too. Platform tests are limited to five every ten minutes per administrator. Each tenant applies the same limit to its own test sends.
+
+For custom SMTP in a production deployment, use a public, externally resolvable DNS hostname and a valid TLS certificate that matches that hostname. BeaconHS blocks private, local, reserved, unresolvable, and IP-literal hosts. Leave **Port** blank to use 465 with **Use implicit TLS (port 465)** turned on, or 587 when it is off.
+
+## Configure a tenant email provider
+
+This option is available only while the platform policy is **Tenants choose their own (recommended)**.
+
+1. Open **Admin**, then **Notifications**, then **Email**.
+2. Choose the **Provider** and enter its sender details.
+3. Enter the provider credential. Changing providers requires the new provider's credential, except when the new custom SMTP relay is intentionally unauthenticated.
+4. Turn on **Enable this tenant provider override**.
+5. Click **Save email settings**.
+6. Under **Send a test through this tenant's provider**, enter an address you can check and click **Send test**.
+
+When the override is off, the tenant uses the platform default provider. Clicking **Remove key** removes the tenant credential and turns off the override; it does not stop email supplied by the platform default. Add a credential and enable the override again before sending another tenant-provider test.
 
 Integration connections can reach public **HTTPS** services only. External database connections also need a public DNS name, valid **SSL/TLS**, and a certificate that matches that name. BeaconHS blocks local, private, and reserved network addresses. When sending to an external SQL table, enter its **Identity column** so a partial retry can remove completed inserts before trying again.
 

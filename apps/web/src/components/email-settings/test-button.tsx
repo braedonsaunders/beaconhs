@@ -8,9 +8,11 @@ import { testEmailConnection } from '@/lib/email-settings-actions'
 export function EmailTestButton({
   scope,
   defaultTo = '',
+  disabled = false,
 }: {
   scope: 'tenant' | 'platform'
   defaultTo?: string
+  disabled?: boolean
 }) {
   const [to, setTo] = useState(defaultTo)
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
@@ -23,7 +25,12 @@ export function EmailTestButton({
           <Input
             type="email"
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            disabled={disabled}
+            maxLength={254}
+            onChange={(event) => {
+              setTo(event.target.value)
+              setResult(null)
+            }}
             placeholder="you@example.com"
             aria-label="Test recipient"
           />
@@ -31,7 +38,7 @@ export function EmailTestButton({
         <Button
           type="button"
           variant="outline"
-          disabled={pending || !to}
+          disabled={disabled || pending || !to}
           onClick={() => start(async () => setResult(await testEmailConnection({ scope, to })))}
         >
           {pending ? (

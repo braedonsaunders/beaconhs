@@ -23,8 +23,6 @@ export type EmailProviderField = {
 export type EmailProviderSpec = {
   value: EmailProvider
   label: string
-  /** HTTP API (fetch) vs SMTP (nodemailer). */
-  transport: 'http' | 'smtp'
   /** Whether this provider authenticates with a single sealed secret. */
   hasSecret: boolean
   /** Label for the single sealed secret (api key / server token / password). */
@@ -43,7 +41,6 @@ export const EMAIL_PROVIDER_SPECS: EmailProviderSpec[] = [
   {
     value: 'resend',
     label: 'Resend',
-    transport: 'http',
     hasSecret: true,
     secretLabel: 'API key',
     keyHint: 're_…',
@@ -53,7 +50,6 @@ export const EMAIL_PROVIDER_SPECS: EmailProviderSpec[] = [
   {
     value: 'sendgrid',
     label: 'SendGrid',
-    transport: 'http',
     hasSecret: true,
     secretLabel: 'API key',
     keyHint: 'SG.…',
@@ -63,7 +59,6 @@ export const EMAIL_PROVIDER_SPECS: EmailProviderSpec[] = [
   {
     value: 'mailgun',
     label: 'Mailgun',
-    transport: 'http',
     hasSecret: true,
     secretLabel: 'API key',
     keyHint: 'Your Mailgun sending key',
@@ -90,7 +85,6 @@ export const EMAIL_PROVIDER_SPECS: EmailProviderSpec[] = [
   {
     value: 'postmark',
     label: 'Postmark',
-    transport: 'http',
     hasSecret: true,
     secretLabel: 'Server token',
     keyHint: 'Your Postmark server token',
@@ -100,7 +94,6 @@ export const EMAIL_PROVIDER_SPECS: EmailProviderSpec[] = [
   {
     value: 'smtp',
     label: 'SMTP (custom)',
-    transport: 'smtp',
     hasSecret: true,
     secretLabel: 'Password',
     keyHint: 'SMTP password (leave blank for an unauthenticated relay)',
@@ -112,13 +105,20 @@ export const EMAIL_PROVIDER_SPECS: EmailProviderSpec[] = [
         label: 'Host',
         placeholder: 'smtp.yourprovider.com',
         required: true,
+        help: 'Public DNS name on the provider certificate. Private hosts and IP literals are blocked.',
       },
-      { key: 'smtpPort', kind: 'number', label: 'Port', placeholder: '587' },
+      {
+        key: 'smtpPort',
+        kind: 'number',
+        label: 'Port',
+        placeholder: 'Automatic (465 or 587)',
+        help: 'Blank defaults to 465 with implicit TLS, or 587 with required STARTTLS.',
+      },
       { key: 'smtpSecure', kind: 'boolean', label: 'Use implicit TLS (port 465)' },
       { key: 'smtpUsername', kind: 'text', label: 'Username', placeholder: 'apikey or full email' },
     ],
     docsHint:
-      'Works with AWS SES, Microsoft 365, Google Workspace and any self-hosted server via SMTP credentials.',
+      'Requires a publicly resolvable DNS host whose TLS certificate matches that name. Private hosts, local names and IP literals are blocked.',
   },
 ]
 
@@ -128,9 +128,5 @@ const SPEC_BY_VALUE = Object.fromEntries(EMAIL_PROVIDER_SPECS.map((s) => [s.valu
 >
 
 export function isEmailProvider(value: unknown): value is EmailProvider {
-  return typeof value === 'string' && value in SPEC_BY_VALUE
-}
-
-export function emailProviderSpec(provider: EmailProvider): EmailProviderSpec {
-  return SPEC_BY_VALUE[provider]
+  return typeof value === 'string' && Object.hasOwn(SPEC_BY_VALUE, value)
 }

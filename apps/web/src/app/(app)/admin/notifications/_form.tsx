@@ -37,6 +37,7 @@ type CatConfig = {
   escalation: EscalationStep[]
 }
 type InitialMap = Record<string, CatConfig>
+export type ChannelAvailability = 'ready' | 'disabled' | 'unconfigured'
 
 const CHANNELS: { key: string; label: string; locked?: boolean }[] = [
   { key: 'in_app', label: 'In-app', locked: true },
@@ -118,18 +119,19 @@ function RoleChips({
 function ChannelChips({
   value,
   onChange,
-  configured,
+  availability,
 }: {
   value: string[]
   onChange: (next: string[]) => void
-  configured: Record<string, boolean>
+  availability: Record<string, ChannelAvailability>
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {CHANNELS.map((c) => {
         const on = c.locked || value.includes(c.key)
-        // email/sms can be selected, but warn if that transport isn't set up.
-        const unconfigured = (c.key === 'email' || c.key === 'sms') && configured[c.key] === false
+        const status = availability[c.key] ?? 'ready'
+        const unavailable = status !== 'ready'
+        const statusCopy = status === 'disabled' ? 'disabled by platform' : 'not set up'
         return (
           <button
             key={c.key}
@@ -137,9 +139,11 @@ function ChannelChips({
             disabled={c.locked}
             aria-pressed={on}
             title={
-              unconfigured
+              status === 'unconfigured'
                 ? `${c.label} isn't set up yet — configure it in the ${c.label} tab`
-                : undefined
+                : status === 'disabled'
+                  ? `${c.label} is disabled by platform policy`
+                  : undefined
             }
             onClick={() =>
               c.locked
@@ -149,12 +153,12 @@ function ChannelChips({
             className={cn(
               chipBase,
               on ? chipOn : chipOff,
-              unconfigured &&
+              unavailable &&
                 'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-300',
             )}
           >
             {c.label}
-            {c.locked ? ' · always' : unconfigured ? ' · not set up' : ''}
+            {c.locked ? ' · always' : unavailable ? ` · ${statusCopy}` : ''}
           </button>
         )
       })}
@@ -162,19 +166,31 @@ function ChannelChips({
   )
 }
 
-function ChannelStatus({ label, ok, href }: { label: string; ok: boolean; href?: string }) {
+function ChannelStatus({
+  label,
+  status,
+  href,
+}: {
+  label: string
+  status: ChannelAvailability
+  href?: string
+}) {
+  const ready = status === 'ready'
+  const statusCopy = status === 'disabled' ? 'disabled by platform' : 'not set up'
   const content = (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cn('h-1.5 w-1.5 rounded-full', ok ? 'bg-emerald-500' : 'bg-amber-500')} />
+      <span className={cn('h-1.5 w-1.5 rounded-full', ready ? 'bg-emerald-500' : 'bg-amber-500')} />
       <span
-        className={ok ? 'text-slate-600 dark:text-slate-300' : 'text-amber-700 dark:text-amber-400'}
+        className={
+          ready ? 'text-slate-600 dark:text-slate-300' : 'text-amber-700 dark:text-amber-400'
+        }
       >
         {label}
-        {ok ? '' : ' — not set up'}
+        {ready ? '' : ` — ${statusCopy}`}
       </span>
     </span>
   )
-  return !ok && href ? (
+  return status === 'unconfigured' && href ? (
     <Link href={href as never} className="hover:underline">
       {content}
     </Link>
@@ -311,8 +327,8 @@ export function NotificationSettingsForm({
   groups,
   initial,
   policy,
-  emailConfigured,
-  smsConfigured,
+  emailAvailability,
+  smsAvailability,
 }: {
   categories: NotificationCategory[]
   roles: RoleOpt[]
@@ -320,14 +336,14 @@ export function NotificationSettingsForm({
   groups: MemberOpt[]
   initial: InitialMap
   policy: PolicyInput
-  emailConfigured: boolean
-  smsConfigured: boolean
+  emailAvailability: ChannelAvailability
+  smsAvailability: ChannelAvailability
 }) {
-  const channelConfigured: Record<string, boolean> = {
-    in_app: true,
-    email: emailConfigured,
-    push: true,
-    sms: smsConfigured,
+  const channelAvailability: Record<string, ChannelAvailability> = {
+    in_app: 'ready',
+    email: emailAvailability,
+    push: 'ready',
+    sms: smsAvailability,
   }
   const seed = useMemo<InitialMap>(() => {
     const out: InitialMap = {}
@@ -398,10 +414,10 @@ export function NotificationSettingsForm({
       {/* Channel availability — what actually delivers right now. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/40">
         <span className="font-medium text-slate-600 dark:text-slate-300">Channels</span>
-        <ChannelStatus label="In-app" ok />
-        <ChannelStatus label="Email" ok={emailConfigured} href="/admin/email" />
-        <ChannelStatus label="SMS" ok={smsConfigured} href="/admin/sms" />
-        <ChannelStatus label="Push" ok />
+        <ChannelStatus label="In-app" status="ready" />
+        <ChannelStatus label="Email" status={emailAvailability} href="/admin/email" />
+        <ChannelStatus label="SMS" status={smsAvailability} href="/admin/sms" />
+        <ChannelStatus label="Push" status="ready" />
       </div>
 
       {/* Tenant-wide routing policy */}
@@ -648,7 +664,7 @@ export function NotificationSettingsForm({
                   <ChannelChips
                     value={cfg.channels}
                     onChange={(v) => patch(cat.key, { channels: v })}
-                    configured={channelConfigured}
+                    availability={channelAvailability}
                   />
                 </div>
 

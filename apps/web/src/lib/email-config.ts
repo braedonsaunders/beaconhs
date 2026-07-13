@@ -10,6 +10,9 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
 import {
   isEmailProvider,
+  isEmailPolicyMode,
+  resolveEmailTransport,
+  validateStoredEmailConfig,
   type EmailPolicyMode,
   type EmailProvider,
   type PlatformEmailConfig,
@@ -45,9 +48,11 @@ type EmailSettings = {
 
 type PlatformEmailSettings = EmailSettings & { mode: EmailPolicyMode }
 
-function toSettings(raw: RawEmailConfig): EmailSettings {
+export function toEmailSettings(raw: RawEmailConfig): EmailSettings {
   return {
-    enabled: raw.enabled !== false,
+    // An absent tenant config means "use the platform default", not an active
+    // tenant override. A stored provider must exist before enabled can be true.
+    enabled: Boolean(raw.provider) && raw.enabled === true,
     provider: normProvider(raw.provider),
     fromName: raw.fromName ?? '',
     fromEmail: raw.fromEmail ?? '',
@@ -79,9 +84,64 @@ export type EmailSettingsInput = {
   secret?: string
 }
 
-// Merge form input over the previously-stored config, re-sealing the secret only
-// when a new one was typed.
-function mergeRaw(prev: RawEmailConfig, input: EmailSettingsInput): RawEmailConfig {
+type EmailConfigChange = {
+  previousProvider: EmailProvider | null
+  providerChanged: boolean
+  credentialChange: 'unchanged' | 'added' | 'replaced' | 'removed'
+  enabledChanged: boolean
+}
+
+function hasCredential(raw: RawEmailConfig): boolean {
+  return Boolean(raw.keyCiphertext && raw.keyNonce)
+}
+
+export function describeEmailConfigChange(
+  prev: RawEmailConfig,
+  next: RawEmailConfig,
+  credentialSupplied: boolean,
+): EmailConfigChange {
+  const hadCredential = hasCredential(prev)
+  const hasNextCredential = hasCredential(next)
+  const credentialChange: EmailConfigChange['credentialChange'] = credentialSupplied
+    ? hadCredential
+      ? 'replaced'
+      : 'added'
+    : hadCredential && !hasNextCredential
+      ? 'removed'
+      : 'unchanged'
+  const wasEnabled = Boolean(prev.provider) && prev.enabled === true
+  return {
+    previousProvider: prev.provider ?? null,
+    providerChanged: prev.provider !== next.provider,
+    credentialChange,
+    enabledChanged: wasEnabled !== (Boolean(next.provider) && next.enabled === true),
+  }
+}
+
+export function assertTenantEmailOverrideAllowed(platform: PlatformEmailConfig): void {
+  if ((platform.mode ?? 'tenant_optional') !== 'tenant_optional') {
+    throw new Error(
+      'Tenant email provider overrides are unavailable under the current platform policy.',
+    )
+  }
+}
+
+/** Validate every stored field and, for a live provider, prove its credential
+ * decrypts into a usable canonical transport before committing the config. */
+export function validateEmailConfigForSave(raw: RawEmailConfig, requireLive: boolean): void {
+  validateStoredEmailConfig(raw, { requireComplete: requireLive })
+  if (requireLive && !resolveEmailTransport(raw)) {
+    throw new Error(
+      'The saved provider credential could not be decrypted. Replace the credential before enabling email delivery.',
+    )
+  }
+}
+
+// Merge form input over the previously-stored config. A sealed credential is
+// reusable only while the provider stays the same: provider credentials are
+// not interchangeable, so changing providers requires a new credential.
+export function mergeEmailConfig(prev: RawEmailConfig, input: EmailSettingsInput): RawEmailConfig {
+  const sameProvider = prev.provider === input.provider
   const next: RawEmailConfig = {
     enabled: input.enabled,
     provider: input.provider,
@@ -91,11 +151,11 @@ function mergeRaw(prev: RawEmailConfig, input: EmailSettingsInput): RawEmailConf
     mailgunDomain: input.mailgunDomain || undefined,
     mailgunRegion: input.mailgunRegion,
     smtpHost: input.smtpHost || undefined,
-    smtpPort: input.smtpPort > 0 ? input.smtpPort : undefined,
+    smtpPort: input.smtpPort === 0 ? undefined : input.smtpPort,
     smtpSecure: input.smtpSecure,
     smtpUsername: input.smtpUsername || undefined,
-    keyCiphertext: prev.keyCiphertext,
-    keyNonce: prev.keyNonce,
+    keyCiphertext: sameProvider ? prev.keyCiphertext : undefined,
+    keyNonce: sameProvider ? prev.keyNonce : undefined,
   }
   if (input.secret && input.secret.trim()) {
     const sealed = sealSecret(input.secret.trim())
@@ -123,7 +183,7 @@ async function readTenantEmail(tenantId: string): Promise<RawEmailConfig> {
 
 /** UI-facing settings for this tenant (no secret). */
 export async function getTenantEmailSettings(ctx: RequestContext): Promise<EmailSettings> {
-  return toSettings(await readTenantEmail(ctx.tenantId))
+  return toEmailSettings(await readTenantEmail(ctx.tenantId))
 }
 
 /** Raw stored config incl. the sealed secret — for the "send test" action. */
@@ -134,8 +194,19 @@ export async function getTenantEmailRaw(ctx: RequestContext): Promise<RawEmailCo
 export async function saveTenantEmailSettings(
   ctx: RequestContext,
   input: EmailSettingsInput,
-): Promise<void> {
-  await withSuperAdmin(db, async (tx) => {
+): Promise<EmailConfigChange> {
+  return withSuperAdmin(db, async (tx) => {
+    const [platformRow] = await tx
+      .select({ email: platformSettings.email })
+      .from(platformSettings)
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .limit(1)
+      .for('share')
+    const platformRaw = platformRow?.email
+    assertTenantEmailOverrideAllowed(
+      (platformRaw && typeof platformRaw === 'object' ? platformRaw : {}) as PlatformEmailConfig,
+    )
+
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -146,16 +217,30 @@ export async function saveTenantEmailSettings(
     const prev = (
       settings.email && typeof settings.email === 'object' ? settings.email : {}
     ) as RawEmailConfig
+    const next = mergeEmailConfig(prev, input)
+    validateEmailConfigForSave(next, next.enabled === true)
     await tx
       .update(tenants)
-      .set({ settings: { ...settings, email: mergeRaw(prev, input) } })
+      .set({ settings: { ...settings, email: next } })
       .where(eq(tenants.id, ctx.tenantId))
+    return describeEmailConfigChange(prev, next, Boolean(input.secret))
   })
 }
 
-/** Clear the stored secret for this tenant. */
-export async function clearTenantEmailKey(ctx: RequestContext): Promise<void> {
-  await withSuperAdmin(db, async (tx) => {
+/** Clear the stored secret and disable this tenant's now-incomplete provider. */
+export async function clearTenantEmailKey(ctx: RequestContext): Promise<EmailConfigChange> {
+  return withSuperAdmin(db, async (tx) => {
+    const [platformRow] = await tx
+      .select({ email: platformSettings.email })
+      .from(platformSettings)
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .limit(1)
+      .for('share')
+    const platformRaw = platformRow?.email
+    assertTenantEmailOverrideAllowed(
+      (platformRaw && typeof platformRaw === 'object' ? platformRaw : {}) as PlatformEmailConfig,
+    )
+
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
@@ -166,15 +251,23 @@ export async function clearTenantEmailKey(ctx: RequestContext): Promise<void> {
     const prev = (
       settings.email && typeof settings.email === 'object' ? settings.email : {}
     ) as RawEmailConfig
+    const next: RawEmailConfig = {
+      ...prev,
+      enabled: false,
+      keyCiphertext: undefined,
+      keyNonce: undefined,
+    }
+    validateEmailConfigForSave(next, false)
     await tx
       .update(tenants)
       .set({
         settings: {
           ...settings,
-          email: { ...prev, keyCiphertext: undefined, keyNonce: undefined },
+          email: next,
         },
       })
       .where(eq(tenants.id, ctx.tenantId))
+    return describeEmailConfigChange(prev, next, false)
   })
 }
 
@@ -196,7 +289,10 @@ async function readPlatformEmail(): Promise<PlatformEmailConfig> {
 
 export async function getPlatformEmailSettings(): Promise<PlatformEmailSettings> {
   const raw = await readPlatformEmail()
-  return { ...toSettings(raw), mode: raw.mode ?? 'tenant_optional' }
+  if (raw.mode !== undefined && !isEmailPolicyMode(raw.mode)) {
+    throw new Error('The stored platform email policy is invalid and must be repaired.')
+  }
+  return { ...toEmailSettings(raw), mode: raw.mode ?? 'tenant_optional' }
 }
 
 export async function getPlatformEmailRaw(): Promise<PlatformEmailConfig> {
@@ -205,18 +301,36 @@ export async function getPlatformEmailRaw(): Promise<PlatformEmailConfig> {
 
 /** The current platform policy — used to decide whether a tenant may self-configure. */
 export async function getEmailPolicyMode(): Promise<EmailPolicyMode> {
-  return (await readPlatformEmail()).mode ?? 'tenant_optional'
+  const raw = await readPlatformEmail()
+  if (raw.mode !== undefined && !isEmailPolicyMode(raw.mode)) return 'disabled'
+  return raw.mode ?? 'tenant_optional'
 }
 
 export async function savePlatformEmailSettings(
   input: EmailSettingsInput & { mode: EmailPolicyMode },
-): Promise<void> {
-  const prev = await readPlatformEmail()
-  const next: PlatformEmailConfig = { ...mergeRaw(prev, input), mode: input.mode }
-  await withSuperAdmin(db, async (tx) => {
+): Promise<EmailConfigChange> {
+  return withSuperAdmin(db, async (tx) => {
+    const [row] = await tx
+      .select({ email: platformSettings.email })
+      .from(platformSettings)
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .limit(1)
+      .for('update')
+    const raw = row?.email
+    const prev = (raw && typeof raw === 'object' ? raw : {}) as PlatformEmailConfig
+    const next: PlatformEmailConfig = { ...mergeEmailConfig(prev, input), mode: input.mode }
+    // The emergency kill switch permits an incomplete disabled draft, but all
+    // fields still pass the canonical validator. Live policies additionally
+    // require an enabled provider whose sealed credential can be decrypted.
+    const requireLive = input.mode !== 'disabled'
+    if (requireLive && next.enabled !== true) {
+      throw new Error('Enable the platform default provider or select Disable all email.')
+    }
+    validateEmailConfigForSave(next, requireLive)
     await tx
       .insert(platformSettings)
       .values({ id: PLATFORM_SETTINGS_ID, email: next })
       .onConflictDoUpdate({ target: platformSettings.id, set: { email: next } })
+    return describeEmailConfigChange(prev, next, Boolean(input.secret))
   })
 }

@@ -8,15 +8,17 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
+import { resolveEffectiveTransport } from '@beaconhs/emails'
+import { resolveEffectiveSmsTransport } from '@beaconhs/sms'
 import { can } from '@beaconhs/tenant'
 import { DetailHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
-import { getEmailPolicyMode, getTenantEmailSettings } from '@/lib/email-config'
-import { getSmsPolicyMode, getTenantSmsSettings } from '@/lib/sms-config'
+import { getPlatformEmailRaw, getTenantEmailRaw } from '@/lib/email-config'
+import { getPlatformSmsRaw, getTenantSmsRaw } from '@/lib/sms-config'
 import { PageContainer } from '@/components/page-layout'
 import { NotificationsSubNav } from '@/components/notifications-sub-nav'
 import { NOTIFICATION_CATEGORIES } from './_catalog'
-import { NotificationSettingsForm } from './_form'
+import { NotificationSettingsForm, type ChannelAvailability } from './_form'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Notifications' }
@@ -121,22 +123,34 @@ export default async function NotificationSettingsPage() {
 
   // Channel availability — surfaced so admins know which channels actually
   // deliver before they enable them. Guarded; defaults to "not set up".
-  let emailConfigured = false
-  let smsConfigured = false
+  let emailAvailability: ChannelAvailability = 'unconfigured'
+  let smsAvailability: ChannelAvailability = 'unconfigured'
   try {
-    const [emailMode, tEmail, smsMode, tSms] = await Promise.all([
-      getEmailPolicyMode(),
-      getTenantEmailSettings(ctx),
-      getSmsPolicyMode(),
-      getTenantSmsSettings(ctx),
+    const [platformEmail, tenantEmail] = await Promise.all([
+      getPlatformEmailRaw(),
+      getTenantEmailRaw(ctx),
     ])
-    emailConfigured =
-      emailMode !== 'disabled' &&
-      (emailMode === 'global_only' || (tEmail.enabled && !!tEmail.fromEmail))
-    smsConfigured =
-      smsMode !== 'disabled' && (smsMode === 'global_only' || (tSms.enabled && !!tSms.fromNumber))
+    const delivery = resolveEffectiveTransport(platformEmail, tenantEmail, { tenantScoped: true })
+    emailAvailability =
+      delivery.kind === 'transport'
+        ? 'ready'
+        : delivery.kind === 'suppressed'
+          ? 'disabled'
+          : 'unconfigured'
   } catch {
-    // platform/tenant settings unavailable — leave both false.
+    // Email settings unavailable — leave email as unconfigured.
+  }
+  try {
+    const [platformSms, tenantSms] = await Promise.all([getPlatformSmsRaw(), getTenantSmsRaw(ctx)])
+    const delivery = resolveEffectiveSmsTransport(platformSms, tenantSms, { tenantScoped: true })
+    smsAvailability =
+      delivery.kind === 'transport'
+        ? 'ready'
+        : delivery.kind === 'suppressed'
+          ? 'disabled'
+          : 'unconfigured'
+  } catch {
+    // SMS settings unavailable — leave SMS as unconfigured.
   }
 
   return (
@@ -154,8 +168,8 @@ export default async function NotificationSettingsPage() {
           groups={groups}
           initial={initial}
           policy={policy}
-          emailConfigured={emailConfigured}
-          smsConfigured={smsConfigured}
+          emailAvailability={emailAvailability}
+          smsAvailability={smsAvailability}
         />
       </div>
     </PageContainer>
