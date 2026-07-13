@@ -46,9 +46,7 @@ export const ppeAnnualRecords = pgTable(
     inspectedByPersonId: uuid('inspected_by_person_id').references(() => people.id),
     inspectorName: text('inspector_name'),
     inspectorCompany: text('inspector_company'),
-    certificateAttachmentId: uuid('certificate_attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
+    certificateAttachmentId: uuid('certificate_attachment_id'),
     result: ppeAnnualRecordResult('result').notNull(),
     notes: text('notes'),
     ...timestamps,

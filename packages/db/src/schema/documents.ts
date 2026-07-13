@@ -3,7 +3,6 @@
 
 import { relations } from 'drizzle-orm'
 import {
-  boolean,
   date,
   index,
   integer,
@@ -12,12 +11,11 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
-import { people, trades } from './org'
+import { people } from './org'
 import { documentTypes, documentCategories } from './document-types'
 
 export const documentStatus = pgEnum('document_status', [
@@ -37,7 +35,6 @@ export const documents = pgTable(
     key: text('key').notNull(),
     title: text('title').notNull(),
     description: text('description'),
-    category: text('category'), // legacy freeform; superseded by categoryId
     typeId: uuid('type_id').references(() => documentTypes.id),
     categoryId: uuid('category_id').references(() => documentCategories.id),
     status: documentStatus('status').default('draft').notNull(),
@@ -194,7 +191,6 @@ export const documentReviews = pgTable(
 
 // Curated bundle of documents that publishes as a single PDF.
 // Ordered membership lives in document_book_items (see document-books.ts).
-// Legacy `contents` jsonb is preserved for back-compat but new code should write items.
 export const documentBookStatus = pgEnum('document_book_status', ['draft', 'published'])
 
 export const documentBooks = pgTable(
@@ -204,12 +200,8 @@ export const documentBooks = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    // Display fields. `title` is the canonical column going forward; `name` is the
-    // legacy column kept around to avoid breaking older inserts.
     title: text('title').notNull().default(''),
-    name: text('name').notNull().default(''),
     description: text('description'),
-    category: text('category'), // legacy freeform; superseded by categoryId
     typeId: uuid('type_id').references(() => documentTypes.id),
     categoryId: uuid('category_id').references(() => documentCategories.id),
     reviewFrequencyMonths: integer('review_frequency_months'),
@@ -217,11 +209,6 @@ export const documentBooks = pgTable(
     status: documentBookStatus('status').default('draft').notNull(),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     publishedByUserId: text('published_by_user_id').references(() => users.id),
-    // Legacy jsonb representation — kept for back-compat; new readers use document_book_items.
-    contents: jsonb('contents')
-      .$type<{ documentId: string; versionId?: string }[]>()
-      .default([])
-      .notNull(),
     ...timestamps,
   },
   (t) => ({

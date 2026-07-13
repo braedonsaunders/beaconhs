@@ -233,21 +233,29 @@ type DrizzleTx = any
  * Idempotently seed the built-in lift-plan form template for one tenant.
  * Safe to call multiple times — uses ON CONFLICT (tenant_id, key) DO NOTHING.
  *
- * @returns 'inserted' if newly created, 'skipped' if it already existed.
+ * @returns 'inserted' if newly created, 'restored' if a deleted template was
+ * reactivated, or 'skipped' if an active template already existed.
  */
 export async function seedLiftPlanTemplate(
   tx: DrizzleTx,
   tenantId: string,
-): Promise<'inserted' | 'skipped'> {
+): Promise<'inserted' | 'restored' | 'skipped'> {
   // Cheap pre-check: an explicit SELECT keeps the log line accurate (vs.
   // relying on ON CONFLICT's silent skip). If the template exists for this
   // tenant we return early.
   const existing = await tx
-    .select({ id: formTemplates.id })
+    .select({ id: formTemplates.id, deletedAt: formTemplates.deletedAt })
     .from(formTemplates)
     .where(and(eq(formTemplates.tenantId, tenantId), eq(formTemplates.key, LIFT_PLAN_TEMPLATE_KEY)))
     .limit(1)
-  if (existing.length > 0) return 'skipped'
+  if (existing[0]) {
+    if (!existing[0].deletedAt) return 'skipped'
+    await tx
+      .update(formTemplates)
+      .set({ deletedAt: null, status: 'published', updatedAt: new Date() })
+      .where(eq(formTemplates.id, existing[0].id))
+    return 'restored'
+  }
 
   const inserts = await tx
     .insert(formTemplates)

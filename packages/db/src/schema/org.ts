@@ -16,7 +16,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers, users } from './core'
+import { tenants, users } from './core'
 
 export const orgUnitLevel = pgEnum('org_unit_level', ['customer', 'project', 'site', 'area'])
 
@@ -170,6 +170,7 @@ export const people = pgTable(
   },
   (t) => ({
     tenantIdx: index('people_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('people_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux').on(t.tenantId, t.employeeNo),
     nameIdx: index('people_name_idx').on(t.tenantId, t.lastName, t.firstName),
     // Reverse-lookup index for "user → person" resolution (compliance audience,
@@ -182,6 +183,7 @@ export const people = pgTable(
     tenantUserUx: uniqueIndex('people_tenant_user_ux')
       .on(t.tenantId, t.userId)
       .where(sql`${t.userId} is not null and ${t.deletedAt} is null`),
+    metadataGin: index('people_metadata_gin').using('gin', t.metadata),
     // Badge tokens resolve people on a PUBLIC page, so they must be globally
     // unique (cross-tenant). Partial: most workers never have a badge printed.
     badgeTokenUx: uniqueIndex('people_badge_token_ux')

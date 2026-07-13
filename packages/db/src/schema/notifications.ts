@@ -39,6 +39,9 @@ export const notifications = pgTable(
     linkPath: text('link_path'), // in-app deep link
     data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
     isCritical: boolean('is_critical').default(false).notNull(),
+    // Stable BullMQ source job id. Nullable only for historical/manual rows;
+    // worker-created notifications use it for retry-safe insertion.
+    sourceJobId: text('source_job_id'),
     readAt: timestamp('read_at', { withTimezone: true }),
     // Snoozed alerts drop out of the inbox until this time (Phase 3). null = visible.
     snoozedUntil: timestamp('snoozed_until', { withTimezone: true }),
@@ -48,6 +51,11 @@ export const notifications = pgTable(
     userIdx: index('notifications_user_idx').on(t.tenantId, t.userId, t.occurredAt),
     tenantIdx: index('notifications_tenant_idx').on(t.tenantId, t.occurredAt),
     unreadIdx: index('notifications_unread_idx').on(t.tenantId, t.userId, t.readAt),
+    sourceJobUx: uniqueIndex('notifications_source_job_user_ux').on(
+      t.tenantId,
+      t.sourceJobId,
+      t.userId,
+    ),
   }),
 )
 

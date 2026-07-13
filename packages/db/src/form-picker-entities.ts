@@ -14,11 +14,12 @@
 // attribute requires editing both ENTITY_ATTRS (forms-core) and the matching
 // projection here. SELECT * is never used.
 
-import { inArray, sql } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import type { Database } from './client'
 import {
   crews,
   departments,
+  documentCategories,
   documents,
   equipmentItems,
   equipmentTypes,
@@ -381,11 +382,12 @@ export async function loadEntitiesForFormPickers(
         id: documents.id,
         key: documents.key,
         title: documents.title,
-        category: documents.category,
+        category: documentCategories.name,
         status: documents.status,
         nextReviewOn: documents.nextReviewOn,
       })
       .from(documents)
+      .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
       .where(inArray(documents.id, [...documentIds]))
     for (const r of rows) {
       result.document.set(r.id, {

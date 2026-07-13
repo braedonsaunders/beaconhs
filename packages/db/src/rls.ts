@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { superDb, type Database } from './client'
 
-// Every tenant-scoped table enforces isolation with FORCE ROW LEVEL SECURITY and
+// Every tenant-owned table enforces isolation with FORCE ROW LEVEL SECURITY and
 // the policy:
 //   tenant_id = current_setting('app.tenant_id')::uuid
 // Application code runs every tenant query inside withTenant(), which sets
@@ -37,13 +37,14 @@ export async function withSuperAdmin<T>(
 // SQL to install on every tenant-scoped table after migrations.
 // Generate via drizzle-kit then append this.
 //
-// FORCE ROW LEVEL SECURITY is required because a table OWNER bypasses non-forced RLS — and the
-// runtime app connects as the owner of its tables (beaconhs_app). Without FORCE, tenant isolation
-// silently does nothing for the owner role (critical once more than one tenant shares the
-// database). Cross-tenant access goes through the dedicated BYPASSRLS role (beaconhs_super); the
-// postgres superuser still bypasses regardless.
+// FORCE ROW LEVEL SECURITY is defense in depth: runtime app traffic uses a
+// non-owner DML role, while a separate NOLOGIN role owns application objects.
+// FORCE ensures even the owner cannot accidentally query tenant rows outside
+// the policy. Cross-tenant access goes through the dedicated BYPASSRLS role
+// (beaconhs_super); a PostgreSQL superuser still bypasses regardless.
 //
-// The predicate is a SINGLE equality on purpose: `tenant_id = current_setting('app.tenant_id')`.
+// The normal predicate is a SINGLE equality on purpose:
+// `tenant_id = current_setting('app.tenant_id')`.
 // current_setting() is STABLE, so the planner can push this into an index Cond and use the
 // (tenant_id, …) composite indexes. The previous "OR current_setting('app.bypass_rls') = 'on'"
 // branch made the whole predicate non-sargable — every RLS-only query degraded to a Seq Scan.
@@ -54,17 +55,49 @@ export async function withSuperAdmin<T>(
 //
 // nullif(current_setting('app.tenant_id', true), '')::uuid — a custom GUC reverts to '' (empty
 // string), not NULL, after a SET LOCAL ends on a pooled connection. Casting ''::uuid throws 22P02,
-// and because FORCE RLS makes the owner role evaluate this predicate, that crash would surface on
-// any query whose connection previously ran a tenant-scoped tx with no tenant set. nullif maps
+// and any RLS-evaluated query on a pooled connection could otherwise crash when
+// no tenant is set. nullif maps
 // '' → NULL so the cast is safe and the row simply does not match (no rows, not an error).
-export const RLS_POLICY_SQL = (table: string) => `
+const TENANT_ID_SQL = `nullif(current_setting('app.tenant_id', true), '')::uuid`
+
+export const RLS_POLICY_SQL = (table: string) => {
+  const reset = `
 ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON ${table};
+DROP POLICY IF EXISTS tenant_write_insert ON ${table};
+DROP POLICY IF EXISTS tenant_write_update ON ${table};
+DROP POLICY IF EXISTS tenant_write_delete ON ${table};`
+
+  // report_definitions deliberately contains both globally readable built-ins
+  // (tenant_id IS NULL) and tenant-owned custom reports. Global rows must be
+  // selectable through ordinary tenant joins, but runtime roles must never be
+  // able to insert, update, or delete them. Separate command policies preserve
+  // that read-only global union without weakening writes.
+  if (table === 'report_definitions') {
+    return `${reset}
 CREATE POLICY tenant_isolation ON ${table}
-  USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
-  WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
+  FOR SELECT
+  USING (tenant_id IS NULL OR tenant_id = ${TENANT_ID_SQL});
+CREATE POLICY tenant_write_insert ON ${table}
+  FOR INSERT
+  WITH CHECK (tenant_id = ${TENANT_ID_SQL});
+CREATE POLICY tenant_write_update ON ${table}
+  FOR UPDATE
+  USING (tenant_id = ${TENANT_ID_SQL})
+  WITH CHECK (tenant_id = ${TENANT_ID_SQL});
+CREATE POLICY tenant_write_delete ON ${table}
+  FOR DELETE
+  USING (tenant_id = ${TENANT_ID_SQL});
 `
+  }
+
+  return `${reset}
+CREATE POLICY tenant_isolation ON ${table}
+  USING (tenant_id = ${TENANT_ID_SQL})
+  WITH CHECK (tenant_id = ${TENANT_ID_SQL});
+`
+}
 
 // Tables that have a `tenant_id` column and need RLS enforcement.
 // The Better-Auth tables (user, session, account, verification) are global and
@@ -83,6 +116,7 @@ export const TENANT_SCOPED_TABLES = [
   'role_assignments',
   'user_permission_overrides',
   'attachments',
+  'attachment_upload_reservations',
   'form_templates',
   'form_template_versions',
   'form_assignments',
@@ -122,6 +156,9 @@ export const TENANT_SCOPED_TABLES = [
   'equipment_station_settings',
   'equipment_inspection_schedules',
   'equipment_reminders',
+  'equipment_maintenance_dispatches',
+  'domain_event_outbox',
+  'domain_event_effects',
   'ppe_types',
   'ppe_items',
   'ppe_issues',
@@ -144,6 +181,7 @@ export const TENANT_SCOPED_TABLES = [
   'webpush_subscriptions',
   'audit_log',
   'api_keys',
+  'api_idempotency_keys',
   'inspection_banks',
   'inspection_bank_criteria',
   'inspection_types',
@@ -177,8 +215,8 @@ export const TENANT_SCOPED_TABLES = [
   'training_content_items',
   'report_schedules',
   'report_runs',
+  'report_run_deliveries',
   'report_definitions',
-  'tenant_notification_recipients',
   'tenant_notification_settings',
   'tenant_notification_policy',
   'notification_groups',

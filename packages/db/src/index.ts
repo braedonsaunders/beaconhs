@@ -1,6 +1,7 @@
 export * from './client'
 export * as schema from './schema'
 export * from './rls'
+export * from './attachment-integrity'
 export * from './maintenance'
 export * from './canonical-templates'
 export * from './form-picker-entities'

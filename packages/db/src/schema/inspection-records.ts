@@ -66,8 +66,7 @@ export const inspectionRecords = pgTable(
     customerContactPersonId: uuid('customer_contact_person_id').references(() => people.id),
     customerContactName: text('customer_contact_name'),
 
-    // Captured signature (base64 PNG dataURL) for proof the customer signed off
-    customerSignatureDataUrl: text('customer_signature_data_url'),
+    customerSignatureAttachmentId: uuid('customer_signature_attachment_id'),
     customerSignerName: text('customer_signer_name'),
     customerSignedAt: timestamp('customer_signed_at', { withTimezone: true }),
 

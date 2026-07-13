@@ -50,8 +50,8 @@ async function main() {
       recurrence: Record<string, unknown>
       recurrenceKind: string
       status: string
-      legacyId: string
-      legacyTable: string
+      sourceId: string
+      sourceKey: string
     },
     audience: Aud[],
   ) => {
@@ -67,11 +67,11 @@ async function main() {
         targetRef: row.targetRef as never,
         recurrence: row.recurrence as never,
         recurrenceKind: row.recurrenceKind as never,
-        legacyTable: row.legacyTable,
-        legacyId: row.legacyId,
+        sourceKey: row.sourceKey,
+        sourceId: row.sourceId,
       })
       .onConflictDoNothing({
-        target: [s.complianceObligations.legacyTable, s.complianceObligations.legacyId],
+        target: [s.complianceObligations.sourceKey, s.complianceObligations.sourceId],
       })
       .returning({ id: s.complianceObligations.id })
     if (!ob) {
@@ -122,8 +122,8 @@ async function main() {
           },
           recurrenceKind: 'frequency',
           status: a.enabled ? 'active' : 'paused',
-          legacyTable: 'inspection_assignments',
-          legacyId: a.id,
+          sourceKey: 'inspection_assignments',
+          sourceId: a.id,
         },
         audFromArrays({
           everyone: a.targetEverybody,
@@ -161,8 +161,8 @@ async function main() {
           recurrence: { kind: 'one_time', dueOn: a.dueOn ?? undefined },
           recurrenceKind: 'one_time',
           status: 'active',
-          legacyTable: 'document_assignments',
-          legacyId: a.id,
+          sourceKey: 'document_assignments',
+          sourceId: a.id,
         },
         aud.map((r) => ({
           kind: r.type === 'everyone' ? 'everyone' : r.type,
@@ -218,8 +218,8 @@ async function main() {
               },
           recurrenceKind: a.recurrenceCron ? 'frequency' : 'one_time',
           status: a.status === 'active' ? 'active' : 'archived',
-          legacyTable: 'training_audience_assignments',
-          legacyId: a.id,
+          sourceKey: 'training_audience_assignments',
+          sourceId: a.id,
         },
         aud,
       )
@@ -246,8 +246,8 @@ async function main() {
           },
           recurrenceKind: 'cron',
           status: a.enabled ? 'active' : 'paused',
-          legacyTable: 'form_assignments',
-          legacyId: a.id,
+          sourceKey: 'form_assignments',
+          sourceId: a.id,
         },
         audFromArrays({
           roleKeys: a.targetRoleKeys,
@@ -291,8 +291,8 @@ async function main() {
           },
           recurrenceKind: 'frequency',
           status: a.active ? 'active' : 'paused',
-          legacyTable: 'journal_assignments',
-          legacyId: a.id,
+          sourceKey: 'journal_assignments',
+          sourceId: a.id,
         },
         aud.length > 0 ? aud : [{ kind: 'everyone', entityKey: '' }],
       )

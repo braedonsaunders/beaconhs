@@ -2,134 +2,121 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
-import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { RLS_POLICY_SQL, TENANT_SCOPED_TABLES } from './rls'
 import { REPORT_VIEWS_SQL } from './views'
 import { STATS_SQL, STATS_HIGH_VOLUME_TABLES } from './stats'
-import { hashKioskPin, isKioskPinHash } from './kiosk-pin'
 import { BUILTIN_ROLES, PERMISSION_CATALOGUE } from './schema'
+import {
+  readMigrationFiles,
+  validateMigrationState,
+  type MigrationTrackerRow,
+} from './migration-state'
+
+type MigrationDatabase = ReturnType<typeof drizzle>
+
+const MIGRATIONS_FOLDER = fileURLToPath(new URL('../drizzle', import.meta.url))
+const MIGRATION_FILES = readMigrationFiles(MIGRATIONS_FOLDER)
+const MIGRATION_CUTOVER_AT = 1783884000000
+const ROLE_NAME = /^[a-z_][a-z0-9_]{0,62}$/
+
+function roleIdentifier(role: string): string {
+  if (!ROLE_NAME.test(role)) throw new Error(`Invalid database role name: ${role}`)
+  return `"${role}"`
+}
 
 function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
   const rows = (result as { rows?: T[] }).rows ?? (result as T[])
   return rows[0]
 }
 
-// Keep drizzle's migration tracker in sync with the journal WITHOUT running any
-// SQL, so the file-based migrator never fights the schema.
-//
-// Why: this app's schema is applied out-of-band by `db:push` (local dev
-// iteration + the CI schema check) — drizzle-kit push records NOTHING in
-// `drizzle.__drizzle_migrations`. So on a long-lived DB the file-based migrator
-// drifts BEHIND the real schema, and `migrate()` tries to re-create
-// already-present objects → "relation already exists" → red deploy. Recording
-// every journal migration as applied makes `migrate()` a guaranteed no-op; the
-// RLS + view steps in main() still run every deploy.
-//
-// A FRESH DB (no app schema yet) is left untouched so `migrate()` builds the
-// whole schema from the migration files the normal way.
-async function reconcileMigrationTracker(db: ReturnType<typeof drizzle>) {
+async function verifyMigrationTracker(db: MigrationDatabase, requireComplete: boolean) {
   const appTable = firstRow<{ exists: string | null }>(
     await db.execute(sql`select to_regclass('public.tenants')::text as exists`),
   )?.exists
-  if (!appTable) return
+  if (!appTable) {
+    if (requireComplete) throw new Error('Migrations completed without creating public.tenants')
+    console.log('  Fresh database detected; the full migration journal will run')
+    return
+  }
 
-  await db.execute(sql`create schema if not exists "drizzle"`)
-  await db.execute(sql`
-    create table if not exists "drizzle"."__drizzle_migrations" (
-      id serial primary key,
-      hash text not null,
-      created_at bigint
+  const trackerTable = firstRow<{ exists: string | null }>(
+    await db.execute(sql`select to_regclass('drizzle.__drizzle_migrations')::text as exists`),
+  )?.exists
+  if (!trackerTable) {
+    throw new Error(
+      'Existing BeaconHS schema has no drizzle migration tracker. Refusing to mark migrations applied without validating the physical schema.',
     )
-  `)
-  const journal = JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as {
-    entries?: { tag: string; when: number }[]
   }
-  for (const entry of journal.entries ?? []) {
-    const hash = createHash('sha256')
-      .update(readFileSync(`drizzle/${entry.tag}.sql`, 'utf8'))
-      .digest('hex')
-    // Idempotent: only inserts the row if this migration isn't recorded yet.
-    await db.execute(sql`
-      insert into "drizzle"."__drizzle_migrations" ("hash", "created_at")
-      select ${hash}, ${entry.when}
-      where not exists (
-        select 1 from "drizzle"."__drizzle_migrations" where hash = ${hash}
-      )
-    `)
-  }
-  console.log('✔ Migration tracker reconciled to journal (schema is push-managed)')
+
+  const rows = (await db.execute(sql`
+    select hash, created_at
+    from "drizzle"."__drizzle_migrations"
+    order by created_at
+  `)) as unknown as Array<{ hash: string; created_at: MigrationTrackerRow['createdAt'] }>
+  const state = validateMigrationState(
+    MIGRATION_FILES,
+    rows.map((row) => ({ hash: row.hash, createdAt: row.created_at })),
+    { allowLegacyBefore: MIGRATION_CUTOVER_AT, requireComplete },
+  )
+  console.log(
+    `  Migration ledger valid: ${state.applied.length} applied, ${state.pending.length} pending, ${state.unknownTrackerRows} historical`,
+  )
 }
 
-async function backfillKioskPinHashes(db: ReturnType<typeof drizzle>) {
-  type TenantPinRow = { id: string; kiosk_pin: string | null }
-  type StationPinRow = { id: string; station_pin: string | null }
-
-  const tenantRows = (await db.execute(sql`
-    select id, kiosk_pin
-    from tenants
-    where kiosk_pin is not null and kiosk_pin <> ''
-  `)) as unknown as TenantPinRow[]
-  let tenantCount = 0
-  for (const row of tenantRows) {
-    if (!row.kiosk_pin || isKioskPinHash(row.kiosk_pin)) continue
-    const hashed = await hashKioskPin(row.kiosk_pin)
+async function assertKioskPinHashes(db: MigrationDatabase) {
+  type CountRow = { count: number }
+  const tenantCount = firstRow<CountRow>(
     await db.execute(sql`
-      update tenants
-      set kiosk_pin = ${hashed}, updated_at = now()
-      where id = ${row.id}
-    `)
-    tenantCount++
-  }
-
-  // equipment_station_settings is tenant-scoped with FORCE ROW LEVEL SECURITY,
-  // and this connection (the table owner, no app.tenant_id set) would see zero
-  // rows through the policy — so lift FORCE for the backfill and restore it
-  // after, same as backfillBuiltinRolePermissions below.
-  await db.execute(sql`alter table "equipment_station_settings" no force row level security`)
-  let stationCount = 0
-  try {
-    const stationRows = (await db.execute(sql`
-      select id, station_pin
+      select count(*)::integer as count
+      from tenants
+      where kiosk_pin is not null
+        and kiosk_pin <> ''
+        and kiosk_pin not like 'bhs_pin_scrypt_v1$%'
+    `),
+  )?.count
+  const stationCount = firstRow<CountRow>(
+    await db.execute(sql`
+      select count(*)::integer as count
       from equipment_station_settings
-      where station_pin is not null and station_pin <> ''
-    `)) as unknown as StationPinRow[]
-    for (const row of stationRows) {
-      if (!row.station_pin || isKioskPinHash(row.station_pin)) continue
-      const hashed = await hashKioskPin(row.station_pin)
-      await db.execute(sql`
-        update equipment_station_settings
-        set station_pin = ${hashed}, updated_at = now()
-        where id = ${row.id}
-      `)
-      stationCount++
-    }
-  } finally {
-    await db.execute(sql`alter table "equipment_station_settings" force row level security`)
-  }
+      where station_pin is not null
+        and station_pin <> ''
+        and station_pin not like 'bhs_pin_scrypt_v1$%'
+    `),
+  )?.count
 
-  console.log(`✔ Kiosk PIN hashes backfilled (${tenantCount} tenant, ${stationCount} station)`)
+  if ((tenantCount ?? 0) > 0 || (stationCount ?? 0) > 0) {
+    throw new Error(
+      `Unhashed kiosk PIN invariant failed (${tenantCount ?? 0} tenant, ${stationCount ?? 0} station). Refusing to deploy until the explicit PIN migration is completed.`,
+    )
+  }
+  console.log('✔ Kiosk PIN hash invariant verified')
 }
 
-async function dropRetiredPluginTables(db: ReturnType<typeof drizzle>) {
-  for (const table of [
-    'plugin_events',
-    'plugin_runs',
-    'tenant_plugin_secrets',
-    'tenant_plugins',
-    'plugins',
-  ]) {
-    await db.execute(sql.raw(`drop table if exists "${table}" cascade`))
-  }
-  console.log('✔ Retired plugin tables removed')
-}
-
-async function backfillBuiltinRolePermissions(db: ReturnType<typeof drizzle>) {
+async function convergeRolePermissions(db: MigrationDatabase) {
   const fullCatalogueJson = JSON.stringify(PERMISSION_CATALOGUE)
 
-  await db.execute(sql`alter table "roles" no force row level security`)
-  try {
-    await db.execute(sql`
+  await db.transaction(async (transaction) => {
+    const tx = transaction as unknown as MigrationDatabase
+    // Clean cutover: remove retired/unknown keys from built-in and custom roles
+    // before adding the current built-in baseline. This prevents deleted
+    // capabilities from surviving indefinitely as inert authorization data.
+    await tx.execute(sql`
+      update "roles"
+      set "permissions" = (
+            select coalesce(jsonb_agg(current_permission."permission" order by current_permission."permission"), '[]'::jsonb)
+            from jsonb_array_elements_text("roles"."permissions") as current_permission("permission")
+            where ${fullCatalogueJson}::jsonb ? current_permission."permission"
+          ),
+          "updated_at" = now()
+      where exists (
+        select 1
+        from jsonb_array_elements_text("roles"."permissions") as current_permission("permission")
+        where not (${fullCatalogueJson}::jsonb ? current_permission."permission")
+      )
+    `)
+
+    await tx.execute(sql`
       update "roles"
       set "permissions" = ${fullCatalogueJson}::jsonb,
           "updated_at" = now()
@@ -141,7 +128,7 @@ async function backfillBuiltinRolePermissions(db: ReturnType<typeof drizzle>) {
     for (const [key, def] of Object.entries(BUILTIN_ROLES)) {
       if (key === 'tenant_admin') continue
       const baselineJson = JSON.stringify(def.permissions)
-      await db.execute(sql`
+      await tx.execute(sql`
         update "roles"
         set "permissions" = (
               select coalesce(jsonb_agg("permission" order by "permission"), '[]'::jsonb)
@@ -164,107 +151,343 @@ async function backfillBuiltinRolePermissions(db: ReturnType<typeof drizzle>) {
           )
       `)
     }
-  } finally {
-    await db.execute(sql`alter table "roles" force row level security`)
-  }
+  })
 
   console.log('✔ Built-in role permissions backfilled')
 }
 
-async function main() {
-  // Migrations + DDL must NOT run through the PgBouncer transaction pooler
-  // (the migration advisory lock + session-scoped DDL need a dedicated session)
-  // and must connect as the table owner. DIRECT_DATABASE_URL targets Postgres
-  // directly (port 5432); fall back to DATABASE_URL for local/un-pooled setups.
-  const url = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL
-  if (!url) throw new Error('DIRECT_DATABASE_URL or DATABASE_URL is required')
-
-  const migrationClient = postgres(url, { max: 1 })
-  const db = drizzle(migrationClient)
-
-  await reconcileMigrationTracker(db)
-
-  console.log('▶ Running drizzle migrations…')
-  await migrate(db, { migrationsFolder: './drizzle' })
-
-  console.log('▶ Backfilling kiosk PIN hashes…')
-  await backfillKioskPinHashes(db)
-
-  console.log('▶ Dropping retired plugin tables…')
-  await dropRetiredPluginTables(db)
-
-  console.log('▶ Backfilling built-in role permissions…')
-  await backfillBuiltinRolePermissions(db)
-
-  console.log('▶ Applying RLS policies…')
-  // RLS_POLICY_SQL is fully idempotent (DROP POLICY IF EXISTS), so ANY error
-  // here is real — and a tenant table without FORCE RLS + tenant_isolation has
-  // no tenant isolation at all. Failures must turn the deploy red.
-  let appliedCount = 0
-  const rlsFailures: { table: string; msg: string }[] = []
-  for (const table of TENANT_SCOPED_TABLES) {
-    try {
-      await db.execute(sql.raw(RLS_POLICY_SQL(table)))
-      appliedCount++
-      process.stdout.write('+')
-    } catch (err) {
-      // drizzle wraps the underlying postgres error in err.cause.
-      const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
-      const topMsg = err instanceof Error ? err.message : String(err)
-      rlsFailures.push({ table, msg: causeMsg || topMsg })
-      process.stdout.write('!')
-    }
+async function assumeOwnerRole(migrationDb: MigrationDatabase, ownerRole: string) {
+  const membership = firstRow<{
+    login_role: string
+    can_assume: boolean
+    login_super: boolean
+    login_bypass_rls: boolean
+    owner_can_login: boolean
+    owner_super: boolean
+    owner_bypass_rls: boolean
+  }>(
+    await migrationDb.execute(sql`
+      select
+        session_user as login_role,
+        pg_has_role(session_user, ${ownerRole}, 'MEMBER') as can_assume,
+        login.rolsuper as login_super,
+        login.rolbypassrls as login_bypass_rls,
+        owner.rolcanlogin as owner_can_login,
+        owner.rolsuper as owner_super,
+        owner.rolbypassrls as owner_bypass_rls
+      from pg_roles login
+      join pg_roles owner on owner.rolname = ${ownerRole}
+      where login.rolname = session_user
+    `),
+  )
+  if (!membership) throw new Error(`Database owner role ${ownerRole} does not exist`)
+  if (!membership.can_assume) {
+    throw new Error(`Migration login ${membership.login_role} cannot SET ROLE ${ownerRole}`)
   }
-  console.log(`\n  ${appliedCount}/${TENANT_SCOPED_TABLES.length} applied`)
-  if (rlsFailures.length > 0) {
-    console.error(`  ${rlsFailures.length} failed:`)
-    for (const f of rlsFailures) {
-      console.error(`    ✗ ${f.table}: ${f.msg}`)
-    }
-    await migrationClient.end()
+  if (membership.login_super || membership.login_bypass_rls) {
+    throw new Error('Migration login must not be SUPERUSER or BYPASSRLS')
+  }
+  if (membership.owner_can_login || membership.owner_super || membership.owner_bypass_rls) {
+    throw new Error(`Owner role ${ownerRole} must be NOLOGIN, NOSUPERUSER, and NOBYPASSRLS`)
+  }
+
+  await migrationDb.execute(sql.raw(`SET ROLE ${roleIdentifier(ownerRole)}`))
+}
+
+async function assertDatabaseRoles(
+  migrationDb: MigrationDatabase,
+  runtimeDb: MigrationDatabase,
+  maintenanceDb: MigrationDatabase,
+  expectedOwner: string,
+  expectedBackup: string,
+) {
+  const migration = firstRow<{ login_role: string; owner_role: string }>(
+    await migrationDb.execute(sql`select session_user as login_role, current_user as owner_role`),
+  )
+  const runtime = firstRow<{
+    role: string
+    is_super: boolean
+    bypass_rls: boolean
+    owner_member: boolean
+  }>(
+    await runtimeDb.execute(sql`
+      select
+        current_user as role,
+        rolsuper as is_super,
+        rolbypassrls as bypass_rls,
+        pg_has_role(current_user, ${expectedOwner}, 'MEMBER') as owner_member
+      from pg_roles
+      where rolname = current_user
+    `),
+  )
+  const maintenance = firstRow<{
+    role: string
+    is_super: boolean
+    bypass_rls: boolean
+    owner_member: boolean
+  }>(
+    await maintenanceDb.execute(sql`
+      select
+        current_user as role,
+        rolsuper as is_super,
+        rolbypassrls as bypass_rls,
+        pg_has_role(current_user, ${expectedOwner}, 'MEMBER') as owner_member
+      from pg_roles
+      where rolname = current_user
+    `),
+  )
+  const backup = firstRow<{
+    role: string
+    can_login: boolean
+    is_super: boolean
+    bypass_rls: boolean
+    owner_member: boolean
+    read_only: boolean
+  }>(
+    await migrationDb.execute(sql`
+      select
+        rolname as role,
+        rolcanlogin as can_login,
+        rolsuper as is_super,
+        rolbypassrls as bypass_rls,
+        pg_has_role(rolname, ${expectedOwner}, 'MEMBER') as owner_member,
+        coalesce(rolconfig @> array['default_transaction_read_only=on']::text[], false) as read_only
+      from pg_roles
+      where rolname = ${expectedBackup}
+    `),
+  )
+  if (!migration || !runtime || !maintenance || !backup) {
+    throw new Error('Unable to resolve database roles for migration preflight')
+  }
+  if (migration.owner_role !== expectedOwner) {
     throw new Error(
-      `RLS policy install failed for ${rlsFailures.length} tenant table(s) — refusing to complete the deploy without tenant isolation`,
+      `Migration login ${migration.login_role} did not assume expected owner role ${expectedOwner}`,
     )
   }
-  console.log('✔ RLS applied')
-
-  console.log('▶ Applying planner statistics targets…')
-  let statsApplied = 0
-  const statsFailures: string[] = []
-  for (const stmt of STATS_SQL) {
-    try {
-      await db.execute(sql.raw(stmt))
-      statsApplied++
-    } catch (err) {
-      // A targeted column may not exist on every listed table — tolerate it.
-      const causeMsg = err instanceof Error && err.cause instanceof Error ? err.cause.message : ''
-      statsFailures.push(`${stmt} — ${causeMsg || (err as Error).message}`)
-    }
+  const distinctRoles = new Set([
+    migration.login_role,
+    migration.owner_role,
+    runtime.role,
+    maintenance.role,
+    backup.role,
+  ])
+  if (distinctRoles.size !== 5) {
+    throw new Error(
+      'Migration login, owner, runtime, maintenance, and backup roles must all be distinct',
+    )
   }
-  // ANALYZE so the raised targets take effect immediately (best-effort).
+  if (runtime.is_super || runtime.bypass_rls || runtime.owner_member) {
+    throw new Error(
+      `Runtime role ${runtime.role} must be NOSUPERUSER, NOBYPASSRLS, and not a member of ${expectedOwner}`,
+    )
+  }
+  if (maintenance.is_super || !maintenance.bypass_rls || maintenance.owner_member) {
+    throw new Error(
+      `Maintenance role ${maintenance.role} must be non-superuser BYPASSRLS and not a member of ${expectedOwner}`,
+    )
+  }
+  if (
+    !backup.can_login ||
+    backup.is_super ||
+    !backup.bypass_rls ||
+    backup.owner_member ||
+    !backup.read_only
+  ) {
+    throw new Error(
+      `Backup role ${backup.role} must be LOGIN, non-superuser BYPASSRLS, non-owner, and default_transaction_read_only=on`,
+    )
+  }
+
+  const tableOwner = firstRow<{ owner: string | null }>(
+    await migrationDb.execute(sql`
+      select pg_get_userbyid(c.relowner) as owner
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relname = 'tenants'
+    `),
+  )?.owner
+  if (tableOwner && tableOwner !== expectedOwner) {
+    throw new Error(`Existing app tables are owned by ${tableOwner}; expected ${expectedOwner}`)
+  }
+  console.log(
+    `✔ Database role preflight passed (${migration.login_role} → ${expectedOwner}; runtime ${runtime.role}; maintenance ${maintenance.role}; backup ${backup.role})`,
+  )
+
+  return {
+    runtimeRole: runtime.role,
+    maintenanceRole: maintenance.role,
+    backupRole: backup.role,
+  }
+}
+
+async function applyRuntimeGrants(
+  db: MigrationDatabase,
+  ownerRole: string,
+  runtimeRole: string,
+  maintenanceRole: string,
+  backupRole: string,
+) {
+  const owner = roleIdentifier(ownerRole)
+  const runtime = roleIdentifier(runtimeRole)
+  const maintenance = roleIdentifier(maintenanceRole)
+  const backup = roleIdentifier(backupRole)
+  await db.transaction(async (transaction) => {
+    const tx = transaction as unknown as MigrationDatabase
+    for (const statement of [
+      `REVOKE CREATE ON SCHEMA public FROM PUBLIC, ${runtime}, ${maintenance}`,
+      `REVOKE CREATE ON SCHEMA public FROM ${backup}`,
+      `GRANT USAGE ON SCHEMA public TO ${runtime}, ${maintenance}, ${backup}`,
+      `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${runtime}, ${maintenance}`,
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${runtime}, ${maintenance}`,
+      `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${runtime}, ${maintenance}`,
+      `GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO ${runtime}, ${maintenance}`,
+      `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ${backup}`,
+      `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${backup}`,
+      `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ${backup}`,
+      `GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO ${backup}`,
+      `GRANT USAGE ON SCHEMA drizzle TO ${backup}`,
+      `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA drizzle FROM ${backup}`,
+      `GRANT SELECT ON ALL TABLES IN SCHEMA drizzle TO ${backup}`,
+      `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA drizzle FROM ${backup}`,
+      `GRANT SELECT ON ALL SEQUENCES IN SCHEMA drizzle TO ${backup}`,
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${runtime}, ${maintenance}`,
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ${runtime}, ${maintenance}`,
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA public GRANT SELECT ON TABLES TO ${backup}`,
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA public GRANT SELECT ON SEQUENCES TO ${backup}`,
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA drizzle GRANT SELECT ON TABLES TO ${backup}`,
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA drizzle GRANT SELECT ON SEQUENCES TO ${backup}`,
+    ]) {
+      await tx.execute(sql.raw(statement))
+    }
+  })
+  console.log(
+    `✔ Least-privilege grants applied (runtime ${runtimeRole}; maintenance ${maintenanceRole}; backup ${backupRole})`,
+  )
+}
+
+async function applyRlsPolicies(db: MigrationDatabase) {
+  await db.transaction(async (transaction) => {
+    const tx = transaction as unknown as MigrationDatabase
+    for (const table of TENANT_SCOPED_TABLES) {
+      try {
+        await tx.execute(sql.raw(RLS_POLICY_SQL(table)))
+      } catch (error) {
+        throw new Error(`RLS policy installation failed for ${table}`, { cause: error })
+      }
+    }
+  })
+  console.log(`✔ RLS applied atomically (${TENANT_SCOPED_TABLES.length} tables)`)
+}
+
+async function applyPlannerStatistics(db: MigrationDatabase) {
+  await db.transaction(async (transaction) => {
+    const tx = transaction as unknown as MigrationDatabase
+    for (const statement of STATS_SQL) await tx.execute(sql.raw(statement))
+  })
   for (const table of STATS_HIGH_VOLUME_TABLES) {
-    try {
-      await db.execute(sql.raw(`ANALYZE ${table};`))
-    } catch {
-      // table may not exist yet on a partial schema — ignore.
+    await db.execute(sql.raw(`ANALYZE ${table};`))
+  }
+  console.log(`✔ Statistics applied (${STATS_SQL.length} targets)`)
+}
+
+async function applyReportingViews(db: MigrationDatabase) {
+  await db.transaction(async (transaction) => {
+    const tx = transaction as unknown as MigrationDatabase
+    for (const viewSql of REPORT_VIEWS_SQL) await tx.execute(sql.raw(viewSql))
+  })
+  console.log(`✔ Views applied atomically (${REPORT_VIEWS_SQL.length} statements)`)
+}
+
+async function main() {
+  // DDL uses a dedicated unpooled login that can SET ROLE to a NOLOGIN owner.
+  // Runtime and cross-tenant maintenance are distinct, non-owner logins.
+  const migrationUrl = process.env.MIGRATION_DATABASE_URL
+  const runtimeUrl = process.env.DATABASE_URL
+  const maintenanceUrl = process.env.SUPERADMIN_DATABASE_URL
+  const ownerRole = process.env.DATABASE_OWNER_ROLE ?? 'beaconhs_owner'
+  const backupRole = process.env.DATABASE_BACKUP_ROLE ?? 'beaconhs_backup'
+  roleIdentifier(ownerRole)
+  roleIdentifier(backupRole)
+  if (!migrationUrl) throw new Error('MIGRATION_DATABASE_URL is required for migrations')
+  if (!runtimeUrl) throw new Error('DATABASE_URL is required for runtime-role validation')
+  if (!maintenanceUrl) {
+    throw new Error('SUPERADMIN_DATABASE_URL is required for cross-tenant migration maintenance')
+  }
+
+  const migrationClient = postgres(migrationUrl, {
+    max: 1,
+    prepare: false,
+    // Idempotent policy/view installation deliberately uses DROP ... IF EXISTS
+    // across hundreds of objects. PostgreSQL emits one NOTICE for every absent
+    // object; suppress those protocol notices so deploy logs retain the explicit
+    // phase summaries and actionable warnings/errors instead of thousands of
+    // expected "does not exist, skipping" records.
+    onnotice: () => undefined,
+  })
+  const runtimeClient = postgres(runtimeUrl, { max: 1, prepare: false })
+  const maintenanceClient = postgres(maintenanceUrl, { max: 1, prepare: false })
+  const migrationDb = drizzle(migrationClient)
+  const runtimeDb = drizzle(runtimeClient)
+  const maintenanceDb = drizzle(maintenanceClient)
+  let lockAcquired = false
+
+  try {
+    await assumeOwnerRole(migrationDb, ownerRole)
+    const roles = await assertDatabaseRoles(
+      migrationDb,
+      runtimeDb,
+      maintenanceDb,
+      ownerRole,
+      backupRole,
+    )
+    await migrationDb.execute(sql`select pg_advisory_lock(hashtext('beaconhs:schema-migration'))`)
+    lockAcquired = true
+
+    console.log('▶ Validating migration ledger…')
+    await verifyMigrationTracker(migrationDb, false)
+
+    console.log('▶ Running drizzle migrations…')
+    await migrate(migrationDb, { migrationsFolder: MIGRATIONS_FOLDER })
+    await verifyMigrationTracker(migrationDb, true)
+
+    console.log('▶ Applying RLS policies…')
+    await applyRlsPolicies(migrationDb)
+
+    console.log('▶ Applying least-privilege runtime grants…')
+    await applyRuntimeGrants(
+      migrationDb,
+      ownerRole,
+      roles.runtimeRole,
+      roles.maintenanceRole,
+      roles.backupRole,
+    )
+
+    console.log('▶ Verifying security data invariants…')
+    await assertKioskPinHashes(maintenanceDb)
+
+    console.log('▶ Converging role permissions…')
+    await convergeRolePermissions(maintenanceDb)
+
+    console.log('▶ Applying planner statistics targets…')
+    await applyPlannerStatistics(migrationDb)
+
+    console.log('▶ Applying reporting views…')
+    await applyReportingViews(migrationDb)
+  } finally {
+    if (lockAcquired) {
+      try {
+        await migrationDb.execute(
+          sql`select pg_advisory_unlock(hashtext('beaconhs:schema-migration'))`,
+        )
+      } catch (error) {
+        console.warn('Migration advisory lock will be released when the connection closes', error)
+      }
     }
+    await Promise.all([migrationClient.end(), runtimeClient.end(), maintenanceClient.end()])
   }
-  console.log(`✔ Statistics applied (${statsApplied}/${STATS_SQL.length})`)
-  if (statsFailures.length > 0) {
-    console.log(`  ${statsFailures.length} skipped (missing table/column):`)
-    for (const f of statsFailures.slice(0, 5)) console.log(`    · ${f}`)
-  }
-
-  console.log('▶ Applying reporting views…')
-  for (const viewSql of REPORT_VIEWS_SQL) {
-    await db.execute(sql.raw(viewSql))
-  }
-  console.log('✔ Views applied')
-
-  await migrationClient.end()
 }
 
 main().catch((err) => {
   console.error(err)
-  process.exit(1)
+  process.exitCode = 1
 })

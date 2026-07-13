@@ -18,13 +18,12 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers, user } from './core'
+import { tenants, tenantUsers, users as user } from './core'
 import { orgUnits, people } from './org'
 
-// Free-form category lookup so admins can group equipment types into buckets
+// Category lookup so admins can group equipment types into buckets
 // ("Tools", "Vehicles", "Lifts", "Trailers", …) without committing to an
-// enum. Equipment types still keep a `category` string for backwards-
-// compatibility with the legacy column; this table is the canonical source.
+// enum.
 export const equipmentCategories = pgTable(
   'equipment_categories',
   {
@@ -57,9 +56,6 @@ export const equipmentTypes = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    category: text('category'), // 'tool' | 'vehicle' | 'machinery' | …
-    // FK to the lookup table when the category exists there. The free-form
-    // `category` text above stays as a fallback for legacy rows.
     categoryId: uuid('category_id').references(() => equipmentCategories.id, {
       onDelete: 'set null',
     }),

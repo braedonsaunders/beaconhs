@@ -13,7 +13,19 @@
 // completed. Surfaced alongside schedules on the maintenance cockpit.
 
 import { relations } from 'drizzle-orm'
-import { boolean, date, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { people } from './org'
@@ -95,6 +107,57 @@ export const equipmentReminders = pgTable(
     tenantDueIdx: index('equipment_reminders_tenant_due_idx').on(t.tenantId, t.dueOn),
     itemIdx: index('equipment_reminders_item_idx').on(t.equipmentItemId),
     openIdx: index('equipment_reminders_open_idx').on(t.tenantId, t.completedAt),
+  }),
+)
+
+export const equipmentMaintenanceDispatchStatus = pgEnum('equipment_maintenance_dispatch_status', [
+  'queued',
+  'enqueued',
+  'failed',
+])
+
+export const equipmentMaintenanceDispatches = pgTable(
+  'equipment_maintenance_dispatches',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    deliveryKey: text('delivery_key').notNull(),
+    status: equipmentMaintenanceDispatchStatus('status').default('queued').notNull(),
+    entries: jsonb('entries')
+      .$type<
+        Array<{
+          kind: 'inspection' | 'reminder'
+          equipmentItemId: string
+          itemName: string
+          assetTag: string
+          title: string
+          dueOn: string
+          assigneePersonId?: string | null
+        }>
+      >()
+      .notNull(),
+    scheduleCycles: jsonb('schedule_cycles')
+      .$type<Array<{ id: string; dueOn: string }>>()
+      .default([])
+      .notNull(),
+    reminderCycles: jsonb('reminder_cycles')
+      .$type<Array<{ id: string; dueOn: string }>>()
+      .default([])
+      .notNull(),
+    error: text('error'),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantStatusIdx: index('equipment_maintenance_dispatches_tenant_status_idx').on(
+      t.tenantId,
+      t.status,
+    ),
+    tenantDeliveryUx: uniqueIndex('equipment_maintenance_dispatches_tenant_delivery_ux').on(
+      t.tenantId,
+      t.deliveryKey,
+    ),
   }),
 )
 

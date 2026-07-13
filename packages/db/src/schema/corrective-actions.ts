@@ -13,6 +13,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
@@ -58,6 +59,7 @@ export const correctiveActions = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     reference: text('reference').notNull(), // e.g. CA-2026-0001
+    flowExecutionKey: text('flow_execution_key'),
     title: text('title').notNull(),
     description: text('description'),
     severity: correctiveActionSeverity('severity').default('medium').notNull(),
@@ -106,6 +108,10 @@ export const correctiveActions = pgTable(
       t.sourceEntityId,
     ),
     ownerIdx: index('corrective_actions_owner_idx').on(t.tenantId, t.ownerTenantUserId),
+    flowExecutionUx: uniqueIndex('corrective_actions_flow_execution_ux').on(
+      t.tenantId,
+      t.flowExecutionKey,
+    ),
   }),
 )
 
@@ -151,7 +157,7 @@ export const caCompleteSteps = pgTable(
     description: text('description'),
     completedByTenantUserId: uuid('completed_by_tenant_user_id').references(() => tenantUsers.id),
     completedAt: timestamp('completed_at', { withTimezone: true }).defaultNow().notNull(),
-    signatureDataUrl: text('signature_data_url'),
+    signatureAttachmentId: uuid('signature_attachment_id'),
     entityOrder: integer('entity_order').default(0).notNull(),
     ...timestamps,
   },

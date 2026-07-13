@@ -1,6 +1,7 @@
 import { relations } from 'drizzle-orm'
 import {
   boolean,
+  foreignKey,
   index,
   jsonb,
   pgEnum,
@@ -32,6 +33,7 @@ export const roles = pgTable(
   },
   (t) => ({
     tenantKeyUx: uniqueIndex('roles_tenant_key_ux').on(t.tenantId, t.key),
+    tenantIdIdUx: uniqueIndex('roles_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantIdx: index('roles_tenant_idx').on(t.tenantId),
   }),
 )
@@ -59,12 +61,8 @@ export const roleAssignments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    tenantUserId: uuid('tenant_user_id')
-      .notNull()
-      .references(() => tenantUsers.id, { onDelete: 'cascade' }),
-    roleId: uuid('role_id')
-      .notNull()
-      .references(() => roles.id, { onDelete: 'cascade' }),
+    tenantUserId: uuid('tenant_user_id').notNull(),
+    roleId: uuid('role_id').notNull(),
     scope: jsonb('scope').$type<RoleScope>().notNull(),
     ...timestamps,
   },
@@ -72,6 +70,16 @@ export const roleAssignments = pgTable(
     tenantIdx: index('role_assignments_tenant_idx').on(t.tenantId),
     userIdx: index('role_assignments_user_idx').on(t.tenantUserId),
     roleIdx: index('role_assignments_role_idx').on(t.roleId),
+    tenantUserFk: foreignKey({
+      name: 'role_assignments_tenant_user_fk',
+      columns: [t.tenantId, t.tenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }).onDelete('cascade'),
+    roleFk: foreignKey({
+      name: 'role_assignments_tenant_role_fk',
+      columns: [t.tenantId, t.roleId],
+      foreignColumns: [roles.tenantId, roles.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -83,10 +91,13 @@ export const rolesRelations = relations(roles, ({ many, one }) => ({
 export const roleAssignmentsRelations = relations(roleAssignments, ({ one }) => ({
   tenant: one(tenants, { fields: [roleAssignments.tenantId], references: [tenants.id] }),
   tenantUser: one(tenantUsers, {
-    fields: [roleAssignments.tenantUserId],
-    references: [tenantUsers.id],
+    fields: [roleAssignments.tenantId, roleAssignments.tenantUserId],
+    references: [tenantUsers.tenantId, tenantUsers.id],
   }),
-  role: one(roles, { fields: [roleAssignments.roleId], references: [roles.id] }),
+  role: one(roles, {
+    fields: [roleAssignments.tenantId, roleAssignments.roleId],
+    references: [roles.tenantId, roles.id],
+  }),
 }))
 
 // Per-user permission exceptions, layered on top of role-granted permissions.
@@ -103,9 +114,7 @@ export const userPermissionOverrides = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    tenantUserId: uuid('tenant_user_id')
-      .notNull()
-      .references(() => tenantUsers.id, { onDelete: 'cascade' }),
+    tenantUserId: uuid('tenant_user_id').notNull(),
     permission: text('permission').$type<PermissionKey>().notNull(),
     effect: permissionOverrideEffect('effect').notNull(),
     ...timestamps,
@@ -117,14 +126,19 @@ export const userPermissionOverrides = pgTable(
     ),
     tenantIdx: index('user_permission_overrides_tenant_idx').on(t.tenantId),
     userIdx: index('user_permission_overrides_user_idx').on(t.tenantUserId),
+    tenantUserFk: foreignKey({
+      name: 'user_permission_overrides_tenant_user_fk',
+      columns: [t.tenantId, t.tenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }).onDelete('cascade'),
   }),
 )
 
 export const userPermissionOverridesRelations = relations(userPermissionOverrides, ({ one }) => ({
   tenant: one(tenants, { fields: [userPermissionOverrides.tenantId], references: [tenants.id] }),
   tenantUser: one(tenantUsers, {
-    fields: [userPermissionOverrides.tenantUserId],
-    references: [tenantUsers.id],
+    fields: [userPermissionOverrides.tenantId, userPermissionOverrides.tenantUserId],
+    references: [tenantUsers.tenantId, tenantUsers.id],
   }),
 }))
 
@@ -223,11 +237,14 @@ export const PERMISSION_CATALOGUE = [
   'dashboards.edit',
   // Insights — native BI (visual query builder, Cards, dashboards, library).
   // `read` = view /insights + the library; `create` = build/edit Cards & dashboards;
-  // `publish` = share to the permission-aware library; `manage` = admin others' Cards.
+  // `publish` = share to the permission-aware library.
   'insights.read',
   'insights.create',
   'insights.publish',
-  'insights.manage',
+  // Native field calculators. Safe Distance creates auditable pressure-test
+  // assessments, so opening, editing, locking, printing, and exporting it all
+  // use one explicit capability instead of borrowing a domain permission.
+  'tools.safe-distance.use',
   // AI Assistant — the agentic chat assistant (/assistant).
   // `use`  = open the assistant + run READ/SEARCH tools (each tool is further
   //          gated by the underlying module's own read permission + record scope).
@@ -286,6 +303,7 @@ export const BUILTIN_ROLES: Record<
       'journals.create',
       'journals.update.own',
       'journals.submit',
+      'tools.safe-distance.use',
       'assistant.use',
     ],
   },
@@ -323,6 +341,7 @@ export const BUILTIN_ROLES: Record<
       'reports.read',
       'dashboards.read',
       'insights.read',
+      'tools.safe-distance.use',
       'assistant.use',
       'assistant.write',
     ],
@@ -387,6 +406,7 @@ export const BUILTIN_ROLES: Record<
       'insights.create',
       'insights.publish',
       'admin.integrations.manage',
+      'tools.safe-distance.use',
       'assistant.use',
       'assistant.write',
     ],

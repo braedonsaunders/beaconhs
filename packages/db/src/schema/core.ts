@@ -55,7 +55,7 @@ export type RiskMatrixConfig = {
 // --- Better-Auth tables (singular names, camelCase columns) ---------------
 // SQL column names use camelCase so they match what Better-Auth 1.6.x emits.
 
-export const user = pgTable(
+export const users = pgTable(
   'user',
   {
     id: text('id').primaryKey(),
@@ -74,13 +74,13 @@ export const user = pgTable(
   }),
 )
 
-export const session = pgTable(
+export const sessions = pgTable(
   'session',
   {
     id: text('id').primaryKey(),
     userId: text('userId')
       .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+      .references(() => users.id, { onDelete: 'cascade' }),
     token: text('token').notNull(),
     expiresAt: timestamp('expiresAt', { withTimezone: true }).notNull(),
     ipAddress: text('ipAddress'),
@@ -93,7 +93,7 @@ export const session = pgTable(
     // deleted). getRequestContext() reads these to resolve the request as the
     // target user — pinned to impersonationTenantId, re-authorized every request
     // — while remembering the real actor. See apps/web/src/lib/impersonation.ts.
-    impersonatingUserId: text('impersonating_user_id').references(() => user.id, {
+    impersonatingUserId: text('impersonating_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
     impersonationTenantId: uuid('impersonation_tenant_id'),
@@ -116,7 +116,7 @@ export const account = pgTable(
     id: text('id').primaryKey(),
     userId: text('userId')
       .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+      .references(() => users.id, { onDelete: 'cascade' }),
     accountId: text('accountId').notNull(),
     providerId: text('providerId').notNull(),
     accessToken: text('accessToken'),
@@ -163,24 +163,21 @@ export const tenantUsers = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     userId: text('user_id')
       .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+      .references(() => users.id, { onDelete: 'cascade' }),
     displayName: text('display_name'),
     status: tenantUserStatus('status').default('active').notNull(),
     invitedAt: timestamp('invited_at', { withTimezone: true }),
-    invitedBy: text('invited_by').references(() => user.id),
+    invitedBy: text('invited_by').references(() => users.id),
     joinedAt: timestamp('joined_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => ({
     tenantUserUx: uniqueIndex('tenant_users_tenant_user_ux').on(t.tenantId, t.userId),
+    tenantIdIdUx: uniqueIndex('tenant_users_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantIdx: index('tenant_users_tenant_idx').on(t.tenantId),
     userIdx: index('tenant_users_user_idx').on(t.userId),
   }),
 )
-
-// Aliases so plural names keep working in app code.
-export const users = user
-export const sessions = session
 
 // --- Relations ------------------------------------------------------------
 
@@ -188,12 +185,12 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   members: many(tenantUsers),
 }))
 
-export const userRelations = relations(user, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
   memberships: many(tenantUsers),
-  sessions: many(session),
+  sessions: many(sessions),
 }))
 
 export const tenantUsersRelations = relations(tenantUsers, ({ one }) => ({
   tenant: one(tenants, { fields: [tenantUsers.tenantId], references: [tenants.id] }),
-  user: one(user, { fields: [tenantUsers.userId], references: [user.id] }),
+  user: one(users, { fields: [tenantUsers.userId], references: [users.id] }),
 }))

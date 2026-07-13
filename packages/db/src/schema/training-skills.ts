@@ -9,7 +9,16 @@
 // sign-off of in-house competencies; this models externally-issued credentials.
 
 import { relations } from 'drizzle-orm'
-import { date, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import {
+  date,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants, tenantUsers, users } from './core'
@@ -73,7 +82,7 @@ export const trainingSkillAssignments = pgTable(
     grantedOn: date('granted_on').notNull(),
     expiresOn: date('expires_on'),
     grantedByTenantUserId: uuid('granted_by_tenant_user_id').references(() => tenantUsers.id),
-    evidenceAttachmentId: uuid('evidence_attachment_id').references(() => attachments.id),
+    evidenceAttachmentId: uuid('evidence_attachment_id'),
     notes: text('notes'),
     ...timestamps,
     // Soft-delete so a skill is revoked (not hard-deleted) — same audit-safe
@@ -109,8 +118,10 @@ export const trainingSkillCertificates = pgTable(
     ...timestamps,
   },
   (t) => ({
-    assignmentIdx: index('training_skill_certificates_assignment_idx').on(t.skillAssignmentId),
-    tokenIdx: index('training_skill_certificates_token_idx').on(t.verifyToken),
+    assignmentIdx: uniqueIndex('training_skill_certificates_skill_assignment_id_ux').on(
+      t.skillAssignmentId,
+    ),
+    tokenIdx: uniqueIndex('training_skill_certificates_verify_token_ux').on(t.verifyToken),
   }),
 )
 
@@ -129,9 +140,7 @@ export const trainingSkillAssignmentFiles = pgTable(
     skillAssignmentId: uuid('skill_assignment_id')
       .notNull()
       .references(() => trainingSkillAssignments.id, { onDelete: 'cascade' }),
-    attachmentId: uuid('attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
+    attachmentId: uuid('attachment_id'),
     label: text('label').notNull(),
     kind: text('kind').notNull(), // 'certificate' | 'evidence' | 'photo' | 'other'
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),

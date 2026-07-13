@@ -19,6 +19,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
@@ -60,6 +61,7 @@ export const incidents = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     reference: text('reference').notNull(),
+    flowExecutionKey: text('flow_execution_key'),
 
     // Top-level taxonomy
     type: incidentType('type').notNull(),
@@ -70,8 +72,6 @@ export const incidents = pgTable(
     // until committed (required fields filled). A worker sweeps drafts untouched
     // > 48h. Existing rows default to false (committed).
     isDraft: boolean('is_draft').default(false).notNull(),
-    classification: jsonb('classification').$type<Record<string, string>>().default({}).notNull(),
-
     // Brief
     title: text('title').notNull(),
     description: text('description'),
@@ -101,22 +101,16 @@ export const incidents = pgTable(
     // Medical flags + conditional sub-fields
     criticalInjury: boolean('critical_injury').default(false).notNull(),
     ministryOfLabourNotified: boolean('ministry_of_labour_notified').default(false).notNull(),
-    emsNotified: boolean('ems_notified').default(false).notNull(),
-
-    firstAidReceived: boolean('first_aid_received').default(false).notNull(),
     firstAidProvider: text('first_aid_provider'),
-    // Wave-4: structured first-aid notes (separate from generic narrative
-    // fields).  Used by the OSHA-300 supplementary log.
+    // Structured first-aid notes (separate from generic narrative fields).
+    // Used by the OSHA-300 supplementary log.
     firstAidGiven: boolean('first_aid_given').default(false).notNull(),
     firstAidNotes: text('first_aid_notes'),
 
     medicalAttentionReceived: boolean('medical_attention_received').default(false).notNull(),
-    treatedAtHospital: text('treated_at_hospital'),
     treatedInCity: text('treated_in_city'),
     transportation: text('transportation'),
-    // Wave-4: EMS dispatch trail.  Legacy parity = EMS bool + freeform note;
-    // here we split out the call-out flag and the arrival/discharge stamps
-    // because the severity-report needs the response-time delta.
+    // EMS dispatch trail, including response-time and hospital timestamps.
     emsCalled: boolean('ems_called').default(false).notNull(),
     emsArrivedAt: timestamp('ems_arrived_at', { withTimezone: true }),
     hospitalName: text('hospital_name'),
@@ -158,10 +152,7 @@ export const incidents = pgTable(
     policeReportNumber: text('police_report_number'),
     insuranceClaimNumber: text('insurance_claim_number'),
 
-    // Wave-4: explicit FK to the tenant-defined classification taxonomy.
-    // Coexists with the legacy `classification` JSON column (which carries
-    // the materialised path so old reports keep rendering after an
-    // archive).
+    // Explicit FK to the tenant-defined classification taxonomy.
     classificationId: uuid('classification_id').references(() => incidentClassifications.id, {
       onDelete: 'set null',
     }),
@@ -194,6 +185,7 @@ export const incidents = pgTable(
     statusIdx: index('incidents_status_idx').on(t.tenantId, t.status),
     occurredIdx: index('incidents_occurred_idx').on(t.tenantId, t.occurredAt),
     siteIdx: index('incidents_site_idx').on(t.tenantId, t.siteOrgUnitId),
+    flowExecutionUx: uniqueIndex('incidents_flow_execution_ux').on(t.tenantId, t.flowExecutionKey),
   }),
 )
 

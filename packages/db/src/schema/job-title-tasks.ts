@@ -60,7 +60,7 @@ export const jobTitleTaskAcknowledgments = pgTable(
       .notNull()
       .references(() => people.id, { onDelete: 'cascade' }),
     acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }).defaultNow().notNull(),
-    signatureDataUrl: text('signature_data_url'),
+    signatureAttachmentId: uuid('signature_attachment_id'),
     notes: text('notes'),
     ...timestamps,
   },

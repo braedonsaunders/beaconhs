@@ -14,10 +14,11 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers, users } from './core'
+import { tenants, tenantUsers } from './core'
 import { orgUnits, people } from './org'
 
 export const trainingDeliveryType = pgEnum('training_delivery_type', [
@@ -133,6 +134,7 @@ export const trainingClassAttendees = pgTable(
     status: trainingClassAttendance('status').default('registered').notNull(),
     signInAt: timestamp('sign_in_at', { withTimezone: true }),
     signatureAttachmentId: uuid('signature_attachment_id'),
+    notes: text('notes'),
     ...timestamps,
   },
   (t) => ({
@@ -207,8 +209,8 @@ export const trainingCertificates = pgTable(
     ...timestamps,
   },
   (t) => ({
-    recordIdx: index('training_certificates_record_idx').on(t.recordId),
-    tokenIdx: index('training_certificates_token_idx').on(t.verifyToken),
+    recordIdx: uniqueIndex('training_certificates_record_id_ux').on(t.recordId),
+    tokenIdx: uniqueIndex('training_certificates_verify_token_ux').on(t.verifyToken),
   }),
 )
 

@@ -9,6 +9,7 @@
 
 import {
   boolean,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -34,11 +35,6 @@ export const tenantIntegrations = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    // A built automation sets trigger_key + destination_key (integration_key is
-    // left null). integration_key is retained (nullable) only for any legacy
-    // code-adapter rows. Multiple builder rows per tenant coexist because the
-    // unique (tenant, integration_key) index treats NULLs as distinct.
-    integrationKey: text('integration_key'),
     name: text('name'), // user label for a built automation
     triggerKey: text('trigger_key'), // event that fires it, e.g. 'incident.created'
     destinationKey: text('destination_key'), // service it sends to, e.g. 'http'
@@ -56,8 +52,8 @@ export const tenantIntegrations = pgTable(
   },
   (t) => ({
     tenantIdx: index('tenant_integrations_tenant_idx').on(t.tenantId),
-    tenantKeyUx: uniqueIndex('tenant_integrations_tenant_key_ux').on(t.tenantId, t.integrationKey),
     triggerIdx: index('tenant_integrations_trigger_idx').on(t.tenantId, t.triggerKey),
+    tenantIdIdUx: uniqueIndex('tenant_integrations_tenant_id_id_ux').on(t.tenantId, t.id),
   }),
 )
 
@@ -72,7 +68,7 @@ export const integrationExportLog = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    integrationKey: text('integration_key').notNull(),
+    automationId: uuid('automation_id').notNull(),
     subjectType: text('subject_type').notNull(), // e.g. 'training_class'
     subjectId: uuid('subject_id').notNull(), // the internal subject (e.g. class id)
     externalSystem: text('external_system').notNull(), // label for the target system, e.g. 'payroll-sql'
@@ -87,6 +83,11 @@ export const integrationExportLog = pgTable(
       t.subjectType,
       t.subjectId,
     ),
-    keyIdx: index('integration_export_log_key_idx').on(t.tenantId, t.integrationKey),
+    automationIdx: index('integration_export_log_automation_idx').on(t.tenantId, t.automationId),
+    automationFk: foreignKey({
+      name: 'integration_export_log_tenant_automation_fk',
+      columns: [t.tenantId, t.automationId],
+      foreignColumns: [tenantIntegrations.tenantId, tenantIntegrations.id],
+    }).onDelete('cascade'),
   }),
 )

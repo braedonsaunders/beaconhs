@@ -22,9 +22,7 @@ export const personFiles = pgTable(
     personId: uuid('person_id')
       .notNull()
       .references(() => people.id, { onDelete: 'cascade' }),
-    attachmentId: uuid('attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
+    attachmentId: uuid('attachment_id'),
     // Free-form display label e.g. "2024 forklift cert", "Drivers license".
     label: text('label').notNull(),
     // Bucket the file by intent — drives the badge colour on the per-person

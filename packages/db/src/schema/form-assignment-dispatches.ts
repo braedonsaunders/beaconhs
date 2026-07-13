@@ -8,7 +8,16 @@
 // on form_assignments itself.
 
 import { relations } from 'drizzle-orm'
-import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import {
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 import { formAssignments } from './forms'
@@ -20,23 +29,39 @@ export const formAssignmentDispatches = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    assignmentId: uuid('assignment_id')
-      .notNull()
-      .references(() => formAssignments.id, { onDelete: 'cascade' }),
+    assignmentId: uuid('assignment_id').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
-    // 'scheduled' | 'skipped' | 'failed'
-    status: text('status').notNull().default('scheduled'),
+    // 'queued' | 'enqueued' | 'skipped' | 'failed'
+    status: text('status').notNull().default('queued'),
     // Audience snapshot — user ids notified at fire time (for audit)
     audienceUserIds: jsonb('audience_user_ids').$type<string[]>().default([]).notNull(),
+    notificationPayload: jsonb('notification_payload').$type<{
+      title: string
+      body?: string
+      linkPath: string
+      data: { assignmentId: string; templateId: string }
+    } | null>(),
+    notificationJobId: text('notification_job_id'),
     error: text('error'),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('form_assignment_dispatches_tenant_idx').on(t.tenantId),
     assignmentIdx: index('form_assignment_dispatches_assignment_idx').on(
+      t.tenantId,
       t.assignmentId,
       t.occurredAt,
     ),
+    assignmentOccurrenceUx: uniqueIndex('form_assignment_dispatches_assignment_occurrence_ux').on(
+      t.tenantId,
+      t.assignmentId,
+      t.occurredAt,
+    ),
+    assignmentFk: foreignKey({
+      name: 'form_assignment_dispatches_tenant_assignment_fk',
+      columns: [t.tenantId, t.assignmentId],
+      foreignColumns: [formAssignments.tenantId, formAssignments.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -46,7 +71,7 @@ export const formAssignmentDispatchesRelations = relations(formAssignmentDispatc
     references: [tenants.id],
   }),
   assignment: one(formAssignments, {
-    fields: [formAssignmentDispatches.assignmentId],
-    references: [formAssignments.id],
+    fields: [formAssignmentDispatches.tenantId, formAssignmentDispatches.assignmentId],
+    references: [formAssignments.tenantId, formAssignments.id],
   }),
 }))

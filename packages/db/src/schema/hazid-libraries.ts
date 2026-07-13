@@ -67,9 +67,7 @@ export const hazidHazards = pgTable(
     }),
     standardControls: text('standard_controls'), // the canonical control text
     risks: text('risks'), // optional "what could go wrong" copy
-    photoAttachmentId: uuid('photo_attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
+    photoAttachmentId: uuid('photo_attachment_id'),
     ...timestamps,
     ...softDelete,
   },

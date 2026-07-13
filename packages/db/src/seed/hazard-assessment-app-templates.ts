@@ -6,9 +6,9 @@ import { and, eq } from 'drizzle-orm'
 import { formTemplates, formTemplateVersions } from '../schema'
 import type { FormSchemaV1 } from '../schema/forms'
 
-export const HAZID_CONFINED_SPACE_APP_KEY = 'hazid-confined-space-entry-plan'
-export const HAZID_ARC_FLASH_APP_KEY = 'hazid-arc-flash-work-plan'
-export const HAZID_FALL_PROTECTION_APP_KEY = 'hazid-fall-protection-plan'
+const HAZID_CONFINED_SPACE_APP_KEY = 'hazid-confined-space-entry-plan'
+const HAZID_ARC_FLASH_APP_KEY = 'hazid-arc-flash-work-plan'
+const HAZID_FALL_PROTECTION_APP_KEY = 'hazid-fall-protection-plan'
 
 const submitterStep = (key: string, title: string) => ({
   key,
@@ -67,7 +67,7 @@ const WAH_EQUIPMENT_OPTIONS = [
   'Ladder tie-off',
 ]
 
-export const HAZID_CONFINED_SPACE_APP_SCHEMA: FormSchemaV1 = {
+const HAZID_CONFINED_SPACE_APP_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Confined Space Entry Plan' },
   description: {
@@ -238,7 +238,7 @@ export const HAZID_CONFINED_SPACE_APP_SCHEMA: FormSchemaV1 = {
   },
 }
 
-export const HAZID_ARC_FLASH_APP_SCHEMA: FormSchemaV1 = {
+const HAZID_ARC_FLASH_APP_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Arc Flash Work Plan' },
   description: {
@@ -438,7 +438,7 @@ async function ensureTemplate(
   return tmpl
 }
 
-export const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
+const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Fall Protection Plan' },
   description: {
@@ -453,7 +453,7 @@ export const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
         { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         {
           id: 'work_description',
-          type: 'textarea',
+          type: 'long_text',
           label: { en: 'Work description' },
           required: true,
         },
@@ -522,7 +522,7 @@ export const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
         ),
         {
           id: 'rescue_plan',
-          type: 'textarea',
+          type: 'long_text',
           label: { en: 'Rescue plan' },
           required: true,
           helpText: { en: 'How will a suspended worker be rescued, and by whom?' },

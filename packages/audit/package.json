@@ -13,8 +13,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@beaconhs/db": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "@beaconhs/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

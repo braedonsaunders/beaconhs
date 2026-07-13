@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { id } from './_helpers'
 import { tenants, users } from './core'
 
@@ -15,6 +15,7 @@ export const auditLog = pgTable(
     entityType: text('entity_type').notNull(), // e.g. 'incident', 'form_response'
     entityId: uuid('entity_id'),
     action: text('action').notNull(), // 'create' | 'update' | 'delete' | 'sign' | …
+    dedupKey: text('dedup_key'),
     summary: text('summary'),
     before: jsonb('before').$type<Record<string, unknown> | null>(),
     after: jsonb('after').$type<Record<string, unknown> | null>(),
@@ -25,5 +26,6 @@ export const auditLog = pgTable(
     tenantIdx: index('audit_log_tenant_idx').on(t.tenantId, t.occurredAt),
     entityIdx: index('audit_log_entity_idx').on(t.tenantId, t.entityType, t.entityId),
     actorIdx: index('audit_log_actor_idx').on(t.tenantId, t.actorUserId, t.occurredAt),
+    dedupUx: uniqueIndex('audit_log_tenant_dedup_ux').on(t.tenantId, t.dedupKey),
   }),
 )

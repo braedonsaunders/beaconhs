@@ -18,8 +18,3 @@ export const timestamps = {
 export const softDelete = {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }
-
-export const tenantFk = (refTenants: () => { id: any }) =>
-  uuid('tenant_id')
-    .notNull()
-    .references(() => refTenants().id, { onDelete: 'cascade' })

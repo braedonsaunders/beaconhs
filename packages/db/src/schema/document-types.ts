@@ -1,15 +1,11 @@
 // Document Types + Categories — lookup tables that classify documents.
 //
-// Both replace the bare `documents.category` text column with proper FK-backed
-// rows that admins can manage. The existing `documents.category` text column is
-// preserved for back-compat (and remains the source of truth on the list page
-// filter chips), while new `typeId` / `categoryId` columns join through to the
-// lookups.
+// Both provide FK-backed rows that admins can manage.
 //
-// Categories form a tenant-scoped tree (parent_id nullable) so admins can mirror
-// their legacy DOCUMENTATIONCATEGORY structure (e.g. Safety / SDS / Acids).
+// Categories form a tenant-scoped tree (parent_id nullable), for example
+// Safety / SDS / Acids.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import { index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants } from './core'
@@ -52,7 +48,13 @@ export const documentCategories = pgTable(
   (t) => ({
     tenantIdx: index('document_categories_tenant_idx').on(t.tenantId),
     parentIdx: index('document_categories_parent_idx').on(t.parentId),
-    tenantNameUx: uniqueIndex('document_categories_tenant_name_ux').on(t.tenantId, t.name),
+    // Sibling names are the user-visible identity of a category. Deleted rows
+    // must not reserve a name forever, and top-level NULL parents must compare
+    // equal (Postgres normally treats every NULL as distinct in a unique
+    // index), so normalize parent + name as index expressions.
+    activeParentNameUx: uniqueIndex('document_categories_active_parent_name_ux')
+      .on(t.tenantId, sql`coalesce(${t.parentId}::text, '')`, sql`lower(btrim(${t.name}))`)
+      .where(sql`${t.deletedAt} is null`),
   }),
 )
 

@@ -20,17 +20,17 @@ import { and, eq } from 'drizzle-orm'
 import { formTemplates, formTemplateVersions } from '../schema'
 import type { FormSchemaV1 } from '../schema/forms'
 
-export const TOOLBOX_TEMPLATE_KEY = 'toolbox-talk'
-export const TOOLBOX_TEMPLATE_CATEGORY = 'toolbox_talk'
-export const TOOLBOX_TEMPLATE_MODULE_BINDING = 'toolbox_talk'
-export const TOOLBOX_TEMPLATE_NAME = 'Toolbox Talk'
+const TOOLBOX_TEMPLATE_KEY = 'toolbox-talk'
+const TOOLBOX_TEMPLATE_CATEGORY = 'toolbox_talk'
+const TOOLBOX_TEMPLATE_MODULE_BINDING = 'toolbox_talk'
+const TOOLBOX_TEMPLATE_NAME = 'Toolbox Talk'
 
 /**
  * The toolbox-talk form template schema. A pre-shift safety discussion with a
  * repeating attendees sign-in section (person + signature) — the attendee rows
  * feed form_response_participants, which power per-person transcripts.
  */
-export const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
+const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
   schemaVersion: 1,
   title: { en: 'Toolbox Talk' },
   description: {

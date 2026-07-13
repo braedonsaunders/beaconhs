@@ -19,7 +19,6 @@
 
 import { relations } from 'drizzle-orm'
 import {
-  boolean,
   date,
   index,
   integer,
@@ -219,12 +218,3 @@ export const trainingAudienceAssignmentRecordsRelations = relations(
     }),
   }),
 )
-
-// Re-export the boolean used by the compliance helpers. Not a table; just a
-// convenient symbolic constant other modules can import for completeness.
-export const TRAINING_AUDIENCE_ASSIGNMENT_RECORD_COMPLETED_STATUSES = ['completed'] as const
-
-// Unused helper to silence "TRAINING_AUDIENCE..." linter warning if removed
-// elsewhere. Type-only export for boolean.
-export type TrainingAudienceAssignmentRecordStatus =
-  (typeof trainingAudienceAssignmentRecordStatus.enumValues)[number]

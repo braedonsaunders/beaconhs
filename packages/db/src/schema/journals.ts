@@ -12,6 +12,7 @@ import {
   boolean,
   customType,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -229,6 +230,7 @@ export const journalAssignments = pgTable(
   (t) => ({
     tenantIdx: index('journal_assignments_tenant_idx').on(t.tenantId),
     activeIdx: index('journal_assignments_active_idx').on(t.tenantId, t.active),
+    tenantIdIdUx: uniqueIndex('journal_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
   }),
 )
 
@@ -242,9 +244,7 @@ export const journalAssignmentDispatches = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    assignmentId: uuid('assignment_id')
-      .notNull()
-      .references(() => journalAssignments.id, { onDelete: 'cascade' }),
+    assignmentId: uuid('assignment_id').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
     dueOn: date('due_on'),
     notes: text('notes'),
@@ -252,8 +252,16 @@ export const journalAssignmentDispatches = pgTable(
   },
   (t) => ({
     tenantIdx: index('journal_assignment_dispatches_tenant_idx').on(t.tenantId),
-    assignmentIdx: index('journal_assignment_dispatches_assignment_idx').on(t.assignmentId),
+    assignmentIdx: index('journal_assignment_dispatches_assignment_idx').on(
+      t.tenantId,
+      t.assignmentId,
+    ),
     occurredIdx: index('journal_assignment_dispatches_occurred_idx').on(t.tenantId, t.occurredAt),
+    assignmentFk: foreignKey({
+      name: 'journal_assignment_dispatches_tenant_assignment_fk',
+      columns: [t.tenantId, t.assignmentId],
+      foreignColumns: [journalAssignments.tenantId, journalAssignments.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -313,8 +321,8 @@ export const journalAssignmentDispatchesRelations = relations(
       references: [tenants.id],
     }),
     assignment: one(journalAssignments, {
-      fields: [journalAssignmentDispatches.assignmentId],
-      references: [journalAssignments.id],
+      fields: [journalAssignmentDispatches.tenantId, journalAssignmentDispatches.assignmentId],
+      references: [journalAssignments.tenantId, journalAssignments.id],
     }),
   }),
 )

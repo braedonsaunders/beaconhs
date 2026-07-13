@@ -31,9 +31,7 @@ export const equipmentLogEntries = pgTable(
     // Optional pointers — useful for a tech filling in "on site X with crew Y".
     siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
     personPersonId: uuid('person_person_id').references(() => people.id),
-    attachmentId: uuid('attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
+    attachmentId: uuid('attachment_id'),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
     ...timestamps,

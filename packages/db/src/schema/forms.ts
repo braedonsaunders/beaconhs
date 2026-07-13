@@ -12,6 +12,7 @@ import { relations } from 'drizzle-orm'
 import {
   boolean,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -56,7 +57,9 @@ export const formTemplates = pgTable(
     iconKey: text('icon_key'),
     // App-level role gating. Empty / null ⇒ visible & usable by everyone (today's
     // behavior). Non-empty ⇒ only these role keys (plus admins / super-admins)
-    // may see the app in the gallery and fill it out. Enforced in /apps + /fill.
+    // may discover, open, fill, or browse the app and its records. Template
+    // builders bypass the audience for authoring, but operational use still
+    // requires a published template.
     allowedRoles: jsonb('allowed_roles').$type<string[]>(),
     // Which built-in module this template powers, if any. Lets us hide certain
     // templates from the generic forms list when they're owned by a specialty UI.
@@ -122,12 +125,7 @@ export type {
   AutomationGraph,
 } from '@beaconhs/forms-core'
 
-import type {
-  AutomationGraph,
-  FormSchemaV1,
-  FormWorkflowStep,
-  I18nString,
-} from '@beaconhs/forms-core'
+import type { AutomationGraph, FormSchemaV1, FormWorkflowStep } from '@beaconhs/forms-core'
 
 // FormWorkflow stays as a local alias: db schema talks about workflow as
 // `{ steps: FormWorkflowStep[] }` and forms-core exports the shape inline on
@@ -147,7 +145,7 @@ export type FormResponseWorkflowStepState = {
   signedAt?: string // ISO 8601
   personId?: string | null
   tenantUserId?: string | null
-  signatureDataUrl?: string | null
+  signatureAttachmentId?: string | null
   rejectionReason?: string | null
   rejectedAt?: string // ISO 8601
   rejectedByTenantUserId?: string | null
@@ -170,6 +168,14 @@ export type FormResponseWorkflowState = {
 export type FormResponseDraftData = {
   values: Record<string, unknown>
   rows: Record<string, Array<Record<string, unknown>>>
+  // Autosave ordering metadata. A browser editing session increments
+  // saveSequence for each local change; saveRevision is the database-wide
+  // revision used when a different tab/session first attempts to take over.
+  // Keeping this alongside the draft payload lets the unload beacon and the
+  // normal Server Action race safely without adding lifecycle-only columns.
+  saveSessionId?: string
+  saveSequence?: number
+  saveRevision?: number
 }
 
 // --- Assignments -----------------------------------------------------------
@@ -210,6 +216,7 @@ export const formAssignments = pgTable(
   },
   (t) => ({
     tenantIdx: index('form_assignments_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('form_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
     templateIdx: index('form_assignments_template_idx').on(t.templateId),
     modeIdx: index('form_assignments_mode_idx').on(t.tenantId, t.mode),
   }),
@@ -273,19 +280,20 @@ export const formResponses = pgTable(
       .notNull()
       .references(() => formTemplateVersions.id),
     assignmentId: uuid('assignment_id').references(() => formAssignments.id),
+    flowExecutionKey: text('flow_execution_key'),
     status: formResponseStatus('status').default('draft').notNull(),
     currentStep: text('current_step'),
     // Hot indexed columns for filtering
     siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
     subjectPersonId: uuid('subject_person_id').references(() => people.id), // for forms about a specific person
-    submittedBy: uuid('submitted_by').references(() => tenantUsers.id),
+    submittedBy: uuid('submitted_by'),
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     // Record-level lock — a locked response is read-only in the record page
     // (no field edits / workflow actions) until an authorised user unlocks it.
     locked: boolean('locked').default(false).notNull(),
     lockedAt: timestamp('locked_at', { withTimezone: true }),
-    lockedByTenantUserId: uuid('locked_by_tenant_user_id').references(() => tenantUsers.id),
+    lockedByTenantUserId: uuid('locked_by_tenant_user_id'),
     // The actual response payload (keyed by field id)
     data: jsonb('data').$type<Record<string, unknown>>().default({}).notNull(),
     // In-flight draft state — written by the autosave path while the user is
@@ -315,7 +323,7 @@ export const formResponses = pgTable(
     // that the UI can read in a single fetch without joining.
     //
     // Shape (FormResponseWorkflowState):
-    //   { steps: [{ stepKey, status, signedAt?, personId?, signatureDataUrl?,
+    //   { steps: [{ stepKey, status, signedAt?, personId?, signatureAttachmentId?,
     //               rejectionReason?, rejectedAt?, rejectedBy? }],
     //     lastActionAt?, lastActionByTenantUserId?, lastReason? }
     workflowState: jsonb('workflow_state').$type<FormResponseWorkflowState | null>().default(null),
@@ -324,6 +332,7 @@ export const formResponses = pgTable(
     // The overdue scan reads (monitorStatus, nextCheckinDueAt); check-in resets
     // nextCheckinDueAt. See docs/monitored-sessions-design.md.
     monitorStatus: formMonitorStatus('monitor_status'),
+    monitorFlowExecutionKey: text('monitor_flow_execution_key'),
     checkinIntervalMinutes: integer('checkin_interval_minutes'),
     gracePeriodMinutes: integer('grace_period_minutes'),
     // Whether check-ins must capture GPS — set by the start_monitored_session
@@ -342,6 +351,8 @@ export const formResponses = pgTable(
     statusIdx: index('form_responses_status_idx').on(t.tenantId, t.status),
     siteIdx: index('form_responses_site_idx').on(t.tenantId, t.siteOrgUnitId),
     submittedIdx: index('form_responses_submitted_idx').on(t.tenantId, t.submittedAt),
+    submittedByIdx: index('form_responses_submitted_by_idx').on(t.tenantId, t.submittedBy),
+    lockedByIdx: index('form_responses_locked_by_idx').on(t.tenantId, t.lockedByTenantUserId),
     sourceIdx: index('form_responses_source_idx').on(
       t.tenantId,
       t.sourceEntityType,
@@ -349,6 +360,20 @@ export const formResponses = pgTable(
     ),
     // Drives the every-minute overdue scan for monitored sessions.
     monitorDueIdx: index('form_responses_monitor_due_idx').on(t.monitorStatus, t.nextCheckinDueAt),
+    flowExecutionUx: uniqueIndex('form_responses_flow_execution_ux').on(
+      t.tenantId,
+      t.flowExecutionKey,
+    ),
+    submittedByFk: foreignKey({
+      name: 'form_responses_tenant_submitted_by_fk',
+      columns: [t.tenantId, t.submittedBy],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    lockedByFk: foreignKey({
+      name: 'form_responses_tenant_locked_by_fk',
+      columns: [t.tenantId, t.lockedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -369,11 +394,17 @@ export const formResponseCheckins = pgTable(
     geoLat: doublePrecision('geo_lat'),
     geoLng: doublePrecision('geo_lng'),
     note: text('note'),
-    byTenantUserId: uuid('by_tenant_user_id').references(() => tenantUsers.id),
+    byTenantUserId: uuid('by_tenant_user_id'),
   },
   (t) => ({
     responseIdx: index('form_response_checkins_response_idx').on(t.responseId, t.recordedAt),
     tenantIdx: index('form_response_checkins_tenant_idx').on(t.tenantId),
+    byTenantUserIdx: index('form_response_checkins_by_user_idx').on(t.tenantId, t.byTenantUserId),
+    byTenantUserFk: foreignKey({
+      name: 'form_response_checkins_tenant_by_user_fk',
+      columns: [t.tenantId, t.byTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -400,29 +431,47 @@ export const formResponseSteps = pgTable(
       .references(() => formResponses.id, { onDelete: 'cascade' }),
     stepKey: text('step_key').notNull(),
     sequence: integer('sequence').notNull(),
-    assigneeTenantUserId: uuid('assignee_tenant_user_id').references(() => tenantUsers.id),
+    assigneeTenantUserId: uuid('assignee_tenant_user_id'),
     signedAt: timestamp('signed_at', { withTimezone: true }),
     signatureAttachmentId: uuid('signature_attachment_id'),
     comment: text('comment'),
     // Lifecycle status. Defaults to 'pending'; populated by the workflow
     // server actions in apps/web/src/app/(app)/apps/responses/[id]/_actions.ts.
     status: text('status').default('pending').notNull(),
-    // Inline signature data URL (PNG). Stored alongside the attachment-id
-    // pointer so PDFs can render the signature without a separate fetch.
-    signatureDataUrl: text('signature_data_url'),
     // Whose person record the signer represents (if internal).
     signedByPersonId: uuid('signed_by_person_id').references(() => people.id),
     // Which tenant_users row did the click — used by audit + assignee resolution.
-    signedByTenantUserId: uuid('signed_by_tenant_user_id').references(() => tenantUsers.id),
+    signedByTenantUserId: uuid('signed_by_tenant_user_id'),
     rejectionReason: text('rejection_reason'),
     rejectedAt: timestamp('rejected_at', { withTimezone: true }),
-    rejectedByTenantUserId: uuid('rejected_by_tenant_user_id').references(() => tenantUsers.id),
+    rejectedByTenantUserId: uuid('rejected_by_tenant_user_id'),
     ...timestamps,
   },
   (t) => ({
     responseIdx: index('form_response_steps_response_idx').on(t.responseId, t.sequence),
     tenantIdx: index('form_response_steps_tenant_idx').on(t.tenantId),
     statusIdx: index('form_response_steps_status_idx').on(t.tenantId, t.status),
+    assigneeIdx: index('form_response_steps_assignee_idx').on(t.tenantId, t.assigneeTenantUserId),
+    signedByIdx: index('form_response_steps_signed_by_idx').on(t.tenantId, t.signedByTenantUserId),
+    rejectedByIdx: index('form_response_steps_rejected_by_idx').on(
+      t.tenantId,
+      t.rejectedByTenantUserId,
+    ),
+    assigneeFk: foreignKey({
+      name: 'form_response_steps_tenant_assignee_fk',
+      columns: [t.tenantId, t.assigneeTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    signedByFk: foreignKey({
+      name: 'form_response_steps_tenant_signed_by_fk',
+      columns: [t.tenantId, t.signedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    rejectedByFk: foreignKey({
+      name: 'form_response_steps_tenant_rejected_by_fk',
+      columns: [t.tenantId, t.rejectedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -438,13 +487,19 @@ export const formResponseComments = pgTable(
     responseId: uuid('response_id')
       .notNull()
       .references(() => formResponses.id, { onDelete: 'cascade' }),
-    authorTenantUserId: uuid('author_tenant_user_id').references(() => tenantUsers.id),
+    authorTenantUserId: uuid('author_tenant_user_id'),
     body: text('body').notNull(),
     ...timestamps,
   },
   (t) => ({
     responseIdx: index('form_response_comments_response_idx').on(t.responseId, t.createdAt),
     tenantIdx: index('form_response_comments_tenant_idx').on(t.tenantId),
+    authorIdx: index('form_response_comments_author_idx').on(t.tenantId, t.authorTenantUserId),
+    authorFk: foreignKey({
+      name: 'form_response_comments_tenant_author_fk',
+      columns: [t.tenantId, t.authorTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -532,13 +587,14 @@ export const flowGates = pgTable(
       .notNull()
       .references(() => formAutomations.id, { onDelete: 'cascade' }),
     nodeId: text('node_id').notNull(),
+    executionId: uuid('execution_id'),
     title: text('title').notNull(),
-    assigneeTenantUserId: uuid('assignee_tenant_user_id').references(() => tenantUsers.id),
+    assigneeTenantUserId: uuid('assignee_tenant_user_id'),
     status: flowGateStatus('status').notNull().default('pending'),
     signatureRequired: boolean('signature_required').default(false).notNull(),
-    signatureDataUrl: text('signature_data_url'),
+    signatureAttachmentId: uuid('signature_attachment_id'),
     comment: text('comment'),
-    decidedByTenantUserId: uuid('decided_by_tenant_user_id').references(() => tenantUsers.id),
+    decidedByTenantUserId: uuid('decided_by_tenant_user_id'),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
     ...timestamps,
   },
@@ -550,7 +606,24 @@ export const flowGates = pgTable(
       t.status,
     ),
     assigneeIdx: index('flow_gates_assignee_idx').on(t.tenantId, t.assigneeTenantUserId, t.status),
+    decidedByIdx: index('flow_gates_decided_by_idx').on(t.tenantId, t.decidedByTenantUserId),
     flowIdx: index('flow_gates_flow_idx').on(t.flowId),
+    executionUx: uniqueIndex('flow_gates_execution_ux').on(
+      t.tenantId,
+      t.executionId,
+      t.flowId,
+      t.nodeId,
+    ),
+    assigneeFk: foreignKey({
+      name: 'flow_gates_tenant_assignee_fk',
+      columns: [t.tenantId, t.assigneeTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    decidedByFk: foreignKey({
+      name: 'flow_gates_tenant_decided_by_fk',
+      columns: [t.tenantId, t.decidedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 

@@ -25,8 +25,8 @@ export const smsLog = pgTable(
     jobId: text('job_id'),
     // Provider message id / SID (Twilio SMxx…, etc.) — null until/unless 'sent'.
     providerMessageId: text('provider_message_id'),
-    // Which provider actually sent it: twilio | vonage | messagebird | plivo |
-    // telnyx | env (legacy TWILIO_* fallback).
+    // Which provider handled it: twilio | vonage | messagebird | plivo |
+    // telnyx. Failed configuration attempts use "unconfigured".
     provider: text('provider'),
     // Destination phone (E.164). Null for 'suppressed' (kill switch, pre-send).
     recipient: text('recipient'),

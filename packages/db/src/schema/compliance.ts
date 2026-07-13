@@ -18,6 +18,7 @@
 import { relations } from 'drizzle-orm'
 import {
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -91,7 +92,8 @@ export const complianceStatusValue = pgEnum('compliance_status_value', [
 ])
 
 export const complianceDispatchStatus = pgEnum('compliance_dispatch_status', [
-  'scheduled',
+  'queued',
+  'enqueued',
   'skipped',
   'failed',
 ])
@@ -142,18 +144,33 @@ export const complianceObligations = pgTable(
     recurrenceKind: complianceRecurrenceKind('recurrence_kind').notNull(),
     lastScannedAt: timestamp('last_scanned_at', { withTimezone: true }),
     nextDueAt: timestamp('next_due_at', { withTimezone: true }),
-    // Provenance back to the legacy assignment row during the transition.
-    legacyTable: text('legacy_table'),
-    legacyId: uuid('legacy_id'),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
+    // Stable identity of the authoring record or built-in rule that produced
+    // this materialized obligation. This makes repeated scans idempotent.
+    sourceKey: text('source_key'),
+    sourceId: uuid('source_id'),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
     ...softDelete,
   },
   (t) => ({
     tenantIdx: index('compliance_obligations_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('compliance_obligations_tenant_id_id_ux').on(t.tenantId, t.id),
+    createdByIdx: index('compliance_obligations_created_by_idx').on(
+      t.tenantId,
+      t.createdByTenantUserId,
+    ),
     moduleIdx: index('compliance_obligations_module_idx').on(t.tenantId, t.sourceModule),
     scanIdx: index('compliance_obligations_scan_idx').on(t.recurrenceKind, t.status),
-    legacyUx: uniqueIndex('compliance_obligations_legacy_ux').on(t.legacyTable, t.legacyId),
+    sourceUx: uniqueIndex('compliance_obligations_source_ux').on(
+      t.tenantId,
+      t.sourceKey,
+      t.sourceId,
+    ),
+    createdByFk: foreignKey({
+      name: 'compliance_obligations_tenant_created_by_fk',
+      columns: [t.tenantId, t.createdByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -164,9 +181,7 @@ export const complianceAudience = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    obligationId: uuid('obligation_id')
-      .notNull()
-      .references(() => complianceObligations.id, { onDelete: 'cascade' }),
+    obligationId: uuid('obligation_id').notNull(),
     kind: complianceAudienceKind('kind').notNull(),
     // person→people.id, trade→trades.id, department→departments.id,
     // org_unit→org_units.id (uuid as text), role→roles.key, everyone→'' sentinel.
@@ -175,8 +190,18 @@ export const complianceAudience = pgTable(
   },
   (t) => ({
     tenantIdx: index('compliance_audience_tenant_idx').on(t.tenantId),
-    obligationIdx: index('compliance_audience_obligation_idx').on(t.obligationId),
-    uniqueUx: uniqueIndex('compliance_audience_unique_ux').on(t.obligationId, t.kind, t.entityKey),
+    obligationIdx: index('compliance_audience_obligation_idx').on(t.tenantId, t.obligationId),
+    uniqueUx: uniqueIndex('compliance_audience_unique_ux').on(
+      t.tenantId,
+      t.obligationId,
+      t.kind,
+      t.entityKey,
+    ),
+    obligationFk: foreignKey({
+      name: 'compliance_audience_tenant_obligation_fk',
+      columns: [t.tenantId, t.obligationId],
+      foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -187,21 +212,43 @@ export const complianceDispatches = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    obligationId: uuid('obligation_id')
-      .notNull()
-      .references(() => complianceObligations.id, { onDelete: 'cascade' }),
+    obligationId: uuid('obligation_id').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
     dueOn: date('due_on'),
     periodStart: date('period_start'),
     periodEnd: date('period_end'),
-    status: complianceDispatchStatus('status').default('scheduled').notNull(),
+    status: complianceDispatchStatus('status').default('queued').notNull(),
     audienceSnapshot: jsonb('audience_snapshot').$type<string[]>().default([]).notNull(),
+    alertPayload: jsonb('alert_payload').$type<{
+      transitions: Array<{
+        subjectKey: string
+        personId: string | null
+        userId?: string | null
+        label: string
+        to: 'completed' | 'overdue' | 'pending' | 'in_progress' | 'expiring'
+        dueOn: string | null
+      }>
+    } | null>(),
     error: text('error'),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('compliance_dispatches_tenant_idx').on(t.tenantId),
-    obligationIdx: index('compliance_dispatches_obligation_idx').on(t.obligationId, t.occurredAt),
+    obligationIdx: index('compliance_dispatches_obligation_idx').on(
+      t.tenantId,
+      t.obligationId,
+      t.occurredAt,
+    ),
+    obligationOccurrenceUx: uniqueIndex('compliance_dispatches_obligation_occurrence_ux').on(
+      t.tenantId,
+      t.obligationId,
+      t.occurredAt,
+    ),
+    obligationFk: foreignKey({
+      name: 'compliance_dispatches_tenant_obligation_fk',
+      columns: [t.tenantId, t.obligationId],
+      foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -212,11 +259,9 @@ export const complianceStatus = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    obligationId: uuid('obligation_id')
-      .notNull()
-      .references(() => complianceObligations.id, { onDelete: 'cascade' }),
+    obligationId: uuid('obligation_id').notNull(),
     // per_person / per_task set personId; per_record leaves it null.
-    personId: uuid('person_id').references(() => people.id, { onDelete: 'cascade' }),
+    personId: uuid('person_id'),
     subjectRef: jsonb('subject_ref').$type<Record<string, string>>(),
     // Never-null dedupe key: person:<id>[|<periodStart>] / record:<id> / task:<taskId>:person:<id>
     subjectKey: text('subject_key').notNull(),
@@ -234,10 +279,24 @@ export const complianceStatus = pgTable(
   },
   (t) => ({
     tenantIdx: index('compliance_status_tenant_idx').on(t.tenantId),
-    obligationIdx: index('compliance_status_obligation_idx').on(t.obligationId),
+    obligationIdx: index('compliance_status_obligation_idx').on(t.tenantId, t.obligationId),
     personIdx: index('compliance_status_person_idx').on(t.tenantId, t.personId),
     statusIdx: index('compliance_status_status_idx').on(t.tenantId, t.status),
-    uniqueUx: uniqueIndex('compliance_status_unique_ux').on(t.obligationId, t.subjectKey),
+    uniqueUx: uniqueIndex('compliance_status_unique_ux').on(
+      t.tenantId,
+      t.obligationId,
+      t.subjectKey,
+    ),
+    obligationFk: foreignKey({
+      name: 'compliance_status_tenant_obligation_fk',
+      columns: [t.tenantId, t.obligationId],
+      foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'compliance_status_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -250,7 +309,7 @@ export const complianceObligationsRelations = relations(complianceObligations, (
 
 export const complianceAudienceRelations = relations(complianceAudience, ({ one }) => ({
   obligation: one(complianceObligations, {
-    fields: [complianceAudience.obligationId],
-    references: [complianceObligations.id],
+    fields: [complianceAudience.tenantId, complianceAudience.obligationId],
+    references: [complianceObligations.tenantId, complianceObligations.id],
   }),
 }))

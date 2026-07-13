@@ -8,6 +8,7 @@
 
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -90,6 +91,7 @@ export const syncConnections = pgTable(
   (t) => ({
     tenantIdx: index('sync_connections_tenant_idx').on(t.tenantId),
     tenantConnectorIdx: index('sync_connections_connector_idx').on(t.tenantId, t.connectorKey),
+    tenantIdIdUx: uniqueIndex('sync_connections_tenant_id_id_ux').on(t.tenantId, t.id),
   }),
 )
 
@@ -103,9 +105,7 @@ export const syncCrosswalk = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    connectionId: uuid('connection_id')
-      .notNull()
-      .references(() => syncConnections.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').notNull(),
     entity: text('entity').$type<SyncEntityKey>().notNull(),
     sourceSystem: text('source_system').notNull(), // connectorKey, for labelling
     externalId: text('external_id').notNull(),
@@ -117,6 +117,11 @@ export const syncCrosswalk = pgTable(
   (t) => ({
     uniq: uniqueIndex('sync_crosswalk_uniq').on(t.tenantId, t.connectionId, t.entity, t.externalId),
     canonicalIdx: index('sync_crosswalk_canonical_idx').on(t.tenantId, t.entity, t.canonicalId),
+    connectionFk: foreignKey({
+      name: 'sync_crosswalk_tenant_connection_fk',
+      columns: [t.tenantId, t.connectionId],
+      foreignColumns: [syncConnections.tenantId, syncConnections.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -128,9 +133,7 @@ export const syncRuns = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    connectionId: uuid('connection_id')
-      .notNull()
-      .references(() => syncConnections.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').notNull(),
     trigger: text('trigger').$type<SyncRunTrigger>().notNull(),
     dryRun: boolean('dry_run').default(false).notNull(),
     status: text('status').$type<SyncRunStatus>().default('running').notNull(),
@@ -146,7 +149,13 @@ export const syncRuns = pgTable(
   },
   (t) => ({
     tenantIdx: index('sync_runs_tenant_idx').on(t.tenantId),
-    connectionIdx: index('sync_runs_connection_idx').on(t.connectionId, t.startedAt),
+    connectionIdx: index('sync_runs_connection_idx').on(t.tenantId, t.connectionId, t.startedAt),
+    tenantIdIdUx: uniqueIndex('sync_runs_tenant_id_id_ux').on(t.tenantId, t.id),
+    connectionFk: foreignKey({
+      name: 'sync_runs_tenant_connection_fk',
+      columns: [t.tenantId, t.connectionId],
+      foreignColumns: [syncConnections.tenantId, syncConnections.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -160,12 +169,8 @@ export const syncRecordChanges = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    connectionId: uuid('connection_id')
-      .notNull()
-      .references(() => syncConnections.id, { onDelete: 'cascade' }),
-    runId: uuid('run_id')
-      .notNull()
-      .references(() => syncRuns.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id').notNull(),
+    runId: uuid('run_id').notNull(),
     entity: text('entity').$type<SyncEntityKey>().notNull(),
     externalId: text('external_id').notNull(),
     canonicalId: uuid('canonical_id'),
@@ -180,8 +185,12 @@ export const syncRecordChanges = pgTable(
   },
   (t) => ({
     tenantIdx: index('sync_record_changes_tenant_idx').on(t.tenantId),
-    runIdx: index('sync_record_changes_run_idx').on(t.runId),
-    connectionRunIdx: index('sync_record_changes_connection_run_idx').on(t.connectionId, t.runId),
+    runIdx: index('sync_record_changes_run_idx').on(t.tenantId, t.runId),
+    connectionRunIdx: index('sync_record_changes_connection_run_idx').on(
+      t.tenantId,
+      t.connectionId,
+      t.runId,
+    ),
     entityActionIdx: index('sync_record_changes_entity_action_idx').on(
       t.tenantId,
       t.entity,
@@ -193,6 +202,16 @@ export const syncRecordChanges = pgTable(
       t.entity,
       t.externalId,
     ),
+    connectionFk: foreignKey({
+      name: 'sync_record_changes_tenant_connection_fk',
+      columns: [t.tenantId, t.connectionId],
+      foreignColumns: [syncConnections.tenantId, syncConnections.id],
+    }).onDelete('cascade'),
+    runFk: foreignKey({
+      name: 'sync_record_changes_tenant_run_fk',
+      columns: [t.tenantId, t.runId],
+      foreignColumns: [syncRuns.tenantId, syncRuns.id],
+    }).onDelete('cascade'),
   }),
 )
 

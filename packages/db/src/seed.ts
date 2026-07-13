@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { createSuperClient } from './client'
 import {
   BUILTIN_ROLES,
@@ -68,10 +68,9 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
   trainingAssessments,
-  trainingAssessmentResults,
   trainingAssessmentTypes,
   trainingAssessmentTypeQuestions,
-  user,
+  users as user,
   // HazID / JSHA
   hazidAssessmentTypePPE,
   hazidAssessmentTypeApps,
@@ -230,7 +229,7 @@ async function main() {
         // corrective_actions). The matrix views pre-compute coverage_status on
         // a 90-day "expiring" window — matching the legacy reports exactly.
         {
-          slug: 'legacy_training_cert_matrix',
+          slug: 'training_certificate_matrix',
           kind: 'built_in',
           name: 'Training — Certificate Matrix',
           description:
@@ -255,7 +254,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_training_certificates',
+          slug: 'training_certificates',
           kind: 'built_in',
           name: 'Training — Certificates',
           description:
@@ -273,7 +272,7 @@ async function main() {
               'expires_on',
               'coverage_status',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [
                 { field: 'coverage_status', op: 'in', value: ['valid', 'expiring', 'expired'] },
@@ -285,7 +284,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_training_expired',
+          slug: 'training_expired_upcoming',
           kind: 'built_in',
           name: 'Training — Expired & Upcoming',
           description:
@@ -296,7 +295,7 @@ async function main() {
             entity: 'training_matrix',
             mode: 'rows',
             columns: ['person_name', 'employee_no', 'course_name', 'expires_on', 'coverage_status'],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'coverage_status', op: 'in', value: ['expired', 'expiring'] }],
             },
@@ -306,7 +305,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_training_missing',
+          slug: 'training_missing',
           kind: 'built_in',
           name: 'Training — Missing',
           description:
@@ -317,7 +316,7 @@ async function main() {
             entity: 'training_matrix',
             mode: 'rows',
             columns: ['person_name', 'employee_no', 'course_name', 'expires_on', 'coverage_status'],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'coverage_status', op: 'in', value: ['missing', 'expired'] }],
             },
@@ -327,7 +326,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_skills_matrix',
+          slug: 'skills_matrix',
           kind: 'built_in',
           name: 'Skills — Matrix',
           description:
@@ -354,7 +353,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_skills_expired',
+          slug: 'skills_expired_upcoming',
           kind: 'built_in',
           name: 'Skills — Expired & Upcoming',
           description:
@@ -373,7 +372,7 @@ async function main() {
               'expires_on',
               'status',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'expires_on', op: 'due_within_days', value: 90 }],
             },
@@ -383,7 +382,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_skills_cwb',
+          slug: 'skills_cwb',
           kind: 'built_in',
           name: 'Skills — CWB (Welding)',
           description:
@@ -404,7 +403,7 @@ async function main() {
               'expires_on',
               'status',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'authority', op: 'eq', value: 'Canadian Welding Bureau' }],
             },
@@ -413,7 +412,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_corrective_list',
+          slug: 'corrective_actions_list',
           kind: 'built_in',
           name: 'Corrective Actions — List',
           description:
@@ -438,7 +437,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_ppe_list',
+          slug: 'ppe_list',
           kind: 'built_in',
           name: 'PPE — List',
           description:
@@ -446,7 +445,7 @@ async function main() {
           category: 'ppe',
           queryKind: 'custom_query',
           customQuery: {
-            entity: 'ppe',
+            entity: 'ppe_items',
             mode: 'rows',
             columns: [
               'serial_number',
@@ -456,7 +455,7 @@ async function main() {
               'next_annual_inspection_due',
               'expires_on',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'status', op: 'in', value: ['issued', 'in_stock'] }],
             },
@@ -465,7 +464,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_ppe_expired',
+          slug: 'ppe_expired_upcoming',
           kind: 'built_in',
           name: 'PPE — Expired & Upcoming',
           description:
@@ -473,10 +472,10 @@ async function main() {
           category: 'ppe',
           queryKind: 'custom_query',
           customQuery: {
-            entity: 'ppe',
+            entity: 'ppe_items',
             mode: 'rows',
             columns: ['serial_number', 'size', 'status', 'next_annual_inspection_due'],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [
                 { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
@@ -495,10 +494,10 @@ async function main() {
           category: 'ppe',
           queryKind: 'custom_query',
           customQuery: {
-            entity: 'ppe',
+            entity: 'ppe_items',
             mode: 'rows',
             columns: ['serial_number', 'size', 'status', 'expires_on'],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [
                 { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
@@ -519,7 +518,7 @@ async function main() {
           category: 'ppe',
           queryKind: 'custom_query',
           customQuery: {
-            entity: 'ppe',
+            entity: 'ppe_items',
             mode: 'rows',
             columns: [
               'serial_number',
@@ -528,7 +527,7 @@ async function main() {
               'last_inspection_on',
               'next_inspection_due',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [
                 { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
@@ -541,7 +540,10 @@ async function main() {
           },
         },
       ])
-      .onConflictDoNothing({ target: reportDefinitions.slug })
+      .onConflictDoNothing({
+        target: reportDefinitions.slug,
+        where: sql`${reportDefinitions.tenantId} is null`,
+      })
 
     // Equipment reports — migrated out of the retired native /equipment/reports
     // pages into the global engine. Upserted (not insert-once) so the upgraded
@@ -552,7 +554,7 @@ async function main() {
       .insert(reportDefinitions)
       .values([
         {
-          slug: 'legacy_vehicle_log_monthly',
+          slug: 'vehicle_log_monthly',
           kind: 'built_in',
           name: 'Vehicle Log - Monthly Summary',
           description:
@@ -583,7 +585,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_equipment_fleet',
+          slug: 'equipment_fleet',
           kind: 'built_in',
           name: 'Equipment — Fleet',
           description:
@@ -605,7 +607,7 @@ async function main() {
               'last_inspection_on',
               'next_inspection_due',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'status', op: 'eq', value: 'in_service' }],
             },
@@ -614,7 +616,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_equipment_inspections',
+          slug: 'equipment_inspections',
           kind: 'built_in',
           name: 'Equipment — Upcoming & overdue inspections',
           description:
@@ -633,7 +635,7 @@ async function main() {
               'last_inspection_on',
               'next_inspection_due',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [{ field: 'next_inspection_due', op: 'due_within_days', value: 30 }],
             },
@@ -642,7 +644,7 @@ async function main() {
           },
         },
         {
-          slug: 'legacy_equipment_oilchange',
+          slug: 'equipment_oil_change_due',
           kind: 'built_in',
           name: 'Equipment — Upcoming & overdue oil changes',
           description: 'Assets whose oil change is overdue or due within 30 days, soonest first.',
@@ -661,7 +663,7 @@ async function main() {
               'next_oil_change_due',
               'oil_change_interval_months',
             ],
-            filtersV2: {
+            filters: {
               combinator: 'and',
               rules: [
                 { field: 'requires_oil_change', op: 'is_true' },
@@ -675,6 +677,7 @@ async function main() {
       ])
       .onConflictDoUpdate({
         target: reportDefinitions.slug,
+        targetWhere: sql`${reportDefinitions.tenantId} is null`,
         set: {
           name: sql`excluded.name`,
           description: sql`excluded.description`,
@@ -1062,13 +1065,20 @@ async function main() {
     })
 
     // --- Equipment + PPE -----------------------------------------------
+    const [toolCategory, vehicleCategory] = await tx
+      .insert(equipmentCategories)
+      .values([
+        { tenantId: tenant.id, name: 'Tools', slug: 'tools' },
+        { tenantId: tenant.id, name: 'Vehicles', slug: 'vehicles' },
+      ])
+      .returning()
     const [tools] = await tx
       .insert(equipmentTypes)
-      .values({ tenantId: tenant.id, name: 'Hand Tools', category: 'tool' })
+      .values({ tenantId: tenant.id, name: 'Hand Tools', categoryId: toolCategory!.id })
       .returning()
     const [vehicles] = await tx
       .insert(equipmentTypes)
-      .values({ tenantId: tenant.id, name: 'Light Vehicle', category: 'vehicle' })
+      .values({ tenantId: tenant.id, name: 'Light Vehicle', categoryId: vehicleCategory!.id })
       .returning()
 
     const equipmentIds: string[] = []
@@ -1079,6 +1089,7 @@ async function main() {
         .values({
           tenantId: tenant.id,
           typeId: isTool ? tools!.id : vehicles!.id,
+          categoryId: isTool ? toolCategory!.id : vehicleCategory!.id,
           assetTag: `AT-${String(i).padStart(4, '0')}`,
           name: isTool ? `Cordless Drill #${i}` : `Pickup Truck #${i - 5}`,
           serialNumber: isTool ? `DRL-${1000 + i}` : `VIN-1HGBH${10000 + i}`,
@@ -1295,7 +1306,7 @@ async function main() {
           repeating: true,
           fields: [
             { id: 'topic', type: 'text', label: { en: 'Topic' }, required: true },
-            { id: 'discussion', type: 'textarea', label: { en: 'Discussion notes' } },
+            { id: 'discussion', type: 'long_text', label: { en: 'Discussion notes' } },
           ],
         },
         {
@@ -1378,44 +1389,38 @@ async function main() {
     }
 
     // --- Incidents (rich) ----------------------------------------------
-    const [inc1] = await tx
-      .insert(incidents)
-      .values({
-        tenantId: tenant.id,
-        reference: 'INC-2026-0001',
-        type: 'near_miss',
-        severity: 'no_injury',
-        status: 'closed',
-        title: 'Hand tool dropped from scaffold',
-        description:
-          '8" wrench fell from level-2 scaffold into a barricaded area below pump P-103. No personnel in the drop zone — caught by toe-boards.',
-        occurredAt: new Date(today.getTime() - 14 * dayMs),
-        reportedAt: new Date(today.getTime() - 14 * dayMs + 2 * 3600 * 1000),
-        siteOrgUnitId: siteA.id,
-        location: 'P-103 pump bay, north scaffold level 2',
-        weather: '17°C, light wind',
-        departmentId: fieldOps!.id,
-        supervisorPersonId: john!.id,
-        witnesses: 'M. Foster, D. Gonzales',
-        ppeWorn: 'Hard hat, safety glasses, gloves, fall arrest',
-        eventsLeadingUp:
-          'Working at height removing valve packing. Tool was set down on scaffold deck instead of being tethered. A gust knocked it through the toe-board gap.',
-        immediateActionTaken:
-          'Work stopped. Area inspected. Toe-board gap shimmed. Tool tethering tailgate held immediately after.',
-        actualSeverity: 1,
-        potentialSeverity: 4,
-        rootCause: 'Tool not tethered when set down on scaffold deck.',
-        contributingFactors: [
-          'Inadequate toe-board height',
-          'No tool-tethering policy enforcement',
-        ],
-        assignedInvestigatorTenantUserId: membership.id,
-        inProgress: false,
-        locked: true,
-        closedAt: new Date(today.getTime() - 10 * dayMs),
-        closedByTenantUserId: membership.id,
-      })
-      .returning()
+    await tx.insert(incidents).values({
+      tenantId: tenant.id,
+      reference: 'INC-2026-0001',
+      type: 'near_miss',
+      severity: 'no_injury',
+      status: 'closed',
+      title: 'Hand tool dropped from scaffold',
+      description:
+        '8" wrench fell from level-2 scaffold into a barricaded area below pump P-103. No personnel in the drop zone — caught by toe-boards.',
+      occurredAt: new Date(today.getTime() - 14 * dayMs),
+      reportedAt: new Date(today.getTime() - 14 * dayMs + 2 * 3600 * 1000),
+      siteOrgUnitId: siteA.id,
+      location: 'P-103 pump bay, north scaffold level 2',
+      weather: '17°C, light wind',
+      departmentId: fieldOps!.id,
+      supervisorPersonId: john!.id,
+      witnesses: 'M. Foster, D. Gonzales',
+      ppeWorn: 'Hard hat, safety glasses, gloves, fall arrest',
+      eventsLeadingUp:
+        'Working at height removing valve packing. Tool was set down on scaffold deck instead of being tethered. A gust knocked it through the toe-board gap.',
+      immediateActionTaken:
+        'Work stopped. Area inspected. Toe-board gap shimmed. Tool tethering tailgate held immediately after.',
+      actualSeverity: 1,
+      potentialSeverity: 4,
+      rootCause: 'Tool not tethered when set down on scaffold deck.',
+      contributingFactors: ['Inadequate toe-board height', 'No tool-tethering policy enforcement'],
+      assignedInvestigatorTenantUserId: membership.id,
+      inProgress: false,
+      locked: true,
+      closedAt: new Date(today.getTime() - 10 * dayMs),
+      closedByTenantUserId: membership.id,
+    })
 
     const [inc2] = await tx
       .insert(incidents)
@@ -1433,7 +1438,7 @@ async function main() {
         location: 'Materials lay-down yard',
         supervisorPersonId: john!.id,
         ppeWorn: 'Cut-resistant gloves (level 3)',
-        firstAidReceived: true,
+        firstAidGiven: true,
         firstAidProvider: 'L. Iverson (HSE Coordinator)',
         actualSeverity: 2,
         potentialSeverity: 2,
@@ -1488,11 +1493,11 @@ async function main() {
         potentialSeverity: 3,
         criticalInjury: false,
         ministryOfLabourNotified: false,
-        emsNotified: false,
-        firstAidReceived: true,
+        emsCalled: false,
+        firstAidGiven: true,
         firstAidProvider: 'L. Iverson',
         medicalAttentionReceived: true,
-        treatedAtHospital: 'MedExpress Walk-In Clinic',
+        hospitalName: 'MedExpress Walk-In Clinic',
         treatedInCity: 'Toronto',
         transportation: 'Private vehicle (supervisor drove)',
         modifiedDuty: true,
@@ -1649,6 +1654,16 @@ async function main() {
         body: '## Scope\n\nThis procedure applies to all work performed >3m above grade…',
       },
     ]
+    const docCategoryRows = await tx
+      .insert(documentCategories)
+      .values(
+        docDefs.map((definition) => ({
+          tenantId: tenant.id,
+          name: definition.category,
+        })),
+      )
+      .returning({ id: documentCategories.id, name: documentCategories.name })
+    const docCategoryIds = new Map(docCategoryRows.map((category) => [category.name, category.id]))
     for (const d of docDefs) {
       const [doc] = await tx
         .insert(documents)
@@ -1656,25 +1671,22 @@ async function main() {
           tenantId: tenant.id,
           key: d.key,
           title: d.title,
-          category: d.category,
+          categoryId: docCategoryIds.get(d.category)!,
           status: 'published',
           reviewFrequencyMonths: d.reviewFreq,
           nextReviewOn: isoDate(new Date(today.getTime() + d.reviewFreq * 30 * dayMs - 30 * dayMs)),
           ownerTenantUserId: membership.id,
         })
         .returning()
-      const [v1] = await tx
-        .insert(documentVersions)
-        .values({
-          tenantId: tenant.id,
-          documentId: doc!.id,
-          version: 1,
-          textContent: d.body,
-          publishedAt: new Date(today.getTime() - 200 * dayMs),
-          publishedBy: admin.id,
-          changelog: 'Initial release',
-        })
-        .returning()
+      await tx.insert(documentVersions).values({
+        tenantId: tenant.id,
+        documentId: doc!.id,
+        version: 1,
+        textContent: d.body,
+        publishedAt: new Date(today.getTime() - 200 * dayMs),
+        publishedBy: admin.id,
+        changelog: 'Initial release',
+      })
       const [v2] = await tx
         .insert(documentVersions)
         .values({
@@ -2079,13 +2091,21 @@ export async function seedDocumentTypesAndCategories(tx: any, tenantId: string):
   let catsInserted = 0
   for (const def of categoryDefs) {
     const parentId = def.parent ? (insertedCats.get(def.parent) ?? null) : null
-    // Existence check by (tenant_id, name) since there's a unique index on
-    // (tenant_id, name).
+    // Match the active sibling-name identity enforced by the schema index.
+    // Deleted categories do not reserve names, and separate parents may use
+    // the same case-insensitive, trimmed display name.
     const existing = await tx
       .select({ id: documentCategories.id })
       .from(documentCategories)
       .where(
-        sql`${documentCategories.tenantId} = ${tenantId} AND ${documentCategories.name} = ${def.name}`,
+        and(
+          eq(documentCategories.tenantId, tenantId),
+          parentId
+            ? eq(documentCategories.parentId, parentId)
+            : isNull(documentCategories.parentId),
+          isNull(documentCategories.deletedAt),
+          sql`lower(btrim(${documentCategories.name})) = lower(btrim(${def.name}))`,
+        ),
       )
       .limit(1)
     if (existing.length > 0) {

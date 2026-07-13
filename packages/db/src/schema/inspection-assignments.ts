@@ -17,6 +17,7 @@ import { relations } from 'drizzle-orm'
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -28,7 +29,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers, users } from './core'
+import { tenants, users } from './core'
 import { people } from './org'
 import { inspectionTypes } from './inspection-types'
 
@@ -82,6 +83,7 @@ export const inspectionAssignments = pgTable(
   },
   (t) => ({
     tenantIdx: index('inspection_assignments_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('inspection_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
     typeIdx: index('inspection_assignments_type_idx').on(t.tenantId, t.typeId),
     nextDueIdx: index('inspection_assignments_next_due_idx').on(t.tenantId, t.nextDueAt),
   }),
@@ -98,14 +100,10 @@ export const inspectionAssignmentCompliance = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    assignmentId: uuid('assignment_id')
-      .notNull()
-      .references(() => inspectionAssignments.id, { onDelete: 'cascade' }),
+    assignmentId: uuid('assignment_id').notNull(),
     // Assignee is always a person; the role/site audience expands into N
     // person rows when compliance is recomputed.
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
+    personId: uuid('person_id').notNull(),
 
     // Snapshot of the most recent 4 periods (P1 = most recent)
     p1Start: date('p1_start'),
@@ -138,11 +136,26 @@ export const inspectionAssignmentCompliance = pgTable(
   },
   (t) => ({
     tenantIdx: index('inspection_assignment_compliance_tenant_idx').on(t.tenantId),
-    assignmentIdx: index('inspection_assignment_compliance_assignment_idx').on(t.assignmentId),
+    assignmentIdx: index('inspection_assignment_compliance_assignment_idx').on(
+      t.tenantId,
+      t.assignmentId,
+    ),
+    personIdx: index('inspection_assignment_compliance_person_idx').on(t.tenantId, t.personId),
     assignmentPersonUx: uniqueIndex('inspection_assignment_compliance_assignment_person_ux').on(
+      t.tenantId,
       t.assignmentId,
       t.personId,
     ),
+    assignmentFk: foreignKey({
+      name: 'inspection_assignment_compliance_tenant_assignment_fk',
+      columns: [t.tenantId, t.assignmentId],
+      foreignColumns: [inspectionAssignments.tenantId, inspectionAssignments.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'inspection_assignment_compliance_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -154,9 +167,7 @@ export const inspectionAssignmentDispatches = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    assignmentId: uuid('assignment_id')
-      .notNull()
-      .references(() => inspectionAssignments.id, { onDelete: 'cascade' }),
+    assignmentId: uuid('assignment_id').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
     status: text('status').notNull().default('scheduled'),
     audiencePersonIds: jsonb('audience_person_ids').$type<string[]>().default([]).notNull(),
@@ -166,9 +177,15 @@ export const inspectionAssignmentDispatches = pgTable(
   (t) => ({
     tenantIdx: index('inspection_assignment_dispatches_tenant_idx').on(t.tenantId),
     assignmentIdx: index('inspection_assignment_dispatches_assignment_idx').on(
+      t.tenantId,
       t.assignmentId,
       t.occurredAt,
     ),
+    assignmentFk: foreignKey({
+      name: 'inspection_assignment_dispatches_tenant_assignment_fk',
+      columns: [t.tenantId, t.assignmentId],
+      foreignColumns: [inspectionAssignments.tenantId, inspectionAssignments.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -190,12 +207,15 @@ export const inspectionAssignmentComplianceRelations = relations(
   inspectionAssignmentCompliance,
   ({ one }) => ({
     assignment: one(inspectionAssignments, {
-      fields: [inspectionAssignmentCompliance.assignmentId],
-      references: [inspectionAssignments.id],
+      fields: [
+        inspectionAssignmentCompliance.tenantId,
+        inspectionAssignmentCompliance.assignmentId,
+      ],
+      references: [inspectionAssignments.tenantId, inspectionAssignments.id],
     }),
     person: one(people, {
-      fields: [inspectionAssignmentCompliance.personId],
-      references: [people.id],
+      fields: [inspectionAssignmentCompliance.tenantId, inspectionAssignmentCompliance.personId],
+      references: [people.tenantId, people.id],
     }),
   }),
 )
@@ -204,8 +224,11 @@ export const inspectionAssignmentDispatchesRelations = relations(
   inspectionAssignmentDispatches,
   ({ one }) => ({
     assignment: one(inspectionAssignments, {
-      fields: [inspectionAssignmentDispatches.assignmentId],
-      references: [inspectionAssignments.id],
+      fields: [
+        inspectionAssignmentDispatches.tenantId,
+        inspectionAssignmentDispatches.assignmentId,
+      ],
+      references: [inspectionAssignments.tenantId, inspectionAssignments.id],
     }),
   }),
 )

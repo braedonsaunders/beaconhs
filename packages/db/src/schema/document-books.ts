@@ -1,7 +1,7 @@
 // Document Books — orderable groupings of documents that publish as a single PDF.
 // The `document_books` table itself lives in documents.ts (it predates this file).
-// Here we add the ordered membership table so we can drag-reorder + add/remove without
-// rewriting the legacy jsonb `contents` blob.
+// Ordered membership is normalized here so drag-reorder and add/remove operations
+// are relational, tenant-scoped, and concurrency-safe.
 
 import { relations } from 'drizzle-orm'
 import { index, integer, pgTable, uniqueIndex, uuid } from 'drizzle-orm/pg-core'

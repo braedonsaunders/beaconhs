@@ -43,6 +43,7 @@ export const STATS_HIGH_VOLUME_TABLES = [
   'equipment_items',
   'ppe_items',
   'document_acknowledgments',
+  'domain_event_outbox',
 ] as const
 
 // Hot non-tenant filter columns worth a finer histogram (status enums, etc.).
@@ -54,8 +55,9 @@ const EXTRA_STAT_COLUMNS: Record<string, string[]> = {
   compliance_status: ['status'],
 }
 
-// One ALTER per (table, column). Applied with per-statement error tolerance in
-// migrate.ts, so a table that lacks a targeted column never aborts the run.
+// One ALTER per (table, column). migrate.ts applies the complete set
+// transactionally after schema migrations; a missing table/column is schema
+// drift and fails the deploy instead of silently skipping the target.
 export const STATS_SQL: string[] = [
   ...STATS_HIGH_VOLUME_TABLES.map(
     (t) => `ALTER TABLE ${t} ALTER COLUMN tenant_id SET STATISTICS 1000;`,

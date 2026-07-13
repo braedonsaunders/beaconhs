@@ -15,6 +15,7 @@
 // directly across tenants.
 
 import {
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -65,13 +66,20 @@ export const dataSources = pgTable(
     // Declared column shape (order matters — drives table column order).
     columns: jsonb('columns').$type<DataSourceColumn[]>().notNull().default([]),
     config: jsonb('config').$type<DataSourceConfig>().notNull().default({}),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
     ...softDelete,
   },
   (t) => ({
     tenantIdx: index('data_sources_tenant_idx').on(t.tenantId),
     tenantKeyUx: uniqueIndex('data_sources_tenant_key_ux').on(t.tenantId, t.key),
+    tenantIdIdUx: uniqueIndex('data_sources_tenant_id_id_ux').on(t.tenantId, t.id),
+    createdByIdx: index('data_sources_created_by_idx').on(t.tenantId, t.createdByTenantUserId),
+    createdByFk: foreignKey({
+      name: 'data_sources_tenant_created_by_fk',
+      columns: [t.tenantId, t.createdByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -82,9 +90,7 @@ export const dataSourceRows = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    dataSourceId: uuid('data_source_id')
-      .notNull()
-      .references(() => dataSources.id, { onDelete: 'cascade' }),
+    dataSourceId: uuid('data_source_id').notNull(),
     // Row values keyed by column key. Untyped at the DB layer; the column
     // declarations on the parent source describe the intended shape.
     data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
@@ -94,8 +100,13 @@ export const dataSourceRows = pgTable(
     ...softDelete,
   },
   (t) => ({
-    sourceIdx: index('data_source_rows_source_idx').on(t.dataSourceId, t.position),
+    sourceIdx: index('data_source_rows_source_idx').on(t.tenantId, t.dataSourceId, t.position),
     tenantIdx: index('data_source_rows_tenant_idx').on(t.tenantId),
+    sourceFk: foreignKey({
+      name: 'data_source_rows_tenant_source_fk',
+      columns: [t.tenantId, t.dataSourceId],
+      foreignColumns: [dataSources.tenantId, dataSources.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -106,8 +117,8 @@ export const dataSourcesRelations = relations(dataSources, ({ one, many }) => ({
 
 export const dataSourceRowsRelations = relations(dataSourceRows, ({ one }) => ({
   source: one(dataSources, {
-    fields: [dataSourceRows.dataSourceId],
-    references: [dataSources.id],
+    fields: [dataSourceRows.tenantId, dataSourceRows.dataSourceId],
+    references: [dataSources.tenantId, dataSources.id],
   }),
 }))
 

@@ -28,6 +28,10 @@ async function main() {
     const tenants = await db.select({ id: s.tenants.id }).from(s.tenants)
     const out: unknown[] = []
     for (const t of tenants) {
+      // Restore a soft-deleted built-in or insert a missing one without
+      // overwriting an active tenant-customized version.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await seedLiftPlanTemplate(db as any, t.id)
       const [tmpl] = await db
         .select({ id: s.formTemplates.id })
         .from(s.formTemplates)
@@ -36,12 +40,7 @@ async function main() {
         )
         .limit(1)
 
-      if (!tmpl) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await seedLiftPlanTemplate(db as any, t.id)
-        out.push({ tenantId: t.id, action: res })
-        continue
-      }
+      if (!tmpl) throw new Error(`Lift Plan seed failed for tenant ${t.id}`)
 
       // Already up to date? Compare the latest version's schema and skip.
       const [latest] = await db

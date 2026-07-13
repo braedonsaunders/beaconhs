@@ -1,5 +1,12 @@
+import { eq } from 'drizzle-orm'
 import { type Database, withSuperAdmin, withTenant } from '@beaconhs/db'
-import type { RoleScope } from '@beaconhs/db/schema'
+import {
+  PERMISSION_CATALOGUE,
+  roleAssignments,
+  roles,
+  userPermissionOverrides,
+  type RoleScope,
+} from '@beaconhs/db/schema'
 
 /**
  * Resolved auth + tenant context for a request. Built by the web app's
@@ -88,6 +95,130 @@ export function can(ctx: RequestContext, perm: string): boolean {
   return false
 }
 
+export type TemplateAccessDescriptor = {
+  status: 'draft' | 'published' | 'archived'
+  allowedRoles: string[] | null | undefined
+  deletedAt?: Date | null
+}
+export type TemplateAccessMode = 'operate' | 'browse-records' | 'builder-edit'
+export type ResponsePayloadAccessDescriptor = {
+  status: string
+  locked: boolean
+  submittedBy: string | null
+}
+
+export function effectiveRoleAssignments<T extends { roleId: string }>(
+  activeRoleId: string | null | undefined,
+  assignments: readonly T[],
+): T[] {
+  if (!activeRoleId) return [...assignments]
+  return assignments.filter((assignment) => assignment.roleId === activeRoleId)
+}
+
+export function isTemplateBuilder(ctx: RequestContext): boolean {
+  return ctx.isSuperAdmin || can(ctx, 'forms.template.create')
+}
+
+export function canAccessTemplate(
+  ctx: RequestContext,
+  template: TemplateAccessDescriptor,
+  effectiveRoleKeys: ReadonlySet<string>,
+  mode: TemplateAccessMode,
+): boolean {
+  if (template.deletedAt) return false
+  const builder = isTemplateBuilder(ctx)
+  if (mode === 'builder-edit') return builder
+  if (mode === 'browse-records' && builder) return true
+  if (template.status !== 'published') return false
+  const allowed = template.allowedRoles
+  return (
+    builder ||
+    !allowed ||
+    allowed.length === 0 ||
+    allowed.some((role) => effectiveRoleKeys.has(role))
+  )
+}
+
+export function canEditResponsePayload(
+  ctx: RequestContext,
+  response: ResponsePayloadAccessDescriptor,
+): boolean {
+  if (response.locked) return false
+  const isDraft = response.status === 'draft' || response.status === 'in_progress'
+  const callerMembershipId = ctx.membership?.id ?? null
+  const isOwner = response.submittedBy !== null && response.submittedBy === callerMembershipId
+  const canWorkDraft = isDraft && can(ctx, 'forms.response.create')
+  return (
+    ctx.isSuperAdmin ||
+    ctx.permissions.has('*') ||
+    can(ctx, 'forms.response.read.all') ||
+    (isOwner && (can(ctx, 'forms.response.update.own') || canWorkDraft)) ||
+    (response.submittedBy === null && canWorkDraft)
+  )
+}
+
+export async function resolveMembershipAccess(
+  tx: Database,
+  membershipId: string,
+  activeRoleId?: string | null,
+): Promise<{ permissions: Set<string>; scopes: RoleScope[]; appliedRoleId: string | null }> {
+  const assignments = await tx
+    .select({
+      roleId: roleAssignments.roleId,
+      permissions: roles.permissions,
+      scope: roleAssignments.scope,
+    })
+    .from(roleAssignments)
+    .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
+    .where(eq(roleAssignments.tenantUserId, membershipId))
+  const appliedRoleId =
+    activeRoleId && assignments.some((assignment) => assignment.roleId === activeRoleId)
+      ? activeRoleId
+      : null
+  const effective = appliedRoleId
+    ? assignments.filter((assignment) => assignment.roleId === appliedRoleId)
+    : assignments
+  const permissions = new Set<string>()
+  const scopes = effective.map((assignment) => assignment.scope)
+  for (const assignment of effective) {
+    for (const permission of assignment.permissions) permissions.add(permission)
+  }
+  const overrides = await tx
+    .select({
+      permission: userPermissionOverrides.permission,
+      effect: userPermissionOverrides.effect,
+    })
+    .from(userPermissionOverrides)
+    .where(eq(userPermissionOverrides.tenantUserId, membershipId))
+  for (const override of overrides) {
+    if (override.effect === 'grant') permissions.add(override.permission)
+  }
+  applyPermissionDenies(
+    permissions,
+    overrides
+      .filter((override) => override.effect === 'deny')
+      .map((override) => override.permission),
+  )
+  return { permissions, scopes, appliedRoleId }
+}
+
+function applyPermissionDenies(permissions: Set<string>, denies: string[]): void {
+  const specificDenies = denies.filter((deny) => !deny.endsWith('.*'))
+  for (const grant of [...permissions]) {
+    if (!grant.endsWith('.*')) continue
+    const prefix = grant.slice(0, -1)
+    if (!specificDenies.some((deny) => deny.startsWith(prefix))) continue
+    permissions.delete(grant)
+    for (const key of PERMISSION_CATALOGUE) if (key.startsWith(prefix)) permissions.add(key)
+  }
+  for (const denied of denies) {
+    permissions.delete(denied)
+    if (!denied.endsWith('.*')) continue
+    const prefix = denied.slice(0, -1)
+    for (const grant of [...permissions]) if (grant.startsWith(prefix)) permissions.delete(grant)
+  }
+}
+
 function readTierCovers(permissions: Set<string>, requested: string): boolean {
   const match = /^(.+)\.read\.(all|site|self)$/.exec(requested)
   if (!match) return false
@@ -132,13 +263,6 @@ export class ImpersonationBlockedError extends Error {
  */
 export function assertNotImpersonating(ctx: RequestContext, action?: string): void {
   if (ctx.impersonation) throw new ImpersonationBlockedError(action)
-}
-
-export class UnauthorizedError extends Error {
-  override readonly name = 'UnauthorizedError'
-  constructor(message = 'Not signed in') {
-    super(message)
-  }
 }
 
 // Site-level scoping decision: does this ctx grant access to this site?

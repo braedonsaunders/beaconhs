@@ -3,9 +3,9 @@
 // This is the world-class course-authoring + learner-runtime layer that sits ON
 // TOP of the existing native training spine (training_courses / training_classes
 // / training_assessment_types / training_records / training_certificates). It is
-// DELIBERATELY native: no Forms/Builder, no Documents-editor coupling. Rich lesson
-// content is stored as a bespoke block array (LessonBlock[]); quizzes reuse the
-// existing native training assessment engine; in-person lessons point at a class.
+// DELIBERATELY native: no Forms/Builder or Documents-editor coupling. Rich lesson
+// content uses ProseMirror JSON plus sanitized HTML; quizzes reuse the existing
+// training assessment engine; in-person lessons point at a class.
 //
 //   training_courses (existing spine)
 //     └─ training_course_modules (ordered sections)            ← new
@@ -37,10 +37,10 @@ import { people } from './org'
 import { trainingClasses, trainingCourses, trainingRecords } from './training'
 import { trainingAssessmentTypes, trainingAssessments } from './training-assessments'
 
-// --- Bespoke lesson content model -----------------------------------------
+// --- Structured-slide region compatibility model --------------------------
 //
-// A rich lesson is a vertical stack of blocks authored in the native training
-// studio. Intentionally our OWN shape (NOT ProseMirror / the Documents editor).
+// Only pre-canvas slide regions use this block shape. Rich lessons and library
+// items use ProseMirror JSON plus sanitized HTML.
 export type LessonBlock =
   | { id: string; type: 'heading'; level: 1 | 2 | 3; text: string }
   | { id: string; type: 'text'; md: string } // bespoke markdown-lite (escaped-first on render)
@@ -342,11 +342,9 @@ export const trainingLessons = pgTable(
     title: text('title').notNull(),
     kind: trainingLessonKind('kind').default('rich').notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
-    // kind = 'rich' (content) | 'practical' (instructions) — legacy block format
-    contentBlocks: jsonb('content_blocks').$type<LessonBlock[]>().default([]).notNull(),
-    // TipTap-authored content (supersedes contentBlocks when present):
-    // ProseMirror JSON is the editing source of truth; HTML is sanitized
-    // server-side at save and rendered in the player.
+    // kind = 'rich' (content) | 'practical' (instructions). ProseMirror JSON is
+    // the editing source of truth; HTML is sanitized server-side at save and
+    // rendered in the player.
     contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(),
     contentHtml: text('content_html'),
     // kind = 'slides'
@@ -480,7 +478,7 @@ export const trainingLessonProgress = pgTable(
     // practical lessons: evaluator sign-off
     evaluatedByTenantUserId: uuid('evaluated_by_tenant_user_id').references(() => tenantUsers.id),
     evaluationNotes: text('evaluation_notes'),
-    evaluationSignatureDataUrl: text('evaluation_signature_data_url'),
+    evaluationSignatureAttachmentId: uuid('evaluation_signature_attachment_id'),
     criteriaResults: jsonb('criteria_results').$type<Record<string, boolean> | null>(),
     ...timestamps,
   },
@@ -540,8 +538,7 @@ export const trainingLessonProgressRelations = relations(trainingLessonProgress,
 // --- Reusable content library ----------------------------------------------
 //
 // "Material outside the course" — reusable content items referenced by lessons
-// via training_lessons.content_item_id. Native to training; same bespoke block
-// model as inline lesson content. Quizzes (assessment types) and sessions
+// via training_lessons.content_item_id. Quizzes (assessment types) and sessions
 // (classes) are already their own reusable entities, so they're not duplicated
 // here — the library covers rich / video / file / embed material.
 export const trainingContentItemKind = pgEnum('training_content_item_kind', [
@@ -562,7 +559,6 @@ export const trainingContentItems = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     kind: trainingContentItemKind('kind').default('rich').notNull(),
-    contentBlocks: jsonb('content_blocks').$type<LessonBlock[]>().default([]).notNull(),
     contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(),
     contentHtml: text('content_html'),
     slides: jsonb('slides').$type<Slide[]>().default([]).notNull(),

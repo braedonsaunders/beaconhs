@@ -12,141 +12,29 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1782430287984,
-      "tag": "0001_drop_equipment_preuse_columns",
+      "when": 1783884000000,
+      "tag": "0001_migration_cutover",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1782439320542,
-      "tag": "0002_messy_lorna_dane",
+      "when": 1783884001000,
+      "tag": "0002_drop_retired_plugin_tables",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1782444699563,
-      "tag": "0003_vehicle_log_import_fields",
+      "when": 1783885836249,
+      "tag": "0003_converge_dev_schema",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1782448205300,
-      "tag": "0004_vehicle_log_report_definition",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1782500000000,
-      "tag": "0005_sync_preview_record_changes",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1782503600000,
-      "tag": "0006_role_dashboard_layouts",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1782507200000,
-      "tag": "0007_hazid_style_drives_sections",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1782510800000,
-      "tag": "0008_admin_export_nav_cleanup",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1782950000000,
-      "tag": "0009_equipment_maintenance_overhaul",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1782960000000,
-      "tag": "0010_equipment_maintenance_notify",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1782970000000,
-      "tag": "0011_drop_equipment_type_legacy_cadence",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1782980000000,
-      "tag": "0012_people_user_link_constraints",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1783100000000,
-      "tag": "0013_vehicle_log_settings",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1783150000000,
-      "tag": "0014_walkthroughs",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1783250000000,
-      "tag": "0015_training_pptx_master",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1783260000000,
-      "tag": "0016_documents_docx_master",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1783350000000,
-      "tag": "0017_reports_print_first",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1783436400000,
-      "tag": "0018_pdf_template_subject_default",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1783436401000,
-      "tag": "0019_drop_orphaned_hazid_signed_reports",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1783436402000,
-      "tag": "0020_people_badge_token",
+      "when": 1783897386441,
+      "tag": "0004_flawless_boomer",
       "breakpoints": true
     }
   ]

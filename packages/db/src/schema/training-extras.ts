@@ -36,9 +36,7 @@ export const trainingCourseFiles = pgTable(
     courseId: uuid('course_id')
       .notNull()
       .references(() => trainingCourses.id, { onDelete: 'cascade' }),
-    attachmentId: uuid('attachment_id').references(() => attachments.id, {
-      onDelete: 'set null',
-    }),
+    attachmentId: uuid('attachment_id'),
     label: text('label'),
     sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,

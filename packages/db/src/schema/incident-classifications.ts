@@ -1,26 +1,16 @@
 // Incident taxonomy + hours-worked tracker — tenant-defined reference data
-// that supports the OSHA / TRIR / DART-style reporting required by the legacy
-// BeaconHS incident workflow.
+// that supports OSHA / TRIR / DART-style reporting.
 //
 // Three siblings here:
-//   - incident_classifications  hierarchical category (parentId).  Legacy
-//                                parity: INCIDENTCLASSIFICATIONS table.
-//                                The `classification` JSON column on
-//                                `incidents` references these by id.
+//   - incident_classifications  hierarchical category (parentId), referenced
+//                                by incidents.classification_id.
 //   - incident_injury_types     flat list of injury labels (laceration,
 //                                strain, fracture …) — referenced from the
-//                                `injuryTypes` JSON array on
-//                                `incident_injuries`.  Legacy parity:
-//                                INCIDENTINJURIES table.
+//                                `injuryTypes` JSON array on incident injuries.
 //   - incident_hours_periods    per-period hours-worked + employee-count
-//                                rollup.  Drives every frequency-rate
-//                                calculation (TRIR / DART / LTIR).  Legacy
-//                                parity: INCIDENTHOURSWORKED, except the
-//                                legacy schema was "year + quarter +
-//                                division" — we model it as an arbitrary
-//                                date range with an optional label so a
-//                                tenant can record monthly, quarterly or
-//                                project-based windows side-by-side.
+//                                rollup. Drives every frequency-rate
+//                                calculation (TRIR / DART / LTIR) over an
+//                                arbitrary date range with an optional label.
 
 import { relations } from 'drizzle-orm'
 import {

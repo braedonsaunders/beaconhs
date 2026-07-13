@@ -203,8 +203,7 @@ export const hazidAssessmentSignatures = pgTable(
     personId: uuid('person_id').references(() => people.id, { onDelete: 'set null' }),
     // External: free-text name
     externalName: text('external_name'),
-    // Captured signature data URL (PNG)
-    signatureDataUrl: text('signature_data_url'),
+    signatureAttachmentId: uuid('signature_attachment_id'),
     // Confined-space role flags — at least one must be true when CS is integrated
     csEntrant: boolean('cs_entrant').default(false).notNull(),
     csAttendant: boolean('cs_attendant').default(false).notNull(),
@@ -287,9 +286,7 @@ export const hazidAssessmentPhotos = pgTable(
     assessmentId: uuid('assessment_id')
       .notNull()
       .references(() => hazidAssessments.id, { onDelete: 'cascade' }),
-    attachmentId: uuid('attachment_id')
-      .notNull()
-      .references(() => attachments.id, { onDelete: 'cascade' }),
+    attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
     ...timestamps,
   },

@@ -10,11 +10,11 @@
 
 import {
   boolean,
+  foreignKey,
   index,
   jsonb,
   pgTable,
   text,
-  timestamp,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
@@ -80,9 +80,7 @@ export const roleDashboardLayouts = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    roleId: uuid('role_id')
-      .notNull()
-      .references(() => roles.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id').notNull(),
     layout: jsonb('layout').$type<DashboardLayoutData>().notNull(),
     ...timestamps,
   },
@@ -90,5 +88,10 @@ export const roleDashboardLayouts = pgTable(
     roleUx: uniqueIndex('role_dashboard_layouts_role_ux').on(t.tenantId, t.roleId),
     tenantIdx: index('role_dashboard_layouts_tenant_idx').on(t.tenantId),
     roleIdx: index('role_dashboard_layouts_role_idx').on(t.roleId),
+    roleFk: foreignKey({
+      name: 'role_dashboard_layouts_tenant_role_fk',
+      columns: [t.tenantId, t.roleId],
+      foreignColumns: [roles.tenantId, roles.id],
+    }).onDelete('cascade'),
   }),
 )

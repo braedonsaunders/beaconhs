@@ -7,17 +7,7 @@
 // A row with `returnedAt` IS NULL means the item is currently out.
 
 import { relations } from 'drizzle-orm'
-import {
-  boolean,
-  date,
-  index,
-  jsonb,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from 'drizzle-orm/pg-core'
+import { date, index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { equipmentItems } from './equipment'

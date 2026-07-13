@@ -14,7 +14,7 @@
 // people) — a notification group can INCLUDE a person_group as one member kind.
 
 import { relations } from 'drizzle-orm'
-import { index, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { foreignKey, index, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants } from './core'
 
@@ -51,6 +51,7 @@ export const notificationGroups = pgTable(
   (t) => ({
     tenantIdx: index('notification_groups_tenant_idx').on(t.tenantId),
     tenantNameUx: uniqueIndex('notification_groups_tenant_name_ux').on(t.tenantId, t.name),
+    tenantIdIdUx: uniqueIndex('notification_groups_tenant_id_id_ux').on(t.tenantId, t.id),
   }),
 )
 
@@ -61,9 +62,7 @@ export const notificationGroupMembers = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    groupId: uuid('group_id')
-      .notNull()
-      .references(() => notificationGroups.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id').notNull(),
     kind: notificationGroupMemberKind('kind').notNull(),
     // The referenced entity: people.id | role.key | department.id | org_unit.id |
     // trade.id | crew.id | person_group.id. Empty string for `everyone`.
@@ -73,13 +72,18 @@ export const notificationGroupMembers = pgTable(
   },
   (t) => ({
     tenantIdx: index('notification_group_members_tenant_idx').on(t.tenantId),
-    groupIdx: index('notification_group_members_group_idx').on(t.groupId),
+    groupIdx: index('notification_group_members_group_idx').on(t.tenantId, t.groupId),
     uniqueMember: uniqueIndex('notification_group_members_unique_ux').on(
       t.groupId,
       t.kind,
       t.entityKey,
       t.mode,
     ),
+    groupFk: foreignKey({
+      name: 'notification_group_members_tenant_group_fk',
+      columns: [t.tenantId, t.groupId],
+      foreignColumns: [notificationGroups.tenantId, notificationGroups.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -94,7 +98,7 @@ export const notificationGroupMembersRelations = relations(notificationGroupMemb
     references: [tenants.id],
   }),
   group: one(notificationGroups, {
-    fields: [notificationGroupMembers.groupId],
-    references: [notificationGroups.id],
+    fields: [notificationGroupMembers.tenantId, notificationGroupMembers.groupId],
+    references: [notificationGroups.tenantId, notificationGroups.id],
   }),
 }))

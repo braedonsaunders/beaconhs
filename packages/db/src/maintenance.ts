@@ -18,6 +18,8 @@ export type MaintenanceTable = {
   label: string
   /** Default retention in days; null = keep forever. */
   defaultRetentionDays: number | null
+  /** Optional trusted SQL predicate that protects live rows from retention. */
+  retentionWhere?: string
 }
 
 export const MAINTENANCE_TABLES: MaintenanceTable[] = [
@@ -41,6 +43,13 @@ export const MAINTENANCE_TABLES: MaintenanceTable[] = [
     timeColumn: 'occurred_at',
     label: 'Compliance dispatch ledger',
     defaultRetentionDays: 730,
+  },
+  {
+    table: 'domain_event_outbox',
+    timeColumn: 'published_at',
+    label: 'Published domain events',
+    defaultRetentionDays: 365,
+    retentionWhere: "status = 'published'",
   },
 ]
 
