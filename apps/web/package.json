@@ -37,7 +37,7 @@
     "@beaconhs/ui": "workspace:*",
     "@excalidraw/excalidraw": "^0.18.1",
     "@grapesjs/react": "^2.0.0",
-    "@napi-rs/canvas": "^0.1.100",
+    "@napi-rs/canvas": "^1.0.2",
     "@sentry/nextjs": "10.65.0",
     "@tiptap/core": "^3.27.1",
     "@tiptap/extension-character-count": "^3.27.1",
