@@ -38,6 +38,8 @@ vi.mock('@/lib/email-config', () => ({
   saveTenantEmailSettings: mocks.saveTenant,
 }))
 
+import { savePlatformEmail, saveTenantEmail, testEmailConnection } from './email-settings-actions'
+
 const context = {
   tenantId: 'tenant-1',
   userId: 'user-1',
@@ -118,7 +120,6 @@ describe('email settings audit metadata', () => {
       credentialChange: 'removed',
       enabledChanged: true,
     })
-    const { saveTenantEmail } = await import('./email-settings-actions')
     await saveTenantEmail(settingsForm({ enabled: '', provider: 'sendgrid' }))
 
     expect(mocks.audit).toHaveBeenCalledWith(
@@ -135,7 +136,6 @@ describe('email settings audit metadata', () => {
   })
 
   it('records platform changes against the platform email singleton', async () => {
-    const { savePlatformEmail } = await import('./email-settings-actions')
     await savePlatformEmail(settingsForm({ mode: 'tenant_optional' }))
 
     expect(mocks.audit).toHaveBeenCalledWith(
@@ -149,8 +149,6 @@ describe('email settings audit metadata', () => {
 
   it('rejects a non-public active SMTP host before opening the locked save', async () => {
     mocks.resolvePublicHost.mockRejectedValue(new Error('private address'))
-    const { saveTenantEmail } = await import('./email-settings-actions')
-
     await expect(
       saveTenantEmail(
         settingsForm({
@@ -164,7 +162,6 @@ describe('email settings audit metadata', () => {
   })
 
   it('keeps the platform kill switch independent from SMTP DNS', async () => {
-    const { savePlatformEmail } = await import('./email-settings-actions')
     await savePlatformEmail(
       settingsForm({
         mode: 'disabled',
@@ -185,8 +182,6 @@ describe('email settings audit metadata', () => {
       family: 4,
       ipLiteral: true,
     })
-    const { saveTenantEmail } = await import('./email-settings-actions')
-
     await expect(
       saveTenantEmail(settingsForm({ provider: 'smtp', smtpHost: '8.8.8.8', smtpPort: '587' })),
     ).rejects.toThrow('IP-literal')
@@ -196,7 +191,6 @@ describe('email settings audit metadata', () => {
 
 describe('testEmailConnection', () => {
   it('rejects and audits an invalid destination before consuming rate-limit capacity', async () => {
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'platform', to: 'not-an-email' })
 
     expect(result).toEqual({
@@ -214,7 +208,6 @@ describe('testEmailConnection', () => {
   })
 
   it('rate-limits and audits a successful test without persisting recipient or secrets', async () => {
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'platform', to: 'operator@example.com' })
 
     expect(result).toEqual({
@@ -241,7 +234,6 @@ describe('testEmailConnection', () => {
       remaining: 0,
       resetAt: new Date(Date.now() + 120_000),
     })
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'tenant', to: 'operator@example.com' })
 
     expect(result.ok).toBe(false)
@@ -262,7 +254,6 @@ describe('testEmailConnection', () => {
       enabled: true,
       provider: 'sendgrid',
     })
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'platform', to: 'operator@example.com' })
 
     expect(result).toEqual({ ok: false, message: 'Email is disabled by the platform kill switch.' })
@@ -278,7 +269,6 @@ describe('testEmailConnection', () => {
 
   it('does not bypass a forced platform policy with a direct tenant test send', async () => {
     mocks.getPlatformRaw.mockResolvedValue({ mode: 'global_only', provider: 'sendgrid' })
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'tenant', to: 'operator@example.com' })
 
     expect(result).toEqual({
@@ -295,7 +285,6 @@ describe('testEmailConnection', () => {
       enabled: true,
       provider: 'sendgrid',
     })
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'platform', to: 'operator@example.com' })
 
     expect(result).toEqual({
@@ -314,7 +303,6 @@ describe('testEmailConnection', () => {
 
   it('fails closed and audits when the Redis limiter is unavailable', async () => {
     mocks.consumeRateLimit.mockRejectedValue(new Error('redis password must not leak'))
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'tenant', to: 'operator@example.com' })
 
     expect(result).toEqual({
@@ -335,7 +323,6 @@ describe('testEmailConnection', () => {
     mocks.sendVia.mockRejectedValue(
       new Error('Authorization Bearer SG.must-never-be-audited; recipient operator@example.com'),
     )
-    const { testEmailConnection } = await import('./email-settings-actions')
     const result = await testEmailConnection({ scope: 'tenant', to: 'operator@example.com' })
 
     expect(result.ok).toBe(false)
