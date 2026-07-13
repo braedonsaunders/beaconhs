@@ -2,108 +2,6 @@
   "version": 1,
   "runs": [
     {
-      "at": "2026-07-07T19:42:35.159Z",
-      "sha": "e72ccbc5985cebf2b346987a54c765695fb10d0f",
-      "pr": null,
-      "actor": "braedonsaunders",
-      "files": 1419,
-      "functions": 4774,
-      "loc": 457609,
-      "languages": 17,
-      "topLanguages": [
-        {
-          "ext": "tsx",
-          "pct": 34,
-          "lines": 156977
-        },
-        {
-          "ext": "json",
-          "pct": 32,
-          "lines": 147840
-        },
-        {
-          "ext": "ts",
-          "pct": 28,
-          "lines": 126592
-        },
-        {
-          "ext": "yaml",
-          "pct": 4,
-          "lines": 16516
-        },
-        {
-          "ext": "sql",
-          "pct": 1,
-          "lines": 4925
-        }
-      ],
-      "dead": 135,
-      "deadPct": 2.8,
-      "circular": 1,
-      "godObjects": 1,
-      "avgCoupling": 5.9,
-      "securityIssues": 86,
-      "patterns": 9,
-      "duplicates": 93,
-      "layerViolations": 612,
-      "connections": 8421,
-      "avgFnLines": 15.4,
-      "longestFn": 16,
-      "testFiles": 10,
-      "testRatio": 0.7,
-      "topFolders": [
-        {
-          "name": "apps",
-          "count": 1068
-        },
-        {
-          "name": "packages",
-          "count": 322
-        },
-        {
-          "name": "root",
-          "count": 14
-        },
-        {
-          "name": "scripts",
-          "count": 6
-        },
-        {
-          "name": "docs",
-          "count": 5
-        }
-      ],
-      "folders": 5,
-      "grade": "D",
-      "score": 63,
-      "topBlast": {
-        "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
-        "direct": 638,
-        "transitive": 1206,
-        "total": 1844
-      },
-      "fragility": [
-        {
-          "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
-          "direct": 638,
-          "transitive": 1206,
-          "total": 1844
-        },
-        {
-          "path": "packages/integrations/src/triggers/emit.ts",
-          "direct": 269,
-          "transitive": 1163,
-          "total": 1432
-        },
-        {
-          "path": "apps/web/src/app/(app)/apps/_lib/recap-email.ts",
-          "direct": 198,
-          "transitive": 1127,
-          "total": 1325
-        }
-      ]
-    },
-    {
       "at": "2026-07-07T20:15:17.851Z",
       "sha": "1d5aeeb19dd44121bea610328c27f8e4b4bbef78",
       "pr": null,
@@ -2962,6 +2860,108 @@
     {
       "at": "2026-07-13T00:59:14.180Z",
       "sha": "2c4c345c6c77f8a518c4c86e77db3a0951ec99bf",
+      "pr": null,
+      "actor": "braedonsaunders",
+      "files": 1525,
+      "functions": 5042,
+      "loc": 442363,
+      "languages": 17,
+      "topLanguages": [
+        {
+          "ext": "tsx",
+          "pct": 37,
+          "lines": 161978
+        },
+        {
+          "ext": "ts",
+          "pct": 31,
+          "lines": 137346
+        },
+        {
+          "ext": "json",
+          "pct": 26,
+          "lines": 115784
+        },
+        {
+          "ext": "yaml",
+          "pct": 4,
+          "lines": 16177
+        },
+        {
+          "ext": "sql",
+          "pct": 1,
+          "lines": 5694
+        }
+      ],
+      "dead": 147,
+      "deadPct": 2.9,
+      "circular": 1,
+      "godObjects": 1,
+      "avgCoupling": 7,
+      "securityIssues": 106,
+      "patterns": 10,
+      "duplicates": 91,
+      "layerViolations": 780,
+      "connections": 10623,
+      "avgFnLines": 15.4,
+      "longestFn": 16,
+      "testFiles": 58,
+      "testRatio": 3.8,
+      "topFolders": [
+        {
+          "name": "apps",
+          "count": 1159
+        },
+        {
+          "name": "packages",
+          "count": 332
+        },
+        {
+          "name": "root",
+          "count": 15
+        },
+        {
+          "name": "scripts",
+          "count": 8
+        },
+        {
+          "name": "docs",
+          "count": 7
+        }
+      ],
+      "folders": 5,
+      "grade": "D",
+      "score": 61,
+      "topBlast": {
+        "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
+        "direct": 664,
+        "transitive": 1331,
+        "total": 1995
+      },
+      "fragility": [
+        {
+          "path": "apps/web/src/app/(app)/insights/cards/_data.ts",
+          "direct": 664,
+          "transitive": 1331,
+          "total": 1995
+        },
+        {
+          "path": "packages/db/src/seed/pdf-templates.ts",
+          "direct": 556,
+          "transitive": 1331,
+          "total": 1887
+        },
+        {
+          "path": "packages/integrations/src/triggers/emit.ts",
+          "direct": 255,
+          "transitive": 1308,
+          "total": 1563
+        }
+      ]
+    },
+    {
+      "at": "2026-07-13T01:02:43.748Z",
+      "sha": "d9bd216b8b972700dd52485465eb1a9ef1d67e2e",
       "pr": null,
       "actor": "braedonsaunders",
       "files": 1525,
