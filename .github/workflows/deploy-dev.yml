@@ -7,6 +7,12 @@ name: Deploy (dev)
 
 on:
   workflow_call:
+    inputs:
+      operation:
+        description: Deployment operation requested by the calling workflow
+        required: false
+        type: string
+        default: deploy
   workflow_dispatch:
     inputs:
       operation:
@@ -79,7 +85,7 @@ jobs:
 
   preflight:
     name: Validate dev deployment contract
-    if: github.event_name == 'workflow_call'
+    if: inputs.operation == 'deploy'
     permissions: {}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -177,7 +183,7 @@ jobs:
           echo "Deployment secret contract passed"
 
   build:
-    if: github.event_name == 'workflow_call'
+    if: inputs.operation == 'deploy'
     needs: preflight
     permissions:
       contents: read

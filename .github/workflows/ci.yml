@@ -90,4 +90,6 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/deploy-dev.yml
+    with:
+      operation: deploy
     secrets: inherit
