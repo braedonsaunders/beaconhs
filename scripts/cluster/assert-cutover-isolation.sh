@@ -29,42 +29,50 @@ for command in docker jq node; do
     || fail "${command} is required to verify cutover isolation"
 done
 
-verified_node_id=''
-verify_single_local_manager() {
+verified_topology=''
+verify_healthy_swarm_topology() {
   local node_ids local_node_id node_state
   local -a node_id_list
 
   node_ids="$(docker node ls -q)" \
     || fail 'Unable to enumerate Swarm nodes for cutover isolation'
   if [ -z "$node_ids" ]; then
-    fail 'Cutover isolation requires exactly one Swarm node; none were visible'
+    fail 'Cutover isolation requires at least one visible Swarm node'
   fi
   mapfile -t node_id_list <<<"$node_ids"
-  if [ "${#node_id_list[@]}" -ne 1 ] || [ -z "${node_id_list[0]}" ]; then
-    fail "Cutover isolation requires exactly one Swarm node; found ${#node_id_list[@]}"
-  fi
 
   local_node_id="$(docker info --format '{{.Swarm.NodeID}}')" \
     || fail 'Unable to identify the local Docker Swarm node'
-  if [ -z "$local_node_id" ] || [ "$local_node_id" != "${node_id_list[0]}" ]; then
-    fail 'The deployment runner is not attached to the sole Swarm node'
+  if [ -z "$local_node_id" ]; then
+    fail 'The deployment runner is not attached to a Docker Swarm node'
   fi
 
-  node_state="$(docker node inspect "$local_node_id")" \
-    || fail 'Unable to inspect the sole Swarm node'
-  if ! jq -e --arg id "$local_node_id" '
-      type == "array" and length == 1
-        and .[0].ID == $id
-        and .[0].Status.State == "ready"
-        and (.[0].Spec.Availability == "active"
-          or .[0].Spec.Availability == "pause"
-          or .[0].Spec.Availability == "drain")
-        and .[0].ManagerStatus.Leader == true
-        and .[0].ManagerStatus.Reachability == "reachable"' \
+  node_state="$(docker node inspect "${node_id_list[@]}")" \
+    || fail 'Unable to inspect every Swarm node'
+  node_ids_json="$(jq -Rn '$ARGS.positional' --args "${node_id_list[@]}")"
+  if ! jq -e --arg id "$local_node_id" --argjson ids "$node_ids_json" '
+      type == "array" and length == ($ids | length)
+        and ([.[].ID] | length) == ([.[].ID] | unique | length)
+        and ([.[].ID] | sort) == ($ids | sort)
+        and all(.[].Status.State; . == "ready")
+        and all(.[].Spec.Availability;
+          . == "active" or . == "pause" or . == "drain")
+        and ([.[] | select(.ManagerStatus.Leader == true)] | length) == 1
+        and all(.[] | select(.ManagerStatus != null);
+          .ManagerStatus.Reachability == "reachable")
+        and any(.[]; .ID == $id
+          and .ManagerStatus.Leader == true
+          and .ManagerStatus.Reachability == "reachable")' \
       <<<"$node_state" >/dev/null; then
-    fail 'The sole Swarm node is not a ready, reachable manager leader'
+    fail 'Swarm nodes must be ready with one reachable local manager leader'
   fi
-  verified_node_id="$local_node_id"
+  verified_topology="$(jq -cS '[.[] | {
+      id: .ID,
+      availability: .Spec.Availability,
+      state: .Status.State,
+      leader: (.ManagerStatus.Leader // false),
+      reachability: (.ManagerStatus.Reachability // null)
+    }] | sort_by(.id)' <<<"$node_state")"
 }
 
 read_services() {
@@ -274,8 +282,8 @@ report_service_violations() {
   fi
 }
 
-verify_single_local_manager
-initial_node_id="$verified_node_id"
+verify_healthy_swarm_topology
+initial_topology="$verified_topology"
 
 services="$(read_services)"
 report_service_violations "$services"
@@ -322,6 +330,34 @@ if [ "$writers_drained" = true ]; then
   # running target writer is safe: inspect every container so a task that was
   # restarted during the cutover cannot hide behind its Swarm service identity.
   target_task_container_ids='[]'
+
+  writer_service_ids="$(jq -r --arg stack "$DOKPLOY_TARGET_STACK" '
+    .[]
+    | select(((.Spec.Labels // {})["com.docker.stack.namespace"] // "") == $stack)
+    | .Spec.Name as $name
+    | select([$stack+"_web", $stack+"_worker", $stack+"_scheduler"]
+        | index($name) != null)
+    | .ID' <<<"$services")"
+  if [ -n "$writer_service_ids" ]; then
+    mapfile -t writer_service_id_list <<<"$writer_service_ids"
+    writer_task_ids="$(docker service ps -q --no-trunc "${writer_service_id_list[@]}")" \
+      || fail 'Unable to enumerate drained writer tasks across the Swarm'
+    if [ -n "$writer_task_ids" ]; then
+      mapfile -t writer_task_id_list <<<"$writer_task_ids"
+      writer_tasks="$(docker inspect "${writer_task_id_list[@]}")" \
+        || fail 'Unable to inspect drained writer tasks across the Swarm'
+      if ! jq -e '
+          type == "array"
+            and all(.[];
+              (.Status.State // "") as $state
+              | ($state == "complete" or $state == "shutdown"
+                or $state == "failed" or $state == "rejected"
+                or $state == "remove" or $state == "orphaned"))' \
+          <<<"$writer_tasks" >/dev/null; then
+        fail 'A target writer task remains nonterminal somewhere in the Swarm after writer drain'
+      fi
+    fi
+  fi
 else
   target_task_container_ids="$(jq -c '
     [.[] | .Status.ContainerStatus.ContainerID?
@@ -346,12 +382,14 @@ if [ "$(jq 'length' <<<"$container_violations")" -ne 0 ]; then
   if [ "$writers_drained" = true ]; then
     fail "Running Docker writer or target-database container detected after writer drain: ${names}"
   fi
-  fail "Standalone Docker writer or target-database container detected during cutover: ${names}"
+  fail "Deployment-manager standalone writer or target-database container detected during cutover: ${names}"
 fi
 
-# Re-evaluate the service specs and topology after the local container scan.
-# A single-node Swarm makes the local Docker daemon authoritative; checking both
-# boundaries ensures a node or service added during the proof cannot be missed.
+# Swarm service and task inspection is cluster-wide. Standalone containers are
+# node-local in the Docker API, so the direct container check above covers the
+# deployment manager while the scheduler fence and global service/task proofs
+# cover all managed workloads. Re-evaluate every observable boundary so a node
+# or service added during the proof cannot be missed.
 services_after="$(read_services)"
 report_service_violations "$services_after"
 if [ "$(jq -cS '[.[].ID] | sort' <<<"$services")" \
@@ -366,13 +404,13 @@ if [ "$(printf '%s\n' "$container_ids" | sed '/^$/d' | LC_ALL=C sort)" \
   fail 'The running Docker container set changed during the cutover-isolation check'
 fi
 
-verify_single_local_manager
-if [ "$verified_node_id" != "$initial_node_id" ]; then
-  fail 'The sole Swarm node changed during the cutover-isolation check'
+verify_healthy_swarm_topology
+if [ "$verified_topology" != "$initial_topology" ]; then
+  fail 'The Swarm topology changed during the cutover-isolation check'
 fi
 
 if [ "$writers_drained" = true ]; then
   echo 'Verified that no running Docker container can write to the drained cutover target'
 else
-  echo 'Verified that no external Swarm service or standalone container can write to the cutover target'
+  echo 'Verified that no external Swarm service or deployment-manager standalone container can write to the cutover target'
 fi

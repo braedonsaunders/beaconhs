@@ -94,6 +94,32 @@ describe('dev deployment cutover order', () => {
     expect(directCredential).toBeLessThan(signatures)
     expect(drainStep).toContain('assert_pre_schema_cutover_fence')
     expect(drainStep).toContain('scripts/cluster/assert-cutover-isolation.sh')
+    expect(drainStep).toContain('BEACONHS_SWARM_FENCE_NODE_SET_SHA256')
+    expect(workflow).not.toContain('BEACONHS_SWARM_FENCE_NODE_ID')
+  })
+
+  it('releases the complete workflow-owned Swarm node set only after final proofs', () => {
+    const releaseStepStart = requiredPosition(
+      workflow,
+      '- name: Verify exact deployment specs and resume Swarm scheduling',
+    )
+    const convergenceStepStart = requiredPosition(
+      workflow,
+      '- name: Wait for Swarm convergence and external readiness',
+    )
+    const releaseStep = workflow.slice(releaseStepStart, convergenceStepStart)
+    const finalIsolation = releaseStep.lastIndexOf('scripts/cluster/assert-cutover-isolation.sh')
+    const finalStackProof = releaseStep.lastIndexOf('assert_exact_stack')
+    const release = requiredPosition(
+      releaseStep,
+      'scripts/cluster/release-swarm-scheduling-fence.sh',
+    )
+
+    expect(finalIsolation).toBeGreaterThanOrEqual(0)
+    expect(finalStackProof).toBeGreaterThanOrEqual(0)
+    expect(finalIsolation).toBeLessThan(release)
+    expect(finalStackProof).toBeLessThan(release)
+    expect(releaseStep).not.toContain('docker node update --availability active')
   })
 
   it('derives the unpooled maintenance URL without changing its database identity', () => {

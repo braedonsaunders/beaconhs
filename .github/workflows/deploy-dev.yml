@@ -1171,8 +1171,14 @@ jobs:
 
           export BEACONHS_SWARM_NODE_STATE_FILE="${RUNNER_TEMP%/}/beaconhs-swarm-original-node-state.tsv"
           scripts/cluster/acquire-swarm-scheduling-fence.sh
-          BEACONHS_SWARM_FENCE_NODE_ID="$(cut -f1 "$BEACONHS_SWARM_NODE_STATE_FILE")"
-          export BEACONHS_SWARM_FENCE_NODE_ID
+          BEACONHS_SWARM_FENCE_NODE_SET_SHA256="$(
+            sha256sum "$BEACONHS_SWARM_NODE_STATE_FILE" | awk '{print $1}'
+          )"
+          if ! [[ "$BEACONHS_SWARM_FENCE_NODE_SET_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::Failed to fingerprint the workflow-owned Swarm node set"
+            exit 1
+          fi
+          export BEACONHS_SWARM_FENCE_NODE_SET_SHA256
           export BEACONHS_SWARM_SCHEDULER_PAUSED=true
           node_state="$BEACONHS_SWARM_NODE_STATE_FILE"
           echo "Swarm scheduling is workflow-fenced; existing non-writer tasks continue running"
@@ -1753,7 +1759,7 @@ jobs:
             exit 1
           fi
           if [ "${BEACONHS_SWARM_SCHEDULER_PAUSED:-}" != true ] \
-            || [ -z "${BEACONHS_SWARM_FENCE_NODE_ID:-}" ] \
+            || [ -z "${BEACONHS_SWARM_FENCE_NODE_SET_SHA256:-}" ] \
             || [ -z "${BEACONHS_SWARM_NODE_STATE_FILE:-}" ] \
             || [ ! -s "$BEACONHS_SWARM_NODE_STATE_FILE" ]; then
             echo "::error::The workflow-owned Swarm scheduler fence record is missing"
@@ -2128,7 +2134,7 @@ jobs:
           umask 077
           if [ "${BEACONHS_SCHEMA_CUTOVER_COMMITTED:-}" != true ] \
             || [ "${BEACONHS_SWARM_SCHEDULER_PAUSED:-}" != true ] \
-            || [ -z "${BEACONHS_SWARM_FENCE_NODE_ID:-}" ] \
+            || [ -z "${BEACONHS_SWARM_FENCE_NODE_SET_SHA256:-}" ] \
             || [ -z "${BEACONHS_SWARM_NODE_STATE_FILE:-}" ] \
             || [ ! -s "$BEACONHS_SWARM_NODE_STATE_FILE" ] \
             || [ -z "${DOKPLOY_FINAL_STATE_SHA256:-}" ]; then
@@ -2339,25 +2345,13 @@ jobs:
             fi
           done
 
-          # This is the final pre-release proof. Only nodes that this workflow
-          # changed from active to pause are restored; pre-existing drain/pause
-          # states and newly joined paused nodes remain untouched.
+          # This is the final pre-release proof. The release script restores
+          # exactly the workflow-owned node set to its recorded availability;
+          # pre-existing drain/pause states remain untouched.
           assert_control_plane_idle_and_exact
           scripts/cluster/assert-swarm-scheduling-paused.sh
           scripts/cluster/assert-cutover-isolation.sh
           assert_exact_stack
-          while IFS=$'\t' read -r node availability; do
-            if [ "$availability" = active ]; then
-              docker node update --availability active "$node" >/dev/null
-            fi
-          done < "$BEACONHS_SWARM_NODE_STATE_FILE"
-          while IFS=$'\t' read -r node availability; do
-            if [ "$availability" = active ] \
-              && [ "$(docker node inspect --format '{{.Spec.Availability}}' "$node")" != active ]; then
-              echo "::error::Swarm node ${node} did not resume active scheduling"
-              exit 1
-            fi
-          done < "$BEACONHS_SWARM_NODE_STATE_FILE"
           scripts/cluster/release-swarm-scheduling-fence.sh
           echo "Exact-digest service specs were materialized before Swarm scheduling resumed"
 
@@ -2564,7 +2558,7 @@ jobs:
       - name: Report retained Swarm scheduler fence
         if: (failure() || cancelled()) && env.BEACONHS_SWARM_SCHEDULER_PAUSED == 'true'
         run: |
-          echo "::error::The workflow failed after durably claiming the Swarm scheduler fence; the previously active manager may remain paused. A retained pause deliberately prevents a concurrent deployment from scheduling database writers. The claim stored in Swarm node labels lets the next audited workflow reconcile this exact transition after it verifies the repository, stack, node identity, and current availability. Do not reactivate scheduling or remove those labels while migration or data-cutover state is unknown."
+          echo "::error::The workflow failed after durably claiming the Swarm scheduler fence; previously active nodes may remain paused. A retained pause deliberately prevents a concurrent deployment from scheduling database writers. The claim stored in Swarm node labels lets the next audited workflow reconcile this exact transition after it verifies the repository, stack, node-set identity, and original availability. Do not reactivate scheduling or remove those labels while migration or data-cutover state is unknown."
 
       - name: Report resumable pre-schema cutover failure
         if: (failure() || cancelled()) && env.BEACONHS_PRE_SCHEMA_CUTOVER_STARTED == 'true' && env.BEACONHS_PRE_SCHEMA_CUTOVER_COMMITTED != 'true'

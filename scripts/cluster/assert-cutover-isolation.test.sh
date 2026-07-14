@@ -47,21 +47,25 @@ run_fixture() {
 }
 
 run_fixture safe success \
-  'Verified that no external Swarm service or standalone container can write to the cutover target'
+  'Verified that no external Swarm service or deployment-manager standalone container can write to the cutover target'
 run_fixture safe failure \
-  'Running Docker writer or target-database container detected after writer drain' true
+  'A target writer task remains nonterminal somewhere in the Swarm after writer drain' true
 run_fixture drained-safe success \
   'Verified that no running Docker container can write to the drained cutover target' true
 run_fixture external-migrator failure \
   'External Swarm writer or target-database service detected during cutover'
 run_fixture spoofed-swarm-label failure \
-  'Standalone Docker writer or target-database container detected during cutover'
+  'Deployment-manager standalone writer or target-database container detected during cutover'
 run_fixture alternate-equivalent-url failure \
-  'Standalone Docker writer or target-database container detected during cutover'
+  'Deployment-manager standalone writer or target-database container detected during cutover'
 run_fixture libpq-environment failure \
-  'Standalone Docker writer or target-database container detected during cutover'
-run_fixture multi-node failure \
-  'Cutover isolation requires exactly one Swarm node'
+  'Deployment-manager standalone writer or target-database container detected during cutover'
+run_fixture multi-node success \
+  'Verified that no external Swarm service or deployment-manager standalone container can write to the cutover target'
+run_fixture unhealthy-node failure \
+  'Swarm nodes must be ready with one reachable local manager leader'
+run_fixture drained-remote-writer failure \
+  'A target writer task remains nonterminal somewhere in the Swarm after writer drain' true
 
 status=0
 output="$({

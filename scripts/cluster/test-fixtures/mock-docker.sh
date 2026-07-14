@@ -15,11 +15,15 @@ fixture="$({
         $fixture
       else
         $all[$fixture.extends] as $base
-        | $base
+          | $base
           * ($fixture | del(.extends, .services, .tasks, .containers, .nodes,
-              .replaceContainers))
+              .replaceContainers, .replaceTasks))
           | .services = (($base.services // []) + ($fixture.services // []))
-          | .tasks = (($base.tasks // []) + ($fixture.tasks // []))
+          | .tasks = (if ($fixture | has("replaceTasks")) then
+              $fixture.replaceTasks
+            else
+              (($base.tasks // []) + ($fixture.tasks // []))
+            end)
           | .containers = (if ($fixture | has("replaceContainers")) then
               $fixture.replaceContainers
             else
@@ -40,8 +44,10 @@ case "${1:-} ${2:-}" in
     jq -r '.nodes[].ID' <<<"$fixture"
     ;;
   "node inspect")
-    node_id="${3:?node id is required}"
-    jq -c --arg id "$node_id" '[.nodes[] | select(.ID == $id)]' <<<"$fixture"
+    shift 2
+    jq -c --args '$ARGS.positional as $ids
+      | [.nodes[] | select(.ID as $id | $ids | index($id))]' \
+      -- "$@" <<<"$fixture"
     ;;
   "service ls")
     jq -r '.services[].ID' <<<"$fixture"

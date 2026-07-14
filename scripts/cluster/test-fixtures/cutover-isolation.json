@@ -45,6 +45,7 @@
         "ID": "task-target-web",
         "ServiceID": "service-target-web",
         "Status": {
+          "State": "running",
           "ContainerStatus": { "ContainerID": "container-target-web" }
         }
       }
@@ -97,6 +98,16 @@
   },
   "drained-safe": {
     "extends": "safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web",
+        "ServiceID": "service-target-web",
+        "Status": {
+          "State": "shutdown",
+          "ContainerStatus": { "ContainerID": "container-target-web" }
+        }
+      }
+    ],
     "replaceContainers": [
       {
         "Id": "container-unrelated",
@@ -165,6 +176,38 @@
         "Spec": { "Availability": "pause" },
         "Status": { "State": "ready" },
         "ManagerStatus": { "Leader": false, "Reachability": "reachable" }
+      }
+    ]
+  },
+  "unhealthy-node": {
+    "extends": "safe",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": { "Availability": "pause" },
+        "Status": { "State": "down" }
+      }
+    ]
+  },
+  "drained-remote-writer": {
+    "extends": "safe",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": { "Availability": "pause" },
+        "Status": { "State": "ready" }
+      }
+    ],
+    "replaceContainers": [
+      {
+        "Id": "container-unrelated",
+        "Name": "/unrelated",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "redis:8-alpine",
+          "Env": [],
+          "Labels": {}
+        }
       }
     ]
   }
