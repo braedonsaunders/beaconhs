@@ -39,6 +39,10 @@ describe('dev deployment cutover order', () => {
     )
   })
 
+  it('uses retry flags supported by the self-hosted runner curl', () => {
+    expect(workflow).not.toContain('--retry-all-errors')
+  })
+
   it('normalizes the registry field removed by newer Dokploy releases', () => {
     expect(workflow).toContain('existing_registry_id_json="$(jq -c \'')
     expect(workflow).not.toContain('existing_registry_id_json="$(jq -ce \'')

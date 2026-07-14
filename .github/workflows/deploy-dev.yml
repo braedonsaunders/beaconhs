@@ -703,7 +703,7 @@ jobs:
 
           dokploy_get() {
             scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-              --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
               --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
               --resolve "$DOKPLOY_CURL_RESOLVE" "$@"
           }
@@ -1011,7 +1011,7 @@ jobs:
 
           dokploy_get() {
             scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-              --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
               --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
               --resolve "$DOKPLOY_CURL_RESOLVE" "$@"
           }
@@ -1384,7 +1384,7 @@ jobs:
           trap 'rm -f "$compose_state" "$deployments" "$queue" "$writer_state"' EXIT
           dokploy_get() {
             scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-              --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
               --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
               --resolve "$DOKPLOY_CURL_RESOLVE" "$@"
           }
@@ -1659,7 +1659,7 @@ jobs:
           SENTRY_DSN=${SENTRY_DSN}"
           printf '%s' "$ENV_BLOCK" > "$env_block_file"
           scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-            --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
             --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
             -G -o "$compose_state" "${DOKPLOY_URL%/}/api/compose.one" \
             --data-urlencode "composeId=$COMPOSE_ID"
@@ -1697,7 +1697,7 @@ jobs:
             update_acknowledged=true
           fi
           scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-            --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
             --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
             -G -o "$compose_state" "${DOKPLOY_URL%/}/api/compose.one" \
             --data-urlencode "composeId=$COMPOSE_ID"
@@ -1772,7 +1772,7 @@ jobs:
           trap 'rm -f "$compose_state" "$deployments" "$queue"' EXIT
           dokploy_get() {
             scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-              --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
               --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
               --resolve "$DOKPLOY_CURL_RESOLVE" "$@"
           }
@@ -1900,7 +1900,7 @@ jobs:
           assert_final_compose_state() {
             local state_sha256 target_stack
             scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-              --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
               --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
               -G -o "$compose_state" "${DOKPLOY_URL%/}/api/compose.one" \
               --data-urlencode "composeId=$COMPOSE_ID"
@@ -1961,7 +1961,7 @@ jobs:
           deployment_title="BeaconHS GitHub ${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
           deployment_description="commit=${GITHUB_SHA};digest=${IMAGE_DIGEST}"
           baseline_deployments="$(scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-            --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
             --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
             --resolve "$DOKPLOY_CURL_RESOLVE" -G \
             "${DOKPLOY_URL%/}/api/deployment.allByCompose" \
@@ -1972,7 +1972,7 @@ jobs:
             exit 1
           fi
           scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-            --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+            --retry 2 --retry-delay 2 --retry-max-time 30 \
             --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
             -o "$deployment_queue" "${DOKPLOY_URL%/}/api/deployment.queueList"
           if ! jq -e 'type=="array"' "$deployment_queue" >/dev/null; then
@@ -2142,7 +2142,7 @@ jobs:
           trap 'rm -f "$compose_state" "$deployments" "$queue"' EXIT
           dokploy_get() {
             scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
-              --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+              --retry 2 --retry-delay 2 --retry-max-time 30 \
               --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
               --resolve "$DOKPLOY_CURL_RESOLVE" "$@"
           }

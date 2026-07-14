@@ -21,6 +21,10 @@ header_file=''
 response_file=''
 previous=''
 for argument in "$@"; do
+  if [ "$argument" = '--retry-all-errors' ]; then
+    echo 'curl: option --retry-all-errors: is unknown' >&2
+    exit 96
+  fi
   if [[ "$argument" == *"$CURRENT_MAIN_EXPECTED_TOKEN"* ]]; then
     echo 'token leaked into curl argument vector' >&2
     exit 90

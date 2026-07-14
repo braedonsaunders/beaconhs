@@ -44,8 +44,11 @@ chmod 0600 "$header_file" "$response"
 printf 'authorization: Bearer %s\n' "$github_token" > "$header_file"
 unset github_token
 
+# The self-hosted Dokploy runner's curl predates --retry-all-errors. Portable
+# retries still cover transient HTTP failures; every transport failure remains
+# fail-closed below.
 if ! curl -sS --fail --connect-timeout 5 --max-time 20 \
-  --retry 2 --retry-delay 2 --retry-all-errors --retry-max-time 30 \
+  --retry 2 --retry-delay 2 --retry-max-time 30 \
   -o "$response" \
   -H @"$header_file" \
   -H 'accept: application/vnd.github+json' \
