@@ -33,6 +33,12 @@ describe('dev deployment cutover order', () => {
   const drainStep = workflow.slice(drainStepStart, postSchemaStepStart)
   const postSchemaStep = workflow.slice(postSchemaStepStart, updateComposeStepStart)
 
+  it('installs Node 24 before pnpm on the self-hosted deploy runner', () => {
+    expect(requiredPosition(workflow, 'uses: actions/setup-node@')).toBeLessThan(
+      requiredPosition(workflow, 'uses: pnpm/action-setup@'),
+    )
+  })
+
   it('converges external-storage prerequisites before schema migration', () => {
     const signatures = requiredPosition(
       drainStep,
