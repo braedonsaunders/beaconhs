@@ -1504,25 +1504,25 @@ jobs:
             assert_pre_schema_cutover_fence
             echo "::group::${label}: pre-apply audit"
             SUPERADMIN_DATABASE_URL="$cutover_superadmin_url" \
-              pnpm --filter @beaconhs/web exec tsx "$script"
+              pnpm --filter @beaconhs/web run cutover:run "$script"
             echo "::endgroup::"
 
             assert_pre_schema_cutover_fence
             echo "::group::${label}: apply"
             SUPERADMIN_DATABASE_URL="$cutover_superadmin_url" \
-              pnpm --filter @beaconhs/web exec tsx "$script" --apply
+              pnpm --filter @beaconhs/web run cutover:run "$script" --apply
             echo "::endgroup::"
 
             assert_pre_schema_cutover_fence
             echo "::group::${label}: post-apply audit"
             SUPERADMIN_DATABASE_URL="$cutover_superadmin_url" \
-              pnpm --filter @beaconhs/web exec tsx "$script"
+              pnpm --filter @beaconhs/web run cutover:run "$script"
             echo "::endgroup::"
 
             assert_pre_schema_cutover_fence
             echo "::group::${label}: idempotency apply"
             SUPERADMIN_DATABASE_URL="$cutover_superadmin_url" \
-              pnpm --filter @beaconhs/web exec tsx "$script" --apply
+              pnpm --filter @beaconhs/web run cutover:run "$script" --apply
             echo "::endgroup::"
             assert_pre_schema_cutover_fence
           }
@@ -1585,22 +1585,22 @@ jobs:
             local script="$2"
 
             echo "::group::${label}: pre-apply audit"
-            pnpm --filter @beaconhs/web exec tsx "$script"
+            pnpm --filter @beaconhs/web run cutover:run "$script"
             echo "::endgroup::"
 
             assert_cutover_fence
             echo "::group::${label}: apply"
-            pnpm --filter @beaconhs/web exec tsx "$script" --apply
+            pnpm --filter @beaconhs/web run cutover:run "$script" --apply
             echo "::endgroup::"
 
             assert_cutover_fence
             echo "::group::${label}: post-apply audit"
-            pnpm --filter @beaconhs/web exec tsx "$script"
+            pnpm --filter @beaconhs/web run cutover:run "$script"
             echo "::endgroup::"
 
             assert_cutover_fence
             echo "::group::${label}: idempotency apply"
-            pnpm --filter @beaconhs/web exec tsx "$script" --apply
+            pnpm --filter @beaconhs/web run cutover:run "$script" --apply
             echo "::endgroup::"
             assert_cutover_fence
           }
@@ -2521,7 +2521,7 @@ jobs:
               "${APP_URL%/}/hosting/discovery")" || discovery_curl_rc=$?
             if [ "$discovery_curl_rc" -eq 0 ] && [ "$discovery_status" = 200 ] \
               && DISCOVERY_PATH="$discovery" EXPECTED_COLLABORA_ORIGIN="${APP_URL%/}" \
-                pnpm --filter @beaconhs/web exec tsx -e '
+                pnpm --filter @beaconhs/web run cutover:run -e '
                   import { readFileSync } from "node:fs";
                   import { resolveCollaboraEditUrlBytes } from "./src/lib/collabora.ts";
                   const path = process.env.DISCOVERY_PATH;

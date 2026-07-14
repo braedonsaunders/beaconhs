@@ -10,6 +10,19 @@ const workflow = readFileSync(
 const directDatabaseUrlScript = fileURLToPath(
   new URL('../../../scripts/cluster/direct-maintenance-database-url.mjs', import.meta.url),
 )
+const webPackage = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+) as {
+  scripts?: Record<string, string>
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+}
+const databasePackage = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../../../packages/db/package.json', import.meta.url)),
+    'utf8',
+  ),
+) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
 
 function requiredPosition(haystack: string, needle: string): number {
   const position = haystack.indexOf(needle)
@@ -37,6 +50,16 @@ describe('dev deployment cutover order', () => {
     expect(requiredPosition(workflow, 'uses: actions/setup-node@')).toBeLessThan(
       requiredPosition(workflow, 'uses: pnpm/action-setup@'),
     )
+  })
+
+  it('installs the TypeScript cutover runtime in production mode', () => {
+    expect(webPackage.scripts?.['cutover:run']).toBe('tsx')
+    expect(webPackage.dependencies?.tsx).toBe('^4.23.1')
+    expect(databasePackage.dependencies?.tsx).toBe('^4.23.1')
+    expect(webPackage.devDependencies?.tsx).toBeUndefined()
+    expect(databasePackage.devDependencies?.tsx).toBeUndefined()
+    expect(workflow).toContain('pnpm --filter @beaconhs/web run cutover:run "$script"')
+    expect(workflow).not.toContain('pnpm --filter @beaconhs/web exec tsx')
   })
 
   it('uses retry flags supported by the self-hosted runner curl', () => {

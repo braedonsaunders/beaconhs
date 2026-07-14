@@ -3,7 +3,7 @@
  * attachment foreign keys.
  *
  * Safety defaults:
- *   pnpm --filter @beaconhs/web exec tsx scripts/backfill-signatures-to-storage.ts
+ *   pnpm --filter @beaconhs/web run cutover:run scripts/backfill-signatures-to-storage.ts
  *     audits/decodes every value and writes nothing.
  *
  * Apply only after the additive migration has created every `newColumn`:

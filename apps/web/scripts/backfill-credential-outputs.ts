@@ -4,7 +4,7 @@
  * outputs with complete Design Studio documents.
  *
  * Audit only (default):
- *   pnpm --filter @beaconhs/web exec tsx scripts/backfill-credential-outputs.ts
+ *   pnpm --filter @beaconhs/web run cutover:run scripts/backfill-credential-outputs.ts
  * Apply after migration 0004:
  *   ... backfill-credential-outputs.ts --apply
  */
