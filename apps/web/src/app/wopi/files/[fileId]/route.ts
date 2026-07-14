@@ -10,11 +10,14 @@ import { attachments } from '@beaconhs/db/schema'
 import { verifyWopiToken } from '@/lib/wopi'
 import { wopiGrantCanAccessFile, wopiPrincipalIsAuthorized } from '@/lib/wopi-access'
 import { tenantIsActive } from '@/lib/active-tenant'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await ctx.params
+  if (!isUuid(fileId)) return new NextResponse('File not found', { status: 404 })
+
   const token = req.nextUrl.searchParams.get('access_token') ?? ''
   const grant = verifyWopiToken(token, fileId)
   if (!grant) return new NextResponse('Invalid or expired WOPI token', { status: 401 })

@@ -46,6 +46,7 @@ export default async function CoursePresentPage({
     <>
       <style dangerouslySetInnerHTML={{ __html: lessonProseCss('.lesson-prose') }} />
       <ClassPresentClient
+        courseId={presentation.course.id}
         courseName={presentation.course.name}
         modules={presentation.modules}
         items={presentation.itemContents}

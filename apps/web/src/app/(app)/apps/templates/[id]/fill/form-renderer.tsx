@@ -65,6 +65,7 @@ import {
   SearchSelect,
   Select,
   Textarea,
+  uploadReservedFile,
 } from '@beaconhs/ui'
 import {
   evaluateFormulaTree,
@@ -3824,15 +3825,8 @@ function SignatureField({
       console.warn('[signature] presign failed', req.error)
       return
     }
-    const put = await fetch(req.putUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': file.type },
-      body: file,
-    })
-    if (!put.ok) return
-    const fin = await finalizeUpload({
-      uploadId: req.uploadId,
-    })
+    const finalizeInput = await uploadReservedFile(req, file)
+    const fin = await finalizeUpload(finalizeInput)
     if (!fin.ok) return
     onChange({ attachmentId: fin.attachmentId, url: fin.url })
   }
@@ -3879,15 +3873,8 @@ function SketchField({
       console.warn('[sketch] presign failed', req.error)
       return
     }
-    const put = await fetch(req.putUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': file.type },
-      body: file,
-    })
-    if (!put.ok) return
-    const fin = await finalizeUpload({
-      uploadId: req.uploadId,
-    })
+    const finalizeInput = await uploadReservedFile(req, file)
+    const fin = await finalizeUpload(finalizeInput)
     if (!fin.ok) return
     onChange({ attachmentId: fin.attachmentId, url: fin.url, scene })
   }

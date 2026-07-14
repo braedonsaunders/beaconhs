@@ -1,44 +1,38 @@
 'use client'
 
 // The slideshow deck workspace — Collabora Online is THE editor. Every
-// editable deck is backed by a .pptx master (sourceAttachmentId); slides[] is
-// the derived render used by the player, thumbnails and Present. Decks
-// without a master (new lessons, or decks built with the retired canvas
-// tools) offer two starts: import a PowerPoint or begin a blank one — either
-// becomes the master and replaces the rendered slides.
+// editable deck is backed by one .pptx master (sourceAttachmentId). Editing
+// and Present both run through Collabora; there is no PDF/image derivative.
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Download, FileUp, Loader2, Play, Plus, X } from 'lucide-react'
 import { Button, FileUploader, cn } from '@beaconhs/ui'
-import type { Slide } from '@beaconhs/db/schema'
+import { MAX_PPTX_FILE_BYTES } from '@beaconhs/office/limits'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
-import { SlidePlayer } from '../_components/slide-player'
 import { CollaboraEmbed } from '@/components/collabora-embed'
-import { createBlankDeckMaster, getPptxEditorSession } from '../pptx/_actions'
+import {
+  createBlankDeckMaster,
+  getPptxAuthorPlaybackSession,
+  getPptxEditorSession,
+} from '../pptx/_actions'
 
 export function SlideDeckEditor({
-  deck,
-  attachmentUrls,
-  importStatus,
-  importError,
   onImportPptx,
   target,
   targetId,
   master,
+  beforeDeckMutation,
   className,
 }: {
-  deck: Slide[]
-  attachmentUrls: Record<string, string | null | undefined>
-  importStatus: string | null
-  importError: string | null
   onImportPptx: (attachmentId: string) => Promise<void>
   target: 'lesson' | 'content_item'
   targetId: string
   /** The deck's PowerPoint master, when one exists. */
   master: { attachmentId: string; filename: string } | null
+  beforeDeckMutation?: () => Promise<void>
   className?: string
 }) {
   const router = useRouter()
@@ -46,39 +40,13 @@ export function SlideDeckEditor({
   const [presenting, setPresenting] = useState(false)
   const [starting, startTransition] = useTransition()
 
-  const importing = importStatus === 'pending' || importStatus === 'processing'
   const downloadHref = `/training/pptx/${target}/${targetId}/download`
 
-  // Refresh while a render is in flight so the new slides (and a newly created
-  // master) appear without a manual reload.
-  useEffect(() => {
-    if (!importing) return
-    const t = setInterval(() => router.refresh(), 3500)
-    return () => clearInterval(t)
-  }, [importing, router])
-
-  const statusBadge = importing ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
-      <Loader2 size={11} className="animate-spin" /> rendering…
-    </span>
-  ) : importStatus === 'failed' ? (
-    <span
-      className="inline-flex max-w-[14rem] items-center truncate rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-      title={importError ?? undefined}
-    >
-      render failed
-    </span>
-  ) : null
-
   async function startBlank() {
-    if (
-      deck.length > 0 &&
-      !(await confirmDialog('Start a blank PowerPoint deck? The current slides are replaced.'))
-    ) {
-      return
-    }
+    if (!(await confirmDialog('Start a blank PowerPoint deck?'))) return
     startTransition(async () => {
       try {
+        await beforeDeckMutation?.()
         await createBlankDeckMaster(target, targetId)
         router.refresh()
       } catch (err) {
@@ -93,15 +61,25 @@ export function SlideDeckEditor({
         requestUploadAction={requestUpload}
         finalizeUploadAction={finalizeUpload}
         kind="document"
-        accept=".pptx,.ppt"
+        accept=".pptx"
+        maxSize={MAX_PPTX_FILE_BYTES}
         onUploaded={(f) => {
           setShowImport(false)
-          void onImportPptx(f.attachmentId).then(() => {
-            toast.success('PowerPoint queued — slides appear when converted')
-          })
+          void onImportPptx(f.attachmentId)
+            .then(() => {
+              toast.success('PowerPoint imported')
+              router.refresh()
+            })
+            .catch((error: unknown) => {
+              toast.error(error instanceof Error ? error.message : 'Could not import PowerPoint')
+            })
         }}
         label="Drop a .pptx or click to choose"
-        hint={master ? 'Replaces the current file and all slides.' : 'Speaker notes are preserved.'}
+        hint={
+          master
+            ? 'Replaces the current PowerPoint file. Maximum 1 GB.'
+            : 'PowerPoint features and speaker notes are preserved. Maximum 1 GB.'
+        }
       />
     </div>
   )
@@ -132,16 +110,9 @@ export function SlideDeckEditor({
             >
               <FileUp size={13} /> Replace
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={deck.length === 0}
-              onClick={() => setPresenting(true)}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => setPresenting(true)}>
               <Play size={13} /> Present
             </Button>
-            {statusBadge}
           </div>
 
           {/* editor — flush against the toolbar, no wasted chrome */}
@@ -160,21 +131,16 @@ export function SlideDeckEditor({
           <div className="mx-auto w-full max-w-2xl space-y-4 px-5 py-8">
             <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {importing ? 'Preparing the presentation…' : 'New presentation'}
+                New presentation
               </h3>
               <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
                 Import a PowerPoint file or start a blank presentation.
               </p>
-              {deck.length > 0 && !importing ? (
-                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                  Importing or starting blank replaces the current slides.
-                </p>
-              ) : null}
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  disabled={starting || importing}
+                  disabled={starting}
                   onClick={() => setShowImport((v) => !v)}
                 >
                   <FileUp size={13} /> Import PowerPoint
@@ -183,23 +149,12 @@ export function SlideDeckEditor({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={starting || importing}
+                  disabled={starting}
                   onClick={startBlank}
                 >
                   {starting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{' '}
                   Start blank
                 </Button>
-                {deck.length > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPresenting(true)}
-                  >
-                    <Play size={13} /> Present
-                  </Button>
-                ) : null}
-                {statusBadge}
               </div>
             </div>
             {showImport ? importPanel : null}
@@ -218,11 +173,12 @@ export function SlideDeckEditor({
           >
             <X size={18} />
           </button>
-          <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-            <div className="w-full max-w-[177.78vh]">
-              <SlidePlayer slides={deck} attachmentUrls={attachmentUrls} />
-            </div>
-          </div>
+          <CollaboraEmbed
+            mode="presentation"
+            frameName={`present-${targetId}`}
+            fetchSession={() => getPptxAuthorPlaybackSession(target, targetId)}
+            className="min-h-0 flex-1"
+          />
         </div>
       ) : null}
     </div>

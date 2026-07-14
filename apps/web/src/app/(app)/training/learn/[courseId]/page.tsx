@@ -106,35 +106,14 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           .where(inArray(trainingContentItems.id, itemIds))
       : []
 
-    // Resolve media URLs for media lessons, library items, and slide decks.
+    // Resolve media URLs for non-PowerPoint lesson content. PPTX playback is
+    // authorized and streamed independently through WOPI.
     const attIds = new Set<string>()
-    const collectSlideAtts = (slides: (typeof lessons)[number]['slides'] | null) => {
-      for (const s of slides ?? []) {
-        if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
-        for (const el of s.elements ?? []) {
-          if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
-        }
-        for (const region of [s.body, s.left, s.right]) {
-          if (!Array.isArray(region)) continue
-          for (const block of region) {
-            if (
-              (block.type === 'image' || block.type === 'file' || block.type === 'video') &&
-              'attachmentId' in block &&
-              block.attachmentId
-            ) {
-              attIds.add(block.attachmentId)
-            }
-          }
-        }
-      }
-    }
     for (const l of lessons) {
       if (l.attachmentId) attIds.add(l.attachmentId)
-      collectSlideAtts(l.slides)
     }
     for (const it of items) {
       if (it.attachmentId) attIds.add(it.attachmentId)
-      collectSlideAtts(it.slides)
     }
     for (const row of progress) {
       if (row.row.evaluationSignatureAttachmentId) {
@@ -177,7 +156,6 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           completionRule: l.completionRule,
           isRequired: l.isRequired,
           contentHtml: item ? item.contentHtml : l.contentHtml,
-          slides: item ? (item.slides ?? []) : (l.slides ?? []),
           practicalCriteria: l.practicalCriteria ?? [],
           evaluation: prog?.row.evaluatedByTenantUserId
             ? {

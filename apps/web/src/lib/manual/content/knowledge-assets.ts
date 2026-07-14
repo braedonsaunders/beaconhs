@@ -175,7 +175,7 @@ Classroom and on-the-job courses are not self-started — workers see them in [M
       'collabora',
     ],
     requiredPermission: 'training.course.manage',
-    body: `Slideshow lessons show one slide at a time, with speaker notes and a progress bar. Every slideshow is a PowerPoint file: import one you already have, or start a blank deck — either way you edit it in a full PowerPoint editor right inside BeaconHS, and you can download the file at any time.
+    body: `Every slideshow is a real PowerPoint file. Import a deck you already have, or start a blank one. BeaconHS opens that same .pptx in PowerPoint-compatible editing and presentation modes. It does not turn the deck into PDFs or slide images.
 
 ## Where to find it
 
@@ -184,17 +184,17 @@ Open **Training** in the left menu, then **Courses**. Open a course, add or open
 ## Start a deck
 
 1. Open a slideshow lesson. A new deck offers two choices.
-2. **Import PowerPoint** — drop in a .pptx file. It becomes the deck's working copy, with speaker notes carried over.
+2. **Import PowerPoint** — drop in a .pptx file that is 1 GB or smaller. It becomes the deck's working copy, with speaker notes carried over.
 3. **Start blank** — creates a new empty PowerPoint deck.
-4. Conversion runs in the background; the slides appear when it finishes and look exactly as they do in PowerPoint.
+4. The PowerPoint editor opens the file directly. There is no conversion wait.
 
 ## Edit the deck
 
 1. Open the slideshow lesson. The PowerPoint editor opens right in the page, with the file name in the toolbar.
 2. Make your changes — text, slides, images, layouts, anything. Changes save automatically.
-3. After each save the slideshow re-renders for learners; the toolbar shows **rendering…** until it catches up.
+3. Authors, instructors, and learners all open the saved .pptx directly.
 
-If the page says PowerPoint editing is not configured, ask your administrator — the editor needs the Collabora server set up. The slideshow still plays and the file can still be downloaded.
+If the page says PowerPoint editing or playback is unavailable, ask your administrator to restore the Collabora server. There is no image or PDF playback fallback.
 
 If the page says the workspace is unavailable, a platform administrator must restore the workspace before the editor can open or save the file.
 
@@ -206,13 +206,20 @@ Click **Download** in the deck toolbar to save the current file, including every
 
 ## Replace the file
 
-Click **Replace** and drop in a different .pptx. It becomes the deck's new working copy and the slides re-render.
+Click **Replace** and drop in a different .pptx. It immediately becomes the deck's working copy.
+
+## Present the deck
+
+Tap **Present** in the slideshow editor, **Play** in the course, or **Present content** on a class. Self-paced learners get the same PowerPoint playback in their lesson. Animations, builds, transitions, timings, links, audio, and video run inside the PowerPoint engine.
+
+Use PowerPoint's own controls inside the presentation to move through the deck. In course or class presentation mode, use the BeaconHS controls below the presentation to move to the next course element.
 
 ## Tips
 
 - Keep one person editing a deck at a time. The editor supports more, but training content rarely needs two authors at once.
-- Very large files can take a minute or two to convert. The **rendering…** badge shows while that runs.
-- Use **Present** to run the deck full-screen from the rendered slides.`,
+- Large decks can take longer to open because the PowerPoint engine loads the original file.
+- Keep embedded media available to the browser and test it before the class.
+- Use **Present** to rehearse the same playback learners and instructors receive.`,
   },
   {
     slug: 'documents',

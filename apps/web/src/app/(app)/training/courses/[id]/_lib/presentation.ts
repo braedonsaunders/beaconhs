@@ -91,39 +91,19 @@ export async function loadCoursePresentation(
         .where(inArray(trainingAssessmentTypes.id, usedTypeIds))
     : []
 
-  // Resolve media URLs for lesson media + slide images across
-  // both lessons and any library items they reference.
+  // Resolve uploaded media plus the PPTX masters referenced by the course.
+  // Collabora streams PPTX bytes through WOPI; no slide-image derivatives are
+  // collected or exposed to the presenter.
   const attIds = new Set<string>()
-  const collectSlides = (slides: (typeof lessons)[number]['slides'] | null) => {
-    for (const s of slides ?? []) {
-      if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
-      for (const el of s.elements ?? []) {
-        if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
-      }
-      for (const region of [s.body, s.left, s.right]) {
-        if (!Array.isArray(region)) continue
-        for (const block of region) {
-          if (
-            (block.type === 'image' || block.type === 'file' || block.type === 'video') &&
-            'attachmentId' in block &&
-            block.attachmentId
-          ) {
-            attIds.add(block.attachmentId)
-          }
-        }
-      }
-    }
-  }
   for (const l of lessons) {
     if (l.attachmentId) attIds.add(l.attachmentId)
     if (l.sourceAttachmentId) attIds.add(l.sourceAttachmentId)
-    collectSlides(l.slides)
   }
   const usedItemIds = new Set(lessons.map((l) => l.contentItemId).filter(Boolean))
   for (const it of contentItemRows) {
     if (!usedItemIds.has(it.id)) continue
     if (it.attachmentId) attIds.add(it.attachmentId)
-    collectSlides(it.slides)
+    if (it.sourceAttachmentId) attIds.add(it.sourceAttachmentId)
   }
   const atts = attIds.size
     ? await tx
@@ -177,9 +157,9 @@ export async function loadCoursePresentation(
       {
         kind: it.kind,
         contentHtml: it.contentHtml,
-        slides: it.slides ?? [],
         embedUrl: it.embedUrl,
         attachmentId: it.attachmentId,
+        sourceAttachmentId: it.sourceAttachmentId,
       },
     ]),
   )
@@ -205,10 +185,7 @@ export async function loadCoursePresentation(
         durationMinutes: l.durationMinutes,
         contentJson: l.contentJson,
         contentHtml: l.contentHtml,
-        slides: l.slides ?? [],
         practicalCriteria: l.practicalCriteria ?? [],
-        importStatus: l.importStatus,
-        importError: l.importError,
         sourceAttachmentId: l.sourceAttachmentId,
         sourceFilename: l.sourceAttachmentId
           ? (attachmentMeta[l.sourceAttachmentId]?.filename ?? null)

@@ -45,7 +45,6 @@ import {
   presignGet,
   putObject,
 } from '@beaconhs/storage'
-import { importSlidesFromPptx } from './slides-import'
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
 import { pdfUnite } from '@beaconhs/office'
 import { audit } from '@beaconhs/audit'
@@ -84,8 +83,6 @@ async function dispatchPdf(data: PdfJobData): Promise<unknown> {
       return await renderDocumentBook(data.tenantId, data.bookId)
     case 'document_bundle':
       return await renderDocumentBundle(data)
-    case 'slides_import':
-      return await importSlidesFromPptx(data)
   }
 }
 

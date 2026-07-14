@@ -2,21 +2,33 @@
 // Same code path either way — only the endpoint changes.
 
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
   CopyObjectCommand,
   CreateBucketCommand,
+  CreateMultipartUploadCommand,
   DeleteBucketPolicyCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   GetBucketLifecycleConfigurationCommand,
   HeadObjectCommand,
   HeadBucketCommand,
+  ListPartsCommand,
   PutBucketLifecycleConfigurationCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import type { LifecycleRule } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'node:crypto'
+import {
+  MULTIPART_UPLOAD_PART_SIZE_BYTES,
+  multipartPartCount,
+  shouldUseMultipartUpload,
+} from './multipart'
+
+export * from './multipart'
 
 const accountId = process.env.R2_ACCOUNT_ID ?? 'local'
 const accessKeyId = process.env.R2_ACCESS_KEY_ID ?? 'beaconhs'
@@ -179,6 +191,93 @@ export async function presignPut(args: {
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 300 })
 }
 
+export async function createMultipartUpload(args: {
+  key: string
+  contentType: string
+  contentDisposition?: 'inline' | 'attachment'
+  uploadToken?: string
+}): Promise<string> {
+  const result = await client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: bucket,
+      Key: args.key,
+      ContentType: args.contentType,
+      ContentDisposition: args.contentDisposition ?? 'attachment',
+      Metadata: args.uploadToken ? { 'upload-token': args.uploadToken } : undefined,
+      Tagging: args.uploadToken ? 'beaconhs-state=pending' : undefined,
+    }),
+  )
+  if (!result.UploadId) throw new Error('Storage did not create a multipart upload')
+  return result.UploadId
+}
+
+export async function presignMultipartPart(args: {
+  key: string
+  uploadId: string
+  partNumber: number
+  expiresInSeconds?: number
+}): Promise<string> {
+  if (!Number.isInteger(args.partNumber) || args.partNumber < 1 || args.partNumber > 10_000) {
+    throw new Error('Multipart part number must be between 1 and 10000')
+  }
+  return getSignedUrl(
+    client,
+    new UploadPartCommand({
+      Bucket: bucket,
+      Key: args.key,
+      UploadId: args.uploadId,
+      PartNumber: args.partNumber,
+    }),
+    { expiresIn: args.expiresInSeconds ?? 3600 },
+  )
+}
+
+export async function completeMultipartUpload(args: {
+  key: string
+  uploadId: string
+}): Promise<void> {
+  const parts: Array<{ ETag: string; PartNumber: number }> = []
+  let partNumberMarker: string | undefined
+  do {
+    const page = await client.send(
+      new ListPartsCommand({
+        Bucket: bucket,
+        Key: args.key,
+        UploadId: args.uploadId,
+        PartNumberMarker: partNumberMarker,
+      }),
+    )
+    for (const part of page.Parts ?? []) {
+      if (!part.ETag || !part.PartNumber) {
+        throw new Error('Storage returned an incomplete multipart part record')
+      }
+      parts.push({ ETag: part.ETag, PartNumber: part.PartNumber })
+    }
+    partNumberMarker = page.IsTruncated ? page.NextPartNumberMarker : undefined
+  } while (partNumberMarker)
+
+  if (parts.length === 0) throw new Error('Multipart upload contains no parts')
+  parts.sort((left, right) => left.PartNumber - right.PartNumber)
+  await client.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: bucket,
+      Key: args.key,
+      UploadId: args.uploadId,
+      MultipartUpload: { Parts: parts },
+    }),
+  )
+}
+
+export async function abortMultipartUpload(args: { key: string; uploadId: string }): Promise<void> {
+  await client.send(
+    new AbortMultipartUploadCommand({
+      Bucket: bucket,
+      Key: args.key,
+      UploadId: args.uploadId,
+    }),
+  )
+}
+
 /**
  * Server-side direct upload. Used by the worker to push rendered PDFs
  * into MinIO/R2 without having to round-trip through a presigned URL.
@@ -189,6 +288,46 @@ export async function putObject(args: {
   contentType: string
   contentDisposition?: 'inline' | 'attachment'
 }): Promise<void> {
+  if (shouldUseMultipartUpload(args.body.byteLength)) {
+    const uploadId = await createMultipartUpload({
+      key: args.key,
+      contentType: args.contentType,
+      contentDisposition: args.contentDisposition,
+    })
+    try {
+      const parts: Array<{ ETag: string; PartNumber: number }> = []
+      const partCount = multipartPartCount(args.body.byteLength)
+      for (let partNumber = 1; partNumber <= partCount; partNumber += 1) {
+        const offset = (partNumber - 1) * MULTIPART_UPLOAD_PART_SIZE_BYTES
+        const result = await client.send(
+          new UploadPartCommand({
+            Bucket: bucket,
+            Key: args.key,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: args.body.subarray(
+              offset,
+              Math.min(offset + MULTIPART_UPLOAD_PART_SIZE_BYTES, args.body.byteLength),
+            ),
+          }),
+        )
+        if (!result.ETag) throw new Error(`Storage did not confirm multipart part ${partNumber}`)
+        parts.push({ ETag: result.ETag, PartNumber: partNumber })
+      }
+      await client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: bucket,
+          Key: args.key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: parts },
+        }),
+      )
+    } catch (error) {
+      await abortMultipartUpload({ key: args.key, uploadId }).catch(() => undefined)
+      throw error
+    }
+    return
+  }
   await client.send(
     new PutObjectCommand({
       Bucket: bucket,

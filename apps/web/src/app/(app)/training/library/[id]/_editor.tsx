@@ -15,7 +15,6 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import type { Slide } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
@@ -42,22 +41,11 @@ type Item = {
   embedUrl: string | null
   contentJson: Record<string, unknown> | null
   contentHtml: string | null
-  slides: Slide[]
-  importStatus: string | null
-  importError: string | null
   sourceAttachmentId: string | null
   sourceFilename: string | null
 }
 
-export function ContentItemEditor({
-  item,
-  usedCount,
-  attachmentUrls,
-}: {
-  item: Item
-  usedCount: number
-  attachmentUrls: Record<string, string | null | undefined>
-}) {
+export function ContentItemEditor({ item, usedCount }: { item: Item; usedCount: number }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [title, setTitle] = useState(item.title)
@@ -264,10 +252,6 @@ export function ContentItemEditor({
             <Label>Slides</Label>
             <div className="flex h-[42rem] flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
               <SlideDeckEditor
-                deck={item.slides}
-                attachmentUrls={attachmentUrls}
-                importStatus={item.importStatus}
-                importError={item.importError}
                 onImportPptx={async (attId) => importContentItemPptx(item.id, attId)}
                 target="content_item"
                 targetId={item.id}

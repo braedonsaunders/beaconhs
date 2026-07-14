@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import {
+  attachments,
   trainingCourseFiles,
   trainingCourses,
   trainingCourseModules,
@@ -16,11 +17,11 @@ import {
   type PracticalCriterion,
 } from '@beaconhs/db/schema'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import { enqueueSlidesImport } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { purgeDeckAssets } from '../../../pptx/_lib'
+import { assertTrainingPptxAttachment } from '@/lib/training-pptx-policy'
 import { DELIVERY_TYPES, type DeliveryType } from '../../../_lib/delivery'
 
 type LessonKind = 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
@@ -355,30 +356,65 @@ export async function saveLessonRich(
   revalidatePath(studioPath(courseId))
 }
 
-// Kick off the worker-side PowerPoint → slides conversion for a lesson.
+// Link the original PPTX as the lesson's single source of truth. Collabora
+// edits and presents these bytes directly; no PDF or image render is created.
 export async function importLessonPptx(lessonId: string, courseId: string, attachmentId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
-  await ctx.db(async (tx) => {
-    await tx
+  const replacedAttachmentId = await ctx.db(async (tx) => {
+    const [attachment] = await tx
+      .select({
+        kind: attachments.kind,
+        contentType: attachments.contentType,
+        sizeBytes: attachments.sizeBytes,
+      })
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId))
+      .limit(1)
+    if (!attachment) throw new Error('PowerPoint attachment not found.')
+    assertTrainingPptxAttachment(attachment)
+
+    const [existing] = await tx
+      .select({ sourceAttachmentId: trainingLessons.sourceAttachmentId })
+      .from(trainingLessons)
+      .where(
+        and(
+          eq(trainingLessons.id, lessonId),
+          eq(trainingLessons.courseId, courseId),
+          eq(trainingLessons.kind, 'slides'),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!existing) throw new Error('Slideshow lesson not found.')
+
+    const [updated] = await tx
       .update(trainingLessons)
-      .set({ importStatus: 'pending', importError: null })
-      .where(eq(trainingLessons.id, lessonId))
+      .set({ sourceAttachmentId: attachmentId })
+      .where(
+        and(
+          eq(trainingLessons.id, lessonId),
+          eq(trainingLessons.courseId, courseId),
+          eq(trainingLessons.kind, 'slides'),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+      .returning({ id: trainingLessons.id })
+    if (!updated) throw new Error('Slideshow lesson not found.')
+    return existing.sourceAttachmentId && existing.sourceAttachmentId !== attachmentId
+      ? existing.sourceAttachmentId
+      : null
   })
-  await enqueueSlidesImport({
-    kind: 'slides_import',
-    tenantId: ctx.tenantId,
-    target: 'lesson',
-    targetId: lessonId,
-    attachmentId,
-  })
+  if (replacedAttachmentId) {
+    await purgeDeckAssets(ctx.db, [{ sourceAttachmentId: replacedAttachmentId }])
+  }
   await recordAudit(ctx, {
     entityType: 'training_lesson',
     entityId: lessonId,
     action: 'update',
-    summary: 'Queued PowerPoint import',
-    after: { attachmentId },
+    summary: 'Imported PowerPoint master',
+    after: { courseId, attachmentId },
   })
   revalidatePath(studioPath(courseId))
 }

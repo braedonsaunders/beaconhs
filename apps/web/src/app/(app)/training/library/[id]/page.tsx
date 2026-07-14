@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
-import { and, count, eq, inArray, isNull } from 'drizzle-orm'
+import { and, count, eq, isNull } from 'drizzle-orm'
 import { DetailHeader } from '@beaconhs/ui'
 import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
-import { attachmentUrl } from '@/lib/attachment-url'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ContentItemEditor } from './_editor'
@@ -30,34 +29,14 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
       .from(trainingLessons)
       .where(and(eq(trainingLessons.contentItemId, id), isNull(trainingLessons.deletedAt)))
 
-    // Media URLs for the slide editor preview.
-    const attIds = new Set<string>()
-    for (const s of it.slides ?? []) {
-      if (s.imageAttachmentId) attIds.add(s.imageAttachmentId)
-      for (const el of s.elements ?? []) {
-        if (el.kind === 'image' && el.attachmentId) attIds.add(el.attachmentId)
-      }
-      for (const region of [s.body, s.left, s.right]) {
-        const blocks = Array.isArray(region) ? region : []
-        for (const b of blocks) {
-          if (
-            (b.type === 'image' || b.type === 'file' || b.type === 'video') &&
-            'attachmentId' in b &&
-            b.attachmentId
-          ) {
-            attIds.add(b.attachmentId)
-          }
-        }
-      }
-    }
-    if (it.sourceAttachmentId) attIds.add(it.sourceAttachmentId)
-    const atts = attIds.size
+    const [source] = it.sourceAttachmentId
       ? await tx
-          .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
+          .select({ filename: attachments.filename })
           .from(attachments)
-          .where(inArray(attachments.id, [...attIds]))
+          .where(eq(attachments.id, it.sourceAttachmentId))
+          .limit(1)
       : []
-    return { it, used: Number(u?.c ?? 0), atts }
+    return { it, used: Number(u?.c ?? 0), source }
   })
 
   if (!data) notFound()
@@ -84,18 +63,10 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
           embedUrl: data.it.embedUrl,
           contentJson: data.it.contentJson,
           contentHtml: data.it.contentHtml,
-          slides: data.it.slides ?? [],
-          importStatus: data.it.importStatus,
-          importError: data.it.importError,
           sourceAttachmentId: data.it.sourceAttachmentId,
-          sourceFilename: data.it.sourceAttachmentId
-            ? (data.atts.find((a) => a.id === data.it.sourceAttachmentId)?.filename ?? null)
-            : null,
+          sourceFilename: data.source?.filename ?? null,
         }}
         usedCount={data.used}
-        attachmentUrls={Object.fromEntries(
-          data.atts.map((a) => [a.id, a.key ? attachmentUrl(a.id) : null]),
-        )}
       />
     </DetailPageLayout>
   )

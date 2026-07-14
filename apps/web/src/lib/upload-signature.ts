@@ -6,6 +6,7 @@
 // panel and the group sign-off sheet share one path. Throws on failure.
 
 import { requestUpload, finalizeUpload } from './uploads'
+import { uploadReservedFile } from '@beaconhs/ui'
 
 function dataUrlToBlob(dataUrl: string): { blob: Blob; contentType: string } {
   const [meta, b64] = dataUrl.split(',')
@@ -28,15 +29,9 @@ export async function uploadSignatureDataUrl(dataUrl: string): Promise<string> {
     sizeBytes: blob.size,
   })
   if (!req.ok) throw new Error(req.error)
-  const put = await fetch(req.putUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: blob,
-  })
-  if (!put.ok) throw new Error(`Signature upload failed (${put.status})`)
-  const fin = await finalizeUpload({
-    uploadId: req.uploadId,
-  })
+  const file = new File([blob], filename, { type: contentType })
+  const finalizeInput = await uploadReservedFile(req, file)
+  const fin = await finalizeUpload(finalizeInput)
   if (!fin.ok) throw new Error(fin.error)
   return fin.attachmentId
 }

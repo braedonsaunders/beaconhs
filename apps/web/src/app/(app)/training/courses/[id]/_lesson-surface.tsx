@@ -390,10 +390,6 @@ export function LessonSurface({
           </div>
         ) : kind === 'slides' ? (
           <SlideDeckEditor
-            deck={lesson.slides ?? []}
-            attachmentUrls={attachmentUrls}
-            importStatus={lesson.importStatus}
-            importError={lesson.importError}
             onImportPptx={async (attachmentId) => {
               await importLessonPptx(lesson.id, courseId, attachmentId)
               router.refresh()

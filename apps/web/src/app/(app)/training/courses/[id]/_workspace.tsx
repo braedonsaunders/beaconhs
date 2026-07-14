@@ -37,7 +37,7 @@ import {
   Video,
 } from 'lucide-react'
 import { Badge, Button, FileUploader, Input, Label, RichTextEditor, Select } from '@beaconhs/ui'
-import type { PracticalCriterion, Slide } from '@beaconhs/db/schema'
+import type { PracticalCriterion } from '@beaconhs/db/schema'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
@@ -91,10 +91,7 @@ export type LessonLite = {
   durationMinutes: number | null
   contentJson: Record<string, unknown> | null
   contentHtml: string | null
-  slides: Slide[]
   practicalCriteria: PracticalCriterion[]
-  importStatus: string | null
-  importError: string | null
   /** Set when the deck is mastered by an uploaded PowerPoint file. */
   sourceAttachmentId: string | null
   sourceFilename: string | null
@@ -149,7 +146,7 @@ const ELEMENTS: { kind: LessonKind; label: string; desc: string; icon: React.Rea
   {
     kind: 'slides',
     label: 'Slideshow',
-    desc: 'Structured slides, or import a PowerPoint.',
+    desc: 'Import or create a PowerPoint presentation.',
     icon: <Presentation size={15} />,
   },
   {
@@ -354,6 +351,7 @@ export function CourseWorkspace({
 
       {presenting ? (
         <CoursePresenter
+          courseId={course.id}
           courseName={course.name}
           modules={tree}
           items={itemContents}
@@ -1175,7 +1173,7 @@ function LessonCard({ lesson, onOpen }: { lesson: LessonLite; onOpen: () => void
   const meta = KIND_META[lesson.kind]
   const summary =
     lesson.kind === 'slides'
-      ? `${lesson.slides.length} slide${lesson.slides.length === 1 ? '' : 's'}`
+      ? (lesson.sourceFilename ?? 'PowerPoint presentation')
       : lesson.kind === 'practical'
         ? `${lesson.practicalCriteria.length} criteria`
         : lesson.durationMinutes
@@ -1203,9 +1201,6 @@ function LessonCard({ lesson, onOpen }: { lesson: LessonLite; onOpen: () => void
             {meta.label}
             {summary ? ` · ${summary}` : ''}
             {!lesson.isRequired ? ' · optional' : ''}
-            {lesson.importStatus === 'pending' || lesson.importStatus === 'processing'
-              ? ' · importing…'
-              : ''}
           </span>
         </button>
         <Button type="button" variant="ghost" size="sm" onClick={onOpen} aria-label="Edit lesson">

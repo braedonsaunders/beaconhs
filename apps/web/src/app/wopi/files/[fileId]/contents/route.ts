@@ -1,17 +1,21 @@
 // WOPI GetFile / PutFile — Collabora Online streams an office master out of
 // storage on session open (GET) and writes the edited file back on every save
 // (POST, X-WOPI-Override: PUT). A successful save bumps the attachment and
-// audits the edit against the owning entity; training decks additionally
-// re-queue the slide render so the learner-facing deck catches up (documents
-// need no derived render — Writer is the draft view, PDFs snapshot at publish).
+// audits the edit against the owning entity. PPTX masters have no derived
+// slide images: editing and playback both read this same canonical file.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { and, eq, isNull } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import { attachments, documents, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
 import { deleteObject, getObjectStream, newAttachmentKey, putObject } from '@beaconhs/storage'
-import { enqueueSlidesRender } from '@beaconhs/jobs'
 import { audit } from '@beaconhs/audit'
+import {
+  DOCX_MIME_TYPE,
+  MAX_DOCX_CONVERSION_BYTES,
+  MAX_PPTX_FILE_BYTES,
+  PPTX_MIME_TYPE,
+} from '@beaconhs/office/limits'
 import { verifyWopiToken, type WopiGrant } from '@/lib/wopi'
 import { wopiGrantCanAccessFile, wopiPrincipalIsAuthorized } from '@/lib/wopi-access'
 import {
@@ -21,12 +25,12 @@ import {
   RequestBodyTooLargeError,
 } from '@/lib/request-body'
 import { tenantIsActive } from '@/lib/active-tenant'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
-// Match the document uploader's production ceiling. The streaming reader
+// Match the web upload/edit contract. The streaming reader
 // enforces this before retaining more than the configured number of bytes.
-const MAX_OFFICE_BYTES = 500 * 1024 * 1024
 const MAX_OFFICE_UPLOAD_MS = 10 * 60 * 1_000
 
 class WopiSaveConflict extends Error {
@@ -48,6 +52,8 @@ function authenticate(req: NextRequest, fileId: string): WopiGrant | null {
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await ctx.params
+  if (!isUuid(fileId)) return new NextResponse('File not found', { status: 404 })
+
   const grant = authenticate(req, fileId)
   if (!grant) return new NextResponse('Invalid or expired WOPI token', { status: 401 })
   if (!(await tenantIsActive(grant.tenantId))) {
@@ -79,6 +85,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await ctx.params
+  if (!isUuid(fileId)) return new NextResponse('File not found', { status: 404 })
+
   const grant = authenticate(req, fileId)
   if (!grant) return new NextResponse('Invalid or expired WOPI token', { status: 401 })
   if (!(await tenantIsActive(grant.tenantId))) {
@@ -112,6 +120,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
   })
   if (!att) return new NextResponse('File not found', { status: 404 })
 
+  const maxBytes =
+    att.contentType === PPTX_MIME_TYPE
+      ? MAX_PPTX_FILE_BYTES
+      : att.contentType === DOCX_MIME_TYPE
+        ? MAX_DOCX_CONVERSION_BYTES
+        : null
+  if (maxBytes === null) {
+    return new NextResponse('Unsupported office file type', { status: 415 })
+  }
+
   // WOPI conflict detection: Collabora echoes the LastModifiedTime it loaded;
   // if the file changed underneath the session (e.g. re-imported), refuse the
   // save so the user can reload instead of silently clobbering.
@@ -124,7 +142,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
   let body: Buffer
   try {
     body = await readBoundedRequestBody(req, {
-      maxBytes: MAX_OFFICE_BYTES,
+      maxBytes,
       timeoutMs: MAX_OFFICE_UPLOAD_MS,
     })
   } catch (error) {
@@ -172,7 +190,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
 
   // Uploading a large file can outlast a membership or permission change.
   // Re-check after staging; the new key is still unreferenced and safe to
-  // delete if access was revoked while bytes were in flight.
   if (!(await tenantIsActive(grant.tenantId))) {
     await cleanupObject(stagedKey, 'revoked staged')
     return new NextResponse('Workspace unavailable', { status: 403 })
@@ -202,7 +219,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
         const table = grant.target === 'lesson' ? trainingLessons : trainingContentItems
         const [target] = await tx
           .update(table)
-          .set({ importStatus: 'pending', importError: null })
+          .set({ updatedAt: savedAt })
           .where(
             and(
               eq(table.id, grant.targetId),
@@ -257,26 +274,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
   // object must not turn a committed save into a false failure; log it with the
   // exact key so operators can retry cleanup without risking live data.
   await cleanupObject(att.key, 'superseded')
-
-  if (grant.target !== 'document') {
-    try {
-      await enqueueSlidesRender({
-        kind: 'slides_import',
-        tenantId: grant.tenantId,
-        target: grant.target,
-        targetId: grant.targetId,
-        attachmentId: fileId,
-      })
-    } catch (error) {
-      // The immutable file + DB commit succeeded. Returning a failure would
-      // make Collabora retry a save that is already canonical; the pending
-      // import status and this exact log keep the render failure observable.
-      console.error(
-        `[wopi] saved ${grant.target} ${grant.targetId}, but could not enqueue slide rendering`,
-        error,
-      )
-    }
-  }
 
   return NextResponse.json({ LastModifiedTime: savedAt.toISOString() })
 }

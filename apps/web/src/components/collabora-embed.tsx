@@ -1,6 +1,6 @@
 'use client'
 
-// Inline Collabora editor (Impress for training decks, Writer for documents).
+// Inline Collabora surface (editing, or native Impress presentation playback).
 //
 // - Fetches a WOPI session via the server action supplied by the host surface,
 //   then — as WOPI mandates — form-POSTs the access token into the iframe.
@@ -33,6 +33,7 @@ export type CollaboraSession =
         | 'unknown_target'
         | 'workspace_unavailable'
         | 'impersonation_blocked'
+        | 'access_denied'
     }
 
 export type CollaboraHandle = {
@@ -48,16 +49,25 @@ export const CollaboraEmbed = forwardRef<
     fetchSession: () => Promise<CollaboraSession>
     /** Unique name for the target iframe (e.g. the entity id). */
     frameName: string
+    mode?: 'editor' | 'presentation'
     className?: string
   }
->(function CollaboraEmbed({ fetchSession, frameName, className }, ref) {
+>(function CollaboraEmbed({ fetchSession, frameName, mode = 'editor', className }, ref) {
   const [session, setSession] = useState<CollaboraSession | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const formRef = useRef<HTMLFormElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const originRef = useRef<string>('')
+  const fetchSessionRef = useRef(fetchSession)
   const { resolvedTheme } = useTheme()
+
+  // Hosts pass small inline wrappers around server actions. Keep the current
+  // wrapper available to retries without treating its render-time identity as
+  // a new document session.
+  useEffect(() => {
+    fetchSessionRef.current = fetchSession
+  }, [fetchSession])
 
   // In production Collabora is routed same-origin (/browser/*), so the frame
   // shares this page's localStorage. COOL resolves its theme from the
@@ -102,7 +112,8 @@ export const CollaboraEmbed = forwardRef<
     let cancelled = false
     setSession(null)
     setLoaded(false)
-    fetchSession()
+    fetchSessionRef
+      .current()
       .then(async (s) => {
         if (cancelled) return
         if (s.ok) {
@@ -136,7 +147,6 @@ export const CollaboraEmbed = forwardRef<
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameName, attempt])
 
   useEffect(() => {
@@ -150,7 +160,15 @@ export const CollaboraEmbed = forwardRef<
   useEffect(() => {
     if (!session?.ok) return
     const onMessage = (e: MessageEvent) => {
-      if (originRef.current && e.origin !== originRef.current) return
+      const editorWindow = iframeRef.current?.contentWindow
+      if (
+        !originRef.current ||
+        !editorWindow ||
+        e.origin !== originRef.current ||
+        e.source !== editorWindow
+      ) {
+        return
+      }
       let msg: { MessageId?: string; Values?: { Status?: string } }
       try {
         msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
@@ -160,7 +178,7 @@ export const CollaboraEmbed = forwardRef<
       if (msg?.MessageId === 'App_LoadingStatus' && msg.Values?.Status === 'Document_Loaded') {
         iframeRef.current?.contentWindow?.postMessage(
           JSON.stringify({ MessageId: 'Host_PostmessageReady', SendTime: Date.now(), Values: {} }),
-          originRef.current || '*',
+          originRef.current,
         )
         setLoaded(true)
       }
@@ -178,6 +196,7 @@ export const CollaboraEmbed = forwardRef<
     () => ({
       isLoaded: () => loaded,
       insertText: (text: string) => {
+        if (!originRef.current) return
         iframeRef.current?.contentWindow?.postMessage(
           JSON.stringify({
             MessageId: 'Send_UNO_Command',
@@ -187,7 +206,7 @@ export const CollaboraEmbed = forwardRef<
               Args: { Text: { type: 'string', value: text } },
             },
           }),
-          originRef.current || '*',
+          originRef.current,
         )
       },
     }),
@@ -206,21 +225,29 @@ export const CollaboraEmbed = forwardRef<
           <p className="flex items-center justify-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
             <Presentation size={15} />
             {session.error === 'not_configured'
-              ? 'In-browser editing is not configured'
+              ? mode === 'presentation'
+                ? 'PowerPoint playback is unavailable'
+                : 'In-browser editing is not configured'
               : session.error === 'workspace_unavailable'
                 ? 'This workspace is unavailable'
                 : session.error === 'impersonation_blocked'
-                  ? 'Editing is blocked while viewing as another user'
-                  : 'This item has no source file yet'}
+                  ? `${mode === 'presentation' ? 'Playback' : 'Editing'} is blocked while viewing as another user`
+                  : session.error === 'access_denied'
+                    ? 'You do not have access to this presentation'
+                    : 'This item has no source file yet'}
           </p>
           <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
             {session.error === 'not_configured'
-              ? 'The editor server did not respond. Published content and downloads keep working.'
+              ? mode === 'presentation'
+                ? 'The PowerPoint server did not respond. This presentation cannot be played until it is restored.'
+                : 'The PowerPoint editor did not respond. Try again or contact a platform administrator.'
               : session.error === 'workspace_unavailable'
-                ? 'Ask a platform administrator to restore the workspace before opening the editor.'
+                ? `Ask a platform administrator to restore the workspace before opening ${mode === 'presentation' ? 'the presentation' : 'the editor'}.`
                 : session.error === 'impersonation_blocked'
-                  ? 'Exit the impersonation session, then open the editor as yourself.'
-                  : 'Import a file or start a blank one to begin.'}
+                  ? `Exit the impersonation session, then open ${mode === 'presentation' ? 'the presentation' : 'the editor'} as yourself.`
+                  : session.error === 'access_denied'
+                    ? 'Return to the course and use an enrollment or instructor account that can open it.'
+                    : 'Import a file or start a blank one to begin.'}
           </p>
           {session.error === 'not_configured' ? (
             <button
@@ -258,16 +285,18 @@ export const CollaboraEmbed = forwardRef<
       <iframe
         ref={iframeRef}
         name={`collabora-${frameName}`}
-        title="Editor"
+        title={mode === 'presentation' ? 'PowerPoint presentation' : 'Editor'}
         className="h-full w-full bg-white dark:bg-slate-900"
-        allow="clipboard-read *; clipboard-write *; fullscreen *"
+        allow="autoplay *; clipboard-read *; clipboard-write *; fullscreen *"
         allowFullScreen
       />
       {!loaded ? (
         <div className="absolute inset-0 z-10 grid place-items-center bg-white dark:bg-slate-950">
           <div className="flex flex-col items-center gap-3">
             <LogoMark draw animated className="h-16 w-16" />
-            <span className="text-xs text-slate-500 dark:text-slate-400">Opening the editor…</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {mode === 'presentation' ? 'Opening PowerPoint…' : 'Opening the editor…'}
+            </span>
           </div>
         </div>
       ) : null}

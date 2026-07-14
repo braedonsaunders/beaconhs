@@ -5,14 +5,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { eq } from 'drizzle-orm'
-import { trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
+import { and, eq } from 'drizzle-orm'
+import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import { enqueueSlidesImport } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { purgeDeckAssets } from '../pptx/_lib'
+import { assertTrainingPptxAttachment } from '@/lib/training-pptx-policy'
 
 type ContentKind = 'rich' | 'video' | 'file' | 'embed' | 'slides'
 
@@ -97,24 +97,44 @@ export async function importContentItemPptx(id: string, attachmentId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
-  await ctx.db(async (tx) => {
-    await tx
-      .update(trainingContentItems)
-      .set({ importStatus: 'pending', importError: null })
+  const replacedAttachmentId = await ctx.db(async (tx) => {
+    const [attachment] = await tx
+      .select({
+        kind: attachments.kind,
+        contentType: attachments.contentType,
+        sizeBytes: attachments.sizeBytes,
+      })
+      .from(attachments)
+      .where(eq(attachments.id, attachmentId))
+      .limit(1)
+    if (!attachment) throw new Error('PowerPoint attachment not found.')
+    assertTrainingPptxAttachment(attachment)
+
+    const [existing] = await tx
+      .select({ sourceAttachmentId: trainingContentItems.sourceAttachmentId })
+      .from(trainingContentItems)
       .where(eq(trainingContentItems.id, id))
+      .limit(1)
+    if (!existing) throw new Error('Slideshow library item not found.')
+
+    const [updated] = await tx
+      .update(trainingContentItems)
+      .set({ sourceAttachmentId: attachmentId })
+      .where(and(eq(trainingContentItems.id, id), eq(trainingContentItems.kind, 'slides')))
+      .returning({ id: trainingContentItems.id })
+    if (!updated) throw new Error('Slideshow library item not found.')
+    return existing.sourceAttachmentId && existing.sourceAttachmentId !== attachmentId
+      ? existing.sourceAttachmentId
+      : null
   })
-  await enqueueSlidesImport({
-    kind: 'slides_import',
-    tenantId: ctx.tenantId,
-    target: 'content_item',
-    targetId: id,
-    attachmentId,
-  })
+  if (replacedAttachmentId) {
+    await purgeDeckAssets(ctx.db, [{ sourceAttachmentId: replacedAttachmentId }])
+  }
   await recordAudit(ctx, {
     entityType: 'training_content_item',
     entityId: id,
     action: 'update',
-    summary: 'Queued PowerPoint import',
+    summary: 'Imported PowerPoint master',
     after: { attachmentId },
   })
   revalidatePath(`/training/library/${id}`)

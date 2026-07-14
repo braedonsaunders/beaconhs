@@ -91,15 +91,6 @@ export type PdfJobData =
       entityId: string
       email?: PdfEmailPayload
     }
-  // LMS: convert an uploaded PowerPoint into per-slide PNG images + notes and
-  // write the resulting Slide[] onto a training lesson or library content item.
-  | {
-      kind: 'slides_import'
-      tenantId: string
-      target: 'lesson' | 'content_item'
-      targetId: string
-      attachmentId: string
-    }
 
 export type OnDemandPdfJobData =
   | Extract<PdfJobData, { kind: 'record_summary' }>
@@ -150,8 +141,6 @@ function pdfJobId(data: PdfJobData): string {
       return `pdf|${data.tenantId}|document_book|${data.bookId}`
     case 'document_bundle':
       return `pdf|${data.tenantId}|document_bundle|${data.entityId}`
-    case 'slides_import':
-      return `pdf|${data.tenantId}|slides_import|${data.target}|${data.targetId}|${data.attachmentId}`
   }
 }
 
@@ -239,29 +228,9 @@ export async function enqueuePdfEmail(
   await pdfQueue.add(pdf.kind, { ...pdf, email }, { jobId, attempts: 2 })
 }
 
-export async function enqueueSlidesImport(data: Extract<PdfJobData, { kind: 'slides_import' }>) {
-  // PPTX→PNG conversion is deterministic and the worker replaces the deck
-  // atomically, so run a single attempt and surface failures through
-  // importStatus='failed' instead of retry loops.
-  await addPdfJob(data, { attempts: 1 })
-}
-
 /** Render a just-published document version's PDF + text in the background. */
 export async function enqueueDocumentVersionRender(
   data: Extract<PdfJobData, { kind: 'document_version_render' }>,
 ) {
   await addPdfJob(data, { attempts: 2 })
-}
-
-/**
- * Re-render a PPTX-mastered deck after the master file changed (a Collabora
- * save through the WOPI host). Uses a unique jobId — a save that lands while a
- * previous render is still active must NOT dedupe away, or the deck would be
- * left stale. The worker guards against out-of-order completion by re-checking
- * the master's version before persisting.
- */
-export async function enqueueSlidesRender(data: Extract<PdfJobData, { kind: 'slides_import' }>) {
-  const pdfQueue = getPdfQueue()
-  const jobId = `${pdfJobId(data)}|r${Date.now()}-${Math.round(Math.random() * 1e6)}`
-  await pdfQueue.add(data.kind, data, { attempts: 1, jobId })
 }

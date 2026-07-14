@@ -13,8 +13,8 @@
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
 
 const FALLBACK_SECRET = 'beaconhs-dev-insecure-secret'
-const HKDF_INFO = 'beaconhs.wopi.v1'
-const WOPI_GRANT_VERSION = 1
+const HKDF_INFO = 'beaconhs.wopi.v2'
+const WOPI_GRANT_VERSION = 2
 const MAX_WOPI_TOKEN_LENGTH = 4096
 const CLOCK_SKEW_MS = 60_000
 
@@ -41,6 +41,7 @@ function key(): Buffer {
 type WopiTarget = 'lesson' | 'content_item' | 'document'
 /** Training-deck subset (slides lessons + library items). */
 export type WopiDeckTarget = 'lesson' | 'content_item'
+export type WopiAudience = 'document' | 'author' | 'instructor' | 'learner'
 
 export type WopiGrant = {
   attachmentId: string
@@ -49,6 +50,12 @@ export type WopiGrant = {
   userName: string
   target: WopiTarget
   targetId: string
+  audience: WopiAudience
+  /** Course/deck binding for instructor and learner presentation grants. */
+  courseId: string | null
+  /** Enrollment and concrete lesson binding for a learner presentation grant. */
+  enrollmentId: string | null
+  lessonId: string | null
   canWrite: boolean
   activeRoleId: string | null
   /** Expiry, ms since epoch. */
@@ -112,8 +119,15 @@ export function verifyWopiToken(
     !isBoundedString(grant.userId, 200) ||
     !isBoundedString(grant.userName, 200) ||
     !isBoundedString(grant.targetId, 100) ||
+    (grant.courseId !== null && !isBoundedString(grant.courseId, 100)) ||
+    (grant.enrollmentId !== null && !isBoundedString(grant.enrollmentId, 100)) ||
+    (grant.lessonId !== null && !isBoundedString(grant.lessonId, 100)) ||
     (grant.activeRoleId !== null && !isBoundedString(grant.activeRoleId, 100)) ||
     (grant.target !== 'lesson' && grant.target !== 'content_item' && grant.target !== 'document') ||
+    (grant.audience !== 'document' &&
+      grant.audience !== 'author' &&
+      grant.audience !== 'instructor' &&
+      grant.audience !== 'learner') ||
     typeof grant.canWrite !== 'boolean' ||
     !isSafeInteger(issuedAt) ||
     !isSafeInteger(expiresAt) ||
@@ -123,6 +137,7 @@ export function verifyWopiToken(
     return null
   }
   if (grant.attachmentId !== attachmentId) return null
+  if (!grantShapeMatchesAudience(grant as WopiGrant)) return null
   if (now < issuedAt - CLOCK_SKEW_MS || now > expiresAt) return null
   return {
     attachmentId: grant.attachmentId,
@@ -131,6 +146,10 @@ export function verifyWopiToken(
     userName: grant.userName,
     target: grant.target,
     targetId: grant.targetId,
+    audience: grant.audience,
+    courseId: grant.courseId,
+    enrollmentId: grant.enrollmentId,
+    lessonId: grant.lessonId,
     canWrite: grant.canWrite,
     activeRoleId: grant.activeRoleId,
     exp: expiresAt,
@@ -144,9 +163,13 @@ type WopiPrincipalState = {
   appliedRoleId: string | null
 }
 
-function wopiRequiredPermission(grant: WopiGrant): string {
-  if (grant.target !== 'document') return 'training.course.manage'
-  return grant.canWrite ? 'documents.manage' : 'documents.read'
+function wopiRequiredPermissions(grant: WopiGrant): string[] {
+  if (grant.audience === 'author') return ['training.course.manage']
+  if (grant.audience === 'instructor') {
+    return ['training.class.manage', 'training.course.manage']
+  }
+  if (grant.audience === 'learner') return ['training.read.self']
+  return [grant.canWrite ? 'documents.manage' : 'documents.read']
 }
 
 /** Pure revocation check shared by callback authorization and focused tests. */
@@ -154,12 +177,34 @@ export function evaluateWopiPrincipal(grant: WopiGrant, principal: WopiPrincipal
   if (principal.isSuperAdmin) return true
   if (principal.membershipStatus !== 'active') return false
   if (grant.activeRoleId && principal.appliedRoleId !== grant.activeRoleId) return false
-  const required = wopiRequiredPermission(grant)
-  if (principal.permissions.has(required)) return true
-  for (const permission of principal.permissions) {
-    if (permission.endsWith('.*') && required.startsWith(permission.slice(0, -1))) return true
+  const required = wopiRequiredPermissions(grant)
+  for (const needed of required) {
+    if (principal.permissions.has(needed)) return true
+    for (const permission of principal.permissions) {
+      if (permission.endsWith('.*') && needed.startsWith(permission.slice(0, -1))) return true
+    }
   }
   return false
+}
+
+function grantShapeMatchesAudience(grant: WopiGrant): boolean {
+  if (grant.audience === 'document') {
+    return (
+      grant.target === 'document' &&
+      grant.courseId === null &&
+      grant.enrollmentId === null &&
+      grant.lessonId === null
+    )
+  }
+  if (grant.target === 'document') return false
+  if (grant.audience === 'author') {
+    return grant.courseId === null && grant.enrollmentId === null && grant.lessonId === null
+  }
+  if (grant.canWrite || !grant.courseId) return false
+  if (grant.audience === 'instructor') {
+    return grant.enrollmentId === null && grant.lessonId === null
+  }
+  return Boolean(grant.enrollmentId && grant.lessonId)
 }
 
 function isBoundedString(value: unknown, max: number): value is string {

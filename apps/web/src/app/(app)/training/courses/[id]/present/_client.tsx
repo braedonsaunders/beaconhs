@@ -11,6 +11,7 @@ import type { ModuleLite } from '../_workspace'
 
 export function ClassPresentClient({
   courseName,
+  courseId,
   modules,
   items,
   quizQuestions,
@@ -19,6 +20,7 @@ export function ClassPresentClient({
   backHref,
 }: {
   courseName: string
+  courseId: string
   modules: ModuleLite[]
   items: Record<string, ItemContent>
   quizQuestions: Record<string, QuizQuestion[]>
@@ -29,6 +31,7 @@ export function ClassPresentClient({
   const router = useRouter()
   return (
     <CoursePresenter
+      courseId={courseId}
       courseName={courseName}
       modules={modules}
       items={items}

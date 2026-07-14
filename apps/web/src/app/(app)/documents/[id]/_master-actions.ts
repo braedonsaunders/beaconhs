@@ -71,6 +71,10 @@ export async function getDocumentWriterSession(
     userName: ctx.membership?.displayName ?? 'BeaconHS user',
     target: 'document',
     targetId: documentId,
+    audience: 'document',
+    courseId: null,
+    enrollmentId: null,
+    lessonId: null,
     canWrite: !versionId,
     activeRoleId: ctx.activeRoleId ?? null,
   })

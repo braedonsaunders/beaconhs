@@ -31,7 +31,7 @@ import {
   Underline as UnderlineIcon,
   Undo2,
 } from 'lucide-react'
-import { cn, Select } from '@beaconhs/ui'
+import { cn, Select, uploadReservedFile } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 
@@ -384,14 +384,8 @@ function ImageBtn({ editor }: { editor: Editor | null }) {
               sizeBytes: file.size,
             })
             if (!req.ok) throw new Error(req.error)
-            await fetch(req.putUrl, {
-              method: 'PUT',
-              body: file,
-              headers: { 'Content-Type': file.type },
-            })
-            const fin = await finalizeUpload({
-              uploadId: req.uploadId,
-            })
+            const finalizeInput = await uploadReservedFile(req, file)
+            const fin = await finalizeUpload(finalizeInput)
             if (!fin.ok) throw new Error(fin.error)
             editor.chain().focus().setImage({ src: fin.url, alt: file.name }).run()
           } catch (err) {

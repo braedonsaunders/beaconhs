@@ -2,7 +2,7 @@
 
 // FileUploader — generic drag-and-drop file picker that hands off the
 // pre-signed-upload protocol to the consumer via two callbacks:
-//   • requestUploadAction  → presigns a PUT URL (server action)
+//   • requestUploadAction  → presigns a single or multipart upload (server action)
 //   • finalizeUploadAction → creates the attachment row (server action)
 //
 // On success the uploader calls `onUploaded({ attachmentId, ... })` so the
@@ -12,16 +12,33 @@
 import { useCallback, useRef, useState } from 'react'
 import { cn } from './utils'
 
+export type UploadRequestResult =
+  | { ok: true; uploadId: string; mode: 'single'; putUrl: string }
+  | {
+      ok: true
+      uploadId: string
+      mode: 'multipart'
+      multipartUploadId: string
+      partSizeBytes: number
+      partUrls: string[]
+    }
+  | { ok: false; error: string }
+
+export type FinalizeUploadInput = {
+  uploadId: string
+  multipartUploadId?: string
+}
+
 export type RequestUploadAction = (input: {
   kind: AttachmentKind
   filename: string
   contentType: string
   sizeBytes: number
-}) => Promise<{ ok: true; uploadId: string; putUrl: string } | { ok: false; error: string }>
+}) => Promise<UploadRequestResult>
 
-export type FinalizeUploadAction = (input: {
-  uploadId: string
-}) => Promise<{ ok: true; attachmentId: string; url: string } | { ok: false; error: string }>
+export type FinalizeUploadAction = (
+  input: FinalizeUploadInput,
+) => Promise<{ ok: true; attachmentId: string; url: string } | { ok: false; error: string }>
 
 export type AttachmentKind = 'image' | 'document' | 'video' | 'audio' | 'signature' | 'other'
 
@@ -73,6 +90,61 @@ const DEFAULT_MAX_BY_KIND: Record<AttachmentKind, number> = {
   other: 500 * 1024 * 1024,
 }
 
+function uploadWithXhr(args: {
+  url: string
+  body: Blob
+  contentType?: string
+  onProgress: (loaded: number) => void
+}): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', args.url)
+    if (args.contentType) xhr.setRequestHeader('Content-Type', args.contentType)
+    xhr.upload.onprogress = (event) => args.onProgress(event.loaded)
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error(`Upload failed (HTTP ${xhr.status})`))
+    }
+    xhr.onerror = () => reject(new Error('Network error during upload'))
+    xhr.send(args.body)
+  })
+}
+
+export async function uploadReservedFile(
+  request: Extract<UploadRequestResult, { ok: true }>,
+  file: File,
+  onProgress: (percent: number) => void = () => undefined,
+): Promise<FinalizeUploadInput> {
+  if (request.mode === 'single') {
+    await uploadWithXhr({
+      url: request.putUrl,
+      body: file,
+      contentType: file.type || 'application/octet-stream',
+      onProgress: (loaded) => onProgress(Math.round((loaded / file.size) * 100)),
+    })
+    return { uploadId: request.uploadId }
+  }
+
+  const expectedParts = Math.ceil(file.size / request.partSizeBytes)
+  if (request.partUrls.length !== expectedParts) {
+    throw new Error('Storage returned an invalid multipart upload plan')
+  }
+  for (const [index, partUrl] of request.partUrls.entries()) {
+    const start = index * request.partSizeBytes
+    const end = Math.min(start + request.partSizeBytes, file.size)
+    const part = file.slice(start, end, 'application/octet-stream')
+    await uploadWithXhr({
+      url: partUrl,
+      body: part,
+      onProgress: (partLoaded) => onProgress(Math.round(((start + partLoaded) / file.size) * 100)),
+    })
+  }
+  return {
+    uploadId: request.uploadId,
+    multipartUploadId: request.multipartUploadId,
+  }
+}
+
 export function FileUploader({
   requestUploadAction,
   finalizeUploadAction,
@@ -116,24 +188,9 @@ export function FileUploader({
         return
       }
 
-      // PUT to the presigned URL with XHR so we get progress events.
+      let finalizeInput: FinalizeUploadInput
       try {
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest()
-          xhr.open('PUT', req.putUrl)
-          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              updateItem({ progress: Math.round((e.loaded / e.total) * 100) })
-            }
-          }
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve()
-            else reject(new Error(`Upload failed (HTTP ${xhr.status})`))
-          }
-          xhr.onerror = () => reject(new Error('Network error during upload'))
-          xhr.send(file)
-        })
+        finalizeInput = await uploadReservedFile(req, file, (progress) => updateItem({ progress }))
       } catch (err) {
         updateItem({ status: 'error', error: err instanceof Error ? err.message : 'Upload failed' })
         return
@@ -141,9 +198,7 @@ export function FileUploader({
 
       updateItem({ status: 'finalising', progress: 100 })
 
-      const finalise = await finalizeUploadAction({
-        uploadId: req.uploadId,
-      })
+      const finalise = await finalizeUploadAction(finalizeInput)
       if (!finalise.ok) {
         updateItem({ status: 'error', error: finalise.error })
         return

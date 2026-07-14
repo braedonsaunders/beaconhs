@@ -9,6 +9,10 @@ const grant = {
   userName: 'A. Worker',
   target: 'document' as const,
   targetId: '30000000-0000-4000-8000-000000000003',
+  audience: 'document' as const,
+  courseId: null,
+  enrollmentId: null,
+  lessonId: null,
   canWrite: true,
   activeRoleId: '40000000-0000-4000-8000-000000000004',
 }
@@ -49,5 +53,35 @@ describe('WOPI grants', () => {
     expect(evaluateWopiPrincipal(decoded, { ...active, permissions: new Set() })).toBe(false)
     expect(evaluateWopiPrincipal(decoded, { ...active, appliedRoleId: null })).toBe(false)
     expect(evaluateWopiPrincipal(decoded, { ...active, isSuperAdmin: true })).toBe(true)
+  })
+
+  it('requires a complete, read-only learner binding and self-read permission', () => {
+    const learner = {
+      ...grant,
+      target: 'lesson' as const,
+      targetId: '50000000-0000-4000-8000-000000000005',
+      audience: 'learner' as const,
+      courseId: '60000000-0000-4000-8000-000000000006',
+      enrollmentId: '70000000-0000-4000-8000-000000000007',
+      lessonId: '50000000-0000-4000-8000-000000000005',
+      canWrite: false,
+    }
+    const { token } = mintWopiToken(learner, NOW)
+    const decoded = verifyWopiToken(token, learner.attachmentId, NOW)
+    expect(decoded).not.toBeNull()
+    if (!decoded) return
+    expect(
+      evaluateWopiPrincipal(decoded, {
+        isSuperAdmin: false,
+        membershipStatus: 'active',
+        permissions: new Set(['training.read.self']),
+        appliedRoleId: learner.activeRoleId,
+      }),
+    ).toBe(true)
+
+    const incomplete = { ...learner, enrollmentId: null }
+    expect(
+      verifyWopiToken(mintWopiToken(incomplete, NOW).token, incomplete.attachmentId, NOW),
+    ).toBeNull()
   })
 })

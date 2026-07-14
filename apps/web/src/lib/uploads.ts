@@ -5,15 +5,23 @@ import { and, count, eq, gt, isNull, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import { attachments, attachmentUploadReservations } from '@beaconhs/db/schema'
 import {
+  abortMultipartUpload,
+  completeMultipartUpload,
+  createMultipartUpload,
   deleteObject,
   ensureBucket,
   getObjectRange,
   headObject,
+  MULTIPART_UPLOAD_PART_SIZE_BYTES,
+  multipartPartCount,
   newAttachmentKey,
   newPendingUploadKey,
+  presignMultipartPart,
   presignPut,
   promoteObject,
+  shouldUseMultipartUpload,
 } from '@beaconhs/storage'
+import { MAX_PPTX_FILE_BYTES } from '@beaconhs/office/limits'
 import { attachmentUrl } from './attachment-url'
 import { requireRequestContext } from './auth'
 import {
@@ -31,13 +39,14 @@ const MAX_UPLOAD_BYTES = {
   image: 50 * 1024 * 1024,
   signature: 10 * 1024 * 1024,
   audio: 200 * 1024 * 1024,
-  document: 500 * 1024 * 1024,
+  document: MAX_PPTX_FILE_BYTES,
   video: 500 * 1024 * 1024,
   other: 500 * 1024 * 1024,
 } as const
 
 const MAX_PENDING_UPLOADS_PER_USER = 25
-const RESERVATION_TTL_MS = 10 * 60 * 1000
+const STANDARD_RESERVATION_TTL_MS = 10 * 60 * 1000
+const MULTIPART_RESERVATION_TTL_MS = 60 * 60 * 1000
 
 const kindSchema = z.enum(['image', 'document', 'video', 'audio', 'signature', 'other'])
 
@@ -62,7 +71,10 @@ const requestSchema = z
     message: 'File type is not allowed for this upload',
   })
 
-const finalizeSchema = z.object({ uploadId: z.string().uuid() })
+const finalizeSchema = z.object({
+  uploadId: z.string().uuid(),
+  multipartUploadId: z.string().min(1).max(1024).optional(),
+})
 
 let storageReady: Promise<void> | null = null
 
@@ -103,9 +115,18 @@ async function discardExpiredUploads(
   }
 }
 
-export async function requestUpload(
-  input: z.infer<typeof requestSchema>,
-): Promise<{ ok: true; uploadId: string; putUrl: string } | { ok: false; error: string }> {
+export async function requestUpload(input: z.infer<typeof requestSchema>): Promise<
+  | { ok: true; uploadId: string; mode: 'single'; putUrl: string }
+  | {
+      ok: true
+      uploadId: string
+      mode: 'multipart'
+      multipartUploadId: string
+      partSizeBytes: number
+      partUrls: string[]
+    }
+  | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
   const parsed = requestSchema.safeParse(input)
   if (!parsed.success)
@@ -139,7 +160,10 @@ export async function requestUpload(
       kind: parsed.data.kind,
       filename: parsed.data.filename,
     })
-    const expiresAt = new Date(Date.now() + RESERVATION_TTL_MS)
+    const useMultipart = shouldUseMultipartUpload(parsed.data.sizeBytes)
+    const expiresAt = new Date(
+      Date.now() + (useMultipart ? MULTIPART_RESERVATION_TTL_MS : STANDARD_RESERVATION_TTL_MS),
+    )
 
     await ctx.db((tx) =>
       tx.insert(attachmentUploadReservations).values({
@@ -157,15 +181,48 @@ export async function requestUpload(
       }),
     )
 
+    let multipartUploadId: string | null = null
     try {
+      if (useMultipart) {
+        multipartUploadId = await createMultipartUpload({
+          key: stagingKey,
+          contentType: parsed.data.contentType,
+          uploadToken,
+        })
+        const partCount = multipartPartCount(parsed.data.sizeBytes)
+        const partUrls: string[] = []
+        for (let partNumber = 1; partNumber <= partCount; partNumber += 1) {
+          partUrls.push(
+            await presignMultipartPart({
+              key: stagingKey,
+              uploadId: multipartUploadId,
+              partNumber,
+              expiresInSeconds: 3600,
+            }),
+          )
+        }
+        return {
+          ok: true,
+          uploadId,
+          mode: 'multipart',
+          multipartUploadId,
+          partSizeBytes: MULTIPART_UPLOAD_PART_SIZE_BYTES,
+          partUrls,
+        }
+      }
       const putUrl = await presignPut({
         key: stagingKey,
         contentType: parsed.data.contentType,
         uploadToken,
         expiresInSeconds: 300,
       })
-      return { ok: true, uploadId, putUrl }
+      return { ok: true, uploadId, mode: 'single', putUrl }
     } catch (error) {
+      if (multipartUploadId) {
+        await abortMultipartUpload({ key: stagingKey, uploadId: multipartUploadId }).catch(
+          () => undefined,
+        )
+      }
       await ctx.db((tx) =>
         tx
           .delete(attachmentUploadReservations)
@@ -188,6 +245,33 @@ export async function finalizeUpload(
 
   try {
     await ensureStorageReady()
+    if (parsed.data.multipartUploadId) {
+      const [multipartReservation] = await ctx.db((tx) =>
+        tx
+          .select({
+            attachmentId: attachmentUploadReservations.attachmentId,
+            requestedBy: attachmentUploadReservations.requestedBy,
+            stagingKey: attachmentUploadReservations.stagingKey,
+          })
+          .from(attachmentUploadReservations)
+          .where(eq(attachmentUploadReservations.id, parsed.data.uploadId))
+          .limit(1),
+      )
+      if (!multipartReservation || multipartReservation.requestedBy !== ctx.userId) {
+        return { ok: false, error: 'Upload reservation not found' }
+      }
+      if (!multipartReservation.attachmentId) {
+        try {
+          await completeMultipartUpload({
+            key: multipartReservation.stagingKey,
+            uploadId: parsed.data.multipartUploadId,
+          })
+        } catch (error) {
+          const completedObject = await headObject({ key: multipartReservation.stagingKey })
+          if (!completedObject) throw error
+        }
+      }
+    }
     const reservation = await ctx.db(async (tx) => {
       const [row] = await tx
         .select()

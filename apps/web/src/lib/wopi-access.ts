@@ -5,7 +5,9 @@ import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import {
   documentVersions,
   documents,
+  people,
   trainingContentItems,
+  trainingEnrollments,
   trainingLessons,
   tenantUsers,
   users,
@@ -89,5 +91,65 @@ export async function wopiGrantCanAccessFile(tx: Database, grant: WopiGrant): Pr
     .from(table)
     .where(and(eq(table.id, grant.targetId), isNull(table.deletedAt)))
     .limit(1)
-  return target?.sourceAttachmentId === grant.attachmentId
+  if (target?.sourceAttachmentId !== grant.attachmentId) return false
+  if (grant.audience === 'author') return true
+  if (!grant.courseId) return false
+
+  if (grant.audience === 'instructor') {
+    const [courseBinding] = await tx
+      .select({ id: trainingLessons.id })
+      .from(trainingLessons)
+      .where(
+        and(
+          eq(trainingLessons.courseId, grant.courseId),
+          grant.target === 'lesson'
+            ? eq(trainingLessons.id, grant.targetId)
+            : eq(trainingLessons.contentItemId, grant.targetId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+      .limit(1)
+    return Boolean(courseBinding)
+  }
+
+  if (grant.audience !== 'learner' || !grant.enrollmentId || !grant.lessonId) return false
+  const [learnerBinding] = await tx
+    .select({
+      enrollmentStatus: trainingEnrollments.status,
+      personStatus: people.status,
+      lessonSourceAttachmentId: trainingLessons.sourceAttachmentId,
+      lessonContentItemId: trainingLessons.contentItemId,
+    })
+    .from(trainingEnrollments)
+    .innerJoin(people, eq(people.id, trainingEnrollments.personId))
+    .innerJoin(
+      trainingLessons,
+      and(
+        eq(trainingLessons.id, grant.lessonId),
+        eq(trainingLessons.courseId, trainingEnrollments.courseId),
+        isNull(trainingLessons.deletedAt),
+      ),
+    )
+    .where(
+      and(
+        eq(trainingEnrollments.id, grant.enrollmentId),
+        eq(trainingEnrollments.courseId, grant.courseId),
+        eq(people.userId, grant.userId),
+        isNull(trainingEnrollments.deletedAt),
+        isNull(people.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (
+    !learnerBinding ||
+    learnerBinding.personStatus !== 'active' ||
+    learnerBinding.enrollmentStatus === 'withdrawn' ||
+    learnerBinding.enrollmentStatus === 'expired'
+  ) {
+    return false
+  }
+  return grant.target === 'lesson'
+    ? grant.targetId === grant.lessonId &&
+        learnerBinding.lessonSourceAttachmentId === grant.attachmentId
+    : learnerBinding.lessonContentItemId === grant.targetId
 }

@@ -36,7 +36,6 @@
     "bullmq": "^5.79.1",
     "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.45.2",
-    "jszip": "^3.10.1",
     "qrcode": "^1.5.4",
     "web-push": "^3.6.7"
   },

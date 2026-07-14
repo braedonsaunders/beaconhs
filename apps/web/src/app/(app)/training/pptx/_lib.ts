@@ -3,13 +3,7 @@
 
 import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import {
-  attachments,
-  renderedPageAttachmentIds,
-  trainingContentItems,
-  trainingLessons,
-  type Slide,
-} from '@beaconhs/db/schema'
+import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
 import { deleteObject } from '@beaconhs/storage'
 import type { WopiDeckTarget } from '@/lib/wopi'
 
@@ -89,20 +83,14 @@ export async function loadDeckMaster(
 }
 
 /**
- * Purge a deck's files when its lesson / library item is deleted: the pptx
- * master and every rendered page image (attachment rows + storage objects).
- * Decks are the heaviest content in the platform (a 100 MB master renders to
- * hundreds of page images), so deletion reclaims them instead of parking them
- * on the soft-deleted row — the deck is recreatable only by re-importing the
- * file anyway. Returns the number of attachments removed.
+ * Purge a deck's PPTX master when its lesson / library item is deleted.
  */
 export async function purgeDeckAssets(
   db: <T>(fn: (tx: Database) => Promise<T>) => Promise<T>,
-  decks: { slides: Slide[] | null; sourceAttachmentId: string | null }[],
+  decks: { sourceAttachmentId: string | null }[],
 ): Promise<number> {
   const ids = new Set<string>()
   for (const deck of decks) {
-    for (const id of renderedPageAttachmentIds(deck.slides ?? [])) ids.add(id)
     if (deck.sourceAttachmentId) ids.add(deck.sourceAttachmentId)
   }
   if (ids.size === 0) return 0

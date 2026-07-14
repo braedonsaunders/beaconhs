@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react'
-import { Button } from '@beaconhs/ui'
+import { Button, uploadReservedFile } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { RawImage } from '@/components/raw-image'
 
@@ -51,18 +51,14 @@ export function FileUpload({
       setError(req.error)
       return null
     }
-    const put = await fetch(req.putUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      body: file,
-    })
-    if (!put.ok) {
-      setError(`Upload failed (${put.status})`)
+    let finalizeInput
+    try {
+      finalizeInput = await uploadReservedFile(req, file)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Upload failed')
       return null
     }
-    const fin = await finalizeUpload({
-      uploadId: req.uploadId,
-    })
+    const fin = await finalizeUpload(finalizeInput)
     if (!fin.ok) {
       setError(fin.error)
       return null

@@ -20,9 +20,10 @@ import {
   UserCheck,
 } from 'lucide-react'
 import { Badge, Button, Card, CardContent } from '@beaconhs/ui'
-import type { LessonBlock, PracticalCriterion, Slide } from '@beaconhs/db/schema'
+import type { LessonBlock, PracticalCriterion } from '@beaconhs/db/schema'
 import { LessonBlocksView } from '../../_lib/blocks'
-import { SlidePlayer } from '../../_components/slide-player'
+import { CollaboraEmbed } from '@/components/collabora-embed'
+import { getPptxLearnerPlaybackSession } from '../../pptx/_actions'
 import {
   completeOnlineCourse,
   enrollInCourse,
@@ -46,7 +47,6 @@ type PlayerLesson = {
   completionRule: 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
   isRequired: boolean
   contentHtml: string | null
-  slides: Slide[]
   practicalCriteria: PracticalCriterion[]
   evaluation: PlayerEvaluation | null
   embedUrl: string | null
@@ -99,8 +99,6 @@ export function CoursePlayer({
   const firstIncomplete = all.find((l) => l.status !== 'completed') ?? all[0] ?? null
   const [currentId, setCurrentId] = useState<string | null>(firstIncomplete?.id ?? null)
   const [pending, startTransition] = useTransition()
-  // Slideshow lessons unlock their Mark-complete button on reaching the end.
-  const [finishedSlides, setFinishedSlides] = useState<Set<string>>(new Set())
 
   const current = all.find((l) => l.id === currentId) ?? null
   const completedCount = all.filter((l) => l.status === 'completed').length
@@ -262,16 +260,11 @@ export function CoursePlayer({
               </div>
 
               {current.kind === 'slides' ? (
-                <SlidePlayer
-                  slides={current.slides}
-                  attachmentUrls={attachmentUrls}
-                  onReachedEnd={() =>
-                    setFinishedSlides((prev) => {
-                      const next = new Set(prev)
-                      next.add(current.id)
-                      return next
-                    })
-                  }
+                <CollaboraEmbed
+                  mode="presentation"
+                  frameName={`learner-${enrollmentId}-${current.id}`}
+                  fetchSession={() => getPptxLearnerPlaybackSession(current.id, enrollmentId)}
+                  className="h-[min(70vh,50rem)] min-h-[24rem] overflow-hidden rounded-lg bg-black"
                 />
               ) : current.kind === 'practical' ? (
                 <div className="space-y-4">
@@ -398,23 +391,10 @@ export function CoursePlayer({
                     </Button>
                   </>
                 ) : current.kind === 'slides' ? (
-                  <>
-                    {!finishedSlides.has(current.id) && current.slides.length > 1 ? (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                        Go through all the slides to continue
-                      </span>
-                    ) : null}
-                    <Button
-                      type="button"
-                      onClick={() => complete(current.id)}
-                      disabled={
-                        pending || (!finishedSlides.has(current.id) && current.slides.length > 1)
-                      }
-                    >
-                      {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                      Mark complete
-                    </Button>
-                  </>
+                  <Button type="button" onClick={() => complete(current.id)} disabled={pending}>
+                    {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                    Mark complete
+                  </Button>
                 ) : (
                   <Button type="button" onClick={() => complete(current.id)} disabled={pending}>
                     {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}

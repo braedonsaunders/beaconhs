@@ -9,6 +9,7 @@ import { getObjectStream } from '@beaconhs/storage'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { loadDeckMaster, parseDeckTarget } from '../../../_lib'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ export async function GET(
 ) {
   const { target: targetRaw, id } = await routeCtx.params
   const target = parseDeckTarget(targetRaw)
-  if (!target) return new NextResponse('Not found', { status: 404 })
+  if (!target || !isUuid(id)) return new NextResponse('Not found', { status: 404 })
 
   const ctx = await requireModuleManage('training')
   const master = await loadDeckMaster(ctx.db, target, id)

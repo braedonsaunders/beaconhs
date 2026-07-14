@@ -1,9 +1,8 @@
 'use client'
 
 // Course presenter — instructor "Play" mode. Walks the ENTIRE course like a
-// PowerPoint preview: slideshows advance slide-by-slide, then flow straight
-// into the next element (text pages, videos, PDFs, images, quizzes, practical
-// briefs, sessions). Arrow keys / click zones navigate across everything.
+// PowerPoint preview: each PPTX is one course element rendered by Collabora
+// Impress, which owns its builds, timing, media, and internal navigation.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -19,12 +18,12 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import type { Slide } from '@beaconhs/db/schema'
 import { toEmbedUrl } from '../../_lib/blocks'
 import { lessonProseCss } from '../../_editor/prose'
-import { SlideView } from '../../_components/slide-view'
 import type { LessonLite, ModuleLite } from './_workspace'
 import { RawImage } from '@/components/raw-image'
+import { CollaboraEmbed } from '@/components/collabora-embed'
+import { getPptxInstructorPlaybackSession } from '../../pptx/_actions'
 
 export type AttachmentMeta = {
   url: string | null
@@ -34,9 +33,9 @@ export type AttachmentMeta = {
 export type ItemContent = {
   kind: string
   contentHtml: string | null
-  slides: Slide[]
   embedUrl: string | null
   attachmentId: string | null
+  sourceAttachmentId: string | null
 }
 export type QuizQuestion = {
   id: string
@@ -55,14 +54,17 @@ type Effective = {
   moduleTitle: string
   kind: string
   contentHtml: string | null
-  slides: Slide[]
   embedUrl: string | null
   attachmentId: string | null
+  deckTarget: 'lesson' | 'content_item'
+  deckTargetId: string
+  sourceAttachmentId: string | null
 }
-type Step = { eff: Effective; slideIndex?: number }
+type Step = { eff: Effective }
 
 export function CoursePresenter({
   courseName,
+  courseId,
   modules,
   items,
   quizQuestions,
@@ -71,6 +73,7 @@ export function CoursePresenter({
   onClose,
 }: {
   courseName: string
+  courseId: string
   modules: ModuleLite[]
   items: Record<string, ItemContent>
   quizQuestions: Record<string, QuizQuestion[]>
@@ -93,15 +96,13 @@ export function CoursePresenter({
           moduleTitle: mod.title,
           kind: item ? item.kind : lesson.kind,
           contentHtml: item ? item.contentHtml : lesson.contentHtml,
-          slides: item ? (item.slides ?? []) : (lesson.slides ?? []),
           embedUrl: item ? item.embedUrl : lesson.embedUrl,
           attachmentId: item ? item.attachmentId : lesson.attachmentId,
+          deckTarget: item ? 'content_item' : 'lesson',
+          deckTargetId: item ? lesson.contentItemId! : lesson.id,
+          sourceAttachmentId: item ? item.sourceAttachmentId : lesson.sourceAttachmentId,
         }
-        if (eff.kind === 'slides' && eff.slides.length > 0) {
-          eff.slides.forEach((_, si) => out.push({ eff, slideIndex: si }))
-        } else {
-          out.push({ eff })
-        }
+        out.push({ eff })
       }
     }
     return out
@@ -141,8 +142,7 @@ export function CoursePresenter({
     )
   }
 
-  const { eff, slideIndex } = step
-  const slideTotal = eff.kind === 'slides' ? eff.slides.length : 0
+  const { eff } = step
 
   return (
     <div
@@ -158,7 +158,6 @@ export function CoursePresenter({
         <span className="truncate text-sm font-semibold text-white">{courseName}</span>
         <span className="truncate text-xs text-white/50">
           {eff.moduleTitle} · {eff.lesson.title}
-          {slideIndex != null ? ` · slide ${slideIndex + 1}/${slideTotal}` : ''}
         </span>
         <button
           type="button"
@@ -173,27 +172,13 @@ export function CoursePresenter({
       {/* stage */}
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-14 pt-2 pb-14">
         <Stage
-          key={`${eff.lesson.id}:${slideIndex ?? ''}`}
+          key={eff.lesson.id}
           eff={eff}
-          slideIndex={slideIndex}
+          courseId={courseId}
           attachmentUrls={attachmentUrls}
           attachmentMeta={attachmentMeta}
           quizQuestions={quizQuestions}
           assessmentMeta={assessmentMeta}
-        />
-
-        {/* click zones */}
-        <button
-          type="button"
-          aria-label="Previous"
-          onClick={() => go(-1)}
-          className="absolute inset-y-0 left-0 w-12 cursor-w-resize opacity-0"
-        />
-        <button
-          type="button"
-          aria-label="Next"
-          onClick={() => go(1)}
-          className="absolute inset-y-0 right-0 w-12 cursor-e-resize opacity-0"
         />
       </div>
 
@@ -251,29 +236,31 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 function Stage({
   eff,
-  slideIndex,
+  courseId,
   attachmentUrls,
   attachmentMeta,
   quizQuestions,
   assessmentMeta,
 }: {
   eff: Effective
-  slideIndex?: number
+  courseId: string
   attachmentUrls: Record<string, string | null>
   attachmentMeta: Record<string, AttachmentMeta>
   quizQuestions: Record<string, QuizQuestion[]>
   assessmentMeta: Record<string, AssessmentMeta>
 }) {
-  // Slides — one slide per step, PowerPoint-style.
+  // PowerPoint — real, read-only Impress presentation mode.
   if (eff.kind === 'slides') {
-    const slide = slideIndex != null ? eff.slides[slideIndex] : null
-    if (!slide) return <EmptyCard label="No slides in this slideshow." />
+    if (!eff.sourceAttachmentId) return <EmptyCard label="No PowerPoint file is configured." />
     return (
-      <div className="max-h-full w-full max-w-[160vh]">
-        <SlideView
-          slide={slide}
-          attachmentUrls={attachmentUrls}
-          className="rounded-lg shadow-2xl"
+      <div className="h-full w-full overflow-hidden rounded-lg bg-black shadow-2xl">
+        <CollaboraEmbed
+          mode="presentation"
+          frameName={`course-${courseId}-${eff.lesson.id}`}
+          fetchSession={() =>
+            getPptxInstructorPlaybackSession(eff.deckTarget, eff.deckTargetId, courseId)
+          }
+          className="h-full"
         />
       </div>
     )
