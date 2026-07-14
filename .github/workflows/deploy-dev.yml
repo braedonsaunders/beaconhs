@@ -591,8 +591,10 @@ jobs:
             exit 1
           fi
           existing_registry_id_json="$(jq -ce '
-            if (has("registryId") | not) then error("missing registryId")
-            elif .registryId == null then null
+            # Newer Dokploy releases removed registryId from the compose
+            # schema. Normalize that omitted nullable field to null while
+            # continuing to reject malformed values and preserve real IDs.
+            if (has("registryId") | not) or .registryId == null then null
             elif (.registryId | type) == "string" and (.registryId | length) > 0 then
               .registryId
             else

@@ -39,6 +39,11 @@ describe('dev deployment cutover order', () => {
     )
   })
 
+  it('normalizes the registry field removed by newer Dokploy releases', () => {
+    expect(workflow).toContain('if (has("registryId") | not) or .registryId == null then null')
+    expect(workflow).not.toContain('then error("missing registryId")')
+  })
+
   it('converges external-storage prerequisites before schema migration', () => {
     const signatures = requiredPosition(
       drainStep,
