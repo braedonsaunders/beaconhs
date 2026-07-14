@@ -1196,8 +1196,12 @@ jobs:
               nonterminal="$(printf '%s\n' "$task_states" | awk '
                 NF {
                   state=tolower($1)
-                  if (state!="complete" && state!="shutdown" && state!="failed"
-                      && state!="rejected" && state!="remove" && state!="orphaned") count++
+                  if (state!="complete" &&
+                      state!="shutdown" &&
+                      state!="failed" &&
+                      state!="rejected" &&
+                      state!="remove" &&
+                      state!="orphaned") count++
                 }
                 END { print count + 0 }')"
               if [ "$desired" = 0 ] && [ "$nonterminal" -eq 0 ]; then

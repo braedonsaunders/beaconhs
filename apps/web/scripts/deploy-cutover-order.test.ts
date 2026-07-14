@@ -98,6 +98,31 @@ describe('dev deployment cutover order', () => {
     expect(workflow).not.toContain('BEACONHS_SWARM_FENCE_NODE_ID')
   })
 
+  it('uses a portable task-state drain counter on the deployment runner', () => {
+    const match = drainStep.match(
+      /nonterminal="\$\(printf '%s\\n' "\$task_states" \| awk '\n([\s\S]*?)'\)"/u,
+    )
+    const program = match?.[1]
+    if (!program) throw new Error('Deployment workflow is missing its task-state awk program')
+
+    const result = spawnSync('awk', [program], {
+      encoding: 'utf8',
+      input: [
+        'Complete 1 second ago',
+        'Shutdown 1 second ago',
+        'Failed 1 second ago',
+        'Rejected 1 second ago',
+        'Remove 1 second ago',
+        'Orphaned 1 second ago',
+        'Running 1 second ago',
+      ].join('\n'),
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).toBe('1\n')
+  })
+
   it('releases the complete workflow-owned Swarm node set only after final proofs', () => {
     const releaseStepStart = requiredPosition(
       workflow,
