@@ -72,6 +72,7 @@ output="$({
     IMAGE_NAME=ghcr.io/braedonsaunders/beaconhs \
     DATABASE_URL='postgres://runtime@db.internal/beaconhs' \
     SUPERADMIN_DATABASE_URL='postgres://super@db.internal/beaconhs' \
+    MIGRATION_DATABASE_URL='' \
     "$subject"
 } 2>&1)" || status=$?
 if [ "$status" -eq 0 ] || ! grep -Fq 'MIGRATION_DATABASE_URL is required' <<<"$output"; then
