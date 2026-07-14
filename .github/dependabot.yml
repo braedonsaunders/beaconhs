@@ -16,6 +16,18 @@ updates:
       development-minor-patch:
         dependency-type: development
         update-types: [minor, patch]
+    # AI provider majors must move with the matching AI SDK protocol major.
+    # @ai-sdk/google 4.x implements provider v4 while this codebase is on AI
+    # SDK 6/provider v3; Dependabot cannot safely coordinate that migration.
+    ignore:
+      - dependency-name: '@ai-sdk/google'
+        versions: ['4.x']
+      # Keep the editor core inside @grapesjs/react 2.0.0's declared peer range.
+      - dependency-name: grapesjs
+        versions: ['0.23.x']
+      # Next 16.2.10 declares sharp ^0.34.5 as its supported native image stack.
+      - dependency-name: sharp
+        versions: ['0.35.x']
 
   - package-ecosystem: github-actions
     directory: /
