@@ -40,6 +40,8 @@ describe('dev deployment cutover order', () => {
   })
 
   it('normalizes the registry field removed by newer Dokploy releases', () => {
+    expect(workflow).toContain('existing_registry_id_json="$(jq -c \'')
+    expect(workflow).not.toContain('existing_registry_id_json="$(jq -ce \'')
     expect(workflow).toContain('if (has("registryId") | not) or .registryId == null then null')
     expect(workflow).not.toContain('then error("missing registryId")')
   })

@@ -590,7 +590,7 @@ jobs:
             echo "::error::Dokploy compose target returned an invalid Swarm stack name"
             exit 1
           fi
-          existing_registry_id_json="$(jq -ce '
+          existing_registry_id_json="$(jq -c '
             # Newer Dokploy releases removed registryId from the compose
             # schema. Normalize that omitted nullable field to null while
             # continuing to reject malformed values and preserve real IDs.
