@@ -34,7 +34,7 @@
     "@beaconhs/tenant": "workspace:*",
     "@sentry/node": "10.65.0",
     "bullmq": "^5.80.2",
-    "cron-parser": "^4.9.0",
+    "cron-parser": "^5.6.2",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
