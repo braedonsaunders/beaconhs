@@ -62,8 +62,14 @@ run_fixture libpq-environment failure \
   'Deployment-manager standalone writer or target-database container detected during cutover'
 run_fixture multi-node success \
   'Verified that no external Swarm service or deployment-manager standalone container can write to the cutover target'
+run_fixture local-worker failure \
+  'The deployment runner must use a reachable Swarm manager'
+run_fixture unreachable-local-manager failure \
+  'Every Swarm manager must be reachable before cutover'
+run_fixture multiple-leaders failure \
+  'Swarm must have exactly one reachable manager leader before cutover'
 run_fixture unhealthy-node failure \
-  'Swarm nodes must be ready with one reachable local manager leader'
+  'Every Swarm node must be ready before cutover'
 run_fixture drained-remote-writer failure \
   'A target writer task remains nonterminal somewhere in the Swarm after writer drain' true
 

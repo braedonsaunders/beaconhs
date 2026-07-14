@@ -50,22 +50,31 @@ verify_healthy_swarm_topology() {
   node_state="$(docker node inspect "${node_id_list[@]}")" \
     || fail 'Unable to inspect every Swarm node'
   node_ids_json="$(jq -Rn '$ARGS.positional' --args "${node_id_list[@]}")"
-  if ! jq -e --arg id "$local_node_id" --argjson ids "$node_ids_json" '
+  jq -e --argjson ids "$node_ids_json" '
       type == "array" and length == ($ids | length)
         and ([.[].ID] | length) == ([.[].ID] | unique | length)
-        and ([.[].ID] | sort) == ($ids | sort)
-        and all(.[].Status.State; . == "ready")
-        and all(.[].Spec.Availability;
-          . == "active" or . == "pause" or . == "drain")
-        and ([.[] | select(.ManagerStatus.Leader == true)] | length) == 1
-        and all(.[] | select(.ManagerStatus != null);
-          .ManagerStatus.Reachability == "reachable")
-        and any(.[]; .ID == $id
-          and .ManagerStatus.Leader == true
-          and .ManagerStatus.Reachability == "reachable")' \
-      <<<"$node_state" >/dev/null; then
-    fail 'Swarm nodes must be ready with one reachable local manager leader'
-  fi
+        and ([.[].ID] | sort) == ($ids | sort)' \
+      <<<"$node_state" >/dev/null \
+    || fail 'Swarm node inspection did not match the exact enumerated node set'
+  jq -e 'all(.[].Status.State; . == "ready")' <<<"$node_state" >/dev/null \
+    || fail 'Every Swarm node must be ready before cutover'
+  jq -e 'all(.[].Spec.Availability;
+      . == "active" or . == "pause" or . == "drain")' \
+      <<<"$node_state" >/dev/null \
+    || fail 'Every Swarm node must have a supported scheduler availability'
+  jq -e '([.[] | select(.ManagerStatus.Leader == true
+      and .ManagerStatus.Reachability == "reachable")] | length) == 1' \
+      <<<"$node_state" >/dev/null \
+    || fail 'Swarm must have exactly one reachable manager leader before cutover'
+  jq -e 'all(.[] | select(.ManagerStatus != null);
+      .ManagerStatus.Reachability == "reachable")' \
+      <<<"$node_state" >/dev/null \
+    || fail 'Every Swarm manager must be reachable before cutover'
+  jq -e --arg id "$local_node_id" 'any(.[]; .ID == $id
+      and .ManagerStatus != null
+      and .ManagerStatus.Reachability == "reachable")' \
+      <<<"$node_state" >/dev/null \
+    || fail 'The deployment runner must use a reachable Swarm manager'
   verified_topology="$(jq -cS '[.[] | {
       id: .ID,
       availability: .Spec.Availability,

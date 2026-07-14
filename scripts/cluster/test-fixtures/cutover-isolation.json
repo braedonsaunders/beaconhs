@@ -170,12 +170,65 @@
   },
   "multi-node": {
     "extends": "safe",
+    "localNodeId": "node-secondary",
     "nodes": [
       {
         "ID": "node-secondary",
         "Spec": { "Availability": "pause" },
         "Status": { "State": "ready" },
         "ManagerStatus": { "Leader": false, "Reachability": "reachable" }
+      }
+    ]
+  },
+  "local-worker": {
+    "extends": "safe",
+    "localNodeId": "node-worker",
+    "nodes": [
+      {
+        "ID": "node-worker",
+        "Spec": {
+          "Availability": "active"
+        },
+        "Status": {
+          "State": "ready"
+        }
+      }
+    ]
+  },
+  "unreachable-local-manager": {
+    "extends": "safe",
+    "localNodeId": "node-secondary",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": {
+          "Availability": "active"
+        },
+        "Status": {
+          "State": "ready"
+        },
+        "ManagerStatus": {
+          "Leader": false,
+          "Reachability": "unreachable"
+        }
+      }
+    ]
+  },
+  "multiple-leaders": {
+    "extends": "safe",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": {
+          "Availability": "active"
+        },
+        "Status": {
+          "State": "ready"
+        },
+        "ManagerStatus": {
+          "Leader": true,
+          "Reachability": "reachable"
+        }
       }
     ]
   },
