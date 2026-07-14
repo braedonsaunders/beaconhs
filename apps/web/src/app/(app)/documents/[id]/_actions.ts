@@ -21,6 +21,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { isDocumentKeyConflict, parseDocumentKey } from '@/lib/document-key-policy'
 import { DOCUMENT_METADATA_LIMITS } from '@/lib/document-metadata-limits'
+import { nextDocumentMajorVersion } from '@/lib/document-authoring-policy'
 import {
   assertUploadedDocumentPdf,
   documentVersionVisibilityWhere,
@@ -317,7 +318,7 @@ export async function attachFileVersion(input: unknown): Promise<{ ok: boolean; 
         .where(eq(documentVersions.documentId, documentId))
         .orderBy(desc(documentVersions.version))
         .limit(1)
-      const next = (latest?.version ?? 0) + 1
+      const next = nextDocumentMajorVersion(latest?.version)
       const [created] = await tx
         .insert(documentVersions)
         .values({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DOCX_MIME_TYPE, MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limits'
-import { documentMasterMetadataError } from './document-authoring-policy'
+import { documentMasterMetadataError, nextDocumentMajorVersion } from './document-authoring-policy'
 
 const VALID = {
   kind: 'document',
@@ -28,5 +28,18 @@ describe('document authoring policy', () => {
     { ...VALID, sizeBytes: Number.NaN },
   ])('rejects an invalid or oversized master', (metadata) => {
     expect(documentMasterMetadataError(metadata)).toMatch(/100 MB/)
+  })
+
+  it('allocates native publications after imported decimal history', () => {
+    expect(nextDocumentMajorVersion(null)).toBe(1)
+    expect(nextDocumentMajorVersion(2)).toBe(3)
+    expect(nextDocumentMajorVersion(1.1)).toBe(2)
+    expect(nextDocumentMajorVersion(1.9)).toBe(2)
+    expect(nextDocumentMajorVersion(2.1)).toBe(3)
+  })
+
+  it('refuses to allocate from corrupt version values', () => {
+    expect(() => nextDocumentMajorVersion(Number.NaN)).toThrow(/invalid/)
+    expect(() => nextDocumentMajorVersion(-1)).toThrow(/invalid/)
   })
 })

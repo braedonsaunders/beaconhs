@@ -20518,7 +20518,7 @@
         },
         "version": {
           "name": "version",
-          "type": "integer",
+          "type": "numeric(18, 1)",
           "primaryKey": false,
           "notNull": true
         },

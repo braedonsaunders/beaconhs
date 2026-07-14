@@ -24,6 +24,7 @@ import { isUuid } from '@/lib/list-params'
 import {
   documentMasterMetadataError,
   MAX_DOCUMENT_VERSION_NOTE_CHARS,
+  nextDocumentMajorVersion,
   type DocumentMasterMetadata,
 } from '@/lib/document-authoring-policy'
 import type { CollaboraSession } from '@/components/collabora-embed'
@@ -290,7 +291,7 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
         .where(eq(documentVersions.documentId, documentId))
         .orderBy(desc(documentVersions.version))
         .limit(1)
-      const nextVersion = (latest?.version ?? 0) + 1
+      const nextVersion = nextDocumentMajorVersion(latest?.version)
 
       const base =
         (doc.key || doc.title || 'document')

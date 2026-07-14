@@ -2,6 +2,19 @@ import { DOCX_MIME_TYPE, MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limi
 
 export const MAX_DOCUMENT_VERSION_NOTE_CHARS = 4_000
 
+/**
+ * Allocate a new native publication as the next whole major revision.
+ * Imported decimal revisions remain immutable history: publishing after 1.9
+ * produces 2, never the misleading floating-point sequence 2.9.
+ */
+export function nextDocumentMajorVersion(latest: number | null | undefined): number {
+  if (latest == null) return 1
+  if (!Number.isFinite(latest) || latest < 0) {
+    throw new Error('The latest document version is invalid')
+  }
+  return Math.floor(latest) + 1
+}
+
 export type DocumentMasterMetadata = {
   kind: string
   contentType: string

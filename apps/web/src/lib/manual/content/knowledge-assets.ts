@@ -395,7 +395,7 @@ The editor is blocked while an administrator is using **View as user**. Exit tha
 
 1. Click **Publish** in the Write toolbar.
 2. Add a short note about what changed (optional), then confirm.
-3. The draft is frozen as the next numbered version — v1, v2, v3 — and its PDF renders in the background. Readers always see the latest published version; your draft stays private until the next publish.
+3. The draft is frozen as the next whole numbered version — v1, v2, v3 — and its PDF renders in the background. Imported decimal revisions such as v1.1 stay in the history. Readers always see the latest published version; your draft stays private until the next publish.
 
 ## Version history
 

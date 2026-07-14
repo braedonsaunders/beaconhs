@@ -6,6 +6,10 @@ import { readProductionCutoverSection } from './test/read-production-cutover-sec
 const migrationSql = readProductionCutoverSection('0010_chilly_proudstar.sql')
 
 describe('document version integrity', () => {
+  it('preserves exact one-decimal source revisions', () => {
+    expect(documentVersions.version.getSQLType()).toBe('numeric(18, 1)')
+  })
+
   it('enforces one version number per document in the schema', () => {
     const index = getTableConfig(documentVersions).indexes.find(
       (candidate) => candidate.config.name === 'document_versions_document_idx',
@@ -26,6 +30,10 @@ describe('document version integrity', () => {
     const relaxAt = migrationSql.indexOf(
       'ALTER TABLE "document_versions" NO FORCE ROW LEVEL SECURITY',
     )
+    const exactVersionAt = migrationSql.indexOf('ALTER COLUMN "version" TYPE numeric(18, 1)')
+    const stagedRevisionAt = migrationSql.indexOf(
+      "to_regclass('etl.document_version_revision_cutover')",
+    )
     const preflightAt = migrationSql.indexOf('Document version uniqueness preflight failed')
     const restoreAt = migrationSql.indexOf(
       'ALTER TABLE "document_versions" FORCE ROW LEVEL SECURITY',
@@ -33,7 +41,9 @@ describe('document version integrity', () => {
     const dropAt = migrationSql.indexOf('DROP INDEX "document_versions_document_idx"')
     const createAt = migrationSql.indexOf('CREATE UNIQUE INDEX "document_versions_document_idx"')
 
-    expect(preflightAt).toBeGreaterThan(relaxAt)
+    expect(exactVersionAt).toBeGreaterThan(relaxAt)
+    expect(stagedRevisionAt).toBeGreaterThan(exactVersionAt)
+    expect(preflightAt).toBeGreaterThan(stagedRevisionAt)
     expect(restoreAt).toBeGreaterThan(preflightAt)
     expect(dropAt).toBeGreaterThan(restoreAt)
     expect(createAt).toBeGreaterThan(dropAt)

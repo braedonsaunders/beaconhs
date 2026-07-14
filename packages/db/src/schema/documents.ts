@@ -7,6 +7,7 @@ import {
   foreignKey,
   index,
   integer,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -88,7 +89,10 @@ export const documentVersions = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     documentId: uuid('document_id').notNull(),
-    version: integer('version').notNull(),
+    // Legacy controlled documents use exact decimal revisions (for example
+    // 1.1 and 1.2). Keep one decimal place in PostgreSQL instead of folding
+    // distinct immutable versions into the same integer identity.
+    version: numeric('version', { precision: 18, scale: 1, mode: 'number' }).notNull(),
     // File-only documents (uploaded PDF or other artifact) — the uploaded file
     // IS the version content.
     contentAttachmentId: uuid('content_attachment_id'),

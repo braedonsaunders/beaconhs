@@ -1140,6 +1140,53 @@ END $$;
 -- enabled for non-owners throughout.
 ALTER TABLE "document_versions" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 
+-- Source-controlled documents include exact decimal revisions (1.1, 1.2,
+-- and so on). The former integer target silently collapsed those identities.
+-- The private cutover reconciles each ETL-owned row from its immutable source
+-- key before this migration; this public migration owns the canonical type and
+-- still fails closed below if any source collision remains unresolved.
+ALTER TABLE "document_versions"
+  ALTER COLUMN "version" TYPE numeric(18, 1)
+  USING "version"::numeric(18, 1);--> statement-breakpoint
+
+-- A deployment may stage exact revisions from a private source that is not
+-- available to this public migration. The table is deliberately optional and
+-- ephemeral; the uniqueness preflight below remains authoritative if it is
+-- absent, incomplete, or malformed. No source identifiers are stored in the
+-- public application tables.
+DO $$
+DECLARE
+  staged regclass := to_regclass('etl.document_version_revision_cutover');
+  invalid_rows bigint;
+BEGIN
+  IF staged IS NOT NULL THEN
+    EXECUTE format(
+      'SELECT count(*)
+         FROM %s AS staged_revision
+         LEFT JOIN public.document_versions AS version
+           ON version.id = staged_revision.target_id
+        WHERE version.id IS NULL
+           OR staged_revision.exact_version <= 0
+           OR staged_revision.exact_version <> round(staged_revision.exact_version, 1)',
+      staged
+    ) INTO invalid_rows;
+    IF invalid_rows > 0 THEN
+      RAISE EXCEPTION
+        'Document version revision staging contains % invalid or unmatched row(s)',
+        invalid_rows;
+    END IF;
+
+    EXECUTE format(
+      'UPDATE public.document_versions AS version
+          SET version = staged_revision.exact_version
+         FROM %s AS staged_revision
+        WHERE version.id = staged_revision.target_id
+          AND version.version IS DISTINCT FROM staged_revision.exact_version',
+      staged
+    );
+  END IF;
+END $$;--> statement-breakpoint
+
 DO $$
 DECLARE
   duplicate_groups bigint;
