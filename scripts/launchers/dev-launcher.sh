@@ -62,31 +62,33 @@ collect_descendants() {
 
 stop_process_tree() {
   local root_pid="$1"
-  local descendants
+  local child
+  local -a descendants=()
 
   if ! kill -0 "$root_pid" 2>/dev/null; then
     return 0
   fi
 
-  descendants="$(collect_descendants "$root_pid" | awk '!seen[$0]++' || true)"
+  while IFS= read -r child; do
+    [[ -n "$child" ]] && descendants+=("$child")
+  done < <(collect_descendants "$root_pid" | awk '!seen[$0]++' || true)
 
-  if [[ -n "$descendants" ]]; then
-    kill -TERM $descendants 2>/dev/null || true
+  if (( ${#descendants[@]} > 0 )); then
+    kill -TERM "${descendants[@]}" 2>/dev/null || true
   fi
   kill -TERM "$root_pid" 2>/dev/null || true
 
   sleep 2
 
-  if [[ -n "$descendants" ]]; then
-    kill -KILL $descendants 2>/dev/null || true
+  if (( ${#descendants[@]} > 0 )); then
+    kill -KILL "${descendants[@]}" 2>/dev/null || true
   fi
   kill -KILL "$root_pid" 2>/dev/null || true
 }
 
 cleanup_docker() {
-  local running_ids
-  local stop_ids=""
   local id
+  local -a stop_ids=()
 
   if [[ "$SKIP_DOCKER" == "1" || "$KEEP_DOCKER" == "1" ]]; then
     return 0
@@ -102,16 +104,16 @@ cleanup_docker() {
     return 0
   fi
 
-  running_ids="$(docker_compose ps -q --status running 2>/dev/null || true)"
-  for id in $running_ids; do
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
     if ! printf '%s\n' "$PREEXISTING_DOCKER_IDS" | grep -qx "$id"; then
-      stop_ids="$stop_ids $id"
+      stop_ids+=("$id")
     fi
-  done
+  done < <(docker_compose ps -q --status running 2>/dev/null || true)
 
-  if [[ -n "$stop_ids" ]]; then
+  if (( ${#stop_ids[@]} > 0 )); then
     log "Stopping Docker containers started by this launcher..."
-    docker stop $stop_ids >/dev/null 2>&1 || true
+    docker stop "${stop_ids[@]}" >/dev/null 2>&1 || true
   fi
 }
 
@@ -295,15 +297,14 @@ ensure_docker() {
 }
 
 wait_for_compose_health() {
-  local ids
   local id
   local name
   local status
-  local attempt
+  local attempts_remaining
   local max_attempts=60
 
-  ids="$(docker_compose ps -q 2>/dev/null || true)"
-  for id in $ids; do
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
     name="$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null | sed 's#^/##' || printf '%s' "$id")"
     status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null || printf 'unknown')"
 
@@ -312,19 +313,21 @@ wait_for_compose_health() {
     fi
 
     log "Waiting for $name to become healthy..."
-    for attempt in $(seq 1 "$max_attempts"); do
+    attempts_remaining="$max_attempts"
+    while (( attempts_remaining > 0 )); do
       status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null || printf 'unknown')"
       if [[ "$status" == "healthy" ]]; then
         log "$name is healthy."
         break
       fi
       sleep 2
+      attempts_remaining=$((attempts_remaining - 1))
     done
 
     if [[ "$status" != "healthy" ]]; then
       warn "$name did not report healthy yet. Continuing; check Docker logs if the app cannot connect."
     fi
-  done
+  done < <(docker_compose ps -q 2>/dev/null || true)
 }
 
 start_docker() {
@@ -413,7 +416,7 @@ open_url() {
 }
 
 wait_and_open_browser() {
-  local attempt
+  local attempts_remaining=90
 
   if ! has_command curl; then
     sleep 8
@@ -421,12 +424,13 @@ wait_and_open_browser() {
     return 0
   fi
 
-  for attempt in $(seq 1 90); do
+  while (( attempts_remaining > 0 )); do
     if curl -fsS -o /dev/null "$APP_URL" >/dev/null 2>&1; then
       open_url "$APP_URL"
       return 0
     fi
     sleep 2
+    attempts_remaining=$((attempts_remaining - 1))
   done
 
   warn "The app did not answer at $APP_URL yet. The dev server may still be compiling."
