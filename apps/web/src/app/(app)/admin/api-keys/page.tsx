@@ -48,8 +48,9 @@ import { formatDate, formatDateTime } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { permissionGroupLabel } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../roles/_components/permission-matrix'
-import { createApiKey, dismissReveal, REVEAL_COOKIE, revokeApiKey } from './_actions'
+import { createApiKey, dismissReveal, revokeApiKey } from './_actions'
 import { requireApiKeyAdmin } from './_guard'
+import { apiKeyIdFromRevealCookie } from './_reveal-cookie'
 
 export const metadata = { title: 'API keys' }
 export const dynamic = 'force-dynamic'
@@ -173,7 +174,18 @@ export default async function ApiKeysPage({
     ),
   ])
   const cookieStore = await cookies()
-  const reveal = cookieStore.get(REVEAL_COOKIE)?.value ?? null
+  const reveals = cookieStore.getAll().flatMap((cookie) => {
+    const apiKeyId = apiKeyIdFromRevealCookie(cookie.name)
+    if (!apiKeyId) return []
+    const row = list.rows.find((candidate) => candidate.id === apiKeyId)
+    return [
+      {
+        cookieName: cookie.name,
+        secret: cookie.value,
+        label: row?.name ?? `Key ${apiKeyId.slice(0, 8)}`,
+      },
+    ]
+  })
   const error = typeof sp.error === 'string' ? sp.error : undefined
 
   const h = await headers()
@@ -192,21 +204,22 @@ export default async function ApiKeysPage({
           subtitle="Per-tenant secrets for the public REST API"
         />
 
-        {reveal ? (
-          <Alert variant="warning">
-            <AlertTitle>Copy this key now — it won't be shown again</AlertTitle>
+        {reveals.map((reveal) => (
+          <Alert key={reveal.cookieName} variant="warning">
+            <AlertTitle>Copy {reveal.label} now — this secret won't be shown again</AlertTitle>
             <AlertDescription className="mt-2 flex items-center justify-between gap-2">
               <code className="block flex-1 overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-300">
-                {reveal}
+                {reveal.secret}
               </code>
               <form action={dismissReveal}>
+                <input type="hidden" name="cookieName" value={reveal.cookieName} />
                 <Button type="submit" variant="outline" size="sm">
                   I've copied it
                 </Button>
               </form>
             </AlertDescription>
           </Alert>
-        ) : null}
+        ))}
 
         {error ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

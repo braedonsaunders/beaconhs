@@ -40,6 +40,10 @@ import { ExpressionField, exprLabel } from './expression-field.client'
 import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { VizIcon } from '../../_viz/viz-icon'
 import { createCard, generateCard, previewCard, updateCard } from '../_actions'
+import {
+  INSIGHT_CARD_DESCRIPTION_MAX_LENGTH,
+  INSIGHT_CARD_NAME_MAX_LENGTH,
+} from '@/lib/persisted-text-policy'
 
 type Mode = 'rows' | 'summarize' | 'matrix'
 
@@ -254,6 +258,7 @@ function defaultMatrixSpec(
 type CardStudioInitial = {
   id?: string
   name: string
+  description?: string | null
   query: BhqlQuery | null
   vizType: string
   vizSettings?: Record<string, unknown>
@@ -288,6 +293,7 @@ export function CardStudio({
   const decoded = useMemo(() => decodeQuery(initial.query), [initial.query])
 
   const [name, setName] = useState(initial.name)
+  const [description, setDescription] = useState(initial.description ?? '')
   const [entityKey, setEntityKey] = useState(decoded.entityKey ?? entities[0]?.key ?? 'incidents')
   const [mode, setMode] = useState<Mode>(decoded.mode)
   const [columns, setColumns] = useState<string[]>(decoded.columns)
@@ -671,6 +677,7 @@ export function CardStudio({
     setSaving(true)
     const payload = {
       name,
+      description,
       query: ast,
       vizType: isAiCard ? 'table' : mode === 'matrix' ? 'pivot' : vizType,
       vizSettings,
@@ -706,8 +713,10 @@ export function CardStudio({
         <BarChart3 size={16} className="text-teal-600" />
         <input
           value={name}
+          maxLength={INSIGHT_CARD_NAME_MAX_LENGTH}
           onChange={(e) => setName(e.target.value)}
           placeholder="Card name"
+          aria-label="Card name"
           className="h-9 flex-1 rounded-md border border-transparent px-2 text-sm font-semibold outline-none hover:border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:text-slate-100 dark:hover:border-slate-700"
         />
         <Button
@@ -723,6 +732,26 @@ export function CardStudio({
           )}
           Save card
         </Button>
+      </div>
+
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
+        <label
+          htmlFor="card-description"
+          className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400"
+        >
+          Description
+        </label>
+        <input
+          id="card-description"
+          value={description}
+          maxLength={INSIGHT_CARD_DESCRIPTION_MAX_LENGTH}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="Optional description shown in the Insights library"
+          className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        />
+        <span className="shrink-0 text-[11px] text-slate-400" aria-live="polite">
+          {description.length}/{INSIGHT_CARD_DESCRIPTION_MAX_LENGTH}
+        </span>
       </div>
 
       {/* Ask AI — natural language → BHQL, loaded into the builder below. */}
@@ -2391,8 +2420,7 @@ function decodeQuery(query: BhqlQuery | null): {
     const den = js.measures[0]
     if (!den) continue
     const calc = aggs.find((m) => m.kind === 'calc' && m.denominator === den.alias) as
-      | { numerator: string; multiplier?: number; alias: string }
-      | undefined
+      { numerator: string; multiplier?: number; alias: string } | undefined
     if (!calc) continue
     const num = aggs.find(
       (m) => (m.kind === undefined || m.kind === 'agg') && m.alias === calc.numerator,
@@ -2420,8 +2448,7 @@ function decodeQuery(query: BhqlQuery | null): {
   // Reusable-metric-backed rates reconstruct the same way (denominator = a metric).
   for (const mr of stage.metricRefs ?? []) {
     const calc = aggs.find((m) => m.kind === 'calc' && m.denominator === mr.alias) as
-      | { numerator: string; multiplier?: number; alias: string }
-      | undefined
+      { numerator: string; multiplier?: number; alias: string } | undefined
     if (!calc) continue
     const num = aggs.find(
       (m) => (m.kind === undefined || m.kind === 'agg') && m.alias === calc.numerator,

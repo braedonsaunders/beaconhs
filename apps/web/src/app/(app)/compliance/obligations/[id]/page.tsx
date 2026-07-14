@@ -17,7 +17,7 @@ import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
-import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { EVERYONE_KEY, type AudienceItem } from '@/components/audience-picker'
 import { recurrenceValueFromStored } from '@/components/recurrence'
 import { StatusBadge, SummaryStrip } from '../../_shared'
@@ -47,6 +47,8 @@ export default async function ObligationDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
@@ -127,13 +129,16 @@ export default async function ObligationDetailPage({
   // where stored rows use the everyone kind.
   let edit: ObligationEditData | null = null
   if (editable && pickString(sp.drawer) === 'edit') {
-    const { targets, audienceOptions } = await loadObligationFormOptions(ctx)
     const initialAudience: AudienceItem[] = audience.map((a) => ({
       // Compliance obligations only ever use the 6 compliance audience kinds;
       // the crew/person_group kinds are notification-only, so this narrows safely.
       type: a.kind as AudienceItem['type'],
       entityKey: a.kind === 'everyone' ? EVERYONE_KEY : a.entityKey,
     }))
+    const { targets, audienceOptions } = await loadObligationFormOptions(ctx, {
+      targetRef: ob.targetRef ?? {},
+      audience: initialAudience,
+    })
     edit = {
       kind: ob.sourceModule as ObligationKind,
       targets,

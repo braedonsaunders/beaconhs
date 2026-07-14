@@ -6,6 +6,7 @@ import { CheckCheck, ClipboardCheck, RotateCcw, Wrench } from 'lucide-react'
 import { attachmentUrl } from '@/lib/attachment-url'
 import {
   attachments,
+  equipmentInspectionRecordAttachments,
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
@@ -13,12 +14,14 @@ import {
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
+import { PhotoGallery } from '@/components/photo-gallery'
 import { CriterionCard, type EqKind } from './_criteria'
 import { RecordMeta } from './_record-meta'
 import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
@@ -61,9 +64,12 @@ export default async function EquipmentInspectionRecordPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const issue = pickString(sp.issue)
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.read.self')
+  const canInspect = can(ctx, 'equipment.inspect')
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -76,13 +82,32 @@ export default async function EquipmentInspectionRecordPage({
       .from(equipmentInspectionRecords)
       .leftJoin(
         equipmentInspectionTypes,
-        eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        and(
+          eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
+          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        ),
       )
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentInspectionRecords.inspectorTenantUserId))
+      .leftJoin(
+        equipmentItems,
+        and(
+          eq(equipmentItems.tenantId, equipmentInspectionRecords.tenantId),
+          eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+        ),
+      )
+      .leftJoin(
+        tenantUsers,
+        and(
+          eq(tenantUsers.tenantId, equipmentInspectionRecords.tenantId),
+          eq(tenantUsers.id, equipmentInspectionRecords.inspectorTenantUserId),
+        ),
+      )
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .where(
-        and(eq(equipmentInspectionRecords.id, id), isNull(equipmentInspectionRecords.deletedAt)),
+        and(
+          eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecords.id, id),
+          isNull(equipmentInspectionRecords.deletedAt),
+        ),
       )
       .limit(1)
     if (!row) return null
@@ -98,7 +123,12 @@ export default async function EquipmentInspectionRecordPage({
     const criteria = await tx
       .select()
       .from(equipmentInspectionRecordCriteria)
-      .where(eq(equipmentInspectionRecordCriteria.recordId, id))
+      .where(
+        and(
+          eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecordCriteria.recordId, id),
+        ),
+      )
       .orderBy(asc(equipmentInspectionRecordCriteria.sequence))
 
     const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.photoAttachmentIds ?? [])))
@@ -107,16 +137,44 @@ export default async function EquipmentInspectionRecordPage({
       const rows = await tx
         .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
         .from(attachments)
-        .where(inArray(attachments.id, allPhotoIds))
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.kind, 'image'),
+            inArray(attachments.id, allPhotoIds),
+          ),
+        )
       for (const r of rows)
         photoMap.set(r.id, { id: r.id, url: attachmentUrl(r.id), filename: r.filename })
     }
-    return { ...row, criteria, photoMap }
+    const recordPhotos = await tx
+      .select({
+        id: attachments.id,
+        filename: attachments.filename,
+        caption: equipmentInspectionRecordAttachments.caption,
+      })
+      .from(equipmentInspectionRecordAttachments)
+      .innerJoin(
+        attachments,
+        and(
+          eq(attachments.tenantId, equipmentInspectionRecordAttachments.tenantId),
+          eq(attachments.id, equipmentInspectionRecordAttachments.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+      .where(
+        and(
+          eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecordAttachments.recordId, id),
+        ),
+      )
+    return { ...row, criteria, photoMap, recordPhotos }
   })
 
   if (!data) notFound()
-  const { record, type, item, inspectorName, criteria, photoMap } = data
-  const locked = record.status === 'submitted' || record.status === 'closed'
+  const { record, type, item, inspectorName, criteria, photoMap, recordPhotos } = data
+  const finalized = record.status === 'submitted' || record.status === 'closed'
+  const editable = canInspect && !record.locked && !finalized
 
   // Counts for the summary line
   const total = criteria.length
@@ -171,16 +229,16 @@ export default async function EquipmentInspectionRecordPage({
                   {record.result}
                 </Badge>
               ) : null}
-              {locked ? (
+              {finalized && canInspect ? (
                 <form action={reopenEquipmentInspection}>
                   <input type="hidden" name="recordId" value={record.id} />
                   <Button type="submit" variant="outline">
                     <RotateCcw size={14} /> Reopen
                   </Button>
                 </form>
-              ) : (
+              ) : editable ? (
                 <>
-                  {type?.allowPassAll && answered < total ? (
+                  {record.allowPassAll && answered < total ? (
                     <form action={passAllEquipmentInspection}>
                       <input type="hidden" name="recordId" value={record.id} />
                       <Button type="submit" variant="outline">
@@ -195,12 +253,12 @@ export default async function EquipmentInspectionRecordPage({
                     </Button>
                   </form>
                 </>
-              )}
+              ) : null}
             </div>
           }
         />
 
-        {issue && !locked ? (
+        {issue && editable ? (
           <Alert variant="destructive">
             <AlertTitle>Submission blocked</AlertTitle>
             <AlertDescription>{issue}</AlertDescription>
@@ -232,8 +290,24 @@ export default async function EquipmentInspectionRecordPage({
           }
           hours={record.hours ?? ''}
           notes={record.notes ?? ''}
-          locked={locked}
+          locked={!editable}
         />
+
+        {recordPhotos.length > 0 ? (
+          <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Record photos ({recordPhotos.length})
+            </h2>
+            <PhotoGallery
+              photos={recordPhotos.map((photo) => ({
+                id: photo.id,
+                url: attachmentUrl(photo.id),
+                filename: photo.filename,
+                caption: photo.caption,
+              }))}
+            />
+          </section>
+        ) : null}
 
         <div className="space-y-4">
           {order.map((label) => {
@@ -254,6 +328,7 @@ export default async function EquipmentInspectionRecordPage({
                     question={c.questionTextSnapshot}
                     kind={c.kind as EqKind}
                     isCritical={c.isCritical}
+                    isRequired={c.isRequired}
                     requiresPhoto={c.requiresPhoto}
                     requiresComment={c.requiresComment}
                     answer={c.answer as 'pass' | 'fail' | 'n_a' | null}
@@ -268,7 +343,7 @@ export default async function EquipmentInspectionRecordPage({
                         Boolean(p),
                       )}
                     workOrderRef={c.workOrderId ? 'Work order' : null}
-                    locked={locked}
+                    locked={!editable}
                     actions={actions}
                   />
                 ))}

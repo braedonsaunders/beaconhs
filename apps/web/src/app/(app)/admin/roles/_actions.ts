@@ -22,14 +22,19 @@ import {
   users as user,
   type DashboardLayoutData,
 } from '@beaconhs/db/schema'
+import {
+  countComplianceAudienceTargetUses,
+  materializeUserIdentityAudienceObligations,
+} from '@beaconhs/compliance'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
+import { upsertRoleAssignments } from '@/lib/role-assignment-upsert'
 import { parseRoleScope } from '../users/_scope-data'
 import {
   DashboardLayoutInputSchema,
   filterPersistableDashboardWidgets,
-  UUID_RE,
 } from '../../dashboard/_layout-input'
 import { QuickActionsSchema } from '../../dashboard/_quick-actions-input'
 import { WIDGETS } from '../../dashboard/_widget-registry'
@@ -171,7 +176,7 @@ async function sanitiseRoleDashboardLayout(
   role: RoleForDashboard,
   widgets: DashboardLayoutData['widgets'],
 ): Promise<DashboardLayoutData> {
-  const insightCardIds = widgets.filter((w) => UUID_RE.test(w.id)).map((w) => w.id)
+  const insightCardIds = widgets.filter((w) => isUuid(w.id)).map((w) => w.id)
   const allowedInsightCardIds = await allowedInsightCardIdsForRole(ctx, role, insightCardIds)
   return {
     widgets: filterPersistableDashboardWidgets(widgets, {
@@ -314,6 +319,7 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
       .where(eq(roles.id, roleId))
       .limit(1)
     if (!role) return { changed: 0, skipped: 0, changedIds: [] as string[], roleName: null }
+    const roleName = role.name
 
     const selectedMembers = await tx
       .select({
@@ -337,9 +343,32 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
       return { changed: 0, skipped, changedIds: [] as string[], roleName: role.name }
     }
 
+    async function auditChanges(changedIds: string[], verb: string): Promise<void> {
+      for (const membershipId of changedIds) {
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'tenant_user',
+          entityId: membershipId,
+          action: 'update',
+          summary: `${verb} role "${roleName}" via bulk role manager`,
+          metadata: { roleId, operation, scope },
+        })
+      }
+    }
+
+    async function materializeChangedMembers(changedIds: string[]): Promise<void> {
+      if (changedIds.length === 0) return
+      const changed = new Set(changedIds)
+      await materializeUserIdentityAudienceObligations(
+        tx,
+        ctx.tenantId,
+        eligibleMembers.filter((member) => changed.has(member.id)).map((member) => member.userId),
+      )
+    }
+
     if (operation === 'replace') {
       await tx.delete(roleAssignments).where(inArray(roleAssignments.tenantUserId, eligibleIds))
-      await tx.insert(roleAssignments).values(
+      const changedIds = await upsertRoleAssignments(
+        tx,
         eligibleIds.map((membershipId) => ({
           tenantId: ctx.tenantId,
           tenantUserId: membershipId,
@@ -347,10 +376,12 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
           scope,
         })),
       )
+      await materializeChangedMembers(changedIds)
+      await auditChanges(changedIds, 'Replaced roles with')
       return {
-        changed: eligibleIds.length,
+        changed: changedIds.length,
         skipped,
-        changedIds: eligibleIds,
+        changedIds,
         roleName: role.name,
       }
     }
@@ -366,6 +397,8 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
         )
         .returning({ membershipId: roleAssignments.tenantUserId })
       const changedIds = [...new Set(deleted.map((row) => row.membershipId))]
+      await materializeChangedMembers(changedIds)
+      await auditChanges(changedIds, 'Removed')
       return {
         changed: changedIds.length,
         skipped,
@@ -374,40 +407,22 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
       }
     }
 
-    const existing = await tx
-      .select({ id: roleAssignments.id, tenantUserId: roleAssignments.tenantUserId })
-      .from(roleAssignments)
-      .where(
-        and(
-          inArray(roleAssignments.tenantUserId, eligibleIds),
-          eq(roleAssignments.roleId, role.id),
-        ),
-      )
-    const existingIds = existing.map((row) => row.id)
-    if (existingIds.length > 0) {
-      await tx
-        .update(roleAssignments)
-        .set({ scope })
-        .where(inArray(roleAssignments.id, existingIds))
-    }
-
-    const existingMembershipIds = new Set(existing.map((row) => row.tenantUserId))
-    const insertIds = eligibleIds.filter((membershipId) => !existingMembershipIds.has(membershipId))
-    if (insertIds.length > 0) {
-      await tx.insert(roleAssignments).values(
-        insertIds.map((membershipId) => ({
-          tenantId: ctx.tenantId,
-          tenantUserId: membershipId,
-          roleId: role.id,
-          scope,
-        })),
-      )
-    }
+    const changedIds = await upsertRoleAssignments(
+      tx,
+      eligibleIds.map((membershipId) => ({
+        tenantId: ctx.tenantId,
+        tenantUserId: membershipId,
+        roleId: role.id,
+        scope,
+      })),
+    )
+    await materializeChangedMembers(changedIds)
+    await auditChanges(changedIds, 'Set')
 
     return {
-      changed: eligibleIds.length,
+      changed: changedIds.length,
       skipped,
-      changedIds: eligibleIds,
+      changedIds,
       roleName: role.name,
     }
   })
@@ -417,21 +432,8 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
   }
 
   const verb =
-    operation === 'replace'
-      ? 'Replaced roles with'
-      : operation === 'remove'
-        ? 'Removed'
-        : 'Assigned'
-  for (const membershipId of result.changedIds) {
-    await recordAudit(ctx, {
-      entityType: 'tenant_user',
-      entityId: membershipId,
-      action: 'update',
-      summary: `${verb} role "${result.roleName}" via bulk role manager`,
-      metadata: { roleId, operation, scope },
-    })
-    revalidatePath(`/admin/users/${membershipId}`)
-  }
+    operation === 'replace' ? 'Replaced roles with' : operation === 'remove' ? 'Removed' : 'Set'
+  for (const membershipId of result.changedIds) revalidatePath(`/admin/users/${membershipId}`)
 
   revalidatePath('/admin/roles')
   revalidatePath('/admin/users')
@@ -499,53 +501,36 @@ export async function addRoleMembers(formData: FormData): Promise<void> {
       .map((m) => m.id)
     if (eligibleIds.length === 0) return { roleName: role.name, changedIds: [] as string[] }
 
-    const existing = await tx
-      .select({ tenantUserId: roleAssignments.tenantUserId })
-      .from(roleAssignments)
-      .where(
-        and(
-          inArray(roleAssignments.tenantUserId, eligibleIds),
-          eq(roleAssignments.roleId, role.id),
-        ),
-      )
-    const existingIds = new Set(existing.map((row) => row.tenantUserId))
-
-    // Re-selecting a member who already holds the role just updates its scope.
-    if (existingIds.size > 0) {
-      await tx
-        .update(roleAssignments)
-        .set({ scope })
-        .where(
-          and(
-            inArray(roleAssignments.tenantUserId, [...existingIds]),
-            eq(roleAssignments.roleId, role.id),
-          ),
-        )
-    }
-    const insertIds = eligibleIds.filter((id) => !existingIds.has(id))
-    if (insertIds.length > 0) {
-      await tx.insert(roleAssignments).values(
-        insertIds.map((membershipId) => ({
-          tenantId: ctx.tenantId,
-          tenantUserId: membershipId,
-          roleId: role.id,
-          scope,
-        })),
+    const changedIds = await upsertRoleAssignments(
+      tx,
+      eligibleIds.map((membershipId) => ({
+        tenantId: ctx.tenantId,
+        tenantUserId: membershipId,
+        roleId: role.id,
+        scope,
+      })),
+    )
+    if (changedIds.length > 0) {
+      const changed = new Set(changedIds)
+      await materializeUserIdentityAudienceObligations(
+        tx,
+        ctx.tenantId,
+        selected.filter((member) => changed.has(member.id)).map((member) => member.userId),
       )
     }
-    return { roleName: role.name, changedIds: eligibleIds }
+    for (const membershipId of changedIds) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'tenant_user',
+        entityId: membershipId,
+        action: 'update',
+        summary: `Set role "${role.name}" and its access scope`,
+        metadata: { roleId, scope, operation: 'upsert' },
+      })
+    }
+    return { roleName: role.name, changedIds }
   })
 
   if (!result || result.changedIds.length === 0) return
-  for (const membershipId of result.changedIds) {
-    await recordAudit(ctx, {
-      entityType: 'tenant_user',
-      entityId: membershipId,
-      action: 'update',
-      summary: `Added to role "${result.roleName}"`,
-      metadata: { roleId, scope },
-    })
-  }
   revalidateRoleMembership(roleId, result.changedIds)
 }
 
@@ -572,22 +557,30 @@ export async function updateRoleMemberScope(formData: FormData): Promise<void> {
       .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
       .where(and(eq(roleAssignments.id, assignmentId), eq(roleAssignments.roleId, roleId)))
       .limit(1)
+      .for('update')
     if (!row) return null
     if (row.userId === ctx.userId || (!ctx.isSuperAdmin && row.isSuperAdmin)) return null
-    await tx.update(roleAssignments).set({ scope }).where(eq(roleAssignments.id, assignmentId))
+    const changedIds = await upsertRoleAssignments(tx, [
+      {
+        tenantId: ctx.tenantId,
+        tenantUserId: row.membershipId,
+        roleId,
+        scope,
+      },
+    ])
+    if (changedIds.length === 0) return null
+    await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [row.userId])
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'tenant_user',
+      entityId: row.membershipId,
+      action: 'update',
+      summary: `Updated scope for role "${row.roleName}"`,
+      metadata: { roleId, assignmentId, scope },
+    })
     return { roleName: row.roleName, membershipId: row.membershipId }
   })
 
   if (!result) return
-  // Attribute the audit to the assignment's verified member — never the
-  // client-posted membershipId, which a tampered form could point elsewhere.
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: result.membershipId,
-    action: 'update',
-    summary: `Updated scope for role "${result.roleName}"`,
-    metadata: { roleId, assignmentId, scope },
-  })
   revalidateRoleMembership(roleId, [result.membershipId])
 }
 
@@ -613,22 +606,26 @@ export async function removeRoleMember(formData: FormData): Promise<void> {
       .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
       .where(and(eq(roleAssignments.id, assignmentId), eq(roleAssignments.roleId, roleId)))
       .limit(1)
+      .for('update')
     if (!row) return null
     if (row.userId === ctx.userId || (!ctx.isSuperAdmin && row.isSuperAdmin)) return null
-    await tx.delete(roleAssignments).where(eq(roleAssignments.id, assignmentId))
+    const [deleted] = await tx
+      .delete(roleAssignments)
+      .where(eq(roleAssignments.id, assignmentId))
+      .returning({ id: roleAssignments.id })
+    if (!deleted) return null
+    await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [row.userId])
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'tenant_user',
+      entityId: row.membershipId,
+      action: 'update',
+      summary: `Removed from role "${row.roleName}"`,
+      metadata: { roleId, assignmentId },
+    })
     return { roleName: row.roleName, membershipId: row.membershipId }
   })
 
   if (!result) return
-  // Attribute the audit to the assignment's verified member — never the
-  // client-posted membershipId, which a tampered form could point elsewhere.
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: result.membershipId,
-    action: 'update',
-    summary: `Removed from role "${result.roleName}"`,
-    metadata: { roleId, assignmentId },
-  })
   revalidateRoleMembership(roleId, [result.membershipId])
 }
 
@@ -756,34 +753,60 @@ export async function deleteRole(formData: FormData): Promise<void> {
   assertCan(ctx, 'admin.roles.manage')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const info = await ctx.db(async (tx) => {
-    const [r] = await tx.select().from(roles).where(eq(roles.id, id)).limit(1)
-    if (!r) return null
+  const result = await ctx.db(async (tx) => {
+    const [role] = await tx
+      .select()
+      .from(roles)
+      .where(and(eq(roles.tenantId, ctx.tenantId), eq(roles.id, id)))
+      .limit(1)
+      .for('update')
+    if (!role) return { state: 'missing' as const }
+    if (role.isBuiltIn) return { state: 'built_in' as const }
     const assignmentRows = await tx
       .select({ n: count() })
       .from(roleAssignments)
-      .where(eq(roleAssignments.roleId, id))
-    return { role: r, assignments: Number(assignmentRows[0]?.n ?? 0) }
+      .where(and(eq(roleAssignments.tenantId, ctx.tenantId), eq(roleAssignments.roleId, id)))
+    const assignments = Number(assignmentRows[0]?.n ?? 0)
+    if (assignments > 0) return { state: 'assigned' as const, assignments }
+
+    const requirements = await countComplianceAudienceTargetUses(tx, ctx.tenantId, {
+      kind: 'role',
+      entityKey: role.key,
+    })
+    if (requirements > 0) return { state: 'required' as const, role, requirements }
+
+    const [deleted] = await tx
+      .delete(roles)
+      .where(and(eq(roles.tenantId, ctx.tenantId), eq(roles.id, id)))
+      .returning({ id: roles.id })
+    if (!deleted) return { state: 'missing' as const }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'role',
+      entityId: id,
+      action: 'delete',
+      summary: `Deleted role "${role.name}"`,
+      before: role as unknown as Record<string, unknown>,
+    })
+    return { state: 'deleted' as const }
   })
-  if (!info) return
-  if (info.role.isBuiltIn) {
+  if (result.state === 'missing') return
+  if (result.state === 'built_in') {
     redirect(`/admin/roles/${id}?error=${encodeURIComponent("Built-in roles can't be deleted.")}`)
   }
-  if (info.assignments > 0) {
+  if (result.state === 'assigned') {
     redirect(
       `/admin/roles/${id}?error=${encodeURIComponent(
-        `Still assigned to ${info.assignments} member${info.assignments === 1 ? '' : 's'} — remove those first.`,
+        `Still assigned to ${result.assignments} member${result.assignments === 1 ? '' : 's'} — remove those first.`,
       )}`,
     )
   }
-  await ctx.db((tx) => tx.delete(roles).where(eq(roles.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'role',
-    entityId: id,
-    action: 'delete',
-    summary: `Deleted role "${info.role.name}"`,
-    before: info.role as unknown as Record<string, unknown>,
-  })
+  if (result.state === 'required') {
+    redirect(
+      `/admin/roles/${id}?error=${encodeURIComponent(
+        `Role "${result.role.name}" is used by ${result.requirements} compliance ${result.requirements === 1 ? 'requirement' : 'requirements'}. Change those audiences before deleting.`,
+      )}`,
+    )
+  }
   revalidatePath('/admin/roles')
   redirect('/admin/roles')
 }

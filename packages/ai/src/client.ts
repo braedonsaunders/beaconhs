@@ -5,7 +5,16 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import {
+  resolvePublicHost,
+  secureFetch,
+  validateOutboundRequestConfiguration,
+} from '@beaconhs/sync/egress'
 import { generateText, type LanguageModel } from 'ai'
+
+const MAX_AI_REQUEST_BYTES = 16 * 1024 * 1024
+const MAX_AI_RESPONSE_BYTES = 16 * 1024 * 1024
+const AI_REQUEST_TIMEOUT_MS = 120_000
 
 export type AiProvider =
   | 'anthropic'
@@ -181,7 +190,7 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
     smart: '',
     keyHint: 'Your provider API key',
     modelHint:
-      'Point Base URL at any OpenAI-compatible endpoint (Together, Fireworks, Perplexity, Ollama, vLLM, …) and set explicit model ids.',
+      'Use a public HTTPS OpenAI-compatible endpoint (for example Together, Fireworks, Perplexity, or hosted vLLM) and set explicit model ids.',
     visionToolResults: false,
   },
 ]
@@ -192,11 +201,109 @@ const SPEC_BY_VALUE = Object.fromEntries(AI_PROVIDER_SPECS.map((s) => [s.value, 
 >
 
 export function isAiProvider(value: unknown): value is AiProvider {
-  return typeof value === 'string' && value in SPEC_BY_VALUE
+  return typeof value === 'string' && Object.hasOwn(SPEC_BY_VALUE, value)
 }
 
 export function providerSpec(provider: AiProvider): ProviderSpec {
   return SPEC_BY_VALUE[provider]
+}
+
+function withoutTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1
+  return value.slice(0, end)
+}
+
+/**
+ * Validate and canonicalize a persisted AI endpoint override. Runtime requests
+ * repeat the public-DNS check immediately before opening each socket.
+ */
+export async function validateAiBaseUrl(
+  provider: AiProvider,
+  rawBaseUrl: string | null | undefined,
+): Promise<string | null> {
+  const spec = providerSpec(provider)
+  const raw = rawBaseUrl?.trim() ?? ''
+  if (spec.kind !== 'openai-compatible') {
+    if (raw) throw new Error(`${spec.label} does not support a custom base URL.`)
+    return null
+  }
+  if (!raw) {
+    if (spec.requiresBaseUrl) throw new Error('A public HTTPS base URL is required.')
+    return null
+  }
+
+  let submitted: URL
+  try {
+    submitted = new URL(raw)
+  } catch {
+    throw new Error('The AI base URL is not valid.')
+  }
+  if (submitted.search || submitted.hash) {
+    throw new Error('The AI base URL must not include a query string or fragment.')
+  }
+  const validated = validateOutboundRequestConfiguration(submitted).url
+  await resolvePublicHost(validated.hostname)
+
+  const path = withoutTrailingSlashes(validated.pathname)
+  validated.pathname = path || '/'
+  const canonical = withoutTrailingSlashes(validated.href)
+  return canonical || validated.origin
+}
+
+async function readBoundedRequestBody(request: Request): Promise<Uint8Array | undefined> {
+  if (!request.body) return undefined
+  const declaredLength = Number(request.headers.get('content-length'))
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_AI_REQUEST_BYTES) {
+    throw new Error(`AI request body exceeded ${MAX_AI_REQUEST_BYTES} bytes.`)
+  }
+
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      if (request.signal.aborted) throw request.signal.reason
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > MAX_AI_REQUEST_BYTES) {
+        await reader.cancel()
+        throw new Error(`AI request body exceeded ${MAX_AI_REQUEST_BYTES} bytes.`)
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const body = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return body
+}
+
+/** Socket-pinned transport for tenant-configurable OpenAI-compatible endpoints. */
+export const secureAiFetch: typeof globalThis.fetch = async (input, init) => {
+  const request = new Request(input, init)
+  const method = request.method.toUpperCase()
+  if (!['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    throw new Error(`AI request method ${method} is not supported.`)
+  }
+  const body = await readBoundedRequestBody(request)
+  return secureFetch(request.url, {
+    method: method as 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    headers: request.headers,
+    body,
+    timeoutMs: AI_REQUEST_TIMEOUT_MS,
+    maxRequestBytes: MAX_AI_REQUEST_BYTES,
+    maxResponseBytes: MAX_AI_RESPONSE_BYTES,
+    maxRedirects: 2,
+    signal: request.signal,
+  })
 }
 
 export function defaultModel(provider: AiProvider, tier: ModelTier): string {
@@ -246,7 +353,12 @@ export function getModel(
     case 'openai-compatible': {
       const baseURL = config.baseUrl?.trim() || spec.baseUrl
       if (!baseURL) return null
-      return createOpenAICompatible({ name: spec.value, apiKey: config.apiKey, baseURL })(modelId)
+      return createOpenAICompatible({
+        name: spec.value,
+        apiKey: config.apiKey,
+        baseURL,
+        fetch: secureAiFetch,
+      })(modelId)
     }
   }
 }

@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm'
 import { equipmentStationSettings } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
 import {
   searchStationCore,
   stationScanCore,
@@ -40,28 +40,31 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
       .from(equipmentStationSettings)
       .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
       .limit(1)
-    return stationScanCore(tx, {
+    const scan = await stationScanCore(tx, {
       ...parsed,
       tenantId: ctx.tenantId,
       homeOrgUnitId: settings?.homeOrgUnitId ?? null,
       actorTenantUserId: ctx.membership?.id ?? null,
       requireHolderOnCheckout: settings?.requireHolder ?? false,
     })
+    if (scan.ok && (scan.action === 'checked_out' || scan.action === 'checked_in')) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment_checkout',
+        entityId: scan.checkoutId ?? undefined,
+        action: scan.action === 'checked_out' ? 'create' : 'update',
+        summary: `Station ${scan.action === 'checked_out' ? 'check-out' : 'check-in'}: ${scan.assetTag}`,
+        after: {
+          itemId: scan.itemId,
+          action: scan.action,
+          holder: scan.holderName,
+          location: scan.locationName,
+        },
+      })
+    }
+    return scan
   })
 
   if (result.ok && (result.action === 'checked_out' || result.action === 'checked_in')) {
-    await recordAudit(ctx, {
-      entityType: 'equipment_checkout',
-      entityId: result.checkoutId ?? undefined,
-      action: result.action === 'checked_out' ? 'create' : 'update',
-      summary: `Station ${result.action === 'checked_out' ? 'check-out' : 'check-in'}: ${result.assetTag}`,
-      after: {
-        itemId: result.itemId,
-        action: result.action,
-        holder: result.holderName,
-        location: result.locationName,
-      },
-    })
     revalidatePath('/equipment/station')
     revalidatePath(`/equipment/${result.itemId}`)
   }

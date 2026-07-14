@@ -38,7 +38,6 @@ const PALETTE: { type: FieldType; w: number; h: number }[] = [
   { type: 'heading', w: 12, h: 1 },
   { type: 'paragraph', w: 12, h: 2 },
   { type: 'divider', w: 12, h: 1 },
-  { type: 'image', w: 4, h: 4 },
   { type: 'text', w: 4, h: 2 },
   { type: 'long_text', w: 6, h: 3 },
   { type: 'number', w: 3, h: 2 },

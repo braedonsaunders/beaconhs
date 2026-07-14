@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import { RawImage } from '@/components/raw-image'
 import { tagSwatch } from '../journals/_tag-colors'
 import { fetchFeedPage } from './_actions'
 import type { FeedEvent, FeedKind, FeedPage, FeedSummary } from './_types'
@@ -622,10 +623,10 @@ function PhotoGrid({
       onClick={() => onOpen(i)}
       className={cn('group/photo relative overflow-hidden bg-slate-100 dark:bg-slate-800', cls)}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <RawImage
         src={u}
         alt=""
+        optimizationReason="authenticated"
         loading="lazy"
         className="h-full w-full object-cover transition-transform duration-300 group-hover/photo:scale-105"
       />
@@ -713,10 +714,10 @@ function Lightbox({
           </button>
         </>
       ) : null}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={urls[index]}
+      <RawImage
+        src={urls[index]!}
         alt=""
+        optimizationReason="authenticated"
         onClick={(e) => e.stopPropagation()}
         className="max-h-[88vh] max-w-[92vw] rounded-lg object-contain shadow-2xl"
       />

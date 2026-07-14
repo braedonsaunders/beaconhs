@@ -1,10 +1,19 @@
 import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
+import { staticSecurityHeaders } from './src/lib/security-headers'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: staticSecurityHeaders(process.env.NODE_ENV === 'production'),
+      },
+    ]
+  },
   transpilePackages: [
     '@beaconhs/db',
     '@beaconhs/tenant',

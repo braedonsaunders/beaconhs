@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
-import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
+import { LiveField, LiveRemoteSelect } from '@/components/live-field'
 
 // The skill "Skill details" card — the auto-saving field set for the unified
 // assignment page. "New skill" creates the row immediately (default
@@ -14,22 +14,22 @@ type SkillFieldValues = {
   notes: string | null
 }
 
-type SkillFieldOptions = {
-  people: { id: string; firstName: string; lastName: string; employeeNo: string | null }[]
-  skillTypes: { id: string; name: string; code: string | null; authorityName: string }[]
+type SkillFieldInitialOptions = {
+  person?: SelectOption
+  skillType?: SelectOption
 }
 
 export function SkillDetailFields({
   id,
   initial,
-  options,
+  initialOptions,
   disabled,
   personHref,
   updateAction,
 }: {
   id: string
   initial: SkillFieldValues
-  options: SkillFieldOptions
+  initialOptions: SkillFieldInitialOptions
   disabled?: boolean
   personHref?: string | null
   updateAction: (formData: FormData) => Promise<void>
@@ -41,18 +41,14 @@ export function SkillDetailFields({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
-          <LivePersonSelect
+          <LiveRemoteSelect
             id={id}
             field="personId"
             label="Person"
             initialValue={initial.personId}
-            options={options.people.map((p) => ({
-              value: p.id,
-              label: `${p.lastName}, ${p.firstName}`,
-              hint: p.employeeNo ?? undefined,
-            }))}
-            placeholder="Select a person…"
-            searchPlaceholder="Search active people…"
+            initialOption={initialOptions.person}
+            lookup="training-skill-assignment-people"
+            emptyLabel="Select a person…"
             disabled={disabled}
             updateAction={updateAction}
           />
@@ -65,16 +61,14 @@ export function SkillDetailFields({
             </Link>
           ) : null}
         </div>
-        <LiveSelect
+        <LiveRemoteSelect
           id={id}
           field="skillTypeId"
           label="Skill / certification"
           initialValue={initial.skillTypeId}
+          initialOption={initialOptions.skillType}
+          lookup="training-skill-assignment-types"
           emptyLabel="Select a skill / certification…"
-          options={options.skillTypes.map((t) => ({
-            value: t.id,
-            label: `${t.authorityName} · ${t.code ? `${t.code} · ` : ''}${t.name}`,
-          }))}
           disabled={disabled}
           updateAction={updateAction}
         />

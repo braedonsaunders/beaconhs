@@ -28,10 +28,10 @@ export function AnimatedNumber({
   className?: string
 }) {
   const mv = useMotionValue(0)
-  const [display, setDisplay] = useState(() => format(0))
+  const [displayValue, setDisplayValue] = useState(0)
 
   useEffect(() => {
-    const unsub = mv.on('change', (latest) => setDisplay(format(latest)))
+    const unsub = mv.on('change', setDisplayValue)
     const controls = animate(mv, value, {
       duration,
       delay,
@@ -41,10 +41,7 @@ export function AnimatedNumber({
       controls.stop()
       unsub()
     }
-    // Re-run when target value changes (e.g. tenant switch). We intentionally
-    // exclude `format` from deps — caller passes inline lambdas.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, duration, delay])
+  }, [delay, duration, mv, value])
 
-  return <span className={className}>{display}</span>
+  return <span className={className}>{format(displayValue)}</span>
 }

@@ -4,7 +4,7 @@
 // materialised compliance_status scoreboard for per-person completion.
 
 import Link from 'next/link'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, count, eq, ilike, isNull, sql } from 'drizzle-orm'
 import { ArrowUpRight, Plus, ShieldCheck } from 'lucide-react'
 import { Badge, Button, EmptyState } from '@beaconhs/ui'
 import {
@@ -13,6 +13,10 @@ import {
   complianceStatus,
 } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -31,42 +35,64 @@ type DocObligationRow = {
 export async function loadDocumentObligations(
   ctx: Ctx,
   documentId: string,
-): Promise<DocObligationRow[]> {
-  const rows = await ctx.db((tx) =>
-    tx
-      .select({
-        id: complianceObligations.id,
-        title: complianceObligations.title,
-        status: complianceObligations.status,
-        recurrence: complianceObligations.recurrence,
-        total: sql<number>`count(${complianceStatus.id})::int`,
-        completed: sql<number>`count(*) filter (where ${complianceStatus.status} = 'completed')::int`,
-        overdue: sql<number>`count(*) filter (where ${complianceStatus.status} in ('overdue','expiring'))::int`,
-      })
-      .from(complianceObligations)
-      .leftJoin(complianceStatus, eq(complianceStatus.obligationId, complianceObligations.id))
-      .where(
-        and(
-          eq(complianceObligations.tenantId, ctx.tenantId),
-          eq(complianceObligations.sourceModule, 'document'),
-          sql`${complianceObligations.targetRef}->>'documentId' = ${documentId}`,
-          isNull(complianceObligations.deletedAt),
-        ),
-      )
-      .groupBy(complianceObligations.id)
-      .orderBy(complianceObligations.title)
-      .limit(100),
-  )
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    status: r.status,
-    recurrence: r.recurrence,
-    total: Number(r.total),
-    completed: Number(r.completed),
-    overdue: Number(r.overdue),
-    percent: Number(r.total) === 0 ? 0 : Math.round((Number(r.completed) / Number(r.total)) * 100),
-  }))
+  options: {
+    q?: string
+    status?: 'active' | 'paused' | 'archived'
+    page: number
+    perPage: number
+  },
+): Promise<{ rows: DocObligationRow[]; total: number; filteredTotal: number }> {
+  return ctx.db(async (tx) => {
+    const baseWhere = and(
+      eq(complianceObligations.tenantId, ctx.tenantId),
+      eq(complianceObligations.sourceModule, 'document'),
+      sql`${complianceObligations.targetRef}->>'documentId' = ${documentId}`,
+      isNull(complianceObligations.deletedAt),
+    )
+    const filteredWhere = and(
+      baseWhere,
+      options.q ? ilike(complianceObligations.title, `%${options.q}%`) : undefined,
+      options.status ? eq(complianceObligations.status, options.status) : undefined,
+    )
+    const [totalRows, filteredRows, rows] = await Promise.all([
+      tx.select({ count: count() }).from(complianceObligations).where(baseWhere),
+      tx.select({ count: count() }).from(complianceObligations).where(filteredWhere),
+      tx
+        .select({
+          id: complianceObligations.id,
+          title: complianceObligations.title,
+          status: complianceObligations.status,
+          recurrence: complianceObligations.recurrence,
+          total: sql<number>`count(${complianceStatus.id})::int`,
+          completed: sql<number>`count(*) filter (where ${complianceStatus.status} = 'completed')::int`,
+          overdue: sql<number>`count(*) filter (where ${complianceStatus.status} in ('overdue','expiring'))::int`,
+        })
+        .from(complianceObligations)
+        .leftJoin(complianceStatus, eq(complianceStatus.obligationId, complianceObligations.id))
+        .where(filteredWhere)
+        .groupBy(complianceObligations.id)
+        .orderBy(complianceObligations.title, complianceObligations.id)
+        .limit(options.perPage)
+        .offset((options.page - 1) * options.perPage),
+    ])
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        recurrence: row.recurrence,
+        total: Number(row.total),
+        completed: Number(row.completed),
+        overdue: Number(row.overdue),
+        percent:
+          Number(row.total) === 0
+            ? 0
+            : Math.round((Number(row.completed) / Number(row.total)) * 100),
+      })),
+      total: Number(totalRows[0]?.count ?? 0),
+      filteredTotal: Number(filteredRows[0]?.count ?? 0),
+    }
+  })
 }
 
 function recurrenceSummary(rec: ComplianceRecurrence | null): string {
@@ -82,15 +108,26 @@ function recurrenceSummary(rec: ComplianceRecurrence | null): string {
 export function DocumentCompliancePanel({
   documentId,
   obligations,
+  total,
+  filteredTotal,
+  page,
+  perPage,
+  currentParams,
   canAssign,
 }: {
   documentId: string
   obligations: DocObligationRow[]
+  total: number
+  filteredTotal: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
   canAssign: boolean
 }) {
   const createHref = `/compliance/obligations/new?kind=document&documentId=${documentId}`
+  const basePath = `/documents/${documentId}`
 
-  if (obligations.length === 0) {
+  if (total === 0) {
     return (
       <div className="space-y-4">
         <EmptyState
@@ -111,6 +148,31 @@ export function DocumentCompliancePanel({
 
   return (
     <div className="space-y-3">
+      <TableToolbar>
+        <SearchInput
+          placeholder="Search obligations…"
+          paramKey="complianceQ"
+          pageParamKey="compliancePage"
+        />
+        <FilterChips
+          basePath={basePath}
+          currentParams={currentParams}
+          paramKey="complianceStatus"
+          pageParamKey="compliancePage"
+          label="Status"
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'paused', label: 'Paused' },
+            { value: 'archived', label: 'Archived' },
+          ]}
+        />
+      </TableToolbar>
+
+      {obligations.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          No obligations match these filters.
+        </div>
+      ) : null}
       {obligations.map((o) => (
         <Link
           key={o.id}
@@ -150,6 +212,15 @@ export function DocumentCompliancePanel({
           </div>
         </Link>
       ))}
+
+      <Pagination
+        basePath={basePath}
+        currentParams={currentParams}
+        total={filteredTotal}
+        page={page}
+        perPage={perPage}
+        pageParamKey="compliancePage"
+      />
 
       {canAssign ? (
         <Link href={createHref}>

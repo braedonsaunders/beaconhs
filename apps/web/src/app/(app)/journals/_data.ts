@@ -10,6 +10,7 @@ import {
   ilike,
   inArray,
   isNull,
+  lt,
   lte,
   or,
   sql,
@@ -32,7 +33,6 @@ import {
   authorTenantUserId,
   getAuthorPersonId,
   htmlToText,
-  isUuid,
   journalAuthorScopeWhere,
   journalCanBrowseAll,
   journalCanReadAll,
@@ -42,6 +42,8 @@ import {
   snippetOf,
   todayISO,
 } from './_lib'
+import { isUuid } from '@/lib/list-params'
+import { CSV_EXPORT_QUERY_LIMIT } from '@/lib/csv'
 import type {
   AuthorRef,
   GroupBy,
@@ -49,14 +51,17 @@ import type {
   JournalEntryDetail,
   JournalFilters,
   JournalListItem,
-  JournalOption,
   JournalRecordsFacets,
   JournalSort,
   OnThisDayItem,
   TagSuggestion,
+  TreeCursor,
   TreeNode,
+  TreePage,
   WorkspaceData,
 } from './_types'
+
+const TREE_PAGE_SIZE = 200
 
 const MONTHS = [
   'January',
@@ -148,46 +153,12 @@ function entryWhere(
   return conds.length === 0 ? undefined : and(...conds)
 }
 
-async function listMetaOptions(
-  ctx: RequestContext,
-): Promise<{ sites: JournalOption[]; people: JournalOption[] }> {
-  return ctx.db(async (tx) => {
-    // Locations = TOP-LEVEL org units (customers). This tenant model logs
-    // journals against the customer/location, not project/site children.
-    const sites = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(eq(orgUnits.level, 'customer'))
-      .orderBy(asc(orgUnits.name))
-      .limit(500)
-    const ppl = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(eq(people.status, 'active'))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(1000)
-    return {
-      sites,
-      people: ppl.map((p) => ({
-        id: p.id,
-        name: `${p.lastName}, ${p.firstName}`,
-        hint: p.employeeNo ?? undefined,
-      })),
-    }
-  })
-}
-
 /**
  * Tags for the entry picker: those in use (within the reader's scope, most-used
  * first) with their governed colour, followed by defined-but-unused tags so
  * admin-curated vocabulary is offered before anyone has applied it.
  */
-export async function listTagSuggestions(
+async function listTagSuggestions(
   ctx: RequestContext,
   scope: SQL | undefined,
 ): Promise<TagSuggestion[]> {
@@ -220,6 +191,22 @@ export async function listTagSuggestions(
   })
 }
 
+/** Governed colours for the bounded set of tags rendered on the current page. */
+export async function listTagColors(
+  ctx: RequestContext,
+  names: readonly string[],
+): Promise<Record<string, string | null>> {
+  const uniqueNames = [...new Set(names)]
+  if (uniqueNames.length === 0) return {}
+  return ctx.db(async (tx) => {
+    const rows = await tx
+      .select({ name: journalTags.name, color: journalTags.color })
+      .from(journalTags)
+      .where(and(eq(journalTags.tenantId, ctx.tenantId), inArray(journalTags.name, uniqueNames)))
+    return Object.fromEntries(rows.map((row) => [row.name, row.color]))
+  })
+}
+
 /** Cards for list / export views. `selfOnly` restricts to the caller's own entries. */
 export async function listEntries(
   ctx: RequestContext,
@@ -228,7 +215,7 @@ export async function listEntries(
   selfOnly = false,
 ): Promise<JournalListItem[]> {
   const authorPersonId = await getAuthorPersonId(ctx)
-  const limit = Math.min(paging.limit ?? 50, 5000)
+  const limit = Math.min(paging.limit ?? 50, CSV_EXPORT_QUERY_LIMIT)
   const offset = paging.offset ?? 0
   const dir = paging.dir === 'asc' ? asc : desc
   const orderBy =
@@ -263,23 +250,21 @@ export async function listEntries(
     const thumbs = await firstPhotoThumbs(tx, ids)
     const photoCounts = await photoCountsByEntry(tx, ids)
 
-    return rows.map(
-      (r): JournalListItem => ({
-        id: r.e.id,
-        reference: r.e.reference,
-        title: r.e.title,
-        snippet: snippetOf(htmlToText(r.e.bodyText)),
-        entryDate: r.e.entryDate,
-        status: r.e.status,
-        definition: r.e.definition,
-        siteName: r.siteName ?? null,
-        authorName: r.firstName ? `${r.firstName} ${r.lastName ?? ''}`.trim() : null,
-        tags: r.e.tagsCache ?? [],
-        photoCount: photoCounts[r.e.id] ?? 0,
-        thumbUrl: thumbs[r.e.id] ?? null,
-        updatedAt: r.e.updatedAt.toISOString(),
-      }),
-    )
+    return rows.map((r): JournalListItem => ({
+      id: r.e.id,
+      reference: r.e.reference,
+      title: r.e.title,
+      snippet: snippetOf(htmlToText(r.e.bodyText)),
+      entryDate: r.e.entryDate,
+      status: r.e.status,
+      definition: r.e.definition,
+      siteName: r.siteName ?? null,
+      authorName: r.firstName ? `${r.firstName} ${r.lastName ?? ''}`.trim() : null,
+      tags: r.e.tagsCache ?? [],
+      photoCount: photoCounts[r.e.id] ?? 0,
+      thumbUrl: thumbs[r.e.id] ?? null,
+      updatedAt: r.e.updatedAt.toISOString(),
+    }))
   })
 }
 
@@ -297,10 +282,8 @@ export async function countEntries(ctx: RequestContext, filters: JournalFilters)
 }
 
 /**
- * Scoped filter facets for the records list: status counts plus the most-used
- * sites and authors within the caller's visibility scope (so the chips never
- * leak names the caller can't see). Reflects scope only, not the active
- * filters, so selecting one facet doesn't make the others vanish.
+ * Scoped status counts for the records list. Site and author options use
+ * purpose-specific remote searches so no valid facet is hidden by a fixed cap.
  */
 export async function listRecordsFacets(ctx: RequestContext): Promise<JournalRecordsFacets> {
   const authorPersonId = await getAuthorPersonId(ctx)
@@ -314,38 +297,7 @@ export async function listRecordsFacets(ctx: RequestContext): Promise<JournalRec
     const statusCounts: Record<string, number> = {}
     for (const r of statusRows) statusCounts[r.status] = Number(r.n)
 
-    const siteRows = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name, n: sql<number>`count(*)::int` })
-      .from(journalEntries)
-      .innerJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
-      .where(scope)
-      .groupBy(orgUnits.id, orgUnits.name)
-      .orderBy(desc(sql`count(*)`), asc(orgUnits.name))
-      .limit(15)
-
-    const peopleRows = await tx
-      .select({
-        id: authorPerson.id,
-        firstName: authorPerson.firstName,
-        lastName: authorPerson.lastName,
-        n: sql<number>`count(*)::int`,
-      })
-      .from(journalEntries)
-      .innerJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
-      .where(scope)
-      .groupBy(authorPerson.id, authorPerson.firstName, authorPerson.lastName)
-      .orderBy(desc(sql`count(*)`), asc(authorPerson.lastName))
-      .limit(15)
-
-    return {
-      statusCounts,
-      sites: siteRows.map((s) => ({ id: s.id, name: s.name, count: Number(s.n) })),
-      people: peopleRows.map((p) => ({
-        id: p.id,
-        name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || '—',
-        count: Number(p.n),
-      })),
-    }
+    return { statusCounts }
   })
 }
 
@@ -454,6 +406,7 @@ export async function getEntry(
 type TreeRow = {
   id: string
   entryDate: string
+  createdAt: string
   snippet: string
   status: 'draft' | 'submitted' | 'archived'
   siteName: string | null
@@ -467,15 +420,34 @@ export async function buildTree(
   filters: JournalFilters,
   selfOnly = false,
   targetAuthor?: AuthorRef | null,
-): Promise<TreeNode[]> {
+  cursor: TreeCursor | null = null,
+): Promise<TreePage> {
   const authorPersonId = await getAuthorPersonId(ctx)
   const where = entryWhere(ctx, filters, authorPersonId, selfOnly, targetAuthor)
+  const pageAsOf = cursor ? new Date(cursor.asOf) : new Date()
+  const cursorCreatedAt = cursor ? new Date(cursor.createdAt) : null
+  const afterCursor =
+    cursor && cursorCreatedAt
+      ? or(
+          lt(journalEntries.entryDate, cursor.entryDate),
+          and(
+            eq(journalEntries.entryDate, cursor.entryDate),
+            lt(journalEntries.createdAt, cursorCreatedAt),
+          ),
+          and(
+            eq(journalEntries.entryDate, cursor.entryDate),
+            eq(journalEntries.createdAt, cursorCreatedAt),
+            lt(journalEntries.id, cursor.id),
+          ),
+        )
+      : undefined
 
-  const rows: TreeRow[] = await ctx.db(async (tx) => {
+  const pageRows = await ctx.db(async (tx) => {
     const base = await tx
       .select({
         id: journalEntries.id,
         entryDate: journalEntries.entryDate,
+        createdAt: journalEntries.createdAt,
         bodyText: journalEntries.bodyText,
         status: journalEntries.status,
         siteName: orgUnits.name,
@@ -485,12 +457,17 @@ export async function buildTree(
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
       .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
-      .where(where)
-      .orderBy(desc(journalEntries.entryDate), desc(journalEntries.updatedAt))
-      .limit(2000)
+      .where(and(where, lte(journalEntries.createdAt, pageAsOf), afterCursor))
+      .orderBy(
+        desc(journalEntries.entryDate),
+        desc(journalEntries.createdAt),
+        desc(journalEntries.id),
+      )
+      .limit(TREE_PAGE_SIZE + 1)
     return base.map((r) => ({
       id: r.id,
       entryDate: r.entryDate,
+      createdAt: r.createdAt.toISOString(),
       snippet: treeSnippet(r.bodyText),
       status: r.status,
       siteName: r.siteName ?? null,
@@ -498,9 +475,29 @@ export async function buildTree(
     }))
   })
 
-  if (groupBy === 'topic') return treeByTopic(ctx, where)
-  if (groupBy === 'site') return treeByKey(rows, (r) => r.siteName ?? 'No location')
-  return treeByDate(rows)
+  const hasMore = pageRows.length > TREE_PAGE_SIZE
+  const rows = hasMore ? pageRows.slice(0, TREE_PAGE_SIZE) : pageRows
+  const last = rows.at(-1)
+  const nodes =
+    groupBy === 'topic'
+      ? await treeByTopic(ctx, rows)
+      : groupBy === 'site'
+        ? treeByKey(rows, (r) => r.siteName ?? 'No location')
+        : treeByDate(rows)
+
+  return {
+    nodes,
+    hasMore,
+    nextCursor:
+      hasMore && last
+        ? {
+            asOf: pageAsOf.toISOString(),
+            entryDate: last.entryDate,
+            createdAt: last.createdAt,
+            id: last.id,
+          }
+        : null,
+  }
 }
 
 function leaf(r: TreeRow): TreeNode {
@@ -534,16 +531,12 @@ function treeByDate(rows: TreeRow[]): TreeNode[] {
       let monthCount = 0
       for (const [iso, entries] of days) {
         monthCount += entries.length
-        if (entries.length === 1) {
-          dayNodes.push({ ...leaf(entries[0]!), label: dayLabel(iso) })
-        } else {
-          dayNodes.push({
-            key: `d-${iso}`,
-            label: dayLabel(iso),
-            count: entries.length,
-            children: entries.map(leaf),
-          })
-        }
+        dayNodes.push({
+          key: `d-${iso}`,
+          label: dayLabel(iso),
+          count: entries.length,
+          children: entries.map(leaf),
+        })
       }
       yearCount += monthCount
       monthNodes.push({
@@ -575,32 +568,40 @@ function treeByKey(rows: TreeRow[], keyOf: (r: TreeRow) => string): TreeNode[] {
     }))
 }
 
-async function treeByTopic(ctx: RequestContext, where: SQL | undefined): Promise<TreeNode[]> {
+async function treeByTopic(ctx: RequestContext, entries: TreeRow[]): Promise<TreeNode[]> {
+  if (entries.length === 0) return []
   return ctx.db(async (tx) => {
-    const rows = await tx
-      .select({
-        tag: journalEntryTags.tag,
-        id: journalEntries.id,
-        bodyText: journalEntries.bodyText,
-        entryDate: journalEntries.entryDate,
-        status: journalEntries.status,
-      })
+    const tagRows = await tx
+      .select({ entryId: journalEntryTags.entryId, tag: journalEntryTags.tag })
       .from(journalEntryTags)
-      .innerJoin(journalEntries, eq(journalEntries.id, journalEntryTags.entryId))
-      .where(where)
-      .orderBy(asc(journalEntryTags.tag), desc(journalEntries.entryDate))
-      .limit(4000)
+      .where(
+        inArray(
+          journalEntryTags.entryId,
+          entries.map((entry) => entry.id),
+        ),
+      )
+      .orderBy(asc(journalEntryTags.tag))
+    const tagsByEntry = new Map<string, string[]>()
+    for (const row of tagRows) {
+      const tags = tagsByEntry.get(row.entryId) ?? []
+      tags.push(row.tag)
+      tagsByEntry.set(row.entryId, tags)
+    }
+
     const groups = new Map<string, TreeNode[]>()
-    for (const r of rows) {
-      if (!groups.has(r.tag)) groups.set(r.tag, [])
-      groups.get(r.tag)!.push({
-        key: `${r.tag}:${r.id}`,
-        label: treeSnippet(r.bodyText) || dayLabel(r.entryDate),
-        count: 1,
-        entryId: r.id,
-        entryDate: r.entryDate,
-        draft: r.status === 'draft',
-      })
+    for (const entry of entries) {
+      const tags = tagsByEntry.get(entry.id) ?? ['No topic']
+      for (const tag of tags) {
+        if (!groups.has(tag)) groups.set(tag, [])
+        groups.get(tag)!.push({
+          key: `${tag}:${entry.id}`,
+          label: entry.snippet || dayLabel(entry.entryDate),
+          count: 1,
+          entryId: entry.id,
+          entryDate: entry.entryDate,
+          draft: entry.status === 'draft',
+        })
+      }
     }
     return Array.from(groups.entries())
       .sort((a, b) => b[1].length - a[1].length)
@@ -679,11 +680,10 @@ export async function getWorkspaceData(
       : journalSelfScopeWhere(ctx, authorPersonId),
   )
 
-  const [tree, hm, otd, options, tagSuggestions, counts] = await Promise.all([
+  const [treePage, hm, otd, tagSuggestions, counts] = await Promise.all([
     buildTree(ctx, groupBy, filters, selfOnly, targetAuthor),
     heatmap(ctx, scopeOnly),
     onThisDay(ctx, scopeOnly),
-    listMetaOptions(ctx),
     listTagSuggestions(ctx, scopeOnly),
     ctx.db(async (tx) => {
       const [row] = await tx
@@ -701,7 +701,9 @@ export async function getWorkspaceData(
   ])
 
   return {
-    tree,
+    tree: treePage.nodes,
+    treeHasMore: treePage.hasMore,
+    treeNextCursor: treePage.nextCursor,
     heatmap: hm,
     onThisDay: otd,
     counts: {
@@ -709,8 +711,6 @@ export async function getWorkspaceData(
       drafts: Number(counts?.drafts ?? 0),
       mine: Number(counts?.mine ?? 0),
     },
-    sites: options.sites,
-    people: options.people,
     tagSuggestions,
     canReadAll: journalCanReadAll(ctx),
     canBrowseAll: journalCanBrowseAll(ctx),

@@ -30,8 +30,7 @@ async function main() {
     for (const t of tenants) {
       // Restore a soft-deleted built-in or insert a missing one without
       // overwriting an active tenant-customized version.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await seedLiftPlanTemplate(db as any, t.id)
+      await seedLiftPlanTemplate(db, t.id)
       const [tmpl] = await db
         .select({ id: s.formTemplates.id })
         .from(s.formTemplates)

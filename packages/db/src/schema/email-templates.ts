@@ -1,6 +1,6 @@
 // Tenant-managed EMAIL TEMPLATES — the library the `send_email` flow action can
-// pick from (mode='template'). Authored in the drag-and-drop builder
-// (/admin/email-templates) which serializes a GrapesJS design + compiles MJML →
+// pick from (mode='template'). Authored in the HTML builder
+// (/admin/email-templates), sanitized before persistence, and compiled to
 // responsive HTML server-side. The compiled HTML carries {{merge}} tokens that
 // are resolved per-send by @beaconhs/email-render.
 
@@ -49,12 +49,10 @@ export const emailTemplates = pgTable(
     recordSubjectType: text('record_subject_type'),
     recordSubjectKey: text('record_subject_key'),
     subjectTemplate: text('subject_template').notNull().default(''), // supports {{tokens}}
-    // GrapesJS getProjectData() — the builder doc, the authoritative reload format.
-    design: jsonb('design').$type<Record<string, unknown>>().notNull().default({}),
-    // Server-compiled MJML → responsive HTML, sanitized, {{tokens}} still embedded.
+    // Server-compiled responsive HTML, sanitized, {{tokens}} still embedded.
     compiledHtml: text('compiled_html').notNull().default(''),
-    // Raw MJML source (editor.getHtml()) kept for re-compile / portability.
-    mjmlSource: text('mjml_source'),
+    // Sanitized editable HTML loaded by the builder and recompiled on save.
+    sourceHtml: text('source_html'),
     mergeFields: jsonb('merge_fields').$type<EmailMergeField[]>().notNull().default([]),
     isActive: boolean('is_active').notNull().default(true),
     createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),

@@ -5,7 +5,7 @@
 import { and, count, desc, eq, ilike, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { complianceAudience, complianceObligations } from '@beaconhs/db/schema'
 import type { requireRequestContext } from '@/lib/auth'
-import { type AudienceItem, evaluateObligation } from '@beaconhs/compliance'
+import { type AudienceItem, evaluateObligation, resolveComplianceClock } from '@beaconhs/compliance'
 import type { ComplianceRecurrence } from '@beaconhs/db/schema'
 import type { ObligationKind } from './_meta'
 
@@ -117,6 +117,9 @@ async function getObligationWithAudience(ctx: Ctx, id: string) {
 export async function obligationCompliance(ctx: Ctx, id: string) {
   const data = await getObligationWithAudience(ctx, id)
   if (!data) return null
-  const result = await ctx.db((tx) => evaluateObligation(tx, ctx.tenantId, data.ob, data.audience))
+  const result = await ctx.db(async (tx) => {
+    const clock = await resolveComplianceClock(tx, ctx.tenantId)
+    return evaluateObligation(tx, ctx.tenantId, data.ob, data.audience, clock)
+  })
   return { obligation: data.ob, audience: data.audience, result }
 }

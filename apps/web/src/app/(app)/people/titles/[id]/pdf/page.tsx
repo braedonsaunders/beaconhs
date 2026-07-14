@@ -5,30 +5,44 @@
 // browser handle the render so we don't need to introduce a worker job.
 
 import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { jobTitleTasks, people, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
+import { AutoPrint } from '@/components/browser-print-controls'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Job Description — Print view' }
 
 export default async function TitlePdfPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(personTitles).where(eq(personTitles.id, id)).limit(1)
+    const [row] = await tx
+      .select()
+      .from(personTitles)
+      .where(and(eq(personTitles.id, id), isNull(personTitles.deletedAt)))
+      .limit(1)
     if (!row) return null
     const tasks = await tx
       .select()
       .from(jobTitleTasks)
-      .where(eq(jobTitleTasks.titleId, id))
+      .where(and(eq(jobTitleTasks.titleId, id), isNull(jobTitleTasks.deletedAt)))
       .orderBy(asc(jobTitleTasks.entityOrder), asc(jobTitleTasks.createdAt))
     const assigned = await tx
       .select({ person: people })
       .from(personTitleAssignments)
       .innerJoin(people, eq(people.id, personTitleAssignments.personId))
-      .where(eq(personTitleAssignments.titleId, id))
+      .where(
+        and(
+          eq(personTitleAssignments.titleId, id),
+          eq(people.status, 'active'),
+          isNull(people.deletedAt),
+        ),
+      )
       .orderBy(asc(people.lastName), asc(people.firstName))
     return { row, tasks, assigned }
   })
@@ -152,12 +166,7 @@ export default async function TitlePdfPage({ params }: { params: Promise<{ id: s
         Job Description · {row.name} · Page printed from BeaconHS on {today}
       </footer>
 
-      {/* Auto-trigger print dialog. Comment out if undesired. */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `setTimeout(() => window.print(), 250)`,
-        }}
-      />
+      <AutoPrint />
     </div>
   )
 }

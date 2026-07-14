@@ -1,0 +1,171 @@
+{
+  "safe": {
+    "localNodeId": "node-primary",
+    "nodes": [
+      {
+        "ID": "node-primary",
+        "Spec": { "Availability": "pause" },
+        "Status": { "State": "ready" },
+        "ManagerStatus": { "Leader": true, "Reachability": "reachable" }
+      }
+    ],
+    "services": [
+      {
+        "ID": "service-target-web",
+        "Spec": {
+          "Name": "beaconhs_web",
+          "Labels": { "com.docker.stack.namespace": "beaconhs" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "Env": [
+                "APP_ROLE=web",
+                "DATABASE_URL=postgres://runtime:runtime-secret@db.internal:5432/beaconhs?sslmode=require"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ID": "service-unrelated",
+        "Spec": {
+          "Name": "other_stack_cache",
+          "Labels": { "com.docker.stack.namespace": "other_stack" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "redis:8-alpine",
+              "Env": []
+            }
+          }
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "ID": "task-target-web",
+        "ServiceID": "service-target-web",
+        "Status": {
+          "ContainerStatus": { "ContainerID": "container-target-web" }
+        }
+      }
+    ],
+    "containers": [
+      {
+        "Id": "container-target-web",
+        "Name": "/beaconhs_web.1.task-target-web",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "Env": [
+            "APP_ROLE=web",
+            "DATABASE_URL=postgres://runtime:runtime-secret@db.internal:5432/beaconhs?sslmode=require"
+          ],
+          "Labels": { "com.docker.swarm.service.name": "beaconhs_web" }
+        }
+      },
+      {
+        "Id": "container-unrelated",
+        "Name": "/unrelated",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "redis:8-alpine",
+          "Env": [],
+          "Labels": {}
+        }
+      }
+    ]
+  },
+  "external-migrator": {
+    "extends": "safe",
+    "services": [
+      {
+        "ID": "service-external-migrator",
+        "Spec": {
+          "Name": "other_stack_migrator",
+          "Labels": { "com.docker.stack.namespace": "other_stack" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "postgres:18-alpine",
+              "Env": [
+                "MIGRATION_DATABASE_URL=postgresql://migrator:migration-secret@db.internal:5432/beaconhs?sslmode=require"
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "drained-safe": {
+    "extends": "safe",
+    "replaceContainers": [
+      {
+        "Id": "container-unrelated",
+        "Name": "/unrelated",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "redis:8-alpine",
+          "Env": [],
+          "Labels": {}
+        }
+      }
+    ]
+  },
+  "spoofed-swarm-label": {
+    "extends": "safe",
+    "containers": [
+      {
+        "Id": "container-spoofed",
+        "Name": "/spoofed",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "ghcr.io/braedonsaunders/beaconhs:old",
+          "Env": ["APP_ROLE=worker"],
+          "Labels": { "com.docker.swarm.service.name": "beaconhs_worker" }
+        }
+      }
+    ]
+  },
+  "alternate-equivalent-url": {
+    "extends": "safe",
+    "containers": [
+      {
+        "Id": "container-alternate-url",
+        "Name": "/alternate-url",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "postgres:18-alpine",
+          "Env": [
+            "OTHER_CONNECTION=postgresql://other:other-secret@DB.INTERNAL.:6432/beacon%68s?application_name=unapproved"
+          ],
+          "Labels": {}
+        }
+      }
+    ]
+  },
+  "libpq-environment": {
+    "extends": "safe",
+    "containers": [
+      {
+        "Id": "container-libpq-environment",
+        "Name": "/libpq-environment",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "postgres:18-alpine",
+          "Env": ["PGHOST=DB.INTERNAL.", "PGDATABASE=beaconhs", "PGUSER=other"],
+          "Labels": {}
+        }
+      }
+    ]
+  },
+  "multi-node": {
+    "extends": "safe",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": { "Availability": "pause" },
+        "Status": { "State": "ready" },
+        "ManagerStatus": { "Leader": false, "Reachability": "reachable" }
+      }
+    ]
+  }
+}

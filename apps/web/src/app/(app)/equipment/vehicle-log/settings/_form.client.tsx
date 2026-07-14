@@ -3,12 +3,17 @@
 // Vehicle log settings — tenant entry-mode configuration + per-driver default
 // overrides. Mode changes save explicitly; driver overrides apply immediately.
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Loader2, Plus, X } from 'lucide-react'
-import { Button, Card, CardContent, SearchSelect, cn } from '@beaconhs/ui'
+import { Button, Card, CardContent, cn } from '@beaconhs/ui'
 import type { VehicleLogEnabledModes } from '@beaconhs/db/schema'
 import { saveVehicleLogSettings, setDriverDefaultMode } from './_actions'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
 
 type PersonRow = {
   id: string
@@ -42,10 +47,20 @@ const DEFAULT_CHOICES: { value: 'destination' | 'odometer'; label: string }[] = 
 
 export function VehicleLogSettingsForm({
   initial,
-  people,
+  overrides,
+  total,
+  filteredTotal,
+  page,
+  perPage,
+  currentParams,
 }: {
   initial: { enabledModes: VehicleLogEnabledModes; defaultMode: 'destination' | 'odometer' }
-  people: PersonRow[]
+  overrides: PersonRow[]
+  total: number
+  filteredTotal: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
 }) {
   const router = useRouter()
   const [enabledModes, setEnabledModes] = useState<VehicleLogEnabledModes>(initial.enabledModes)
@@ -58,12 +73,6 @@ export function VehicleLogSettingsForm({
   const [addMode, setAddMode] = useState<'destination' | 'odometer'>('destination')
   const [rowPending, setRowPending] = useState<string | null>(null)
   const [rowError, setRowError] = useState<string | null>(null)
-
-  const overrides = useMemo(() => people.filter((p) => p.mode), [people])
-  const addOptions = useMemo(
-    () => people.filter((p) => !p.mode).map((p) => ({ value: p.id, label: p.label, hint: p.hint })),
-    [people],
-  )
 
   function save() {
     setError(null)
@@ -194,13 +203,14 @@ export function VehicleLogSettingsForm({
                 <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
                   Person
                 </div>
-                <SearchSelect
+                <RemoteSearchSelect
+                  lookup="vehicle-drivers"
                   value={addPersonId}
                   onChange={setAddPersonId}
-                  options={addOptions}
                   placeholder="Choose a driver…"
-                  searchPlaceholder="Search people…"
+                  searchPlaceholder="Search active drivers…"
                   sheetTitle="Driver"
+                  clearable
                 />
               </div>
               <div className="space-y-1">
@@ -232,14 +242,42 @@ export function VehicleLogSettingsForm({
                 disabled={!addPersonId || rowPending !== null}
               >
                 <Plus size={14} />
-                Add
+                Set override
               </Button>
             </div>
             {rowError ? <p className="text-xs text-red-600">{rowError}</p> : null}
 
+            <TableToolbar>
+              <SearchInput placeholder="Search driver overrides…" />
+              <FilterChips
+                basePath="/equipment/vehicle-log/settings"
+                currentParams={currentParams}
+                paramKey="overrideMode"
+                label="Mode"
+                options={[
+                  { value: 'destination', label: 'Destination' },
+                  { value: 'odometer', label: 'Odometer' },
+                ]}
+              />
+              <FilterChips
+                basePath="/equipment/vehicle-log/settings"
+                currentParams={currentParams}
+                paramKey="sort"
+                label="Order"
+                defaultValue="name"
+                hideAll
+                options={[
+                  { value: 'name', label: 'Driver name' },
+                  { value: 'mode', label: 'Mode, then name' },
+                ]}
+              />
+            </TableToolbar>
+
             {overrides.length === 0 ? (
               <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                No per-driver defaults yet. Every driver lands on the tenant default.
+                {total === 0
+                  ? 'No per-driver defaults yet. Every driver lands on the tenant default.'
+                  : 'No driver defaults match these filters.'}
               </p>
             ) : (
               <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
@@ -294,6 +332,13 @@ export function VehicleLogSettingsForm({
                 ))}
               </ul>
             )}
+            <Pagination
+              basePath="/equipment/vehicle-log/settings"
+              currentParams={currentParams}
+              total={filteredTotal}
+              page={page}
+              perPage={perPage}
+            />
           </CardContent>
         </Card>
       ) : null}

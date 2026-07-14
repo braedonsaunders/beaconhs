@@ -27,6 +27,7 @@ import { formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
+import { isUuid } from '@/lib/list-params'
 import { cancelAssessmentAttempt, submitAssessmentAttempt } from '../../_actions/assessments'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,8 @@ export default async function AssessmentAttemptDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   // Proctors (training.record.create / training.class.manage) run attempts for
   // other people, so either staff permission sees (and can grade) any attempt.

@@ -33,6 +33,38 @@ function tzOffsetMs(timeZone: string, at: Date): number {
   return asUtc - Math.floor(at.getTime() / 1000) * 1000
 }
 
+type WallClockParts = {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
+function wallClockParts(timeZone: string, at: Date): WallClockParts {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts: Record<string, string> = {}
+  for (const part of dtf.formatToParts(at)) parts[part.type] = part.value
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  }
+}
+
 /**
  * Format an instant as a `<input type="datetime-local">` value (`YYYY-MM-DDTHH:mm`)
  * in the given IANA timezone.
@@ -52,6 +84,12 @@ export function datetimeLocalValue(d: Date, timeZone: string): string {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
 }
 
+/** Format an instant as an ISO calendar date in the given IANA timezone. */
+export function dateIsoInTimeZone(d: Date, timeZone: string): string {
+  const parts = wallClockParts(timeZone, d)
+  return `${String(parts.year).padStart(4, '0')}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
+}
+
 /**
  * Parse a wall-clock string (`YYYY-MM-DD[THH:mm[:ss[.sss]]]`) as a time in the
  * given IANA timezone. Strings carrying an explicit offset/Z fall through to
@@ -66,21 +104,57 @@ export function parseDatetimeLocal(value: string, timeZone: string): Date | null
     const d = new Date(s)
     return Number.isNaN(d.getTime()) ? null : d
   }
+  const requested = {
+    year: Number(m[1]),
+    month: Number(m[2]),
+    day: Number(m[3]),
+    hour: Number(m[4] ?? 0),
+    minute: Number(m[5] ?? 0),
+    second: Number(m[6] ?? 0),
+    millisecond: Number((m[7] ?? '').padEnd(3, '0') || 0),
+  }
   const utcGuess = Date.UTC(
-    Number(m[1]),
-    Number(m[2]) - 1,
-    Number(m[3]),
-    Number(m[4] ?? 0),
-    Number(m[5] ?? 0),
-    Number(m[6] ?? 0),
-    Number((m[7] ?? '').padEnd(3, '0') || 0),
+    requested.year,
+    requested.month - 1,
+    requested.day,
+    requested.hour,
+    requested.minute,
+    requested.second,
+    requested.millisecond,
   )
   if (Number.isNaN(utcGuess)) return null
+  const normalized = new Date(utcGuess)
+  if (
+    normalized.getUTCFullYear() !== requested.year ||
+    normalized.getUTCMonth() + 1 !== requested.month ||
+    normalized.getUTCDate() !== requested.day ||
+    normalized.getUTCHours() !== requested.hour ||
+    normalized.getUTCMinutes() !== requested.minute ||
+    normalized.getUTCSeconds() !== requested.second ||
+    normalized.getUTCMilliseconds() !== requested.millisecond
+  ) {
+    return null
+  }
   // Two-pass offset resolution so instants near a DST transition land correctly.
   let ts = utcGuess - tzOffsetMs(timeZone, new Date(utcGuess))
   const refined = tzOffsetMs(timeZone, new Date(ts))
   ts = utcGuess - refined
-  return new Date(ts)
+  const parsed = new Date(ts)
+  const actual = wallClockParts(timeZone, parsed)
+  // Reject wall-clock times that do not exist during a DST spring-forward gap.
+  // JavaScript otherwise normalizes them to a different local time silently.
+  if (
+    actual.year !== requested.year ||
+    actual.month !== requested.month ||
+    actual.day !== requested.day ||
+    actual.hour !== requested.hour ||
+    actual.minute !== requested.minute ||
+    actual.second !== requested.second ||
+    parsed.getUTCMilliseconds() !== requested.millisecond
+  ) {
+    return null
+  }
+  return parsed
 }
 
 /** Human-readable date + time (e.g. `Jun 11, 2026, 2:30 PM`) in the given timezone. */

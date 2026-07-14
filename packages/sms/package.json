@@ -20,6 +20,7 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@beaconhs/crypto": "workspace:*"
+    "@beaconhs/crypto": "workspace:*",
+    "@beaconhs/sync": "workspace:*"
   }
 }

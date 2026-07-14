@@ -1,7 +1,7 @@
 'use client'
 
 // "Additional fields" section + URL-drawer used by the skill-type, authority,
-// and (future) skill detail pages.  Renders the existing rows in a small
+// and skill detail pages. Renders the existing rows in a small
 // table and exposes an inline delete + a "?drawer=add-extra-field" drawer
 // for new ones.
 //
@@ -23,11 +23,30 @@ import {
   UrlDrawer,
 } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import {
+  TRAINING_EXTRA_FIELD_KEY_MAX,
+  TRAINING_EXTRA_FIELD_VALUE_MAX,
+} from '../_lib/extra-field-policy'
 
 type ExtraFieldRow = {
   id: string
   fieldKey: string
   fieldValue: string | null
+}
+
+type ExtraFieldListState = {
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  total: number
+  filteredTotal: number
+  query?: string
+  page: number
+  perPage: number
+  queryParamKey: string
+  pageParamKey: string
 }
 
 type AddExtraFieldAction = (input: {
@@ -47,6 +66,7 @@ export function ExtraFieldsSection({
   ownerType,
   ownerId,
   rows,
+  list,
   drawerOpen,
   drawerCloseHref,
   addHref,
@@ -56,24 +76,50 @@ export function ExtraFieldsSection({
   ownerType: 'skill' | 'skill_type' | 'authority'
   ownerId: string
   rows: ExtraFieldRow[]
+  list: ExtraFieldListState
   drawerOpen: boolean
   drawerCloseHref: string
   addHref: string
   addAction: AddExtraFieldAction
   deleteAction: DeleteExtraFieldAction
 }) {
+  const countLabel =
+    list.filteredTotal === list.total
+      ? list.total.toLocaleString()
+      : `${list.filteredTotal.toLocaleString()} of ${list.total.toLocaleString()}`
+  const isOutOfRange = list.filteredTotal > 0 && rows.length === 0
+
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Additional fields ({rows.length})</CardTitle>
+          <CardTitle>Additional fields ({countLabel})</CardTitle>
         </CardHeader>
         <CardContent>
+          <TableToolbar className="mb-3">
+            <SearchInput
+              placeholder="Search field name or value…"
+              paramKey={list.queryParamKey}
+              pageParamKey={list.pageParamKey}
+            />
+          </TableToolbar>
           {rows.length === 0 ? (
             <EmptyState
               icon={<Plus size={24} />}
-              title="No custom fields"
-              description="Capture extra fields that don't fit the built-in columns — e.g. issuing union local, reference number."
+              title={
+                isOutOfRange
+                  ? 'No fields on this page'
+                  : list.query
+                    ? 'No fields match your search'
+                    : 'No custom fields'
+              }
+              description={
+                isOutOfRange
+                  ? 'Use the pagination control to return to the last page.'
+                  : list.query
+                    ? 'Clear the search to see other additional fields.'
+                    : "Capture extra fields that don't fit the built-in columns — e.g. issuing union local, reference number."
+              }
             />
           ) : (
             <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -88,6 +134,14 @@ export function ExtraFieldsSection({
               ))}
             </ul>
           )}
+          <Pagination
+            basePath={list.basePath}
+            currentParams={list.currentParams}
+            total={list.filteredTotal}
+            page={list.page}
+            perPage={list.perPage}
+            pageParamKey={list.pageParamKey}
+          />
         </CardContent>
       </Card>
       <div className="mt-3 flex justify-end">
@@ -243,7 +297,7 @@ function AddExtraFieldDrawer({
             value={fieldKey}
             onChange={(e) => setFieldKey(e.currentTarget.value)}
             placeholder="e.g. Local, Reference number, Renewal contact"
-            maxLength={120}
+            maxLength={TRAINING_EXTRA_FIELD_KEY_MAX}
           />
         </div>
         <div className="space-y-1.5">
@@ -253,7 +307,7 @@ function AddExtraFieldDrawer({
             value={fieldValue}
             onChange={(e) => setFieldValue(e.currentTarget.value)}
             placeholder="Leave blank if not applicable"
-            maxLength={500}
+            maxLength={TRAINING_EXTRA_FIELD_VALUE_MAX}
           />
         </div>
         {error ? (

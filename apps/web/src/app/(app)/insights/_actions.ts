@@ -17,12 +17,14 @@ import { recordAudit } from '@/lib/audit'
 import { canPublishInsights, canViewInsights } from './_access'
 import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
 import { INSIGHT_WIDGET_MAP } from './_widgets'
+import { isUuid } from '@/lib/list-params'
+import {
+  INSIGHT_DASHBOARD_NAME_MAX_LENGTH,
+  validateRequiredPersistedText,
+} from '@/lib/persisted-text-policy'
 
 type Ok<T = {}> = { ok: true } & T
 type Err = { ok: false; error: string }
-
-/** A widget id is EITHER a built-in widget key OR an insight_cards.id (uuid). */
-const UUID_RE = /^[0-9a-f-]{36}$/i
 
 const LayoutSchema = z.object({
   widgets: z
@@ -62,7 +64,12 @@ async function ownedDashboard(
 export async function createDashboard(name: string): Promise<Ok<{ id: string }> | Err> {
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
-  const clean = name.trim().slice(0, 60) || 'New dashboard'
+  const parsedName = validateRequiredPersistedText(name, {
+    label: 'Dashboard name',
+    maxLength: INSIGHT_DASHBOARD_NAME_MAX_LENGTH,
+  })
+  if (!parsedName.ok) return parsedName
+  const clean = parsedName.value
   const [{ maxOrder } = { maxOrder: -1 }] = await ctx.db((tx) =>
     tx
       .select({ maxOrder: sql<number>`coalesce(max(${insightDashboards.sortOrder}), -1)::int` })
@@ -92,18 +99,45 @@ export async function createDashboard(name: string): Promise<Ok<{ id: string }> 
   return { ok: true, id: row.id }
 }
 
-export async function renameDashboard(id: string, name: string): Promise<Ok | Err> {
+export async function renameDashboard(
+  id: string,
+  name: string,
+): Promise<Ok<{ name: string }> | Err> {
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) return { ok: false, error: 'You don’t have access to Insights.' }
-  if (!(await ownedDashboard(ctx, id))) return { ok: false, error: 'Dashboard not found.' }
-  await ctx.db((tx) =>
+  if (!isUuid(id)) return { ok: false, error: 'Dashboard not found.' }
+  const parsedName = validateRequiredPersistedText(name, {
+    label: 'Dashboard name',
+    maxLength: INSIGHT_DASHBOARD_NAME_MAX_LENGTH,
+  })
+  if (!parsedName.ok) return parsedName
+  const dashboard = await ownedDashboard(ctx, id)
+  if (!dashboard) return { ok: false, error: 'Dashboard not found.' }
+  if (dashboard.name === parsedName.value) return { ok: true, name: parsedName.value }
+  const [renamed] = await ctx.db((tx) =>
     tx
       .update(insightDashboards)
-      .set({ name: name.trim().slice(0, 60) || 'Dashboard' })
-      .where(eq(insightDashboards.id, id)),
+      .set({ name: parsedName.value })
+      .where(
+        and(
+          eq(insightDashboards.id, id),
+          eq(insightDashboards.userId, ctx.userId),
+          isNull(insightDashboards.deletedAt),
+        ),
+      )
+      .returning({ id: insightDashboards.id }),
   )
+  if (!renamed) return { ok: false, error: 'Dashboard not found.' }
+  await recordAudit(ctx, {
+    entityType: 'insight_dashboard',
+    entityId: id,
+    action: 'update',
+    summary: `Renamed Insights dashboard to "${parsedName.value}"`,
+    before: { name: dashboard.name },
+    after: { name: parsedName.value },
+  })
   revalidatePath('/insights')
-  return { ok: true }
+  return { ok: true, name: parsedName.value }
 }
 
 export async function deleteDashboard(id: string): Promise<Ok | Err> {
@@ -135,9 +169,7 @@ export async function saveDashboardLayout(input: {
   if (!(await ownedDashboard(ctx, input.id))) return { ok: false, error: 'Dashboard not found.' }
   const parsed = LayoutSchema.safeParse(input.layout)
   if (!parsed.success) return { ok: false, error: 'Invalid layout.' }
-  const widgets = parsed.data.widgets.filter(
-    (w) => INSIGHT_WIDGET_MAP.has(w.id) || UUID_RE.test(w.id),
-  )
+  const widgets = parsed.data.widgets.filter((w) => INSIGHT_WIDGET_MAP.has(w.id) || isUuid(w.id))
   await ctx.db((tx) =>
     tx
       .update(insightDashboards)
@@ -219,7 +251,7 @@ export async function publishDashboard(input: {
   // A published dashboard is rendered through each VIEWER's card palette, which
   // excludes other users' drafts — so draft cards on the layout would silently
   // vanish for every viewer. Require them to be published first.
-  const cardIds = dashboard.layout.widgets.map((w) => w.id).filter((id) => UUID_RE.test(id))
+  const cardIds = dashboard.layout.widgets.map((w) => w.id).filter(isUuid)
   if (cardIds.length > 0) {
     const drafts = await ctx.db((tx) =>
       tx

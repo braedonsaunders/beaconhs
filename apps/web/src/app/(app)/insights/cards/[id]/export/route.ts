@@ -7,6 +7,7 @@ import { recordAudit } from '@/lib/audit'
 import { canViewInsights } from '../../../_access'
 import { loadCard } from '../../_data'
 import { isTrustedSystemCard } from '../../../_system-cards'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,8 @@ function toCsv(result: BhqlResult): string {
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) return new Response('Not found', { status: 404 })
+
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) return new Response('Forbidden', { status: 403 })
   const card = await loadCard(ctx, id)

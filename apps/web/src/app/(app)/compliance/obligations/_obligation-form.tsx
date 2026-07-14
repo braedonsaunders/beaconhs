@@ -27,7 +27,9 @@ import {
   type AudienceType,
 } from '@/components/audience-picker'
 import { RecurrencePicker } from '@/components/recurrence-picker'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import type { RecurrenceValue } from '@/components/recurrence'
+import type { PickerLookup } from '@/lib/picker-options'
 import { KIND_META, OBLIGATION_KINDS, type ObligationKind, kindLabel } from './_meta'
 import { createObligation, updateObligation, type ObligationInput } from './_actions'
 
@@ -93,10 +95,8 @@ export function ObligationForm({
   const [kind, setKind] = useState<ObligationKind>(initialKind)
   const [title, setTitle] = useState(initial?.title ?? '')
   const [notes, setNotes] = useState(initial?.notes ?? '')
-  const [inspectionTypeId, setInspectionTypeId] = useState(
-    ref.inspectionTypeId ?? targets.inspectionTypes[0]?.id ?? '',
-  )
-  const [documentId, setDocumentId] = useState(ref.documentId ?? targets.documents[0]?.id ?? '')
+  const [inspectionTypeId, setInspectionTypeId] = useState(ref.inspectionTypeId ?? '')
+  const [documentId, setDocumentId] = useState(ref.documentId ?? '')
   const [trainingItemKind, setTrainingItemKind] = useState<'course' | 'assessment_type'>(
     ref.trainingItemKind ?? 'course',
   )
@@ -106,14 +106,10 @@ export function ObligationForm({
     ref.skillTypeId ? 'skill' : 'course',
   )
   const [skillTypeId, setSkillTypeId] = useState(ref.skillTypeId ?? '')
-  const [formTemplateId, setFormTemplateId] = useState(
-    ref.formTemplateId ?? targets.formTemplates[0]?.id ?? '',
-  )
-  const [equipmentTypeId, setEquipmentTypeId] = useState(
-    ref.equipmentTypeId ?? targets.equipmentTypes[0]?.id ?? '',
-  )
-  const [ppeTypeId, setPpeTypeId] = useState(ref.ppeTypeId ?? targets.ppeTypes[0]?.id ?? '')
-  const [jobTitleId, setJobTitleId] = useState(ref.jobTitleId ?? targets.jobTitles[0]?.id ?? '')
+  const [formTemplateId, setFormTemplateId] = useState(ref.formTemplateId ?? '')
+  const [equipmentTypeId, setEquipmentTypeId] = useState(ref.equipmentTypeId ?? '')
+  const [ppeTypeId, setPpeTypeId] = useState(ref.ppeTypeId ?? '')
+  const [jobTitleId, setJobTitleId] = useState(ref.jobTitleId ?? '')
 
   const meta = KIND_META[kind]
   const [audience, setAudience] = useState<AudienceItem[]>(initial?.audience ?? [])
@@ -244,6 +240,7 @@ export function ObligationForm({
           <CardContent className="space-y-4">
             {meta.target === 'inspectionType' ? (
               <TargetSelect
+                lookup="compliance-obligation-inspection-types"
                 value={inspectionTypeId}
                 onChange={setInspectionTypeId}
                 placeholder="inspection type"
@@ -252,6 +249,7 @@ export function ObligationForm({
             ) : null}
             {meta.target === 'document' ? (
               <TargetSelect
+                lookup="compliance-obligation-documents"
                 value={documentId}
                 onChange={setDocumentId}
                 placeholder="document"
@@ -269,6 +267,7 @@ export function ObligationForm({
                 </Select>
                 {certItemKind === 'course' ? (
                   <TargetSelect
+                    lookup="compliance-obligation-courses"
                     value={courseId}
                     onChange={setCourseId}
                     placeholder="certification (course)"
@@ -276,6 +275,7 @@ export function ObligationForm({
                   />
                 ) : (
                   <TargetSelect
+                    lookup="compliance-obligation-skill-types"
                     value={skillTypeId}
                     onChange={setSkillTypeId}
                     placeholder="skill type"
@@ -286,6 +286,7 @@ export function ObligationForm({
             ) : null}
             {meta.target === 'formTemplate' ? (
               <TargetSelect
+                lookup="compliance-obligation-form-templates"
                 value={formTemplateId}
                 onChange={setFormTemplateId}
                 placeholder="app / form template"
@@ -294,6 +295,7 @@ export function ObligationForm({
             ) : null}
             {meta.target === 'equipmentType' ? (
               <TargetSelect
+                lookup="compliance-obligation-equipment-types"
                 value={equipmentTypeId}
                 onChange={setEquipmentTypeId}
                 placeholder="equipment type"
@@ -302,6 +304,7 @@ export function ObligationForm({
             ) : null}
             {meta.target === 'ppeType' ? (
               <TargetSelect
+                lookup="compliance-obligation-ppe-types"
                 value={ppeTypeId}
                 onChange={setPpeTypeId}
                 placeholder="PPE type"
@@ -310,6 +313,7 @@ export function ObligationForm({
             ) : null}
             {meta.target === 'jobTitle' ? (
               <TargetSelect
+                lookup="compliance-obligation-job-titles"
                 value={jobTitleId}
                 onChange={setJobTitleId}
                 placeholder="job title"
@@ -329,6 +333,7 @@ export function ObligationForm({
                 </Select>
                 {trainingItemKind === 'course' ? (
                   <TargetSelect
+                    lookup="compliance-obligation-courses"
                     value={courseId}
                     onChange={setCourseId}
                     placeholder="course"
@@ -336,6 +341,7 @@ export function ObligationForm({
                   />
                 ) : (
                   <TargetSelect
+                    lookup="compliance-obligation-assessment-types"
                     value={assessmentTypeId}
                     onChange={setAssessmentTypeId}
                     placeholder="assessment type"
@@ -398,24 +404,33 @@ export function ObligationForm({
 }
 
 function TargetSelect({
+  lookup,
   value,
   onChange,
   placeholder,
   options,
 }: {
+  lookup: PickerLookup
   value: string
   onChange: (v: string) => void
   placeholder: string
   options: { id: string; label: string }[]
 }) {
+  const initialOption = options.find((candidate) => candidate.id === value)
   return (
-    <Select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">— Pick a {placeholder} —</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.label}
-        </option>
-      ))}
-    </Select>
+    <RemoteSearchSelect
+      lookup={lookup}
+      value={value}
+      onChange={onChange}
+      initialOption={
+        initialOption ? { value: initialOption.id, label: initialOption.label } : undefined
+      }
+      placeholder={`— Pick a ${placeholder} —`}
+      searchPlaceholder={`Search ${placeholder}s…`}
+      sheetTitle={`Pick a ${placeholder}`}
+      ariaLabel={`Pick a ${placeholder}`}
+      clearable
+      emptyLabel={`— Pick a ${placeholder} —`}
+    />
   )
 }

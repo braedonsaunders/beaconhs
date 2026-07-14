@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { createHash } from 'node:crypto'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import {
   notificationPreferences,
@@ -13,7 +13,12 @@ import {
   users,
   webpushSubscriptions,
 } from '@beaconhs/db/schema'
-import { enqueueEmail, enqueuePush, type NotifyJobData } from '@beaconhs/jobs'
+import {
+  enqueueEmail,
+  enqueuePush,
+  normalizeNotifyJobData,
+  type NotifyJobData,
+} from '@beaconhs/jobs'
 import { sendSmsVia } from '@beaconhs/sms'
 import { resolveSmsDelivery } from '../lib/resolve-sms-transport'
 import { appBaseUrl } from '../lib/app-base-url'
@@ -37,11 +42,13 @@ function msUntilQuietHoursEnd(qh: { start: number; end: number }, now: Date): nu
 }
 
 export async function processNotification(job: Job<NotifyJobData>): Promise<void> {
-  const d = job.data
+  const d = normalizeNotifyJobData(job.data)
   const sourceJobId = String(job.id ?? '')
-  if (!sourceJobId) throw new Error('Notification worker requires a durable BullMQ job id')
+  if (!sourceJobId || sourceJobId.length > 512 || /[\u0000-\u001f\u007f]/.test(sourceJobId)) {
+    throw new Error('Notification worker requires a valid durable BullMQ job id')
+  }
   const critical = d.isCritical ?? false
-  const requestedUserIds = [...new Set(d.userIds.map((id) => id.trim()).filter(Boolean))]
+  const requestedUserIds = d.userIds
   const plan = await withTenant(db, d.tenantId, async (tx) => {
     const [catCfg] = await tx
       .select({ channels: tenantNotificationSettings.channels })
@@ -76,7 +83,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     const targets =
       requestedUserIds.length > 0
         ? await tx
-            .select({ user: users })
+            .select({ id: users.id, email: users.email })
             .from(tenantUsers)
             .innerJoin(users, eq(users.id, tenantUsers.userId))
             .where(
@@ -87,7 +94,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
               ),
             )
         : []
-    const targetUserIds = targets.map((target) => target.user.id)
+    const targetUserIds = targets.map((target) => target.id)
 
     const prefRows =
       targetUserIds.length > 0
@@ -106,26 +113,48 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
               ),
             )
         : []
-    for (const u of targetUserIds) {
+    if (targetUserIds.length > 0) {
       await tx
         .insert(notifications)
-        .values({
-          tenantId: d.tenantId,
-          userId: u,
-          category: d.category,
-          type: d.type,
-          title: d.title,
-          body: d.body,
-          linkPath: d.linkPath,
-          data: d.data ?? {},
-          isCritical: d.isCritical ?? false,
-          sourceJobId,
-        })
+        .values(
+          targetUserIds.map((userId) => ({
+            tenantId: d.tenantId,
+            userId,
+            category: d.category,
+            type: d.type,
+            title: d.title,
+            body: d.body,
+            linkPath: d.linkPath,
+            data: d.data ?? {},
+            isCritical: d.isCritical ?? false,
+            sourceJobId,
+          })),
+        )
         .onConflictDoNothing({
           target: [notifications.tenantId, notifications.sourceJobId, notifications.userId],
         })
     }
-    return { targets, prefRows, emailAllowed, emailDelayMs, pushAllowed, smsAllowed }
+    const subscriptions =
+      pushAllowed && targetUserIds.length > 0
+        ? await tx
+            .select({ id: webpushSubscriptions.id, userId: webpushSubscriptions.userId })
+            .from(webpushSubscriptions)
+            .where(
+              and(
+                eq(webpushSubscriptions.tenantId, d.tenantId),
+                inArray(webpushSubscriptions.userId, targetUserIds),
+              ),
+            )
+        : []
+    return {
+      targets,
+      prefRows,
+      emailAllowed,
+      emailDelayMs,
+      pushAllowed,
+      smsAllowed,
+      subscriptions,
+    }
   })
 
   const prefsByUser = new Map<string, Map<string, boolean>>()
@@ -141,19 +170,19 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
   // Publish all email jobs before contacting non-idempotent providers. Queue
   // ids are deterministic, so a later retry cannot fan out duplicate emails.
   for (const target of plan.targets) {
-    if (!plan.emailAllowed || !channelEnabled(target.user.id, 'email')) continue
+    if (!plan.emailAllowed || !channelEnabled(target.id, 'email')) continue
     await enqueueEmail(
       {
-        to: target.user.email,
+        to: target.email,
         subject: d.title,
         html: `<p>${escapeHtml(d.body ?? d.title)}</p>${d.linkPath ? `<p><a href="${escapeHtml(`${baseUrl}${d.linkPath}`)}">Open in app</a></p>` : ''}`,
         text: `${d.body ?? d.title}${d.linkPath ? `\n${baseUrl}${d.linkPath}` : ''}`,
-        meta: { tenantId: d.tenantId, userId: target.user.id, category: d.category },
+        meta: { tenantId: d.tenantId, userId: target.id, category: d.category },
       },
       {
         ...(plan.emailDelayMs > 0 ? { delay: plan.emailDelayMs } : {}),
         jobId: `notification-email|${createHash('sha256')
-          .update(`${sourceJobId}\0${target.user.id}`)
+          .update(`${d.tenantId}\0${sourceJobId}\0${target.id}`)
           .digest('hex')}`,
       },
     )
@@ -162,22 +191,23 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
   // Push has its own retry queue. One dead endpoint cannot replay in-app,
   // email, or SMS delivery.
   if (plan.pushAllowed) {
+    const subscriptionsByUser = new Map<string, typeof plan.subscriptions>()
+    for (const subscription of plan.subscriptions) {
+      const subscriptions = subscriptionsByUser.get(subscription.userId) ?? []
+      subscriptions.push(subscription)
+      subscriptionsByUser.set(subscription.userId, subscriptions)
+    }
     for (const target of plan.targets) {
-      if (!channelEnabled(target.user.id, 'push')) continue
-      const subscriptions = await withTenant(db, d.tenantId, (tx) =>
-        tx
-          .select()
-          .from(webpushSubscriptions)
-          .where(eq(webpushSubscriptions.userId, target.user.id)),
-      )
+      if (!channelEnabled(target.id, 'push')) continue
+      const subscriptions = subscriptionsByUser.get(target.id) ?? []
       for (const subscription of subscriptions) {
         const pushJobId = `notification-push|${createHash('sha256')
-          .update(`${sourceJobId}\0${subscription.id}`)
+          .update(`${d.tenantId}\0${sourceJobId}\0${subscription.id}`)
           .digest('hex')}`
         await enqueuePush(
           {
             tenantId: d.tenantId,
-            userId: target.user.id,
+            userId: target.id,
             subscriptionId: subscription.id,
             title: d.title,
             body: d.body,
@@ -216,21 +246,50 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     return
   }
 
-  const smsFailures: string[] = []
-  if (smsDelivery) {
+  let smsFailureCount = 0
+  if (smsDelivery && plan.targets.length > 0) {
     const via = smsDelivery.kind === 'transport' ? smsDelivery.transport.provider : 'unconfigured'
     const text = (d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1500)
-    for (const target of plan.targets) {
-      if (!channelEnabled(target.user.id, 'sms')) continue
-      const [person] = await withTenant(db, d.tenantId, (tx) =>
+    const [phoneRows, priorRows] = await Promise.all([
+      withTenant(db, d.tenantId, (tx) =>
         tx
-          .select({ phone: people.phone })
+          .select({ userId: people.userId, phone: people.phone })
           .from(people)
-          .where(and(eq(people.tenantId, d.tenantId), eq(people.userId, target.user.id)))
-          .limit(1),
-      )
-      const phone = person?.phone?.trim()
+          .where(
+            and(
+              eq(people.tenantId, d.tenantId),
+              inArray(
+                people.userId,
+                plan.targets.map((target) => target.id),
+              ),
+              isNull(people.deletedAt),
+            ),
+          ),
+      ),
+      withTenant(db, d.tenantId, (tx) =>
+        tx
+          .select({ recipient: smsLog.recipient, status: smsLog.status, meta: smsLog.meta })
+          .from(smsLog)
+          .where(eq(smsLog.jobId, sourceJobId)),
+      ),
+    ])
+    const phoneByUser = new Map(phoneRows.map((row) => [row.userId, row.phone]))
+    const sentRecipients = new Set(
+      priorRows
+        .filter((row) => row.status === 'sent' && row.recipient)
+        .map((row) => row.recipient!),
+    )
+    const skippedUsers = new Set(
+      priorRows
+        .filter((row) => row.status === 'skipped')
+        .map((row) => (row.meta as { userEmail?: unknown } | null)?.userEmail)
+        .filter((email): email is string => typeof email === 'string'),
+    )
+    for (const target of plan.targets) {
+      if (!channelEnabled(target.id, 'sms')) continue
+      const phone = phoneByUser.get(target.id)?.trim()
       if (!phone) {
+        if (skippedUsers.has(target.email)) continue
         await withTenant(db, d.tenantId, (tx) =>
           tx.insert(smsLog).values({
             tenantId: d.tenantId,
@@ -241,25 +300,12 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             body: text,
             bodyLength: text.length,
             errorMessage: 'No phone number on file for this user.',
-            meta: { userEmail: target.user.email },
+            meta: { userEmail: target.email },
           }),
         )
         continue
       }
-      const [alreadySent] = await withTenant(db, d.tenantId, (tx) =>
-        tx
-          .select({ id: smsLog.id })
-          .from(smsLog)
-          .where(
-            and(
-              eq(smsLog.jobId, sourceJobId),
-              eq(smsLog.recipient, phone),
-              eq(smsLog.status, 'sent'),
-            ),
-          )
-          .limit(1),
-      )
-      if (alreadySent) continue
+      if (sentRecipients.has(phone)) continue
       try {
         if (smsDelivery.kind !== 'transport') {
           throw new Error(
@@ -279,12 +325,12 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             body: text,
             bodyLength: text.length,
             sentAt: new Date(),
-            meta: { userEmail: target.user.email },
+            meta: { userEmail: target.email },
           }),
         )
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        smsFailures.push(`${target.user.email}: ${message}`)
+        smsFailureCount += 1
         await withTenant(db, d.tenantId, (tx) =>
           tx.insert(smsLog).values({
             tenantId: d.tenantId,
@@ -296,15 +342,13 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             body: text,
             bodyLength: text.length,
             errorMessage: message,
-            meta: { userEmail: target.user.email },
+            meta: { userEmail: target.email },
           }),
         )
       }
     }
   }
-  if (smsFailures.length > 0) {
-    throw new Error(
-      `SMS delivery failed for ${smsFailures.length} recipient(s): ${smsFailures.join('; ')}`,
-    )
+  if (smsFailureCount > 0) {
+    throw new Error(`SMS delivery failed for ${smsFailureCount} recipient(s); see the SMS log`)
   }
 }

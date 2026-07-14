@@ -112,6 +112,7 @@ export function CustomerSignatureCard({
                 <RawImage
                   src={currentSignature}
                   alt="Customer signature"
+                  optimizationReason="generated"
                   className="max-h-32 rounded border border-slate-200 bg-white"
                 />
                 <div className="text-xs text-slate-600">

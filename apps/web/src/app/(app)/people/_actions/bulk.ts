@@ -23,23 +23,22 @@ import {
   trades,
 } from '@beaconhs/db/schema'
 import { assertCan, assertNotImpersonating } from '@beaconhs/tenant'
+import { materializeIdentityAudienceObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
 import type { Database } from '@beaconhs/db'
+import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
+import {
+  lockPersonGroupMembershipGraph,
+  refreshPersonGroupCache,
+} from '@/lib/person-group-memberships'
 
 type BulkActionResult =
-  | { ok: true; updated: number; skipped: number }
-  | { ok: false; error: string }
+  { ok: true; updated: number; skipped: number } | { ok: false; error: string }
 
 type BulkCsvResult = { ok: true; filename: string; content: string } | { ok: false; error: string }
-
-const MAX_BULK = 500
-
-function makeBatchId(): string {
-  return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
 
 /**
  * Ids of the given people that are actively synced from an external system.
@@ -57,7 +56,6 @@ async function activelySyncedPersonIds(tx: Database, personIds: string[]): Promi
       and(
         eq(syncCrosswalk.entity, 'people'),
         inArray(syncCrosswalk.canonicalId, personIds),
-        eq(syncConnections.enabled, true),
         isNull(syncConnections.deletedAt),
       ),
     )
@@ -74,64 +72,79 @@ export async function bulkAssignPeopleToGroup(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
-  if (!args.groupId) return { ok: false, error: 'Pick a group.' }
-  const ids = args.personIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
-
-  const groupExists = await ctx.db(async (tx) => {
-    const [g] = await tx
-      .select({ id: personGroups.id })
-      .from(personGroups)
-      .where(and(eq(personGroups.id, args.groupId), isNull(personGroups.deletedAt)))
-      .limit(1)
-    return Boolean(g)
+  const parsedIds = parseBulkActionIds(args?.personIds, {
+    singular: 'person',
+    plural: 'people',
   })
-  if (!groupExists) return { ok: false, error: 'Group not found.' }
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.groupId)) return { ok: false, error: 'Pick a group.' }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
+    await lockPersonGroupMembershipGraph(tx, ctx.tenantId)
+    const [group] = await tx
+      .select({ id: personGroups.id })
+      .from(personGroups)
+      .where(
+        and(
+          eq(personGroups.tenantId, ctx.tenantId),
+          eq(personGroups.id, args.groupId),
+          isNull(personGroups.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!group) return { state: 'missing' as const }
+
     // Filter out deleted people up-front so we don't audit dead rows.
     const validRows = await tx
       .select({ id: people.id })
       .from(people)
-      .where(and(inArray(people.id, ids), isNull(people.deletedAt)))
-    const validIds = validRows.map((r) => r.id)
-    const skipped = ids.length - validIds.length
+      .where(
+        and(
+          eq(people.tenantId, ctx.tenantId),
+          inArray(people.id, ids),
+          eq(people.status, 'active'),
+          isNull(people.deletedAt),
+        ),
+      )
+      .orderBy(asc(people.id))
+      .for('update')
+    const validIds = validRows.map((row) => row.id)
 
-    if (validIds.length === 0) return { updated: 0, skipped }
+    if (validIds.length === 0) {
+      return { state: 'ok' as const, updated: 0, skipped: ids.length }
+    }
 
-    await tx
-      .insert(personGroupMemberships)
-      .values(
-        validIds.map((personId) => ({
+    const existing = await tx
+      .select({ personId: personGroupMemberships.personId })
+      .from(personGroupMemberships)
+      .where(
+        and(
+          eq(personGroupMemberships.tenantId, ctx.tenantId),
+          eq(personGroupMemberships.groupId, args.groupId),
+          inArray(personGroupMemberships.personId, validIds),
+        ),
+      )
+      .orderBy(asc(personGroupMemberships.personId))
+      .for('update')
+    const existingIds = new Set(existing.map((row) => row.personId))
+    const toAdd = validIds.filter((id) => !existingIds.has(id))
+
+    if (toAdd.length > 0) {
+      await tx.insert(personGroupMemberships).values(
+        toAdd.map((personId) => ({
           tenantId: ctx.tenantId,
           groupId: args.groupId,
           personId,
         })),
       )
-      .onConflictDoNothing()
+    }
 
-    // Refresh the denormalised cache on people for filtering.
-    await tx.execute(sql`
-      UPDATE people
-      SET group_ids = COALESCE((
-        SELECT jsonb_agg(group_id ORDER BY group_id)
-        FROM person_group_memberships
-        WHERE person_id = people.id AND tenant_id = ${ctx.tenantId}
-      ), '[]'::jsonb)
-      WHERE id IN (${sql.join(
-        validIds.map((v) => sql`${v}::uuid`),
-        sql`, `,
-      )})
-        AND tenant_id = ${ctx.tenantId}
-    `)
-
-    return { updated: validIds.length, skipped, validIds }
-  })
-
-  if ('validIds' in result && result.validIds) {
-    for (const id of result.validIds) {
-      await recordAudit(ctx, {
+    await refreshPersonGroupCache(tx, ctx.tenantId, validIds)
+    for (const id of toAdd) {
+      await recordAuditInTransaction(tx, ctx, {
         entityType: 'person',
         entityId: id,
         action: 'update',
@@ -139,18 +152,28 @@ export async function bulkAssignPeopleToGroup(args: {
         metadata: { batchId, groupId: args.groupId },
       })
     }
-    await recordAudit(ctx, {
-      entityType: 'person',
-      action: 'update',
-      summary: `Bulk assigned ${result.validIds.length} person${result.validIds.length === 1 ? '' : 's'} to a group`,
-      metadata: {
-        batchId,
-        groupId: args.groupId,
-        personIds: result.validIds,
-        skipped: result.skipped,
-      },
-    })
-  }
+    if (toAdd.length > 0) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'person',
+        action: 'update',
+        summary: `Bulk assigned ${toAdd.length} person${toAdd.length === 1 ? '' : 's'} to a group`,
+        metadata: {
+          batchId,
+          groupId: args.groupId,
+          personIds: toAdd,
+          skipped: ids.length - toAdd.length,
+        },
+      })
+    }
+
+    return {
+      state: 'ok' as const,
+      updated: toAdd.length,
+      skipped: ids.length - toAdd.length,
+    }
+  })
+
+  if (result.state === 'missing') return { ok: false, error: 'Group not found.' }
 
   revalidatePath('/people')
   revalidatePath(`/people/groups/${args.groupId}`)
@@ -163,49 +186,54 @@ export async function bulkAssignPeopleToDepartment(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
-  if (!args.departmentId) return { ok: false, error: 'Pick a department.' }
-  const ids = args.personIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
-
-  const deptExists = await ctx.db(async (tx) => {
-    const [d] = await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.id, args.departmentId))
-      .limit(1)
-    return Boolean(d)
+  const parsedIds = parseBulkActionIds(args?.personIds, {
+    singular: 'person',
+    plural: 'people',
   })
-  if (!deptExists) return { ok: false, error: 'Department not found.' }
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.departmentId)) return { ok: false, error: 'Pick a department.' }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
+    const [department] = await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(and(eq(departments.tenantId, ctx.tenantId), eq(departments.id, args.departmentId)))
+      .limit(1)
+      .for('key share')
+    if (!department) return { error: 'Department not found.' } as const
+
     const validRows = await tx
-      .select({ id: people.id })
+      .select({ id: people.id, departmentId: people.departmentId })
       .from(people)
-      .where(and(inArray(people.id, ids), isNull(people.deletedAt)))
+      .where(
+        and(eq(people.tenantId, ctx.tenantId), inArray(people.id, ids), isNull(people.deletedAt)),
+      )
+      .orderBy(people.id)
+      .for('update')
     // Department is sync-owned: skip actively-synced people (the source system
     // would clobber the change back on its next run) and report them as skipped.
     const synced = await activelySyncedPersonIds(
       tx,
       validRows.map((r) => r.id),
     )
-    const validIds = validRows.map((r) => r.id).filter((id) => !synced.has(id))
-    const skipped = ids.length - validIds.length
+    const eligibleRows = validRows.filter((row) => !synced.has(row.id))
+    const changedIds = eligibleRows
+      .filter((row) => row.departmentId !== args.departmentId)
+      .map((row) => row.id)
+    const skipped = ids.length - eligibleRows.length
 
-    if (validIds.length === 0) return { updated: 0, skipped }
+    if (changedIds.length === 0) return { updated: 0, skipped }
 
     // One department per person — a plain update (idempotent).
     await tx
       .update(people)
       .set({ departmentId: args.departmentId })
-      .where(inArray(people.id, validIds))
-
-    return { updated: validIds.length, skipped, validIds }
-  })
-
-  if ('validIds' in result && result.validIds) {
-    for (const id of result.validIds) {
-      await recordAudit(ctx, {
+      .where(and(eq(people.tenantId, ctx.tenantId), inArray(people.id, changedIds)))
+    await materializeIdentityAudienceObligations(tx, ctx.tenantId, changedIds)
+    for (const id of changedIds) {
+      await recordAuditInTransaction(tx, ctx, {
         entityType: 'person',
         entityId: id,
         action: 'update',
@@ -213,18 +241,21 @@ export async function bulkAssignPeopleToDepartment(args: {
         metadata: { batchId, departmentId: args.departmentId },
       })
     }
-    await recordAudit(ctx, {
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'person',
       action: 'update',
-      summary: `Bulk assigned ${result.validIds.length} person${result.validIds.length === 1 ? '' : 's'} to a department`,
+      summary: `Bulk assigned ${changedIds.length} person${changedIds.length === 1 ? '' : 's'} to a department`,
       metadata: {
         batchId,
         departmentId: args.departmentId,
-        personIds: result.validIds,
-        skipped: result.skipped,
+        personIds: changedIds,
+        skipped,
       },
     })
-  }
+    return { updated: changedIds.length, skipped }
+  })
+
+  if ('error' in result && result.error) return { ok: false, error: result.error }
 
   revalidatePath('/people')
   revalidatePath('/people/departments')
@@ -239,52 +270,64 @@ export async function bulkSetPeopleStatus(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
-  if (!['active', 'inactive', 'terminated'].includes(args.status)) {
+  const parsedIds = parseBulkActionIds(args?.personIds, {
+    singular: 'person',
+    plural: 'people',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const status = args?.status
+  if (!status || !['active', 'inactive', 'terminated'].includes(status)) {
     return { ok: false, error: 'Invalid status.' }
   }
-  const ids = args.personIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
     const rows = await tx
       .select({ id: people.id, status: people.status, deletedAt: people.deletedAt })
       .from(people)
-      .where(inArray(people.id, ids))
-    const notDeleted = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
+      .where(and(eq(people.tenantId, ctx.tenantId), inArray(people.id, ids)))
+      .orderBy(people.id)
+      .for('update')
+    const notDeleted = rows.filter((row) => row.deletedAt === null)
     // Status is sync-owned: skip actively-synced people so the bulk change
     // doesn't silently fight the source system.
-    const synced = await activelySyncedPersonIds(tx, notDeleted)
-    const editable = notDeleted.filter((id) => !synced.has(id))
-    const skipped = rows.length - editable.length
-    if (editable.length === 0) return { updated: 0, skipped }
-    await tx.update(people).set({ status: args.status }).where(inArray(people.id, editable))
-    return { updated: editable.length, skipped, editable }
-  })
-
-  if ('editable' in result && result.editable) {
-    for (const id of result.editable) {
-      await recordAudit(ctx, {
+    const synced = await activelySyncedPersonIds(
+      tx,
+      notDeleted.map((row) => row.id),
+    )
+    const eligibleRows = notDeleted.filter((row) => !synced.has(row.id))
+    const changedIds = eligibleRows.filter((row) => row.status !== status).map((row) => row.id)
+    const skipped = ids.length - eligibleRows.length
+    if (changedIds.length === 0) return { updated: 0, skipped }
+    await tx
+      .update(people)
+      .set({ status })
+      .where(and(eq(people.tenantId, ctx.tenantId), inArray(people.id, changedIds)))
+    await materializeIdentityAudienceObligations(tx, ctx.tenantId, changedIds)
+    for (const id of changedIds) {
+      await recordAuditInTransaction(tx, ctx, {
         entityType: 'person',
         entityId: id,
         action: 'update',
-        summary: `Bulk action: set status ${args.status}`,
-        after: { status: args.status },
+        summary: `Bulk action: set status ${status}`,
+        after: { status },
         metadata: { batchId },
       })
     }
-    await recordAudit(ctx, {
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'person',
       action: 'update',
-      summary: `Bulk set status to ${args.status} on ${result.editable.length} person${result.editable.length === 1 ? '' : 's'}`,
+      summary: `Bulk set status to ${status} on ${changedIds.length} person${changedIds.length === 1 ? '' : 's'}`,
       metadata: {
         batchId,
-        status: args.status,
-        personIds: result.editable,
-        skipped: result.skipped,
+        status,
+        personIds: changedIds,
+        skipped,
       },
     })
-  }
+    return { updated: changedIds.length, skipped }
+  })
 
   revalidatePath('/people')
   return { ok: true, updated: result.updated, skipped: result.skipped }
@@ -297,9 +340,13 @@ export async function bulkExportPeopleCsv(args: { personIds: string[] }): Promis
   assertCan(ctx, 'admin.data.export')
   assertCan(ctx, 'admin.users.manage')
   assertNotImpersonating(ctx, 'export')
-  if (args.personIds.length === 0) return { ok: false, error: 'No people selected.' }
-  const ids = args.personIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.personIds, {
+    singular: 'person',
+    plural: 'people',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const rows = await ctx.db((tx) =>
     tx

@@ -1,16 +1,30 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
-const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade'] as const
+const SORTS = [
+  'name',
+  'employee_no',
+  'title',
+  'hire_date',
+  'department',
+  'trade',
+  'status',
+] as const
 const STATUS_FILTERS = ['active', 'inactive', 'terminated', 'all'] as const
 type StatusFilter = (typeof STATUS_FILTERS)[number]
 
@@ -29,6 +43,7 @@ export async function GET(req: NextRequest) {
   assertCan(ctx, 'admin.users.manage')
 
   const rows = await ctx.db(async (tx) => {
+    const primaryTitleName = primaryPersonTitleName(people.id, people.tenantId)
     const filters: SQL<unknown>[] = [isNull(people.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -36,6 +51,7 @@ export async function GET(req: NextRequest) {
         ilike(people.firstName, term),
         ilike(people.lastName, term),
         ilike(people.employeeNo, term),
+        ilike(primaryTitleName, term),
       )
       if (cond) filters.push(cond)
     }
@@ -50,25 +66,33 @@ export async function GET(req: NextRequest) {
           : [desc(people.lastName), desc(people.firstName)]
         : params.sort === 'employee_no'
           ? [params.dir === 'asc' ? asc(people.employeeNo) : desc(people.employeeNo)]
-          : params.sort === 'hire_date'
-            ? [params.dir === 'asc' ? asc(people.hireDate) : desc(people.hireDate)]
-            : params.sort === 'department'
-              ? [params.dir === 'asc' ? asc(departments.name) : desc(departments.name)]
-              : [params.dir === 'asc' ? asc(trades.name) : desc(trades.name)]
+          : params.sort === 'title'
+            ? [params.dir === 'asc' ? asc(primaryTitleName) : desc(primaryTitleName)]
+            : params.sort === 'hire_date'
+              ? [params.dir === 'asc' ? asc(people.hireDate) : desc(people.hireDate)]
+              : params.sort === 'department'
+                ? [params.dir === 'asc' ? asc(departments.name) : desc(departments.name)]
+                : params.sort === 'status'
+                  ? [params.dir === 'asc' ? asc(people.status) : desc(people.status)]
+                  : [params.dir === 'asc' ? asc(trades.name) : desc(trades.name)]
 
     return tx
       .select({
         person: people,
         department: departments,
         trade: trades,
+        primaryTitleName,
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .where(whereClause)
       .orderBy(...orderBy)
-      .limit(10_000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
   })
+
+  const overflow = csvExportOverflowResponse(rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'people',
@@ -84,6 +108,7 @@ export async function GET(req: NextRequest) {
     'Last name',
     'First name',
     'Employee #',
+    'Primary job title',
     'Department',
     'Trade',
     'Hire date',
@@ -101,6 +126,7 @@ export async function GET(req: NextRequest) {
         r.person.lastName,
         r.person.firstName,
         r.person.employeeNo ?? '',
+        r.primaryTitleName ?? '',
         r.department?.name ?? '',
         r.trade?.name ?? '',
         r.person.hireDate ?? '',

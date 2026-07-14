@@ -1,25 +1,30 @@
 'use server'
 
 // Server actions for the email-template library. All gated by
-// admin.settings.manage (the data-sources / AI-providers tier). The MJML compile
+// admin.settings.manage (the data-sources / AI-providers tier). HTML compilation
 // happens HERE (server-side) on save — the builder's in-canvas compile is preview
 // only. All mutations recordAudit (entityType='email_template').
 
 import { revalidatePath } from 'next/cache'
-import { eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import { emailTemplates } from '@beaconhs/db/schema'
 import { renderEmail } from '@beaconhs/email-render'
 import { enqueueEmail } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import {
-  compileBuilderHtml,
-  loadTenantEmailTemplate,
-  slugifyTemplateKey,
-} from '@/lib/email-templates'
+import { loadTenantEmailTemplate, slugifyTemplateKey } from '@/lib/email-templates'
+import { compileBuilderHtml } from '@/lib/template-builder-compile'
 import { inlineEmailCss } from '@/lib/email-inline'
-import { loadSubjectFields } from '@/lib/flows/subject-fields'
+import { loadSubjectFields, subjectExists } from '@/lib/flows/subject-fields'
+import { isUuid } from '@/lib/list-params'
+import {
+  isBoundedTemplateSubjectKey,
+  normalizeTemplateDescription,
+  normalizeTemplateName,
+  normalizeTemplateSubject,
+  normalizeTemplateTestRecipient,
+} from '@/lib/admin-template-input'
 
 const SUBJECT_TYPES = new Set(['module', 'form_template'])
 
@@ -34,23 +39,20 @@ const CATEGORIES = new Set([
   'marketing',
 ])
 type EmailTemplateCategory =
-  | 'general'
-  | 'notification'
-  | 'reminder'
-  | 'approval'
-  | 'digest'
-  | 'marketing'
+  'general' | 'notification' | 'reminder' | 'approval' | 'digest' | 'marketing'
 
 function parseCategory(raw: string): EmailTemplateCategory {
   return CATEGORIES.has(raw) ? (raw as EmailTemplateCategory) : 'general'
 }
 
 function parseRecordSubject(raw: string): { type: string; key: string } | null {
+  if (raw.length > 250) return null
   const idx = raw.indexOf(':')
   if (idx < 0) return null
   const type = raw.slice(0, idx)
   const key = raw.slice(idx + 1)
-  if (!SUBJECT_TYPES.has(type) || !key) return null
+  if (!SUBJECT_TYPES.has(type) || !isBoundedTemplateSubjectKey(key)) return null
+  if (type === 'form_template' && !isUuid(key)) return null
   return { type, key }
 }
 
@@ -70,13 +72,17 @@ const STARTER_HTML =
 
 export async function createEmailTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
-  const name = String(formData.get('name') ?? '').trim()
+  const name = normalizeTemplateName(formData.get('name'))
   if (!name) return
   const category = parseCategory(String(formData.get('category') ?? 'general'))
-  const description = String(formData.get('description') ?? '').trim() || null
+  const description = normalizeTemplateDescription(formData.get('description') ?? '')
+  if (description === undefined) return
 
   // Tie the template to a record type so the builder exposes that type's fields.
-  const subject = parseRecordSubject(String(formData.get('recordSubject') ?? ''))
+  const rawSubject = String(formData.get('recordSubject') ?? '')
+  const subject = parseRecordSubject(rawSubject)
+  if (rawSubject && !subject) return
+  if (subject && !(await subjectExists(ctx, subject.type, subject.key))) return
   const subjectFields = subject ? await loadSubjectFields(ctx, subject.type, subject.key) : []
   const mergeFields =
     subjectFields.length > 0
@@ -110,7 +116,7 @@ export async function createEmailTemplate(formData: FormData): Promise<void> {
         recordSubjectType: subject?.type ?? null,
         recordSubjectKey: subject?.key ?? null,
         subjectTemplate: name,
-        mjmlSource: STARTER_HTML,
+        sourceHtml: STARTER_HTML,
         compiledHtml: compiled.html,
         mergeFields,
         createdByTenantUserId: ctx.membership?.id ?? null,
@@ -134,45 +140,65 @@ export async function saveEmailTemplateDesign(input: {
   id: string
   name: string
   subjectTemplate: string
-  design: Record<string, unknown>
-  mjmlSource: string
-}): Promise<{ ok: boolean; error?: string; warnings?: string[] }> {
+  sourceHtml: string
+}): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireManage()
-  if (!input.id) return { ok: false, error: 'Missing template id.' }
+  if (!input || !isUuid(input.id)) return { ok: false, error: 'Invalid template id.' }
+  const name = normalizeTemplateName(input.name)
+  if (!name) return { ok: false, error: 'Enter a template name of 200 characters or fewer.' }
+  const subjectTemplate = normalizeTemplateSubject(input.subjectTemplate)
+  if (!subjectTemplate) return { ok: false, error: 'Enter a valid email subject.' }
+  if (typeof input.sourceHtml !== 'string') {
+    return { ok: false, error: 'The email design is invalid.' }
+  }
   // Inline the builder's <style> rules onto elements (email clients strip
   // <style>) BEFORE compile expands the data-each rows into {{#each}}.
-  const compiled = compileBuilderHtml(inlineEmailCss(input.mjmlSource))
-  await ctx.db((tx) =>
-    tx
+  let compiled: ReturnType<typeof compileBuilderHtml>
+  try {
+    compiled = compileBuilderHtml(inlineEmailCss(input.sourceHtml))
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid email design.' }
+  }
+  if (compiled.errors.length > 0) return { ok: false, error: compiled.errors.join(' ') }
+  const updated = await ctx.db(async (tx) => {
+    const [row] = await tx
       .update(emailTemplates)
       .set({
-        name: input.name.trim() || 'Untitled',
-        subjectTemplate: input.subjectTemplate,
-        design: input.design,
-        mjmlSource: input.mjmlSource,
+        name,
+        subjectTemplate,
+        sourceHtml: compiled.sanitizedSource,
         compiledHtml: compiled.html,
         updatedAt: new Date(),
       })
-      .where(eq(emailTemplates.id, input.id)),
-  )
+      .where(and(eq(emailTemplates.id, input.id), isNull(emailTemplates.deletedAt)))
+      .returning({ id: emailTemplates.id })
+    return row ?? null
+  })
+  if (!updated) return { ok: false, error: 'Template not found.' }
   await recordAudit(ctx, {
     entityType: 'email_template',
     entityId: input.id,
     action: 'update',
-    summary: `Saved email template "${input.name}"`,
+    summary: `Saved email template "${name}"`,
   })
   revalidatePath(`/admin/email-templates/${input.id}`)
   revalidatePath('/admin/email-templates')
-  return { ok: true, warnings: compiled.errors }
+  return { ok: true }
 }
 
 export async function deleteEmailTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
   const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await ctx.db((tx) =>
-    tx.update(emailTemplates).set({ deletedAt: new Date() }).where(eq(emailTemplates.id, id)),
-  )
+  if (!isUuid(id)) return
+  const deleted = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .update(emailTemplates)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(emailTemplates.id, id), isNull(emailTemplates.deletedAt)))
+      .returning({ id: emailTemplates.id })
+    return row ?? null
+  })
+  if (!deleted) return
   await recordAudit(ctx, {
     entityType: 'email_template',
     entityId: id,
@@ -187,8 +213,9 @@ export async function sendTestEmailTemplate(input: {
   to: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireManage()
-  const to = input.to.trim()
-  if (!to.includes('@')) return { ok: false, error: 'Enter a valid email address.' }
+  if (!input || !isUuid(input.id)) return { ok: false, error: 'Invalid template id.' }
+  const to = normalizeTemplateTestRecipient(input.to)
+  if (!to) return { ok: false, error: 'Enter a valid email address.' }
   const tpl = await loadTenantEmailTemplate(ctx, input.id)
   if (!tpl) return { ok: false, error: 'Template not found.' }
 
@@ -206,12 +233,22 @@ export async function sendTestEmailTemplate(input: {
     { mode: 'template', subjectTemplate: tpl.subjectTemplate, compiledHtml: tpl.compiledHtml },
     sample,
   )
-  await enqueueEmail({
-    to,
-    subject: `[Test] ${subject}`,
-    html,
-    text,
-    meta: { tenantId: ctx.tenantId, category: 'email_template_test' },
+  try {
+    await enqueueEmail({
+      to,
+      subject: `[Test] ${subject}`,
+      html,
+      text,
+      meta: { tenantId: ctx.tenantId, category: 'email_template_test' },
+    })
+  } catch {
+    return { ok: false, error: 'Could not queue the test email.' }
+  }
+  await recordAudit(ctx, {
+    entityType: 'email_template',
+    entityId: input.id,
+    action: 'send',
+    summary: `Queued a test of email template "${tpl.name}"`,
   })
   return { ok: true }
 }

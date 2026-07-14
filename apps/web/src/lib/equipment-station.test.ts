@@ -24,10 +24,11 @@ describe('equipment station scan input', () => {
     })
   })
 
-  it('rejects malformed ids, dates, directions, and oversized codes', () => {
+  it('rejects malformed ids, dates, directions, oversized codes, and oversized notes', () => {
     expect(parseStationScanInput({ code: 'EQ', activePersonId: 'not-a-uuid' })).toBeNull()
     expect(parseStationScanInput({ code: 'EQ', expectedReturnOn: '2026-02-31' })).toBeNull()
     expect(parseStationScanInput({ code: 'EQ', direction: 'sideways' })).toBeNull()
     expect(parseStationScanInput({ code: 'x'.repeat(201) })).toBeNull()
+    expect(parseStationScanInput({ code: 'EQ', returnedNotes: 'x'.repeat(2_001) })).toBeNull()
   })
 })

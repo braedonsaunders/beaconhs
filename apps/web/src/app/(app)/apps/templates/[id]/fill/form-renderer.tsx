@@ -47,6 +47,7 @@ import {
   Minus,
   Plus,
   ScanLine,
+  Search,
   ShieldCheck,
   Sparkles,
   Sun,
@@ -70,7 +71,11 @@ import {
 import {
   evaluateFormulaTree,
   evaluateLogicRule,
+  normalizeFormResponseDraftData,
+  normalizeRichTextLinkUrl,
   resolveDefaultValue,
+  sanitizeDocumentHtml,
+  validateFieldValue,
   validateResponse,
   entityKindForPicker,
   type EvalContext,
@@ -101,7 +106,9 @@ import {
   type DataRow,
 } from '@/app/(app)/apps/_lib/data-sources'
 import { SignaturePad } from '@/components/signature-pad'
+import { RawImage } from '@/components/raw-image'
 import { SketchPad, type SketchScene } from '@/components/sketch-pad'
+import { RiskMatrixField } from '@/components/risk-matrix'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
@@ -109,6 +116,7 @@ import { PremiumSection } from '@/components/premium-section'
 import { Section } from '@/components/section'
 import { toast } from '@/lib/toast'
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/apps/_lib/canvas'
+import { attachmentIdsEqual, singlePrimaryPhoto } from './photo-field-state'
 
 type CurrentUser = {
   personId: string | null
@@ -191,6 +199,7 @@ export function FormRenderer({
   readOnly = false,
   responseStatus = null,
   reviewHref = null,
+  complianceObligationId = null,
   inlineAutosave = false,
 }: {
   templateId: string
@@ -227,6 +236,9 @@ export function FormRenderer({
   // Admin review surface (CAPA/comments/audit) for this response, shown as a
   // "Review" header action. Null hides it (no responseId or no permission).
   reviewHref?: string | null
+  // Exact compliance task that opened this filler. Null for normal gallery,
+  // API, Flow, and manual entries.
+  complianceObligationId?: string | null
   // Opt-in INLINE editing mode (native LiveField parity). When true the
   // renderer drops the wizard stepper / footer / DetailHeader entirely and
   // renders every section as a vertical stack of self-autosaving fields, each
@@ -244,9 +256,14 @@ export function FormRenderer({
   // sections render; validation still spans every tab.
   const appTabs = schema.tabs ?? []
   const [activeTabId, setActiveTabId] = useState(appTabs[0]?.id ?? '')
-  const [values, setValues] = useState<Record<string, unknown>>(initialValues)
-  const [rowsByStep, setRowsByStep] =
-    useState<Record<string, Record<string, unknown>[]>>(initialRows)
+  const normalizedInitial = useMemo(
+    () => normalizeFormResponseDraftData(schema, initialValues, initialRows),
+    [schema, initialValues, initialRows],
+  )
+  const [values, setValues] = useState<Record<string, unknown>>(normalizedInitial.values)
+  const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>(
+    normalizedInitial.rows,
+  )
   const [siteId, setSiteId] = useState<string | ''>('')
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
@@ -308,8 +325,8 @@ export function FormRenderer({
     dirty: boolean
     editSequence: number
   }>({
-    values: initialValues,
-    rows: initialRows,
+    values: normalizedInitial.values,
+    rows: normalizedInitial.rows,
     stepIndex: initialStepIndex,
     responseId: initialResponseId,
     dirty: false,
@@ -322,6 +339,12 @@ export function FormRenderer({
   // Picker field ids currently mid-flight to the fetchEntityAttrs action.
   // Drives the small "Looking up…" indicator next to the picker.
   const [pickerLoading, setPickerLoading] = useState<Set<string>>(new Set())
+  // Entity lookups run through a small state-backed queue. Replacing a queued
+  // field selection cancels the effect handling the old value, so a slower old
+  // response can never overwrite attributes for the current selection.
+  const [pickerLookupQueue, setPickerLookupQueue] = useState<
+    Array<{ fieldId: string; entityId: string; requestId: string }>
+  >([])
 
   // Group sections by their workflow step. Each step is a "page". Sections
   // without an explicit `step` fall into the first workflow step.
@@ -452,9 +475,7 @@ export function FormRenderer({
     if (isResumed) {
       toast.success('Draft restored — pick up where you left off')
     }
-    // Run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isResumed])
 
   // Tick "Saved Xs ago" every 5s once a save has happened so the label
   // stays current without re-saving.
@@ -480,7 +501,8 @@ export function FormRenderer({
       // and await the same request, then each submits its ordered snapshot.
       let id = latestRef.current.responseId
       if (!id) {
-        const creation = creatingRef.current ?? createDraftResponse({ templateId })
+        const creation =
+          creatingRef.current ?? createDraftResponse({ templateId, complianceObligationId })
         creatingRef.current = creation
         try {
           const res = await creation
@@ -534,7 +556,7 @@ export function FormRenderer({
       }
       return true
     },
-    [templateId],
+    [complianceObligationId, templateId],
   )
 
   // Debounced autosave on any values / rows / step change. The 1500ms delay
@@ -594,70 +616,103 @@ export function FormRenderer({
     }
   }, [])
 
-  function markDirty() {
+  const markDirty = useCallback(() => {
     // In read-only mode nothing is editable; never flip dirty so autosave +
     // the unload beacon stay silent.
     if (readOnly) return
     setDraftEditState((current) => ({ dirty: true, sequence: current.sequence + 1 }))
-  }
+  }, [readOnly])
 
   // --- Helpers ---------------------------------------------------------------
 
-  // Map of fieldId → picker field type so picker-change refreshes can resolve
-  // the entity kind server-side without re-walking the schema.
-  const pickerFieldTypes = useMemo(() => {
-    const map = new Map<string, string>()
+  // Top-level picker field ids that can drive entity-attribute formulas. The
+  // server independently proves the field and derives its type from the
+  // published template schema; this set only decides when the client refreshes.
+  const pickerFieldIds = useMemo(() => {
+    const ids = new Set<string>()
     for (const sec of schema.sections) {
       if (sec.repeating) continue
       for (const f of sec.fields) {
-        if (entityKindForPicker(f.type)) map.set(f.id, f.type)
+        if (entityKindForPicker(f.type)) ids.add(f.id)
       }
     }
-    return map
+    return ids
   }, [schema])
 
-  function setValue(fieldId: string, v: unknown) {
-    markDirty()
-    setValues((s) => ({ ...s, [fieldId]: v }))
-    setErrors((m) => {
-      const next = new Map(m)
-      next.delete(fieldId)
-      return next
+  useEffect(() => {
+    const request = pickerLookupQueue[0]
+    if (!request) return
+    let active = true
+    void fetchEntityAttrs({
+      templateId,
+      fieldId: request.fieldId,
+      entityId: request.entityId,
     })
-    // If this field is a picker, refresh its entity-attr map. We clear any
-    // stale entry immediately (so an `entity_attr` field that no longer
-    // applies stops rendering its old value) before kicking off the async
-    // fetch. Multi-pickers (`multi_person_picker` etc.) aren't supported by
-    // entity_attr — `entityKindForPicker` returns null for them.
-    const pickerType = pickerFieldTypes.get(fieldId)
-    if (pickerType) {
-      setEntitiesByField((m) => ({ ...m, [fieldId]: null }))
-      if (typeof v === 'string' && v.length > 0) {
-        setPickerLoading((s) => {
-          const next = new Set(s)
-          next.add(fieldId)
+      .then((res) => {
+        if (active && res.ok) {
+          setEntitiesByField((current) => ({ ...current, [request.fieldId]: res.attrs }))
+        }
+      })
+      .catch(() => {
+        // Picker selection remains usable; dependent formula fields show “—”.
+      })
+      .finally(() => {
+        if (!active) return
+        setPickerLookupQueue((current) =>
+          current[0]?.requestId === request.requestId ? current.slice(1) : current,
+        )
+        setPickerLoading((current) => {
+          const next = new Set(current)
+          next.delete(request.fieldId)
           return next
         })
-        // Fire-and-forget — we only update local state on completion.
-        fetchEntityAttrs({ pickerFieldType: pickerType, entityId: v })
-          .then((res) => {
-            if (res.ok) {
-              setEntitiesByField((m) => ({ ...m, [fieldId]: res.attrs }))
-            }
-          })
-          .catch(() => {
-            // Swallow — picker still works, the formula field just shows '—'.
-          })
-          .finally(() => {
-            setPickerLoading((s) => {
-              const next = new Set(s)
-              next.delete(fieldId)
-              return next
-            })
-          })
-      }
+      })
+    return () => {
+      active = false
     }
-  }
+  }, [pickerLookupQueue, templateId])
+
+  const setValue = useCallback(
+    (fieldId: string, v: unknown) => {
+      markDirty()
+      setValues((s) => ({ ...s, [fieldId]: v }))
+      setErrors((m) => {
+        const next = new Map(m)
+        next.delete(fieldId)
+        return next
+      })
+      // If this field is a picker, refresh its entity-attr map. We clear any
+      // stale entry immediately (so an `entity_attr` field that no longer
+      // applies stops rendering its old value) before kicking off the async
+      // fetch. Multi-pickers (`multi_person_picker` etc.) aren't supported by
+      // entity_attr — `entityKindForPicker` returns null for them.
+      if (pickerFieldIds.has(fieldId)) {
+        setEntitiesByField((m) => ({ ...m, [fieldId]: null }))
+        if (typeof v === 'string' && v.length > 0) {
+          setPickerLoading((s) => {
+            const next = new Set(s)
+            next.add(fieldId)
+            return next
+          })
+          setPickerLookupQueue((current) => [
+            ...current.filter((request) => request.fieldId !== fieldId),
+            { fieldId, entityId: v, requestId: globalThis.crypto.randomUUID() },
+          ])
+        } else {
+          setPickerLookupQueue((current) =>
+            current.filter((request) => request.fieldId !== fieldId),
+          )
+          setPickerLoading((s) => {
+            if (!s.has(fieldId)) return s
+            const next = new Set(s)
+            next.delete(fieldId)
+            return next
+          })
+        }
+      }
+    },
+    [markDirty, pickerFieldIds],
+  )
 
   function setRows(sectionId: string, rows: Record<string, unknown>[]) {
     markDirty()
@@ -724,7 +779,7 @@ export function FormRenderer({
             if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) continue
             // Computed fields are derived, never user-validated.
             if (f.type === 'formula') continue
-            const error = validateOne(f, rows[i]![f.id])
+            const error = validateFieldValue(f, rows[i]![f.id])
             if (error) errs.set(`${sec.id}.${i}.${f.id}`, error)
           }
         }
@@ -733,7 +788,7 @@ export function FormRenderer({
           if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) continue
           // Formula fields are auto-computed and never validated against the user.
           if (f.type === 'formula') continue
-          const error = validateOne(f, values[f.id])
+          const error = validateFieldValue(f, values[f.id])
           if (error) errs.set(f.id, error)
         }
       }
@@ -838,6 +893,7 @@ export function FormRenderer({
     start(async () => {
       const res = await submitFormResponse({
         templateId,
+        complianceObligationId,
         data: payload,
         siteOrgUnitId: siteId || null,
         // Pass the in-flight draft id (if any) so the server finalizes that
@@ -880,7 +936,7 @@ export function FormRenderer({
     // Persist one top-level field (scalar/array/object) by its id, validating
     // first. Returns void; the per-field hook owns the status indicator.
     const saveField = (field: FormField, v: unknown) => {
-      const err = validateOne(field, v)
+      const err = validateFieldValue(field, v)
       setErrors((m) => {
         const next = new Map(m)
         if (err) next.set(field.id, err)
@@ -1565,14 +1621,7 @@ function FieldRow({
 //
 // Render-only element types that hold no value and must never trigger a save
 // in inline mode. Their FieldInput render path is purely presentational.
-const INLINE_NON_SAVING_TYPES = new Set([
-  'formula',
-  'metric',
-  'heading',
-  'paragraph',
-  'divider',
-  'image',
-])
+const INLINE_NON_SAVING_TYPES = new Set(['formula', 'metric', 'heading', 'paragraph', 'divider'])
 
 type InlineSaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -1939,6 +1988,33 @@ function FieldInput({
         </div>
       )
     }
+    case 'risk_matrix': {
+      const current =
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? (value as {
+              likelihood?: unknown
+              severity?: unknown
+            })
+          : undefined
+      return (
+        <RiskMatrixField
+          label="Select risk rating"
+          likelihoodName={`${field.id}.likelihood`}
+          severityName={`${field.id}.severity`}
+          defaultLikelihood={
+            typeof current?.likelihood === 'number' ? current.likelihood : undefined
+          }
+          defaultSeverity={typeof current?.severity === 'number' ? current.severity : undefined}
+          onChange={({ likelihood, severity, score, label }) =>
+            onChange(
+              likelihood === null || severity === null || score === null
+                ? {}
+                : { likelihood, severity, score, label: label ?? '' },
+            )
+          }
+        />
+      )
+    }
     case 'formula':
       // No formula configured — fall back to a read-only blank.
       return <Input disabled placeholder="(no formula)" />
@@ -2287,8 +2363,6 @@ function FieldInput({
       return <p className="text-sm text-slate-600">{field.helpText?.en ?? field.label?.en}</p>
     case 'divider':
       return <hr className="border-slate-200" />
-    case 'image':
-      return <ImageDisplay field={field} />
     case 'typed_attestation':
       return <TypedAttestationField field={field} value={value} onChange={onChange} />
     case 'table':
@@ -2675,7 +2749,7 @@ function TableCell({
   }
 }
 
-// --- Typed attestation + display image (previously fell back to a text box) --
+// --- Typed attestation ------------------------------------------------------
 
 function TypedAttestationField({
   field,
@@ -2708,21 +2782,6 @@ function TypedAttestationField({
         <span>{statement}</span>
       </label>
     </div>
-  )
-}
-
-function ImageDisplay({ field }: { field: FormField }) {
-  const url = (field.config?.url ?? field.config?.src) as string | undefined
-  if (!url) {
-    return <p className="text-xs text-slate-400">No image configured for this field.</p>
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={url}
-      alt={field.label?.en ?? 'Image'}
-      className="max-h-64 w-auto rounded border border-slate-200"
-    />
   )
 }
 
@@ -2840,35 +2899,83 @@ function LookupInput({
   const where = b?.where
   const filterColumn = hasCascade ? b?.filterColumn : undefined
   const filterValue = hasCascade ? parentVal : undefined
-  const limit = b?.limit ?? 200
-  const requestKey = JSON.stringify([sourceKey, where ?? null, filterColumn, filterValue, limit])
-  const [queryResult, setQueryResult] = useState<{ key: string; rows: DataRow[] }>({
+  const pageSize = b?.limit ?? 50
+  const valueColumn = b?.valueColumn || '__rowId'
+  const selectedValue = value == null ? '' : String(value)
+  const waitingParent = hasCascade && (parentVal == null || parentVal === '')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const requestKey = JSON.stringify([
+    sourceKey,
+    where ?? null,
+    filterColumn,
+    filterValue,
+    pageSize,
+    valueColumn,
+    selectedValue,
+    debouncedSearch,
+  ])
+  const [queryResult, setQueryResult] = useState<{
+    key: string
+    result: DataQueryResult
+    error: boolean
+  }>({
     key: '',
-    rows: [],
+    result: emptyDataQueryResult(1, pageSize),
+    error: false,
   })
-  const loading = !!sourceKey && queryResult.key !== requestKey
-  const rows = queryResult.key === requestKey ? queryResult.rows : []
+  const waitingForDebounce = search.trim() !== debouncedSearch
+  const loading =
+    !!sourceKey && !waitingParent && (waitingForDebounce || queryResult.key !== requestKey)
+  const result =
+    queryResult.key === requestKey ? queryResult.result : emptyDataQueryResult(1, pageSize)
+  const error = queryResult.key === requestKey && queryResult.error
 
   useEffect(() => {
-    if (!sourceKey) return
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    if (!sourceKey || waitingParent) return
     let alive = true
     queryDataSource({
       sourceKey,
       where,
       filterColumn,
       filterValue,
-      limit,
+      search: debouncedSearch,
+      pageSize,
+      valueColumn,
+      selectedValue,
     })
       .then((res) => {
-        if (alive) setQueryResult({ key: requestKey, rows: res.rows })
+        if (alive) setQueryResult({ key: requestKey, result: res, error: false })
       })
       .catch(() => {
-        if (alive) setQueryResult({ key: requestKey, rows: [] })
+        if (alive) {
+          setQueryResult({
+            key: requestKey,
+            result: emptyDataQueryResult(1, pageSize),
+            error: true,
+          })
+        }
       })
     return () => {
       alive = false
     }
-  }, [filterColumn, filterValue, limit, requestKey, sourceKey, where])
+  }, [
+    debouncedSearch,
+    filterColumn,
+    filterValue,
+    pageSize,
+    requestKey,
+    selectedValue,
+    sourceKey,
+    valueColumn,
+    waitingParent,
+    where,
+  ])
 
   if (!sourceKey) {
     return (
@@ -2878,13 +2985,22 @@ function LookupInput({
     )
   }
 
-  const valueCol = b.valueColumn || '__rowId'
-  const waitingParent = hasCascade && (parentVal == null || parentVal === '')
+  const rowByValue = new Map<string, DataRow>()
+  if (result.selectedRow) {
+    rowByValue.set(String(result.selectedRow[valueColumn] ?? ''), result.selectedRow)
+  }
+  if (!waitingForDebounce) {
+    for (const row of result.rows) {
+      const rowValue = String(row[valueColumn] ?? '')
+      if (rowValue && !rowByValue.has(rowValue)) rowByValue.set(rowValue, row)
+    }
+  }
+  const rows = [...rowByValue.values()]
 
   const pick = (rowVal: string) => {
     onChange(rowVal)
     if (onSetFieldValue && b.autofill?.length) {
-      const row = rows.find((r) => String(r[valueCol] ?? '') === rowVal)
+      const row = rowByValue.get(rowVal)
       if (row) {
         for (const m of b.autofill) onSetFieldValue(m.targetFieldId, row[m.column] ?? null)
       }
@@ -2892,24 +3008,37 @@ function LookupInput({
   }
 
   return (
-    <Select
-      value={(value as string) ?? ''}
-      onChange={(e) => pick(e.target.value)}
+    <SearchSelect
+      value={selectedValue}
+      onChange={pick}
+      options={rows.map((row) => ({
+        value: String(row[valueColumn] ?? ''),
+        label: labelForRow(row, b.labelColumn),
+      }))}
+      placeholder={waitingParent ? 'Select the previous field first…' : 'Select…'}
+      searchPlaceholder="Search records…"
+      sheetTitle="Select a record"
+      clearable
+      emptyLabel="—"
       disabled={waitingParent}
-    >
-      <option value="">
-        {loading ? 'Loading…' : waitingParent ? 'Select the previous field first…' : 'Select…'}
-      </option>
-      {rows.map((r, i) => {
-        const v = String(r[valueCol] ?? '')
-        return (
-          <option key={`${v}-${i}`} value={v}>
-            {labelForRow(r, b.labelColumn)}
-          </option>
-        )
-      })}
-    </Select>
+      searchable
+      remote
+      loading={loading}
+      statusMessage={
+        error
+          ? 'Could not load records. Change the search to retry.'
+          : result.total > result.rows.length
+            ? 'More results exist. Refine your search.'
+            : undefined
+      }
+      statusTone={error ? 'error' : 'muted'}
+      onSearchChange={(next) => setSearch(next.slice(0, 100))}
+    />
   )
+}
+
+function emptyDataQueryResult(page: number, pageSize: number): DataQueryResult {
+  return { columns: [], rows: [], total: 0, page, pageSize, selectedRow: null }
 }
 
 // A data-bound table — displays (and optionally lets the user select) rows from
@@ -2932,38 +3061,88 @@ function DataTableInput({
   const where = b?.where
   const filterColumn = hasCascade ? b?.filterColumn : undefined
   const filterValue = hasCascade ? parentVal : undefined
-  const limit = b?.limit ?? 50
-  const requestKey = JSON.stringify([sourceKey, where ?? null, filterColumn, filterValue, limit])
+  const pageSize = b?.limit ?? 25
+  const waitingParent = hasCascade && (parentVal == null || parentVal === '')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const contextKey = JSON.stringify([sourceKey, where ?? null, filterColumn, filterValue])
+  const [pageState, setPageState] = useState({ contextKey, page: 1 })
+  const page = pageState.contextKey === contextKey ? pageState.page : 1
+  const setCurrentPage = useCallback(
+    (next: number | ((current: number) => number)) => {
+      setPageState((current) => {
+        const currentPage = current.contextKey === contextKey ? current.page : 1
+        return {
+          contextKey,
+          page: typeof next === 'function' ? next(currentPage) : next,
+        }
+      })
+    },
+    [contextKey],
+  )
+  const requestKey = JSON.stringify([contextKey, debouncedSearch, page, pageSize])
   const [queryResult, setQueryResult] = useState<{
     key: string
     result: DataQueryResult
-  }>({ key: '', result: { columns: [], rows: [] } })
-  const loading = !!sourceKey && queryResult.key !== requestKey
+    error: boolean
+  }>({ key: '', result: emptyDataQueryResult(1, pageSize), error: false })
+  const waitingForDebounce = search.trim() !== debouncedSearch
+  const loading =
+    !!sourceKey && !waitingParent && (waitingForDebounce || queryResult.key !== requestKey)
   const res =
-    queryResult.key === requestKey ? queryResult.result : { columns: [], rows: [] as DataRow[] }
+    queryResult.key === requestKey ? queryResult.result : emptyDataQueryResult(page, pageSize)
+  const error = queryResult.key === requestKey && queryResult.error
 
   useEffect(() => {
-    if (!sourceKey) return
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+      setCurrentPage(1)
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [search, setCurrentPage])
+
+  useEffect(() => {
+    if (!sourceKey || waitingParent) return
     let alive = true
     queryDataSource({
       sourceKey,
       where,
       filterColumn,
       filterValue,
-      limit,
+      search: debouncedSearch,
+      page,
+      pageSize,
     })
       .then((r) => {
-        if (alive) setQueryResult({ key: requestKey, result: r })
+        if (!alive) return
+        const lastPage = Math.max(1, Math.ceil(r.total / r.pageSize))
+        if (page > lastPage) setCurrentPage(lastPage)
+        setQueryResult({ key: requestKey, result: r, error: false })
       })
       .catch(() => {
         if (alive) {
-          setQueryResult({ key: requestKey, result: { columns: [], rows: [] } })
+          setQueryResult({
+            key: requestKey,
+            result: emptyDataQueryResult(page, pageSize),
+            error: true,
+          })
         }
       })
     return () => {
       alive = false
     }
-  }, [filterColumn, filterValue, limit, requestKey, sourceKey, where])
+  }, [
+    debouncedSearch,
+    filterColumn,
+    filterValue,
+    page,
+    pageSize,
+    requestKey,
+    setCurrentPage,
+    sourceKey,
+    waitingParent,
+    where,
+  ])
 
   if (!sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
 
@@ -2980,53 +3159,109 @@ function DataTableInput({
       )
   }
 
-  if (loading && res.rows.length === 0) return <p className="text-xs text-slate-400">Loading…</p>
-  if (res.rows.length === 0) return <p className="text-xs text-slate-400">No matching records.</p>
+  if (waitingParent) {
+    return <p className="text-xs text-slate-400">Select the previous field first.</p>
+  }
+
+  const pageCount = Math.max(1, Math.ceil(res.total / pageSize))
+  const from = res.total === 0 ? 0 : (page - 1) * pageSize + 1
+  const to = Math.min(res.total, page * pageSize)
 
   return (
-    <div className="overflow-x-auto rounded border border-slate-200">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
-            {selectable !== 'none' ? <th className="w-8 px-2 py-1.5" /> : null}
-            {showCols.map((c) => (
-              <th key={c.key} className="px-2 py-1.5 font-medium">
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {res.rows.map((r, i) => {
-            const rowId = String(r.__rowId ?? i)
-            const isSel = selected.includes(rowId)
-            return (
-              <tr
-                key={rowId}
-                className={`border-b border-slate-100 ${isSel ? 'bg-teal-50' : ''} ${
-                  selectable !== 'none' ? 'cursor-pointer hover:bg-slate-50' : ''
-                }`}
-                onClick={selectable !== 'none' ? () => toggle(rowId) : undefined}
-              >
-                {selectable !== 'none' ? (
-                  <td className="px-2 py-1.5">
-                    <input
-                      type={selectable === 'single' ? 'radio' : 'checkbox'}
-                      checked={isSel}
-                      onChange={() => toggle(rowId)}
-                    />
-                  </td>
-                ) : null}
-                {showCols.map((c) => (
-                  <td key={c.key} className="px-2 py-1.5 text-slate-700">
-                    {r[c.key] == null || r[c.key] === '' ? '—' : String(r[c.key])}
-                  </td>
-                ))}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      <div className="relative max-w-sm">
+        <Search
+          size={15}
+          className="pointer-events-none absolute top-2.5 left-2.5 text-slate-400"
+        />
+        <Input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value.slice(0, 100))}
+          placeholder="Search records…"
+          aria-label={`Search ${field.label?.en ?? 'data table'} records`}
+          className="h-9 pr-3 pl-8"
+        />
+      </div>
+      <div className="overflow-x-auto rounded border border-slate-200">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
+              {selectable !== 'none' ? <th className="w-8 px-2 py-1.5" /> : null}
+              {showCols.map((c) => (
+                <th key={c.key} className="px-2 py-1.5 font-medium">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {res.rows.map((r, i) => {
+              const rowId = String(r.__rowId ?? i)
+              const isSel = selected.includes(rowId)
+              return (
+                <tr
+                  key={rowId}
+                  className={`border-b border-slate-100 ${isSel ? 'bg-teal-50' : ''} ${
+                    selectable !== 'none' ? 'cursor-pointer hover:bg-slate-50' : ''
+                  }`}
+                  onClick={selectable !== 'none' ? () => toggle(rowId) : undefined}
+                >
+                  {selectable !== 'none' ? (
+                    <td className="px-2 py-1.5">
+                      <input
+                        type={selectable === 'single' ? 'radio' : 'checkbox'}
+                        checked={isSel}
+                        aria-label={`${isSel ? 'Deselect' : 'Select'} row ${rowId}`}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => toggle(rowId)}
+                      />
+                    </td>
+                  ) : null}
+                  {showCols.map((c) => (
+                    <td key={c.key} className="px-2 py-1.5 text-slate-700">
+                      {r[c.key] == null || r[c.key] === '' ? '—' : String(r[c.key])}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        {loading ? <p className="px-3 py-4 text-xs text-slate-400">Loading…</p> : null}
+        {!loading && error ? (
+          <p className="px-3 py-4 text-xs text-red-600">Could not load records. Try again.</p>
+        ) : null}
+        {!loading && !error && res.rows.length === 0 ? (
+          <p className="px-3 py-4 text-xs text-slate-400">No matching records.</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <span>{res.total === 0 ? 'No results' : `Showing ${from}–${to} of ${res.total}`}</span>
+        {pageCount > 1 ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={page <= 1 || loading}
+              onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+              className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="px-1">
+              Page {page} of {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={page >= pageCount || loading}
+              onClick={() => setCurrentPage((current) => Math.min(pageCount, current + 1))}
+              className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -3037,9 +3272,7 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
   const hasCascade = !!b?.filterByField && !!b?.filterColumn
-  const parentKey = String(parentVal ?? '')
   const [res, setRes] = useState<DataAggregateResult | null>(null)
-  const whereKey = JSON.stringify(b?.where ?? null)
   const agg = b?.aggregate
 
   useEffect(() => {
@@ -3053,7 +3286,7 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
       where: b.where,
       filterColumn: hasCascade ? b.filterColumn : undefined,
       filterValue: hasCascade ? parentVal : undefined,
-      limit: b.limit,
+      groupLimit: b.limit ?? (b.display === 'pie' ? 8 : 12),
     })
       .then((r) => {
         if (alive) setRes(r)
@@ -3064,17 +3297,18 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
     return () => {
       alive = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    b?.sourceKey,
+    agg?.column,
+    agg?.fn,
+    agg?.groupBy,
     b?.filterByField,
     b?.filterColumn,
     b?.limit,
-    agg?.fn,
-    agg?.column,
-    agg?.groupBy,
-    whereKey,
-    parentKey,
+    b?.display,
+    b?.sourceKey,
+    b?.where,
+    hasCascade,
+    parentVal,
   ])
 
   if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
@@ -3088,7 +3322,7 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
       const total = res.groups.reduce((a, g) => a + g.value, 0) || 1
       return (
         <div className="space-y-1.5">
-          {res.groups.slice(0, 8).map((g) => (
+          {res.groups.map((g) => (
             <div key={g.key} className="flex items-center gap-2 text-xs">
               <span className="w-28 truncate text-slate-600">{g.key}</span>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -3106,7 +3340,7 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
     const max = Math.max(...res.groups.map((g) => g.value), 1)
     return (
       <div className="flex items-end gap-1.5" style={{ height: 120 }}>
-        {res.groups.slice(0, 12).map((g) => (
+        {res.groups.map((g) => (
           <div key={g.key} className="flex flex-1 flex-col items-center justify-end gap-1">
             <div
               className="w-full rounded-t bg-teal-400"
@@ -3168,10 +3402,11 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
   const a = v.analysis
 
   const setFiles = (files: AttachedFile[]) => {
+    const unchanged = attachmentIdsEqual(attachments, files)
     onChange({
       attachments: files,
-      analysis: files.length ? v.analysis : undefined,
-      analyzedAt: files.length ? v.analyzedAt : undefined,
+      analysis: unchanged ? v.analysis : undefined,
+      analyzedAt: unchanged ? v.analyzedAt : undefined,
     })
   }
   const analyze = () => {
@@ -3289,8 +3524,11 @@ function PhotoAnnotateInput({
   const imgWrapRef = useRef<HTMLDivElement>(null)
   const photo = attachments[0]
 
-  const setFiles = (files: AttachedFile[]) =>
-    onChange({ attachments: files, markers: files.length ? markers : [] })
+  const setFiles = (files: AttachedFile[]) => {
+    const next = singlePrimaryPhoto(files)
+    const samePrimary = attachments[0]?.attachmentId === next[0]?.attachmentId
+    onChange({ attachments: next, markers: samePrimary ? markers : [] })
+  }
   const newId = () =>
     globalThis.crypto?.randomUUID?.() ??
     `m_${markers.length}_${markers.reduce((a, m) => a + m.x, 0)}`
@@ -3307,7 +3545,7 @@ function PhotoAnnotateInput({
     onChange({ attachments, markers: markers.filter((m) => m.id !== id) })
 
   if (attachments.length === 0 || !photo) {
-    return <FileUpload variant="photo" value={attachments} onChange={setFiles} />
+    return <FileUpload variant="photo" value={attachments} onChange={setFiles} multiple={false} />
   }
 
   return (
@@ -3317,10 +3555,10 @@ function PhotoAnnotateInput({
         onClick={addMarker}
         className="relative inline-block max-w-full cursor-crosshair select-none"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <RawImage
           src={photo.url}
           alt="Annotate hazards"
+          optimizationReason="authenticated"
           draggable={false}
           className="max-h-80 max-w-full rounded border border-slate-200"
         />
@@ -3534,32 +3772,44 @@ function RankingInput({
 function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
   const readOnly = useContext(FillReadOnlyContext)
   const ref = useRef<HTMLDivElement>(null)
-  // Seed the editor once on mount; afterwards it's uncontrolled so the caret
-  // isn't reset on every keystroke.
-  useEffect(() => {
-    if (ref.current) ref.current.innerHTML = (value as string) ?? ''
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Capture the sanitized initial document once. React sees the same HTML prop
+  // on later renders and leaves the user's uncontrolled DOM/caret untouched.
+  const [initialHtml] = useState(() => sanitizeDocumentHtml(typeof value === 'string' ? value : ''))
+  const cleanEditorHtml = () => sanitizeDocumentHtml(ref.current?.innerHTML ?? '')
   const exec = (cmd: string, arg?: string) => {
+    if (readOnly) return
     document.execCommand(cmd, false, arg)
-    onChange(ref.current?.innerHTML ?? '')
+    onChange(cleanEditorHtml())
     ref.current?.focus()
   }
   const btn =
-    'flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-white hover:text-slate-800'
+    'flex h-7 w-7 items-center justify-center rounded text-slate-500 enabled:hover:bg-white enabled:hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40'
   return (
     <div className="rounded-md border border-slate-200">
       <div className="flex gap-0.5 border-b border-slate-200 bg-slate-50 p-1">
-        <button type="button" className={btn} title="Bold" onClick={() => exec('bold')}>
+        <button
+          type="button"
+          className={btn}
+          title="Bold"
+          disabled={readOnly}
+          onClick={() => exec('bold')}
+        >
           <Bold size={13} />
         </button>
-        <button type="button" className={btn} title="Italic" onClick={() => exec('italic')}>
+        <button
+          type="button"
+          className={btn}
+          title="Italic"
+          disabled={readOnly}
+          onClick={() => exec('italic')}
+        >
           <Italic size={13} />
         </button>
         <button
           type="button"
           className={btn}
           title="Bulleted list"
+          disabled={readOnly}
           onClick={() => exec('insertUnorderedList')}
         >
           <List size={13} />
@@ -3568,9 +3818,16 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
           type="button"
           className={btn}
           title="Link"
+          disabled={readOnly}
           onClick={() => {
             const url = window.prompt('Link URL')
-            if (url) exec('createLink', url)
+            if (!url) return
+            const safeUrl = normalizeRichTextLinkUrl(url)
+            if (!safeUrl) {
+              toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')
+              return
+            }
+            exec('createLink', safeUrl)
           }}
         >
           <LinkIcon size={13} />
@@ -3580,7 +3837,40 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         ref={ref}
         contentEditable={!readOnly}
         suppressContentEditableWarning
-        onInput={readOnly ? undefined : (e) => onChange((e.target as HTMLDivElement).innerHTML)}
+        dangerouslySetInnerHTML={{ __html: initialHtml }}
+        onInput={readOnly ? undefined : () => onChange(cleanEditorHtml())}
+        onPaste={
+          readOnly
+            ? undefined
+            : (event) => {
+                event.preventDefault()
+                const html = event.clipboardData.getData('text/html')
+                if (html) {
+                  document.execCommand('insertHTML', false, sanitizeDocumentHtml(html))
+                } else {
+                  document.execCommand('insertText', false, event.clipboardData.getData('text'))
+                }
+                onChange(cleanEditorHtml())
+              }
+        }
+        onDrop={
+          readOnly
+            ? undefined
+            : (event) => {
+                event.preventDefault()
+                document.execCommand('insertText', false, event.dataTransfer.getData('text/plain'))
+                onChange(cleanEditorHtml())
+              }
+        }
+        onBlur={
+          readOnly
+            ? undefined
+            : () => {
+                const clean = cleanEditorHtml()
+                if (ref.current && ref.current.innerHTML !== clean) ref.current.innerHTML = clean
+                onChange(clean)
+              }
+        }
         className="app-scroll prose prose-sm max-h-60 min-h-[80px] max-w-none overflow-auto p-2 text-sm focus:outline-none"
       />
     </div>
@@ -3712,86 +4002,6 @@ function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unkno
   )
 }
 
-function validateOne(field: FormField, value: unknown): string | null {
-  // Display-only data block — holds no value, so it's never required/validated.
-  if (field.type === 'metric') return null
-  // Rich text: an "empty" editor can still hold <br>/<div> markup, so check text.
-  if (field.type === 'rich_text') {
-    const required = field.required || field.validation?.required
-    const text = String(value ?? '')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .trim()
-    if (required && text === '') return field.validation?.message ?? 'Required'
-    return null
-  }
-  // Address: require at least line1 when required (compound object).
-  if (field.type === 'address') {
-    const required = field.required || field.validation?.required
-    const a = (value as AddressValue) ?? {}
-    if (required && !a.line1 && !a.query) return field.validation?.message ?? 'Required'
-    return null
-  }
-  const v = field.validation
-  const required = field.required || v?.required
-  const isEmpty =
-    value === undefined ||
-    value === null ||
-    value === '' ||
-    (Array.isArray(value) && value.length === 0)
-  if (required && isEmpty) return v?.message ?? 'Required'
-  if (isEmpty) return null
-
-  switch (field.type) {
-    case 'number':
-    case 'rating':
-    case 'slider': {
-      const n = Number(value)
-      if (Number.isNaN(n)) return v?.message ?? 'Must be a number'
-      if (v?.min !== undefined && n < v.min) return v?.message ?? `Must be >= ${v.min}`
-      if (v?.max !== undefined && n > v.max) return v?.message ?? `Must be <= ${v.max}`
-      return null
-    }
-    case 'matrix': {
-      // Required matrices need at least one row rated (empty object isn't caught
-      // by the generic isEmpty check above).
-      const obj = (value as Record<string, unknown>) ?? {}
-      if (required && Object.keys(obj).length === 0) return v?.message ?? 'Rate at least one row'
-      return null
-    }
-    case 'photo_ai':
-    case 'photo_annotated': {
-      // Compound { attachments, ... } — require at least one photo.
-      const obj = (value as { attachments?: unknown[] }) ?? {}
-      if (required && (!Array.isArray(obj.attachments) || obj.attachments.length === 0))
-        return v?.message ?? 'Add a photo'
-      return null
-    }
-    case 'sketch': {
-      // Compound { attachmentId, url, scene } — require a drawn diagram.
-      const obj = (value as { attachmentId?: string }) ?? {}
-      if (required && !obj.attachmentId) return v?.message ?? 'Add a diagram'
-      return null
-    }
-    case 'text':
-    case 'long_text':
-    case 'email':
-    case 'phone':
-    case 'url': {
-      const s = String(value)
-      if (v?.minLength && s.length < v.minLength) return v?.message ?? `Min ${v.minLength} chars`
-      if (v?.maxLength && s.length > v.maxLength) return v?.message ?? `Max ${v.maxLength} chars`
-      if (v?.pattern && !new RegExp(v.pattern).test(s)) return v?.message ?? 'Invalid format'
-      if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
-        return v?.message ?? 'Invalid email'
-      if (field.type === 'url' && !/^https?:\/\/.+/.test(s)) return v?.message ?? 'Invalid URL'
-      return null
-    }
-    default:
-      return null
-  }
-}
-
 // --- Signature -------------------------------------------------------------
 //
 // The signature pad lives in @beaconhs/ui and is being built by a parallel
@@ -3825,7 +4035,13 @@ function SignatureField({
       console.warn('[signature] presign failed', req.error)
       return
     }
-    const finalizeInput = await uploadReservedFile(req, file)
+    let finalizeInput
+    try {
+      finalizeInput = await uploadReservedFile(req, file)
+    } catch (error) {
+      console.warn('[signature] upload failed', error)
+      return
+    }
     const fin = await finalizeUpload(finalizeInput)
     if (!fin.ok) return
     onChange({ attachmentId: fin.attachmentId, url: fin.url })
@@ -3873,7 +4089,13 @@ function SketchField({
       console.warn('[sketch] presign failed', req.error)
       return
     }
-    const finalizeInput = await uploadReservedFile(req, file)
+    let finalizeInput
+    try {
+      finalizeInput = await uploadReservedFile(req, file)
+    } catch (error) {
+      console.warn('[sketch] upload failed', error)
+      return
+    }
     const fin = await finalizeUpload(finalizeInput)
     if (!fin.ok) return
     onChange({ attachmentId: fin.attachmentId, url: fin.url, scene })

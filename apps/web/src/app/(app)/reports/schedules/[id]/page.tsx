@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -22,6 +22,11 @@ import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { loadDefinitionById } from '../../_definitions'
 import { formatCadence, StatusBadge } from '../../_format'
 import { formatDateTime } from '@/lib/datetime'
@@ -32,8 +37,29 @@ import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions
 export const metadata = { title: 'Report schedule' }
 export const dynamic = 'force-dynamic'
 
-export default async function ScheduleDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const SORTS = ['started'] as const
+
+export default async function ScheduleDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
+  const sp = await searchParams
+  const listParams = parseListParams(sp, {
+    sort: 'started',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const statusParam = pickString(sp.status)
+  const statusFilter = ['queued', 'running', 'succeeded', 'failed'].includes(statusParam ?? '')
+    ? (statusParam as 'queued' | 'running' | 'succeeded' | 'failed')
+    : undefined
   const ctx = await requireRequestContext()
 
   const schedule = await ctx.db(async (tx) => {
@@ -44,20 +70,33 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
 
   const canSchedule = can(ctx, 'reports.schedule')
 
-  const [definition, { definitions, members }, runs] = await Promise.all([
+  const [definition, { definitions, members }, runData] = await Promise.all([
     loadDefinitionById(ctx.tenantId!, schedule.definitionId),
     canSchedule
       ? loadScheduleFormData(ctx)
       : Promise.resolve({ definitions: [] as never[], members: [] as never[] }),
-    ctx.db(async (tx) =>
-      tx
+    ctx.db(async (tx) => {
+      const search: SQL<unknown> | undefined = listParams.q
+        ? sql`(${reportRuns.status}::text ilike ${`%${listParams.q}%`} or ${reportRuns.trigger}::text ilike ${`%${listParams.q}%`} or ${reportRuns.startedAt}::text ilike ${`%${listParams.q}%`})`
+        : undefined
+      const where = and(
+        eq(reportRuns.scheduleId, id),
+        search,
+        statusFilter ? eq(reportRuns.status, statusFilter) : undefined,
+      )
+      const [totalRow] = await tx.select({ c: count() }).from(reportRuns).where(where)
+      const rows = await tx
         .select()
         .from(reportRuns)
-        .where(eq(reportRuns.scheduleId, id))
+        .where(where)
         .orderBy(desc(reportRuns.startedAt))
-        .limit(50),
-    ),
+        .limit(listParams.perPage)
+        .offset((listParams.page - 1) * listParams.perPage)
+      return { rows, total: Number(totalRow?.c ?? 0) }
+    }),
   ])
+  const runs = runData.rows
+  const basePath = `/reports/schedules/${id}`
 
   const triggerBound = triggerNow.bind(null, id)
   const toggleBound = setActive.bind(null, id, !schedule.active)
@@ -207,14 +246,33 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Run history ({runs.length})</CardTitle>
+            <CardTitle className="text-sm">Run history ({runData.total})</CardTitle>
           </CardHeader>
           <CardContent>
+            <TableToolbar className="mb-3">
+              <SearchInput placeholder="Search date, status, or trigger…" />
+              <FilterChips
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="status"
+                label="Status"
+                options={[
+                  { value: 'queued', label: 'Queued' },
+                  { value: 'running', label: 'Running' },
+                  { value: 'succeeded', label: 'Succeeded' },
+                  { value: 'failed', label: 'Failed' },
+                ]}
+              />
+            </TableToolbar>
             {runs.length === 0 ? (
               <EmptyState
                 icon={<History size={24} />}
-                title="No runs"
-                description="Run now to trigger the first delivery."
+                title={listParams.q || statusFilter ? 'No runs match your filters' : 'No runs'}
+                description={
+                  listParams.q || statusFilter
+                    ? 'Clear the search or status filter to see other runs.'
+                    : 'Run now to trigger the first delivery.'
+                }
               />
             ) : (
               <Table>
@@ -264,6 +322,13 @@ export default async function ScheduleDetailPage({ params }: { params: Promise<{
                 </TableBody>
               </Table>
             )}
+            <Pagination
+              basePath={basePath}
+              currentParams={sp}
+              total={runData.total}
+              page={listParams.page}
+              perPage={listParams.perPage}
+            />
           </CardContent>
         </Card>
       </div>

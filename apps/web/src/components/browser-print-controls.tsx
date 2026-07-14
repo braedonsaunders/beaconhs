@@ -1,0 +1,26 @@
+'use client'
+
+import { useEffect, type ReactNode } from 'react'
+
+export function BrowserPrintButton({
+  children = 'Print',
+  className,
+}: {
+  children?: ReactNode
+  className?: string
+}) {
+  return (
+    <button type="button" className={className} onClick={() => window.print()}>
+      {children}
+    </button>
+  )
+}
+
+export function AutoPrint({ delayMs = 250 }: { delayMs?: number }) {
+  useEffect(() => {
+    const timer = window.setTimeout(() => window.print(), delayMs)
+    return () => window.clearTimeout(timer)
+  }, [delayMs])
+
+  return null
+}

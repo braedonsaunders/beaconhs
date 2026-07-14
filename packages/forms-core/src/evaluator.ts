@@ -105,20 +105,11 @@ function looseEquals(a: unknown, b: unknown): boolean {
  * either a JS Date (from drizzle ORM) or an ISO string (from a JSON
  * round-trip), so we normalise them to ISO strings either way.
  */
-function coerceEntityAttr(
-  raw: unknown,
-  valueType: 'string' | 'number' | 'date' | 'boolean',
-): string | number | boolean | null {
+function coerceEntityAttr(raw: unknown, valueType: 'string' | 'date'): string | null {
   if (raw === undefined || raw === null) return null
   switch (valueType) {
     case 'string':
       return String(raw)
-    case 'number': {
-      const n = Number(raw)
-      return Number.isFinite(n) ? n : null
-    }
-    case 'boolean':
-      return Boolean(raw)
     case 'date': {
       if (raw instanceof Date) {
         return Number.isNaN(raw.getTime()) ? null : raw.toISOString()
@@ -266,7 +257,12 @@ export function evaluateFormulaTree(
       return Math.abs(coerceNumber(evaluateFormulaTree(expr.of, ctx)))
 
     case 'round': {
-      const places = Number.isFinite(expr.places) ? (expr.places as number) : 0
+      const places =
+        Number.isInteger(expr.places) &&
+        (expr.places as number) >= 0 &&
+        (expr.places as number) <= 12
+          ? (expr.places as number)
+          : 0
       const factor = Math.pow(10, places)
       return Math.round(coerceNumber(evaluateFormulaTree(expr.of, ctx)) * factor) / factor
     }
@@ -327,7 +323,7 @@ export function evaluateFormulaTree(
       // prefetches the row server-side and stashes it on ctx.entities keyed
       // by the picker field id, so we just look it up here.
       //
-      // The loader stamps a sidecar `__entityKind` (e.g. 'person', 'equipment')
+      // The loader stamps a sidecar `__entityKind` (`person` or `site`)
       // on each entity map. We use it to resolve the EntityAttrDef from the
       // registry and coerce accordingly. Attrs not in ENTITY_ATTRS never made
       // it onto the row (the loader allowlists at SELECT-time), so this lookup
@@ -346,10 +342,6 @@ export function evaluateFormulaTree(
         )
         if (def) {
           const coerced = coerceEntityAttr(raw, def.valueType)
-          // Booleans don't fit the formula return type. Coerce to number
-          // (0/1) so they compose with sum/product downstream — designers
-          // can `if(entity_attr=1)` etc.
-          if (typeof coerced === 'boolean') return coerced ? 1 : 0
           return coerced
         }
       }

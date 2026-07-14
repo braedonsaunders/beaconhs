@@ -17,10 +17,11 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/emails": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
-    "better-auth": "^1.6.20",
+    "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"
   },

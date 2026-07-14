@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { buildDocxFromHtml } from './html-docx'
 
 export const exec = promisify(execFile)
 
@@ -61,13 +62,25 @@ export async function sofficeConvert(
     })
     const outExt = convertTo.split(':')[0]!
     const outPath = srcPath.replace(/\.[^.]+$/, `.${outExt}`)
-    await access(outPath).catch(() => {
-      throw new Error(`LibreOffice did not produce a .${outExt} from ${inputName}`)
-    })
-    return await readFile(outPath)
+    try {
+      // Read directly: checking access and then reopening creates a needless
+      // time-of-check/time-of-use window. The private random work directory is
+      // cleaned in finally regardless of whether LibreOffice produced output.
+      return await readFile(outPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`LibreOffice did not produce a .${outExt} from ${inputName}`)
+      }
+      throw error
+    }
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
+}
+
+/** Convert sanitized HTML into a deterministic, editable DOCX master. */
+export async function htmlToDocx(html: Buffer): Promise<Buffer> {
+  return buildDocxFromHtml(html)
 }
 
 /** Concatenate PDFs in order with poppler's pdfunite. */
@@ -90,3 +103,4 @@ export async function pdfUnite(pdfs: Buffer[]): Promise<Buffer> {
   }
 }
 export * from './fodt'
+export * from './limits'

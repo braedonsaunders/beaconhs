@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import {
+  complianceObligations,
+  complianceStatus,
   people,
   trainingAssessmentResults,
   trainingAssessments,
@@ -13,8 +15,13 @@ import {
 } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
+import {
+  materializeEvidenceTargetsObligations,
+  type ComplianceEvidenceTarget,
+} from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { addMonthsIso, isoToday } from '../_lib/dates'
 import { gradeAnswer, type QuestionKind } from '../_lib/grading'
@@ -58,7 +65,11 @@ export async function startAssessmentAttempt(formData: FormData) {
 
   const typeId = String(formData.get('typeId') ?? '').trim()
   const personId = String(formData.get('personId') ?? '').trim()
+  const complianceObligationId = String(formData.get('complianceObligationId') ?? '').trim() || null
   if (!typeId || !personId) throw new Error('Type and person are required')
+  if (complianceObligationId && !isUuid(complianceObligationId)) {
+    throw new Error('The compliance requirement is invalid')
+  }
 
   // Starting an attempt for another person is a proctor/manager action (it can
   // ultimately mint a training record for them). A learner may only start their
@@ -71,18 +82,66 @@ export async function startAssessmentAttempt(formData: FormData) {
   // Shared creation path (also used by lesson quizzes). Standalone attempts
   // must come from the live catalogue: soft-deleted or deactivated types are
   // rejected server-side — the New-attempt page only filters options in the UI.
-  const created = await ctx.db((tx) =>
-    createAssessmentAttempt(tx, { tenantId, typeId, personId, requireActive: true }),
-  )
+  const result = await ctx.db(async (tx) => {
+    if (complianceObligationId) {
+      const [requirement] = await tx
+        .select()
+        .from(complianceObligations)
+        .where(
+          and(
+            eq(complianceObligations.tenantId, tenantId),
+            eq(complianceObligations.id, complianceObligationId),
+            eq(complianceObligations.status, 'active'),
+            inArray(complianceObligations.sourceModule, ['training', 'cert_requirement']),
+            isNull(complianceObligations.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!requirement || requirement.targetRef?.assessmentTypeId !== typeId) {
+        throw new Error('That assessment does not match the active compliance requirement')
+      }
 
-  await recordAudit(ctx, {
-    entityType: 'training_assessment',
-    entityId: created.id,
-    action: 'create',
-    summary: `Started assessment ${created.id}`,
-    after: { typeId, personId },
+      const [outstanding] = await tx
+        .select({ id: complianceStatus.id })
+        .from(complianceStatus)
+        .where(
+          and(
+            eq(complianceStatus.tenantId, tenantId),
+            eq(complianceStatus.obligationId, complianceObligationId),
+            eq(complianceStatus.personId, personId),
+            inArray(complianceStatus.status, ['pending', 'in_progress', 'overdue', 'expiring']),
+          ),
+        )
+        .limit(1)
+      if (!outstanding) {
+        throw new Error('That person does not have this outstanding compliance requirement')
+      }
+    }
+
+    const attempt = await createAssessmentAttempt(tx, {
+      tenantId,
+      typeId,
+      personId,
+      complianceObligationId,
+      requireActive: true,
+    })
+    if (attempt.created) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'training_assessment',
+        entityId: attempt.attempt.id,
+        action: 'create',
+        summary: `Started assessment ${attempt.attempt.id}`,
+        after: { typeId, personId, complianceObligationId },
+      })
+    }
+    if (complianceObligationId) {
+      await materializeEvidenceTargetsObligations(tx, tenantId, [
+        { sourceModule: 'training', targetRef: { assessmentTypeId: typeId } },
+      ])
+    }
+    return attempt
   })
-  redirect(`/training/assessments/${created.id}`)
+  redirect(`/training/assessments/${result.attempt.id}`)
 }
 
 /**
@@ -101,11 +160,12 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
   const tenantId: string = ctx.tenantId
   const myPersonId = await resolveMyPersonId(ctx)
 
-  const summary = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [attempt] = await tx
       .select()
       .from(trainingAssessments)
       .where(eq(trainingAssessments.id, attemptId))
+      .for('update')
       .limit(1)
     if (!attempt) throw new Error('Attempt not found')
     // Ownership: only the candidate (or a proctor/manager) may grade an attempt.
@@ -172,7 +232,8 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
           certificateType: 'auto',
         })
         .returning()
-      trainingRecordId = rec?.id ?? null
+      if (!rec) throw new Error('Could not issue the course training record')
+      trainingRecordId = rec.id
     }
 
     await tx
@@ -195,17 +256,30 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
       occurrenceKey: attemptId,
     })
 
-    // Compliance is computed by the unified engine (the training adapter reads
-    // training_records / training_assessments directly); no legacy recompute.
-    return { score, passed, pointsAwarded, pointsPossible, trainingRecordId }
-  })
+    const targets: ComplianceEvidenceTarget[] = []
+    if (attempt.complianceObligationId) {
+      targets.push({
+        sourceModule: 'training' as const,
+        targetRef: { assessmentTypeId: attempt.typeId },
+      })
+    }
+    if (trainingRecordId && attempt.courseId) {
+      targets.push({
+        sourceModule: 'training' as const,
+        targetRef: { courseId: attempt.courseId },
+      })
+    }
+    await materializeEvidenceTargetsObligations(tx, tenantId, targets)
 
-  await recordAudit(ctx, {
-    entityType: 'training_assessment',
-    entityId: attemptId,
-    action: 'sign',
-    summary: `Submitted assessment ${attemptId} (${summary.score}%, ${summary.passed ? 'pass' : 'fail'})`,
-    after: { ...summary },
+    const submission = { score, passed, pointsAwarded, pointsPossible, trainingRecordId }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_assessment',
+      entityId: attemptId,
+      action: 'sign',
+      summary: `Submitted assessment ${attemptId} (${score}%, ${passed ? 'pass' : 'fail'})`,
+      after: submission,
+    })
+    return submission
   })
   revalidatePath(`/training/assessments/${attemptId}`)
   revalidatePath('/training/assessments')
@@ -222,15 +296,18 @@ export async function cancelAssessmentAttempt(attemptId: string) {
   if (!ctx.tenantId) throw new Error('No active tenant')
   const myPersonId = await resolveMyPersonId(ctx)
 
-  const outcome = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [attempt] = await tx
       .select({
         personId: trainingAssessments.personId,
         status: trainingAssessments.status,
+        typeId: trainingAssessments.typeId,
         trainingRecordId: trainingAssessments.trainingRecordId,
+        complianceObligationId: trainingAssessments.complianceObligationId,
       })
       .from(trainingAssessments)
       .where(eq(trainingAssessments.id, attemptId))
+      .for('update')
       .limit(1)
     if (!attempt) throw new Error('Attempt not found')
     if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
@@ -244,13 +321,15 @@ export async function cancelAssessmentAttempt(attemptId: string) {
       throw new Error('Only training staff can void a submitted attempt')
     }
     let revokedRecordId: string | null = null
+    let revokedCourseId: string | null = null
     if (wasSubmitted && attempt.trainingRecordId) {
-      await tx
+      const [revokedRecord] = await tx
         .update(trainingRecords)
         .set({ deletedAt: new Date(), notes: 'Revoked: assessment attempt voided' })
         .where(
           and(eq(trainingRecords.id, attempt.trainingRecordId), isNull(trainingRecords.deletedAt)),
         )
+        .returning({ id: trainingRecords.id, courseId: trainingRecords.courseId })
       await tx
         .update(trainingCertificates)
         .set({ revokedAt: new Date(), revokedReason: 'Assessment attempt voided' })
@@ -260,28 +339,39 @@ export async function cancelAssessmentAttempt(attemptId: string) {
             isNull(trainingCertificates.revokedAt),
           ),
         )
-      revokedRecordId = attempt.trainingRecordId
+      revokedRecordId = revokedRecord?.id ?? null
+      revokedCourseId = revokedRecord?.courseId ?? null
     }
     await tx
       .update(trainingAssessments)
       .set({ status: 'cancelled', completedAt: new Date() })
       .where(eq(trainingAssessments.id, attemptId))
-    return { changed: true, wasSubmitted, revokedRecordId }
-  })
+    const targets: ComplianceEvidenceTarget[] = []
+    if (attempt.complianceObligationId) {
+      targets.push({
+        sourceModule: 'training' as const,
+        targetRef: { assessmentTypeId: attempt.typeId },
+      })
+    }
+    if (revokedRecordId && revokedCourseId) {
+      targets.push({
+        sourceModule: 'training' as const,
+        targetRef: { courseId: revokedCourseId },
+      })
+    }
+    await materializeEvidenceTargetsObligations(tx, ctx.tenantId, targets)
 
-  if (outcome.changed) {
-    await recordAudit(ctx, {
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'training_assessment',
       entityId: attemptId,
       action: 'update',
-      summary: outcome.wasSubmitted
+      summary: wasSubmitted
         ? `Voided submitted assessment attempt ${attemptId}`
         : `Cancelled assessment attempt ${attemptId}`,
-      metadata: outcome.revokedRecordId
-        ? { revokedTrainingRecordId: outcome.revokedRecordId }
-        : undefined,
+      metadata: revokedRecordId ? { revokedTrainingRecordId: revokedRecordId } : undefined,
     })
-  }
+    return { changed: true, wasSubmitted, revokedRecordId }
+  })
   revalidatePath(`/training/assessments/${attemptId}`)
   revalidatePath('/training/assessments')
   revalidatePath('/training')

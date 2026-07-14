@@ -20,14 +20,7 @@ import {
 } from '@beaconhs/db/schema'
 
 export type AudienceKind =
-  | 'everyone'
-  | 'person'
-  | 'role'
-  | 'trade'
-  | 'department'
-  | 'org_unit'
-  | 'crew'
-  | 'person_group'
+  'everyone' | 'person' | 'role' | 'trade' | 'department' | 'org_unit' | 'crew' | 'person_group'
 
 export type AudienceItem = { kind: AudienceKind; entityKey: string }
 

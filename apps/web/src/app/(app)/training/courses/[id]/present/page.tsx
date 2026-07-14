@@ -4,6 +4,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { lessonProseCss } from '../../../_editor/prose'
 import { loadCoursePresentation } from '../_lib/presentation'
 import { ClassPresentClient } from './_client'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,8 @@ export default async function CoursePresentPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const ctx = await requireRequestContext()
   // Presenting is an instructor/author action.

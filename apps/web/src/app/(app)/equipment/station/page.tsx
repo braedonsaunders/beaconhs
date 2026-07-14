@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Settings2 } from 'lucide-react'
-import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
+import { and, count, eq, isNull } from 'drizzle-orm'
 import { Button, PageHeader } from '@beaconhs/ui'
 import {
   equipmentItems,
@@ -9,6 +9,7 @@ import {
   people,
   tenants,
 } from '@beaconhs/db/schema'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
@@ -45,41 +46,48 @@ export default async function StationPage({
           await tx
             .select({ name: orgUnits.name })
             .from(orgUnits)
-            .where(eq(orgUnits.id, settings.defaultCheckInOrgUnitId))
+            .where(
+              and(
+                eq(orgUnits.tenantId, ctx.tenantId),
+                eq(orgUnits.id, settings.defaultCheckInOrgUnitId),
+                isNull(orgUnits.deletedAt),
+              ),
+            )
             .limit(1)
         )[0]?.name ?? null)
       : null
 
-    const peopleRows = await tx
-      .select({
-        id: people.id,
-        userId: people.userId,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-        jobTitle: people.jobTitle,
-      })
-      .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(2000)
-
-    const locationRows = await tx
-      .select({
-        id: orgUnits.id,
-        name: orgUnits.name,
-        level: orgUnits.level,
-        isBase: orgUnits.isEquipmentBase,
-      })
-      .from(orgUnits)
-      .where(isNull(orgUnits.deletedAt))
-      .orderBy(desc(orgUnits.isEquipmentBase), asc(orgUnits.name))
-      .limit(2000)
+    const [initialPerson] = ctx.personId
+      ? await tx
+          .select({
+            id: people.id,
+            firstName: people.firstName,
+            lastName: people.lastName,
+            employeeNo: people.employeeNo,
+            jobTitle: primaryPersonTitleName(people.id, people.tenantId),
+          })
+          .from(people)
+          .where(
+            and(
+              eq(people.tenantId, ctx.tenantId),
+              eq(people.id, ctx.personId),
+              eq(people.status, 'active'),
+              isNull(people.deletedAt),
+            ),
+          )
+          .limit(1)
+      : []
 
     const [avail] = await tx
       .select({ c: count() })
       .from(equipmentItems)
-      .where(and(eq(equipmentItems.isAvailableForCheckout, true), isNull(equipmentItems.deletedAt)))
+      .where(
+        and(
+          eq(equipmentItems.tenantId, ctx.tenantId),
+          eq(equipmentItems.isAvailableForCheckout, true),
+          isNull(equipmentItems.deletedAt),
+        ),
+      )
 
     const [tenant] = await tx
       .select({ name: tenants.name })
@@ -90,11 +98,16 @@ export default async function StationPage({
     return {
       settings,
       homeName,
-      peopleRows,
-      locationRows,
       tenantName: tenant?.name ?? 'Equipment',
       availableCount: Number(avail?.c ?? 0),
-      initialActivePersonId: peopleRows.find((p) => p.userId === ctx.userId)?.id ?? null,
+      initialActivePerson: initialPerson
+        ? {
+            id: initialPerson.id,
+            name: `${initialPerson.lastName}, ${initialPerson.firstName}`,
+            employeeNo: initialPerson.employeeNo,
+            jobTitle: initialPerson.jobTitle,
+          }
+        : null,
     }
   })
 
@@ -127,15 +140,8 @@ export default async function StationPage({
           soundEnabled={data.settings?.soundEnabled ?? true}
           requireConditionOnCheckin={data.settings?.requireConditionOnCheckin ?? false}
           homeLocationName={data.homeName}
-          people={data.peopleRows.map((p) => ({
-            id: p.id,
-            name: `${p.lastName}, ${p.firstName}`,
-            employeeNo: p.employeeNo,
-            jobTitle: p.jobTitle,
-          }))}
-          locations={data.locationRows}
           availableCount={data.availableCount}
-          initialActivePersonId={data.initialActivePersonId}
+          initialActivePerson={data.initialActivePerson}
           initialScanCode={initialScanCode}
           onSearch={searchStation}
           onScan={performStationScan}

@@ -123,6 +123,7 @@ export function EquipmentFileDrawer({
           <Input
             id="file-label"
             value={label}
+            maxLength={240}
             onChange={(e) => setLabel(e.currentTarget.value)}
             placeholder={uploaded?.filename ?? 'e.g. 2026 annual calibration'}
           />

@@ -25,7 +25,12 @@ import { requireExportContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { parseDateFilter } from '../_datetime'
@@ -65,7 +70,7 @@ export async function GET(req: NextRequest) {
   assertCan(ctx, 'inspections.read.self')
 
   const rows = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(inspectionRecords.deletedAt)]
     const scopeWhere = await moduleScopeWhere(ctx, tx, {
       prefix: 'inspections',
       ownerCols: [
@@ -146,8 +151,11 @@ export async function GET(req: NextRequest) {
       .where(whereClause)
       .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
       .orderBy(...orderBy)
-      .limit(10_000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
   })
+
+  const overflow = csvExportOverflowResponse(rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'inspection_record',

@@ -1,15 +1,16 @@
+import { createHash } from 'node:crypto'
 import { Queue, type JobsOptions } from 'bullmq'
+import {
+  normalizeEmailDeliveryInput,
+  type EmailAttachmentPayload,
+} from '@beaconhs/email-render/delivery-input'
 import { getConnection } from '../connection'
 
-export type EmailAttachment = {
-  filename: string
-  /** base64-encoded file contents (BullMQ payloads must be JSON-serializable). */
-  content: string
-  contentType?: string
-}
+export type EmailAttachment = EmailAttachmentPayload
 
 export type EmailJobData = {
-  to: string | string[]
+  /** One recipient per durable job prevents address disclosure between users. */
+  to: string
   subject: string
   html: string
   text: string
@@ -22,6 +23,8 @@ export type EmailJobData = {
     reportRunDeliveryId?: string
   }
 }
+
+export type EnqueueEmailData = Omit<EmailJobData, 'to'> & { to: string | string[] }
 
 let emailQueue: Queue<EmailJobData> | undefined
 
@@ -38,6 +41,31 @@ function getEmailQueue(): Queue<EmailJobData> {
   return emailQueue
 }
 
-export async function enqueueEmail(data: EmailJobData, options?: JobsOptions) {
-  return getEmailQueue().add('send', data, options)
+function fanoutOptions(
+  options: JobsOptions | undefined,
+  recipient: string,
+): JobsOptions | undefined {
+  if (!options?.jobId) return options
+  const digest = createHash('sha256')
+    .update(options.jobId)
+    .update('\0')
+    .update(recipient.toLowerCase())
+    .digest('hex')
+  return { ...options, jobId: `email-fanout|${digest}` }
+}
+
+export async function enqueueEmail(data: EnqueueEmailData, options?: JobsOptions) {
+  const normalized = normalizeEmailDeliveryInput(data)
+  const queue = getEmailQueue()
+  if (normalized.to.length === 1) {
+    return [await queue.add('send', { ...data, ...normalized, to: normalized.to[0]! }, options)]
+  }
+
+  return queue.addBulk(
+    normalized.to.map((recipient) => ({
+      name: 'send',
+      data: { ...data, ...normalized, to: recipient },
+      opts: fanoutOptions(options, recipient),
+    })),
+  )
 }

@@ -66,8 +66,7 @@ export default async function MonitoredSessionsPage({
   const searchQuery = params.q?.trim()
   const requestedStatus = pickString(sp.status)
   const statusFilter = STATUS_OPTIONS.find((option) => option.value === requestedStatus)?.value as
-    | (typeof formResponses.$inferSelect)['monitorStatus']
-    | undefined
+    (typeof formResponses.$inferSelect)['monitorStatus'] | undefined
   const ctx = await requireRequestContext()
   const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 

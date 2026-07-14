@@ -61,9 +61,35 @@ export type RateLimitInput = {
   windowSeconds: number
 }
 
+function assertRateLimitWindow(input: Pick<RateLimitInput, 'key' | 'windowSeconds'>): void {
+  if (
+    typeof input.key !== 'string' ||
+    input.key.length === 0 ||
+    input.key.length > 512 ||
+    /[\u0000-\u001f\u007f]/.test(input.key)
+  ) {
+    throw new Error('Rate-limit key is invalid or exceeds 512 characters.')
+  }
+  if (
+    !Number.isSafeInteger(input.windowSeconds) ||
+    input.windowSeconds < 1 ||
+    input.windowSeconds > 365 * 24 * 3600
+  ) {
+    throw new Error('Rate-limit windowSeconds must be a positive bounded integer.')
+  }
+}
+
+function assertRateLimitInput(input: RateLimitInput): void {
+  assertRateLimitWindow(input)
+  if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 10_000_000) {
+    throw new Error('Rate-limit limit must be a positive bounded integer.')
+  }
+}
+
 /** Atomically consume one request from a fixed window. Unlike the failure
  * counter, the Nth request is allowed and N+1 is rejected. */
 export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimitStatus> {
+  assertRateLimitInput(input)
   const nowMs = Date.now()
   const count = await incrementCounter(
     redisKey(input.key, input.windowSeconds, nowMs),
@@ -79,6 +105,7 @@ export async function consumeRateLimit(input: RateLimitInput): Promise<RateLimit
 }
 
 export async function getRateLimitStatus(input: RateLimitInput): Promise<RateLimitStatus> {
+  assertRateLimitInput(input)
   const nowMs = Date.now()
   const raw = await (await rateLimitClient()).get(redisKey(input.key, input.windowSeconds, nowMs))
   const count = raw ? Number(raw) : 0
@@ -92,6 +119,7 @@ export async function getRateLimitStatus(input: RateLimitInput): Promise<RateLim
 }
 
 export async function recordRateLimitFailure(input: RateLimitInput): Promise<RateLimitStatus> {
+  assertRateLimitInput(input)
   const nowMs = Date.now()
   const count = await incrementCounter(
     redisKey(input.key, input.windowSeconds, nowMs),
@@ -107,5 +135,6 @@ export async function recordRateLimitFailure(input: RateLimitInput): Promise<Rat
 }
 
 export async function resetRateLimit(input: Pick<RateLimitInput, 'key' | 'windowSeconds'>) {
+  assertRateLimitWindow(input)
   await (await rateLimitClient()).del(redisKey(input.key, input.windowSeconds))
 }

@@ -5,13 +5,7 @@ import { AIDisabledError, getModel, type AiConfig } from './client'
 import { JOURNAL_SYSTEM, orgContextLine } from './prompts'
 
 export type WritingMode =
-  | 'tidy'
-  | 'expand'
-  | 'continue'
-  | 'rephrase'
-  | 'fix'
-  | 'bulletize'
-  | 'summarize'
+  'tidy' | 'expand' | 'continue' | 'rephrase' | 'fix' | 'bulletize' | 'summarize'
 
 export const WRITING_MODES: WritingMode[] = [
   'tidy',

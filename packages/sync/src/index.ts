@@ -15,14 +15,17 @@ export type { DbConn, DbConnectConfig, DbKind } from './db-drivers'
 export {
   isPublicIpAddress,
   normalizeOutboundHostname,
+  resolveOutboundRedirect,
   resolvePublicHost,
   secureFetch,
+  validateOutboundRequestConfiguration,
 } from './egress'
 export type {
   OutboundDnsResolver,
   ResolvePublicHostOptions,
   ResolvedPublicHost,
   SecureFetchOptions,
+  ValidatedOutboundRequestConfiguration,
 } from './egress'
 export { loadLookups, upsertRecord } from './upsert'
 export type { Lookups, UpsertAction, UpsertCtx, UpsertResult } from './upsert'

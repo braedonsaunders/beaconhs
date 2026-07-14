@@ -6,9 +6,7 @@ import { reportSchedules } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { computeNextRunAt } from '@beaconhs/reports'
-import { loadDefinitionById } from '../../_definitions'
-import { parseScheduleForm } from '../_parse'
+import { prepareScheduleMutation } from '../_mutation'
 
 export async function createSchedule(formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
@@ -17,10 +15,8 @@ export async function createSchedule(formData: FormData): Promise<void> {
     throw new Error('An active tenant membership is required to schedule reports')
   const runAsTenantUserId = ctx.membership.id
 
-  const definitionId = String(formData.get('definitionId') ?? '').trim()
-  if (!definitionId) throw new Error('Report definition is required')
-
   const {
+    definitionId,
     name,
     cadence,
     dayOfWeek,
@@ -31,20 +27,8 @@ export async function createSchedule(formData: FormData): Promise<void> {
     recipientUserIds,
     recipientEmails,
     filters,
-  } = parseScheduleForm(formData)
-
-  // The definition must be visible to this tenant (built-in or owned).
-  const def = await loadDefinitionById(ctx.tenantId!, definitionId)
-  if (!def) throw new Error('Unknown report definition')
-
-  const nextRunAt = computeNextRunAt({
-    cadence,
-    dayOfWeek,
-    dayOfMonth,
-    hour,
-    minute,
-    timezone,
-  })
+    nextRunAt,
+  } = await prepareScheduleMutation(ctx, formData)
 
   const [row] = await ctx.db(async (tx) => {
     return tx
@@ -70,28 +54,27 @@ export async function createSchedule(formData: FormData): Promise<void> {
       .returning({ id: reportSchedules.id })
   })
 
-  if (row) {
-    await recordAudit(ctx, {
-      entityType: 'report_schedule',
-      entityId: row.id,
-      action: 'create',
-      summary: `Created report schedule "${name}" (${cadence})`,
-      after: {
-        name,
-        definitionId,
-        cadence,
-        dayOfWeek,
-        dayOfMonth,
-        hour,
-        minute,
-        timezone,
-        recipientEmails,
-        recipientUserIds,
-      },
-    })
-  }
+  if (!row) throw new Error('Failed to create report schedule')
+
+  await recordAudit(ctx, {
+    entityType: 'report_schedule',
+    entityId: row.id,
+    action: 'create',
+    summary: `Created report schedule "${name}" (${cadence})`,
+    after: {
+      name,
+      definitionId,
+      cadence,
+      dayOfWeek,
+      dayOfMonth,
+      hour,
+      minute,
+      timezone,
+      recipientEmails,
+      recipientUserIds,
+    },
+  })
 
   revalidatePath('/reports')
-  if (row) redirect(`/reports/schedules/${row.id}`)
-  redirect('/reports')
+  redirect(`/reports/schedules/${row.id}`)
 }

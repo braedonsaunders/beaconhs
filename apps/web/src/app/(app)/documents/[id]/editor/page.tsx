@@ -12,6 +12,7 @@ import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { SmartBackLink } from '@/components/smart-back-link'
+import { isUuid } from '@/lib/list-params'
 import { DocumentWriter } from './_writer'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,8 @@ export default async function DocumentEditorPage({
   const { id } = await params
   const sp = await searchParams
   const versionId = typeof sp.version === 'string' ? sp.version : null
+  if (!isUuid(id) || (versionId !== null && !isUuid(versionId))) notFound()
+
   const ctx = await requireRequestContext()
   // The live master is a manage-only surface (it exposes unpublished edits).
   if (!can(ctx, 'documents.manage')) notFound()

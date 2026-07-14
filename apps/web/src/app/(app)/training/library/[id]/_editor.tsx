@@ -39,7 +39,6 @@ type Item = {
   durationMinutes: number | null
   attachmentId: string | null
   embedUrl: string | null
-  contentJson: Record<string, unknown> | null
   contentHtml: string | null
   sourceAttachmentId: string | null
   sourceFilename: string | null
@@ -56,24 +55,25 @@ export function ContentItemEditor({ item, usedCount }: { item: Item; usedCount: 
   const [attachmentId, setAttachmentId] = useState(item.attachmentId ?? '')
   const [embedUrl, setEmbedUrl] = useState(item.embedUrl ?? '')
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null)
-  const [richContent, setRichContent] = useState({
-    json: item.contentJson as unknown,
-    html: item.contentHtml ?? '',
-  })
+  const [richContent, setRichContent] = useState({ html: item.contentHtml ?? '' })
 
   function saveMeta() {
     startTransition(async () => {
-      const fd = new FormData()
-      fd.set('title', title)
-      fd.set('kind', kind)
-      fd.set('description', description)
-      fd.set('tags', tags)
-      fd.set('durationMinutes', duration)
-      fd.set('attachmentId', attachmentId)
-      fd.set('embedUrl', embedUrl)
-      await updateContentItem(item.id, fd)
-      router.refresh()
-      toast.success('Saved')
+      try {
+        const fd = new FormData()
+        fd.set('title', title)
+        fd.set('kind', kind)
+        fd.set('description', description)
+        fd.set('tags', tags)
+        fd.set('durationMinutes', duration)
+        fd.set('attachmentId', attachmentId)
+        fd.set('embedUrl', embedUrl)
+        await updateContentItem(item.id, fd)
+        router.refresh()
+        toast.success('Saved')
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not save the library item')
+      }
     })
   }
   async function remove() {
@@ -222,7 +222,7 @@ export function ContentItemEditor({ item, usedCount }: { item: Item; usedCount: 
                 disabled={pending}
                 onClick={() =>
                   startTransition(async () => {
-                    await saveContentItemRich(item.id, richContent.json, richContent.html)
+                    await saveContentItemRich(item.id, richContent.html)
                     router.refresh()
                     toast.success('Content saved')
                   })
@@ -235,7 +235,6 @@ export function ContentItemEditor({ item, usedCount }: { item: Item; usedCount: 
             <LessonRibbon editor={activeEditor} />
             <div className="lesson-prose min-h-80 rounded-lg border border-slate-200 bg-white px-10 py-8 dark:border-slate-800 dark:bg-slate-900">
               <RichEditor
-                initialJson={item.contentJson}
                 initialHtml={item.contentHtml}
                 placeholder="Write reusable training content…"
                 onChange={setRichContent}

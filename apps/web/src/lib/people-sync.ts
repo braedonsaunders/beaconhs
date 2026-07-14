@@ -1,9 +1,10 @@
 // Sync provenance for a person. A person created or maintained by a data-sync
-// connection has a `sync_crosswalk` row pointing at it. We treat the person as
-// "actively synced" only while that connection is still ENABLED — disabling or
-// removing the connection hands the record back to manual editing.
+// connection has a `sync_crosswalk` row pointing at it. Schedule enablement is
+// deliberately irrelevant: a manual-only connection still owns its records.
+// Deleting the connection transactionally removes its crosswalks and hands the
+// records back to manual editing.
 //
-// This is what makes the directory standalone-capable: with no enabled sync,
+// This is what makes the directory standalone-capable: with no sync owner,
 // every person is fully editable; with one, the fields that connection owns are
 // locked at the source.
 
@@ -22,7 +23,6 @@ type PersonSyncOrigin = {
 export const SYNC_OWNED_PERSON_FIELDS = [
   'firstName',
   'lastName',
-  'jobTitle',
   'employeeNo',
   'email',
   'phone',
@@ -31,6 +31,15 @@ export const SYNC_OWNED_PERSON_FIELDS = [
   'tradeId',
   'status',
 ] as const
+
+/**
+ * Relationships written by the people sync engine. A connector's scalar
+ * `jobTitle` value becomes the person's canonical primary title assignment;
+ * secondary titles remain app-managed. The current people editor changes the
+ * full title set in one operation, so it must lock that control while a sync is
+ * active rather than risk deleting or replacing the source-owned primary.
+ */
+export const SYNC_OWNED_PERSON_RELATIONSHIPS = ['titles'] as const
 
 /**
  * Returns the active sync origin for a person, or null when the person is
@@ -54,7 +63,6 @@ export async function getPersonSyncOrigin(
       and(
         eq(syncCrosswalk.entity, 'people'),
         eq(syncCrosswalk.canonicalId, personId),
-        eq(syncConnections.enabled, true),
         isNull(syncConnections.deletedAt),
       ),
     )

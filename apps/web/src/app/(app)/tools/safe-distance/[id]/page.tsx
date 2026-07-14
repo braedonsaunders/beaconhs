@@ -12,14 +12,7 @@ import {
   CardTitle,
   DetailHeader,
 } from '@beaconhs/ui'
-import {
-  orgUnits,
-  people,
-  safeDistanceRecords,
-  safeDistanceSegments,
-  tenantUsers,
-  users as userTable,
-} from '@beaconhs/db/schema'
+import { safeDistanceRecords, safeDistanceSegments } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recentActivityForEntity } from '@/lib/audit'
 import { isUuid, pickString } from '@/lib/list-params'
@@ -49,11 +42,13 @@ export default async function SafeDistanceDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const tab = pickActiveTab<Tab>(sp, TABS, 'calculator')
   const mutationError = pickString(sp.error)?.slice(0, 300) ?? null
   const ctx = await requireRequestContext()
-  if (!canUseSafeDistance(ctx) || !isUuid(id)) notFound()
+  if (!canUseSafeDistance(ctx)) notFound()
 
   const detail = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -67,35 +62,11 @@ export default async function SafeDistanceDetailPage({
       .from(safeDistanceSegments)
       .where(eq(safeDistanceSegments.recordId, id))
       .orderBy(asc(safeDistanceSegments.sortOrder))
-    const sites = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
-      .orderBy(asc(orgUnits.name))
-      .limit(200)
-    const supervisors = await tx
-      .select({ id: tenantUsers.id, name: tenantUsers.displayName, email: userTable.email })
-      .from(tenantUsers)
-      .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
-      .where(eq(tenantUsers.status, 'active'))
-      .orderBy(asc(tenantUsers.displayName))
-      .limit(500)
-    const operators = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(500)
-    return { row, segments, sites, supervisors, operators }
+    return { row, segments }
   })
 
   if (!detail) notFound()
-  const { row, segments, sites, supervisors, operators } = detail
+  const { row, segments } = detail
 
   const activity =
     tab === 'activity'
@@ -181,19 +152,6 @@ export default async function SafeDistanceDetailPage({
             unit: s.unit as SafeDistanceSegmentUnit,
             lengthValue: s.lengthValue,
             internalDiameter: s.internalDiameter,
-          }))}
-          sites={sites}
-          supervisors={supervisors.map((s) => ({
-            value: s.id,
-            label: s.name ?? '(unnamed)',
-            hint: s.email ?? undefined,
-          }))}
-          operators={operators.map((p) => ({
-            value: p.id,
-            label:
-              `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() ||
-              '(unnamed)',
-            hint: p.employeeNo ?? undefined,
           }))}
         />
       ) : null}

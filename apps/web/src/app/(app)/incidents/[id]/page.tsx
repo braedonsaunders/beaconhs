@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { randomUUID } from 'node:crypto'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   Activity,
   AlertTriangle,
@@ -45,6 +45,7 @@ import {
   incidentContributingFactors,
   incidentEvents,
   incidentInjuries,
+  incidentInjuryTypeAssignments,
   incidentInjuryTypes,
   incidentLostTimeEvents,
   incidentPeople,
@@ -73,7 +74,7 @@ import {
   type PersonInput,
 } from './_people-injury-drawers'
 import { IncidentHeaderActions } from './_header-actions'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
@@ -81,7 +82,8 @@ import { nextReference } from '@/lib/reference'
 import { assertCan, can } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { parseIncidentInjuryInput } from '@/lib/incident-injury-input'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -94,7 +96,7 @@ import { SectionNav, type SectionNavItem } from '@/components/section-nav'
 import {
   LiveDateTime,
   LiveField,
-  LivePersonSelect,
+  LiveRemoteSelect,
   LiveRichText,
   LiveSelect,
   LiveSeverityRating,
@@ -631,50 +633,181 @@ async function deleteIncidentPerson(formData: FormData) {
 
 // ---- Injuries --------------------------------------------------------------
 
+class IncidentInjuryMutationError extends Error {}
+
 async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; error?: string }> {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'incidents.update')
-  if (!input.incidentId) return { ok: false, error: 'Missing incident.' }
-  if (!input.personId && !input.personName)
-    return { ok: false, error: 'Pick the injured person or type a name.' }
-  await assertCanSeeIncident(ctx, input.incidentId)
+
+  let parsed: ReturnType<typeof parseIncidentInjuryInput>
+  try {
+    parsed = parseIncidentInjuryInput(input)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Injury is invalid.' }
+  }
+
+  await assertCanSeeIncident(ctx, parsed.incidentId)
   const values = {
-    personId: input.personId,
-    personName: input.personName,
-    injuryTypeId: input.injuryTypeId,
-    injuryTypes: input.injuryTypes,
-    bodyParts: input.bodyParts,
-    treatment: input.treatment,
-    treatedAtFacility: input.treatedAtFacility,
-    workedHoursPriorTo: input.workedHoursPriorTo,
+    personId: parsed.personId,
+    personName: parsed.personName,
+    injuryResult: parsed.injuryResult,
+    bodyParts: parsed.bodyParts,
+    treatment: parsed.treatment,
+    treatedAtFacility: parsed.treatedAtFacility,
+    workedHoursPriorTo: parsed.workedHoursPriorTo,
   }
-  if (input.id) {
-    await ctx.db((tx) =>
-      tx.update(incidentInjuries).set(values).where(eq(incidentInjuries.id, input.id!)),
-    )
-    await recordAudit(ctx, {
-      entityType: 'incident',
-      entityId: input.incidentId,
-      action: 'update',
-      summary: 'Edited injury',
+
+  try {
+    await ctx.db(async (tx) => {
+      const [incident] = await tx
+        .select({ id: incidents.id })
+        .from(incidents)
+        .where(
+          and(
+            eq(incidents.tenantId, ctx.tenantId),
+            eq(incidents.id, parsed.incidentId),
+            isNull(incidents.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!incident) throw new IncidentInjuryMutationError('Incident not found.')
+
+      const [before] = parsed.id
+        ? await tx
+            .select()
+            .from(incidentInjuries)
+            .where(
+              and(
+                eq(incidentInjuries.tenantId, ctx.tenantId),
+                eq(incidentInjuries.id, parsed.id),
+                eq(incidentInjuries.incidentId, parsed.incidentId),
+              ),
+            )
+            .limit(1)
+        : []
+      if (parsed.id && !before) {
+        throw new IncidentInjuryMutationError('Injury not found on this incident.')
+      }
+
+      if (parsed.personId) {
+        const [person] = await tx
+          .select({ id: people.id })
+          .from(people)
+          .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, parsed.personId)))
+          .limit(1)
+        if (!person) throw new IncidentInjuryMutationError('Injured person not found.')
+      }
+
+      const existingAssignments = parsed.id
+        ? await tx
+            .select({ injuryTypeId: incidentInjuryTypeAssignments.injuryTypeId })
+            .from(incidentInjuryTypeAssignments)
+            .where(
+              and(
+                eq(incidentInjuryTypeAssignments.tenantId, ctx.tenantId),
+                eq(incidentInjuryTypeAssignments.injuryId, parsed.id),
+              ),
+            )
+        : []
+      const existingTypeIds = new Set(existingAssignments.map((row) => row.injuryTypeId))
+
+      if (parsed.injuryTypeIds.length > 0) {
+        const selectedTypes = await tx
+          .select({
+            id: incidentInjuryTypes.id,
+            isActive: incidentInjuryTypes.isActive,
+            deletedAt: incidentInjuryTypes.deletedAt,
+          })
+          .from(incidentInjuryTypes)
+          .where(
+            and(
+              eq(incidentInjuryTypes.tenantId, ctx.tenantId),
+              inArray(incidentInjuryTypes.id, parsed.injuryTypeIds),
+            ),
+          )
+        const selectedById = new Map(selectedTypes.map((row) => [row.id, row]))
+        for (const typeId of parsed.injuryTypeIds) {
+          const type = selectedById.get(typeId)
+          if (!type) throw new IncidentInjuryMutationError('An injury type was not found.')
+          if ((type.deletedAt || type.isActive !== 1) && !existingTypeIds.has(typeId)) {
+            throw new IncidentInjuryMutationError('Archived injury types cannot be newly assigned.')
+          }
+        }
+      }
+
+      let injuryId: string
+      if (before && parsed.id) {
+        const [updated] = await tx
+          .update(incidentInjuries)
+          .set(values)
+          .where(
+            and(
+              eq(incidentInjuries.tenantId, ctx.tenantId),
+              eq(incidentInjuries.id, parsed.id),
+              eq(incidentInjuries.incidentId, parsed.incidentId),
+            ),
+          )
+          .returning({ id: incidentInjuries.id })
+        if (!updated) throw new IncidentInjuryMutationError('Injury could not be updated.')
+        injuryId = updated.id
+      } else {
+        const [created] = await tx
+          .insert(incidentInjuries)
+          .values({
+            tenantId: ctx.tenantId,
+            incidentId: parsed.incidentId,
+            ...values,
+          })
+          .returning({ id: incidentInjuries.id })
+        if (!created) throw new IncidentInjuryMutationError('Injury could not be created.')
+        injuryId = created.id
+      }
+
+      await tx
+        .delete(incidentInjuryTypeAssignments)
+        .where(
+          and(
+            eq(incidentInjuryTypeAssignments.tenantId, ctx.tenantId),
+            eq(incidentInjuryTypeAssignments.injuryId, injuryId),
+          ),
+        )
+      if (parsed.injuryTypeIds.length > 0) {
+        await tx.insert(incidentInjuryTypeAssignments).values(
+          parsed.injuryTypeIds.map((injuryTypeId) => ({
+            tenantId: ctx.tenantId,
+            injuryId,
+            injuryTypeId,
+          })),
+        )
+      }
+
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'incident',
+        entityId: parsed.incidentId,
+        action: 'update',
+        summary: before ? 'Edited injury' : 'Added injury',
+        before: before
+          ? {
+              personId: before.personId,
+              personName: before.personName,
+              injuryTypeIds: [...existingTypeIds],
+              injuryResult: before.injuryResult,
+              bodyParts: before.bodyParts,
+              treatment: before.treatment,
+              treatedAtFacility: before.treatedAtFacility,
+              workedHoursPriorTo: before.workedHoursPriorTo,
+            }
+          : null,
+        after: { ...values, injuryTypeIds: parsed.injuryTypeIds },
+      })
     })
-  } else {
-    await ctx.db((tx) =>
-      tx.insert(incidentInjuries).values({
-        tenantId: ctx.tenantId,
-        incidentId: input.incidentId,
-        ...values,
-      }),
-    )
-    await recordAudit(ctx, {
-      entityType: 'incident',
-      entityId: input.incidentId,
-      action: 'update',
-      summary: 'Added injury',
-    })
+  } catch (error) {
+    if (error instanceof IncidentInjuryMutationError) return { ok: false, error: error.message }
+    throw error
   }
-  revalidatePath(`/incidents/${input.incidentId}`)
+
+  revalidatePath(`/incidents/${parsed.incidentId}`)
   return { ok: true }
 }
 
@@ -684,14 +817,26 @@ async function deleteIncidentInjury(formData: FormData) {
   assertCan(ctx, 'incidents.update')
   const id = String(formData.get('id') ?? '')
   const incidentId = String(formData.get('incidentId') ?? '')
-  if (!id || !incidentId) return
+  if (!isUuid(id) || !isUuid(incidentId)) return
   await assertCanSeeIncident(ctx, incidentId)
-  await ctx.db((tx) => tx.delete(incidentInjuries).where(eq(incidentInjuries.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: incidentId,
-    action: 'update',
-    summary: 'Removed injury',
+  await ctx.db(async (tx) => {
+    const [deleted] = await tx
+      .delete(incidentInjuries)
+      .where(
+        and(
+          eq(incidentInjuries.tenantId, ctx.tenantId),
+          eq(incidentInjuries.id, id),
+          eq(incidentInjuries.incidentId, incidentId),
+        ),
+      )
+      .returning({ id: incidentInjuries.id })
+    if (!deleted) return
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: incidentId,
+      action: 'update',
+      summary: 'Removed injury',
+    })
   })
   revalidatePath(`/incidents/${incidentId}`)
 }
@@ -703,9 +848,7 @@ async function addLostTimeEvent(formData: FormData) {
   const ctx = await requireRequestContext()
   const incidentId = String(formData.get('incidentId') ?? '')
   const status = String(formData.get('status') ?? '') as
-    | 'off_work'
-    | 'restricted_duty'
-    | 'full_duty'
+    'off_work' | 'restricted_duty' | 'full_duty'
   const validFrom = String(formData.get('validFrom') ?? '').trim()
   const validTo = String(formData.get('validTo') ?? '').trim() || null
   const injuryId = String(formData.get('injuryId') ?? '').trim() || null
@@ -1182,6 +1325,8 @@ export default async function IncidentDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const drawer = pickString(sp.drawer)
   const editId = pickString(sp.editId)
@@ -1210,6 +1355,41 @@ export default async function IncidentDetailPage({
       .leftJoin(people, eq(people.id, incidentInjuries.personId))
       .where(eq(incidentInjuries.incidentId, id))
       .orderBy(asc(incidentInjuries.createdAt))
+    const injuryIds = injuries.map((row) => row.injury.id)
+    const injuryTypeRows =
+      injuryIds.length === 0
+        ? []
+        : await tx
+            .select({
+              injuryId: incidentInjuryTypeAssignments.injuryId,
+              id: incidentInjuryTypes.id,
+              name: incidentInjuryTypes.name,
+            })
+            .from(incidentInjuryTypeAssignments)
+            .innerJoin(
+              incidentInjuryTypes,
+              and(
+                eq(incidentInjuryTypes.tenantId, incidentInjuryTypeAssignments.tenantId),
+                eq(incidentInjuryTypes.id, incidentInjuryTypeAssignments.injuryTypeId),
+              ),
+            )
+            .where(
+              and(
+                eq(incidentInjuryTypeAssignments.tenantId, ctx.tenantId),
+                inArray(incidentInjuryTypeAssignments.injuryId, injuryIds),
+              ),
+            )
+            .orderBy(asc(incidentInjuryTypes.sortOrder), asc(incidentInjuryTypes.name))
+    const assignedTypesByInjury = new Map<string, { id: string; name: string }[]>()
+    for (const row of injuryTypeRows) {
+      const assigned = assignedTypesByInjury.get(row.injuryId) ?? []
+      assigned.push({ id: row.id, name: row.name })
+      assignedTypesByInjury.set(row.injuryId, assigned)
+    }
+    const injuriesWithTypes = injuries.map((row) => ({
+      ...row,
+      assignedTypes: assignedTypesByInjury.get(row.injury.id) ?? [],
+    }))
     const lostTime = await tx
       .select()
       .from(incidentLostTimeEvents)
@@ -1260,43 +1440,9 @@ export default async function IncidentDetailPage({
       .where(eq(incidentPreventativeSteps.incidentId, id))
       .orderBy(asc(incidentPreventativeSteps.status), asc(incidentPreventativeSteps.targetDate))
 
-    // Options for the inline live selects + drawers.
-    const siteOptions = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
-      .orderBy(asc(orgUnits.name))
-    const departmentOptions = await tx
-      .select({ id: departments.id, name: departments.name })
-      .from(departments)
-      .orderBy(asc(departments.name))
-    const classificationOptions = await tx
-      .select({ id: incidentClassifications.id, name: incidentClassifications.name })
-      .from(incidentClassifications)
-      .where(
-        and(isNull(incidentClassifications.deletedAt), eq(incidentClassifications.isActive, 1)),
-      )
-      .orderBy(asc(incidentClassifications.name))
-    const injuryTypeOptions = await tx
-      .select({ id: incidentInjuryTypes.id, name: incidentInjuryTypes.name })
-      .from(incidentInjuryTypes)
-      .where(and(isNull(incidentInjuryTypes.deletedAt), eq(incidentInjuryTypes.isActive, 1)))
-      .orderBy(asc(incidentInjuryTypes.sortOrder), asc(incidentInjuryTypes.name))
-    const peopleList = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(eq(people.status, 'active'))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(500)
-
     return {
       ...row,
-      injuries,
+      injuries: injuriesWithTypes,
       lostTime,
       involved,
       linkedCAs,
@@ -1305,11 +1451,6 @@ export default async function IncidentDetailPage({
       factors,
       whys,
       prevSteps,
-      siteOptions,
-      departmentOptions,
-      classificationOptions,
-      injuryTypeOptions,
-      peopleList,
     }
   })
 
@@ -1338,11 +1479,6 @@ export default async function IncidentDetailPage({
     factors,
     whys,
     prevSteps,
-    siteOptions,
-    departmentOptions,
-    classificationOptions,
-    injuryTypeOptions,
-    peopleList,
   } = data
 
   const canManage = canManageModule(ctx, 'incidents')
@@ -1358,12 +1494,6 @@ export default async function IncidentDetailPage({
     url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
-  }))
-
-  const personOpts = peopleList.map((p) => ({
-    value: p.id,
-    label: `${p.lastName}, ${p.firstName}`,
-    hint: [p.firstName, p.lastName].filter(Boolean).join(' '),
   }))
 
   // Investigation-progress milestones — drive the overview hero + checklist.
@@ -1605,30 +1735,30 @@ export default async function IncidentDetailPage({
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              <LiveSelect
+              <LiveRemoteSelect
                 id={id}
                 field="siteOrgUnitId"
                 label="Site"
                 initialValue={incident.siteOrgUnitId}
-                options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
+                lookup="incident-sites"
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              <LiveSelect
+              <LiveRemoteSelect
                 id={id}
                 field="departmentId"
                 label="Department"
                 initialValue={incident.departmentId}
-                options={departmentOptions.map((d) => ({ value: d.id, label: d.name }))}
+                lookup="incident-departments"
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              <LiveSelect
+              <LiveRemoteSelect
                 id={id}
                 field="classificationId"
                 label="Classification"
                 initialValue={incident.classificationId}
-                options={classificationOptions.map((c) => ({ value: c.id, label: c.name }))}
+                lookup="incident-classifications"
                 disabled={locked}
                 updateAction={updateTextField}
               />
@@ -1649,13 +1779,12 @@ export default async function IncidentDetailPage({
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              <LivePersonSelect
+              <LiveRemoteSelect
                 id={id}
                 field="supervisorPersonId"
                 label="Supervisor"
                 initialValue={incident.supervisorPersonId}
-                options={personOpts}
-                sheetTitle="Select supervisor"
+                lookup="incident-people"
                 disabled={locked}
                 updateAction={updateTextField}
               />
@@ -2157,11 +2286,22 @@ export default async function IncidentDetailPage({
                         Body part(s): {row.injury.bodyParts.join(', ') || '—'}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">
-                        Injury type(s): {row.injury.injuryTypes.join(', ') || '—'}
+                        Injury type(s):{' '}
+                        {row.assignedTypes.map((type) => type.name).join(', ') || '—'}
                       </div>
                     </div>
                     <div className="text-xs text-slate-600 dark:text-slate-300">
-                      {row.injury.treatment ? <p>{row.injury.treatment}</p> : null}
+                      {row.injury.injuryResult ? (
+                        <p>
+                          <span className="font-medium">Result / outcome:</span>{' '}
+                          {row.injury.injuryResult}
+                        </p>
+                      ) : null}
+                      {row.injury.treatment ? (
+                        <p>
+                          <span className="font-medium">Treatment:</span> {row.injury.treatment}
+                        </p>
+                      ) : null}
                       {row.injury.treatedAtFacility ? (
                         <p className="text-slate-500 dark:text-slate-400">
                           Treated at: {row.injury.treatedAtFacility}
@@ -2174,12 +2314,13 @@ export default async function IncidentDetailPage({
                       ) : null}
                     </div>
                     {!locked ? (
-                      <div className="flex items-start gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex items-start gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                         <Link
                           href={drawerHref('edit-injury', { editId: row.injury.id }) as any}
                           scroll={false}
                           className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
                           title="Edit injury"
+                          aria-label="Edit injury"
                         >
                           <Pencil size={14} />
                         </Link>
@@ -2190,6 +2331,7 @@ export default async function IncidentDetailPage({
                             type="submit"
                             className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700"
                             title="Remove injury"
+                            aria-label="Remove injury"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -2670,7 +2812,6 @@ export default async function IncidentDetailPage({
         incidentId={id}
         action={saveIncidentPerson}
         mode="create"
-        people={peopleList}
       />
       <PersonDrawer
         open={drawer === 'edit-person' && !!editPersonRow}
@@ -2678,7 +2819,6 @@ export default async function IncidentDetailPage({
         incidentId={id}
         action={saveIncidentPerson}
         mode="edit"
-        people={peopleList}
         defaults={
           editPersonRow
             ? {
@@ -2696,8 +2836,6 @@ export default async function IncidentDetailPage({
         incidentId={id}
         action={saveIncidentInjury}
         mode="create"
-        people={peopleList}
-        injuryTypeOptions={injuryTypeOptions}
       />
       <InjuryDrawer
         open={drawer === 'edit-injury' && !!editInjuryRow}
@@ -2705,16 +2843,14 @@ export default async function IncidentDetailPage({
         incidentId={id}
         action={saveIncidentInjury}
         mode="edit"
-        people={peopleList}
-        injuryTypeOptions={injuryTypeOptions}
         defaults={
           editInjuryRow
             ? {
                 id: editInjuryRow.injury.id,
                 personId: editInjuryRow.injury.personId,
                 personName: editInjuryRow.injury.personName,
-                injuryTypeId: editInjuryRow.injury.injuryTypeId,
-                injuryTypes: editInjuryRow.injury.injuryTypes,
+                assignedTypes: editInjuryRow.assignedTypes,
+                injuryResult: editInjuryRow.injury.injuryResult,
                 bodyParts: editInjuryRow.injury.bodyParts,
                 treatment: editInjuryRow.injury.treatment,
                 treatedAtFacility: editInjuryRow.injury.treatedAtFacility,
@@ -2798,7 +2934,6 @@ export default async function IncidentDetailPage({
         incidentId={id}
         action={savePrevStepAction}
         mode="create"
-        people={peopleList}
       />
       <PrevStepDrawer
         open={drawer === 'edit-prev-step' && !!editingPrev}
@@ -2806,7 +2941,6 @@ export default async function IncidentDetailPage({
         incidentId={id}
         action={savePrevStepAction}
         mode="edit"
-        people={peopleList}
         defaults={
           editingPrev
             ? {

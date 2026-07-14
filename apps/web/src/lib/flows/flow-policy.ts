@@ -4,7 +4,6 @@ import { moduleFlowProfile } from './module-profiles'
 
 export type FlowSubjectRef = { type: 'form_template' | 'module'; key: string }
 
-const MAX_FLOW_NAME_LENGTH = 200
 const MAX_GRAPH_BYTES = 1024 * 1024
 const MAX_GRAPH_NODES = 250
 const MAX_GRAPH_EDGES = 500
@@ -19,11 +18,6 @@ export function parseFlowSubject(value: unknown): FlowSubjectRef | null {
     return isUuid(candidate.key) ? { type: candidate.type, key: candidate.key } : null
   }
   return moduleFlowProfile(candidate.key) ? { type: candidate.type, key: candidate.key } : null
-}
-
-export function normalizeFlowName(value: unknown): string {
-  const name = typeof value === 'string' ? value.trim() : ''
-  return (name || 'Flow').slice(0, MAX_FLOW_NAME_LENGTH)
 }
 
 type FlowGraphResult = { ok: true; graph: AutomationGraph } | { ok: false; error: string }

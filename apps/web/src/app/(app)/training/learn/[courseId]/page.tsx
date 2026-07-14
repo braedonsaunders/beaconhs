@@ -17,9 +17,16 @@ import { attachmentUrl } from '@/lib/attachment-url'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
+import { safeTrainingExternalUrl } from '@/lib/training-external-url'
+import { configuredTrainingBlockedOrigins } from '@/lib/training-external-url.server'
 import { deliveryMeta } from '../../_lib/delivery'
 import { lessonProseCss } from '../../_editor/prose'
+import {
+  findOutstandingCourseRequirement,
+  requiresEnrollmentRenewal,
+} from '../_lib/compliance-requirement'
 import { CoursePlayer, EnrollGate, OnlineCoursePlayer, type PlayerModule } from './_player'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,13 +37,15 @@ export async function generateMetadata({ params }: { params: Promise<{ courseId:
 
 export default async function PlayerPage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = await params
+  if (!isUuid(courseId)) notFound()
+
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
     const [course] = await tx
       .select()
       .from(trainingCourses)
-      .where(eq(trainingCourses.id, courseId))
+      .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
       .limit(1)
     if (!course) return null
 
@@ -66,6 +75,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       .where(eq(trainingClasses.courseId, courseId))
 
     let enrollment: typeof trainingEnrollments.$inferSelect | null = null
+    let renewalRequired = false
     let progress: {
       row: typeof trainingLessonProgress.$inferSelect
       evaluatorName: string | null
@@ -82,6 +92,14 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
         )
         .limit(1)
       enrollment = e ?? null
+      if (enrollment?.status === 'completed') {
+        const requirement = await findOutstandingCourseRequirement(tx, {
+          tenantId: ctx.tenantId,
+          personId: person.id,
+          courseId,
+        })
+        renewalRequired = requiresEnrollmentRenewal(enrollment, requirement)
+      }
       if (enrollment) {
         const rows = await tx
           .select({ row: trainingLessonProgress, evaluator: tenantUsers })
@@ -106,8 +124,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           .where(inArray(trainingContentItems.id, itemIds))
       : []
 
-    // Resolve media URLs for non-PowerPoint lesson content. PPTX playback is
-    // authorized and streamed independently through WOPI.
+    // Resolve media URLs for media lessons, library items, and slide decks.
     const attIds = new Set<string>()
     for (const l of lessons) {
       if (l.attachmentId) attIds.add(l.attachmentId)
@@ -127,11 +144,33 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
           .where(inArray(attachments.id, [...attIds]))
       : []
 
-    return { course, person, mods, lessons, classes, enrollment, progress, atts, items }
+    return {
+      course,
+      person,
+      mods,
+      lessons,
+      classes,
+      enrollment,
+      renewalRequired,
+      progress,
+      atts,
+      items,
+    }
   })
 
   if (!data) notFound()
-  const { course, person, mods, lessons, classes, enrollment, progress, atts, items } = data
+  const {
+    course,
+    person,
+    mods,
+    lessons,
+    classes,
+    enrollment,
+    renewalRequired,
+    progress,
+    atts,
+    items,
+  } = data
 
   const attachmentUrls: Record<string, string | null> = Object.fromEntries(
     atts.map((a) => [a.id, a.key ? attachmentUrl(a.id) : null]),
@@ -139,6 +178,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
   const classTitleById = new Map(classes.map((c) => [c.id, c.title]))
   const progressByLesson = new Map(progress.map((p) => [p.row.lessonId, p]))
   const itemById = new Map(items.map((i) => [i.id, i]))
+  const trainingUrlOptions = { blockedOrigins: configuredTrainingBlockedOrigins() }
 
   const modules: PlayerModule[] = mods.map((m) => ({
     id: m.id,
@@ -168,11 +208,14 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
                 completedAt: prog.row.completedAt?.toISOString() ?? null,
               }
             : null,
-          embedUrl: item ? item.embedUrl : l.embedUrl,
+          embedUrl:
+            safeTrainingExternalUrl(item ? item.embedUrl : l.embedUrl, trainingUrlOptions)?.url ??
+            null,
           attachmentId: item ? item.attachmentId : l.attachmentId,
           assessmentTypeId: l.assessmentTypeId,
           classTitle: l.classId ? (classTitleById.get(l.classId) ?? null) : null,
           durationMinutes: l.durationMinutes,
+          minTimeSeconds: l.minTimeSeconds,
           status: prog?.row.status ?? 'not_started',
         }
       }),
@@ -199,8 +242,11 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       ) : course.deliveryType === 'external_certificate' ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            This course tracks certifications earned outside the app — there is nothing to take
-            here. Your training team records them; completed certificates appear under{' '}
+            {renewalRequired
+              ? 'This external certification is due for renewal. '
+              : 'This course tracks certifications earned outside the app. '}
+            There is nothing to take here. Your training team records the certificate; completed
+            certificates appear under{' '}
             <a
               href="/my/training?tab=records"
               className="text-teal-700 underline dark:text-teal-300"
@@ -210,6 +256,20 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
             .
           </CardContent>
         </Card>
+      ) : renewalRequired && !deliveryMeta(course.deliveryType).selfLaunch ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+            This course is due again and is delivered by your training team. Ask them to enroll you
+            in the new session; your earlier certificate remains in your records.
+          </CardContent>
+        </Card>
+      ) : renewalRequired ? (
+        <EnrollGate
+          courseId={courseId}
+          courseName={course.name}
+          summary={htmlToSnippet(course.description, 240) || null}
+          renewal
+        />
       ) : !enrollment && !deliveryMeta(course.deliveryType).selfLaunch ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">

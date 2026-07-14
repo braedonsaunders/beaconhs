@@ -4,6 +4,7 @@
 // keep the bolded labels in sync with those pages.
 
 import type { ManualArticle } from '../types'
+import { CSV_EXPORT_LIMIT_GUIDANCE } from './_shared'
 
 export const FRONTLINE_ARTICLES: ManualArticle[] = [
   {
@@ -43,6 +44,16 @@ Open **Journals** in the left menu. The page opens on your most recent entry. On
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
 5. Set the location and people in the bar above the text, if they apply.
 
+The header changes from **Saving…** to **Saved** after your latest edit is stored. If it shows **Not saved — retry**, tap that message before leaving or submitting the entry.
+
+## Using AI writing help
+
+1. Tap the **AI** button in the journal editor.
+2. Choose the writing action you want.
+3. For a long entry, select the part you want changed first. AI writing help accepts up to 8,000 characters at a time.
+
+BeaconHS leaves your original words in place until the AI response finishes. If the request fails, your journal is not changed.
+
 ## Adding photos
 
 1. Scroll to the **Photos** section under the text.
@@ -51,7 +62,7 @@ Open **Journals** in the left menu. The page opens on your most recent entry. On
 
 ## Tags
 
-Tags help people find entries later (for example a tag for concrete pours). Tap the **Tags** chip in the bar above the text to add or change tags. If your company has AI assist turned on, tags are often added for you.
+Tags help people find entries later (for example a tag for concrete pours). Tap the **Tags** chip in the bar above the text to add or change up to 20 tags. If your company has AI assist turned on, tags are often added for you.
 
 ## Submitting
 
@@ -63,12 +74,42 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 1. Open [Journals](/journals). On a phone, tap **Browse**.
 2. Entries are grouped by date. Tap one to open it.
 3. Tap **Drafts** in the list to see entries you have not submitted yet.
+4. If you have a long history, tap **Load older entries** at the bottom to bring in the next group. Nothing is silently left out.
+
+If your role can browse other people's journals, open **Records**. Use **All authors**, **All locations**, and **Any tag** to search the complete set of filter values used by journals you are allowed to open. If a picker says more results exist, add more of the person's name, location, or tag.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 
 - Write your entry through the day, not from memory at quitting time. It autosaves, so short visits are fine.
 - A photo of a hazard is worth a paragraph. Add both.
 - If you missed a day, pick that date in the list to create an entry for it.`,
+  },
+  {
+    slug: 'people-kiosk',
+    title: 'People sign-in / sign-out kiosk',
+    group: 'Everyday tasks',
+    iconKey: 'users',
+    summary: 'Sign in or out from the shared jobsite tablet.',
+    keywords: ['kiosk', 'sign in', 'sign out', 'attendance', 'tablet', 'crew', 'site', 'PIN'],
+    body: `The people kiosk is the shared tablet at a jobsite entrance. It records when you sign in or out and can attach the scan to a site and crew.
+
+## Sign in or out
+
+1. Enter the jobsite PIN and tap **Unlock kiosk**.
+2. Open **Your name**. Search by your name, employee number, or job title, then tap your exact match.
+3. If they apply, search **Site (optional)** and **Crew (optional)**. A saved choice stays selected for the next person using the same tablet.
+4. Tap **SIGN IN** or **SIGN OUT**.
+5. Check the confirmation, then tap **Done**. The kiosk also returns to the name search automatically after a few seconds.
+
+The kiosk searches the current company directory in small groups. If it says more results exist, type more of the name, employee number, job title, site, or crew. It does not hide a valid match just because the company has a large directory.
+
+## If the kiosk will not unlock
+
+- Check that the PIN has 4–12 digits.
+- Ask an administrator whether the people kiosk is enabled for this workspace.
+- A suspended or archived workspace cannot use the public kiosk.`,
   },
   {
     slug: 'hazard-assessments',
@@ -102,6 +143,8 @@ Walking through the hazards as a crew catches problems while they are still chea
 ## Where to find it
 
 Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/hazard-assessments).
+
+Use **All sites** to search the complete set of sites used by assessments you are allowed to open. On **My hazard assessments**, it searches only sites used by assessments you started. If the picker says more results exist, add more of the site name or code.
 
 ## Starting a new assessment
 
@@ -160,6 +203,7 @@ If your role manages Hazard Assessments, open **Types** to set up the templates 
     group: 'Everyday tasks',
     iconKey: 'clipboard',
     summary: 'Run a checklist inspection, flag failures, and submit the record.',
+    requiredPermission: 'inspections.read.self',
     keywords: [
       'inspection',
       'checklist',
@@ -172,7 +216,7 @@ If your role manages Hazard Assessments, open **Types** to set up the templates 
       'punch list',
       'findings',
     ],
-    body: `An inspection is a checklist you walk through on site: each item passes, fails, or does not apply. Failures capture what was wrong and what was done about it.
+    body: `An inspection is a checklist you walk through on site. Items can ask for **Pass** / **Fail** / **N/A**, **Yes** / **No**, or one answer from a company-defined list. Failures capture what was wrong and what was done about it.
 
 ## What this is for
 
@@ -182,6 +226,8 @@ Regular inspections catch unsafe conditions before they hurt someone. The record
 
 Open **Inspections** in the left menu. Records live at [Inspection records](/inspections/records).
 
+On **Inspection records**, use **All inspection types**, **All sites**, and **All inspectors** to search across the records you are allowed to open. If a picker says more results exist, add more of the type, site, inspector name, or email to the search.
+
 ## Starting an inspection
 
 1. Tap **New inspection**.
@@ -190,13 +236,17 @@ Open **Inspections** in the left menu. Records live at [Inspection records](/ins
 
 ## Answering the criteria
 
-1. Work down the list. Tap **Pass**, **Fail**, or **N/A** on each item. Some items use **Yes** / **No** instead.
+1. Work down the list. Tap **Pass**, **Fail**, or **N/A** on each item. Some items use **Yes** / **No**. For **Select one**, pick the exact answer that applies. Other items ask for **Text**, **Long text**, or a **Number**; enter the requested value instead of a pass/fail result.
 2. When you tap **Fail**, extra fields open on that item:
    - **Reason for non-compliance** — what is wrong.
    - **Action taken** — what was done to fix it.
    - A severity, and a person the finding is assigned to, if your company uses those.
 3. Add photos on any failed item. Some items require a photo before you can submit — they show a **Photo** tag.
-4. If most items pass, tap **Mark unanswered as pass** in the **Status & workflow** section to fill the rest in one tap. Only do this when you actually checked them.
+4. If most outcome items pass, tap **Mark unanswered as pass** in the **Status & workflow** section to fill those items in one tap. **Select one**, **Text**, **Long text**, and **Number** items are never filled by this shortcut; answer each one yourself. Only use the shortcut when you actually checked the items.
+
+## Setting up checklist questions
+
+Managers build inspection types under **Inspections** → **Manage** → **Types**. Open a type, add or edit a question, then choose its **Response type**. Use **Text** for a short answer, **Long text** for a narrative, or **Number** when the answer must be numeric. For **Select one**, enter at least two unique **Options (one per line)**. New inspections copy the response type and options into the record, so changing the type later does not rewrite an inspector's saved answer contract. Reusable banks use the same question editor under **Banks**.
 
 ## Draft vs submitted
 
@@ -205,6 +255,12 @@ A record stays a draft while you work — you can leave and come back. When ever
 1. Open the **Status & workflow** section.
 2. Pick the new status under **Move to** and tap **Update status**.
 3. Submitting or closing requires every item to be answered. Closing locks the record so it cannot change.
+
+If an edit removes required information from a submitted record, it returns to **In progress**. Complete the missing item and submit it again.
+
+To correct a closed record, tap **Unlock**. The record reopens as **Submitted** so you can make the correction and close it again.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 
@@ -264,6 +320,31 @@ The quick report captures the essentials. Photos, witness statements, and the fu
 
 You can open your own reports any time from the [Incidents](/incidents) list to see their status.
 
+## Recording an injured person
+
+If you can update the incident, open its **Injuries** section and:
+
+1. Tap **Add injury**.
+2. Pick the **Injured person**, or type a name if the person is not in the directory.
+3. Under **Injury types**, search the managed list and select every type that applies. You can remove a selected type with its **Remove** button.
+4. Enter the **Body part(s)** and **Hours worked prior** when known.
+5. Use **Injury result / outcome** for what happened after the injury, such as "x-rays clear", "stitches required", or "modified duty assigned". Do not repeat injury types in this box.
+6. Record the **Treatment details** and **Treated at facility**.
+7. Tap **Add injury**. Use **Edit injury** later if the outcome or treatment changes.
+
+Archived injury types stay visible on existing records but cannot be added to another injury.
+
+## Incident setup and hours (managers)
+
+If your role can manage Incidents, the **Manage** pages include **Classifications**, **Injury types**, and **Hours worked**.
+
+- Use the search box and **Status** on classifications or injury types to find active or archived setup records. Use **Next** and **Prev** to move through the list.
+- An injury can have more than one managed **Injury type**. A type that is already used is archived instead of permanently deleted, so historical records stay complete.
+- To nest a classification, choose **+ Child** on an active top-level row. In **Parent**, type to find another active top-level classification. Archived rows cannot receive new children.
+- On **Hours worked**, search by period, date, or site. Use **Site** to narrow the entries. The totals above the table follow the current search and filter.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
+
 ## Tips
 
 - Report first, get details later. A quick report now beats a perfect report tomorrow.
@@ -320,6 +401,8 @@ Open **Corrective Actions** in the left menu, or go to [Corrective actions](/cor
 The due date is on the row in the list and at the top of the action. Overdue actions are marked and show up in reports your supervisor sees. If you cannot make the date, say so early — do not let it quietly go overdue.
 
 Supervisors can use the report tabs to work through larger backlogs. **Aging** filters open actions by age, severity, and status. **Overdue** searches all overdue actions and filters by severity, status, or whether an owner is assigned. **By assignee** finds owners with overdue or outstanding work, and **By source** shows which records create the most actions. Click a heading to change the sort order.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 
@@ -391,6 +474,18 @@ The **Total km** column and the month totals at the bottom update as you type.
 
 The grid becomes a stack of day cards with big touch targets, one card per day, with the same fields. Fill them the same way.
 
+## Annual summary
+
+Open **Summary** to review vehicles across a year. Search by asset tag, name, category, or type. Use **Next** and **Prev** to move through the vehicle list; the totals row still covers every vehicle that matches the current search. Site-scoped roles only see vehicles at their assigned sites (plus equipment currently issued to them).
+
+Open one saved entry and use its **Activity** tab when you need the change history. Search the history, filter by **Action**, choose the **Order**, and use **Next** and **Prev** to reach older events.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
+
+## Settings for equipment managers
+
+Open **Settings** from the vehicle log to choose which entry modes the company uses and the default mode. Under **Per-driver defaults**, search for an active driver, choose **Destination** or **Odometer**, then click **Set override**. Search the saved overrides or use **Mode** and **Order** to narrow the list. Use **Next** and **Prev** to review every saved override.
+
 ## Tips
 
 - Tap **PDF** to get the printable monthly sheet for the selected driver and vehicle.
@@ -447,9 +542,15 @@ Only published forms allowed for the role you are currently using appear. If you
 1. Tap the form in the left menu to open its entry list.
 2. Use the search box and filters to find the entry, and tap it to open.
 
+${CSV_EXPORT_LIMIT_GUIDANCE}
+
 ## Tips
 
 - Required fields are marked. The form tells you what is missing when you try to submit.
+- In a formatted-text field, pasted content is cleaned automatically. **Link** accepts a web address, email address, phone number, app path, or page anchor.
+- In a **Risk matrix** field, tap where likelihood meets severity. The score and risk band appear above the grid. Tap the selected cell again to clear it.
+- Linked record pickers search company data as you type. Large linked tables have their own search box and **Previous** and **Next** page buttons.
+- An AI photo review belongs to the exact photos shown. Changing those photos clears the old review so you can run it again. A marked-up photo keeps one photo at a time and clears its markers when you replace it.
 - For a toolbox talk, add everyone who attended before you submit — that is your attendance record.
 - If a form you need is not in your menu, check that you are using the right role, then ask your supervisor. The form may need to be published, allowed for your role, pinned, or assigned to you.`,
   },
@@ -494,14 +595,16 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 1. Open [Compliance](/compliance).
 2. Find a row that is not done. The button on the row tells you what to do — it changes with the kind of item:
    - **Acknowledge** — open the document, read it, and confirm.
-   - **Go to training** — opens your training so you can take the course.
-   - **Open app** — opens the form you need to fill and submit.
+   - **Go to training** — opens the assigned course or assessment. Start an assessment from this link so the result is credited to that exact requirement.
+   - **Open app** — opens the form linked to that exact obligation. Submit it from this link so the required item is recorded as complete.
    - **Start inspection** — starts the required inspection.
    - **New assessment** — starts the required hazard assessment.
    - **Log entry** — opens your journal.
    - **Sign off** — records a required sign-off.
 3. Finish the task. The row updates to completed on its own.
 4. Rows that are done show **Review** so you can look back at what you submitted.
+
+Opening the same app from the general Builder gallery creates an on-demand entry. It does not clear a scheduled obligation; always start required apps from **Compliance** → **Mine**.
 
 ## Tips
 
@@ -634,6 +737,8 @@ If somebody changes or locks the assessment while you have it open, refresh the 
 ## Print or save a PDF
 
 Open the assessment and tap **Print / PDF**. Use your browser's print window to print it or save it as a PDF. Past assessments remain in the Safe Distance list.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 

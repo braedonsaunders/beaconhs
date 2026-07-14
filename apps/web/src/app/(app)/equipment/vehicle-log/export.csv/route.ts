@@ -1,12 +1,18 @@
 import type { NextRequest } from 'next/server'
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import { extractRows } from '@beaconhs/reports'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
+import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +27,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const yearRaw = url.searchParams.get('year')
   const year = yearRaw && /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : new Date().getFullYear()
+  const q = url.searchParams.get('q')?.trim() || undefined
   const ctx = await requireExportContext()
   // Tenant-wide fleet summary grid: gate on the full read tier (a site-scoped
   // export would distort the cross-vehicle totals rather than bound them).
@@ -30,6 +37,16 @@ export async function GET(req: NextRequest) {
   const nextFirst = ymd(year + 1, 1, 1)
 
   const { trucks, rows } = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+    const search: SQL<unknown> | undefined = q
+      ? or(
+          ilike(equipmentItems.assetTag, `%${q}%`),
+          ilike(equipmentItems.name, `%${q}%`),
+          ilike(equipmentCategories.name, `%${q}%`),
+          ilike(equipmentTypes.name, `%${q}%`),
+        )
+      : undefined
+    const where = and(vehicleWhere, search)!
     const t = await tx
       .select({
         id: equipmentItems.id,
@@ -41,18 +58,28 @@ export async function GET(req: NextRequest) {
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
+      .where(where)
       .orderBy(asc(equipmentItems.assetTag))
-      .limit(1000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
+    if (t.length >= CSV_EXPORT_QUERY_LIMIT) return { trucks: t, rows: [] }
     const result = await tx.execute(sql`
       SELECT
-        equipment_item_id,
-        extract(month from month)::int AS month,
-        total_km,
-        hours_on_site,
-        manpower_count,
-        logged_days
-      FROM report_vehicle_log_monthly
-      WHERE month >= ${firstDay}::date AND month < ${nextFirst}::date
+        monthly.equipment_item_id,
+        extract(month from monthly.month)::int AS month,
+        monthly.total_km,
+        monthly.hours_on_site,
+        monthly.manpower_count,
+        monthly.logged_days
+      FROM report_vehicle_log_monthly monthly
+      INNER JOIN ${equipmentItems}
+        ON ${equipmentItems.id} = monthly.equipment_item_id
+      LEFT JOIN ${equipmentTypes}
+        ON ${equipmentTypes.id} = ${equipmentItems.typeId}
+      LEFT JOIN ${equipmentCategories}
+        ON ${equipmentCategories.id} = ${equipmentItems.categoryId}
+      WHERE ${where}
+        AND monthly.month >= ${firstDay}::date
+        AND monthly.month < ${nextFirst}::date
     `)
     const r = extractRows(result).map((row) => ({
       equipmentItemId: String(row.equipment_item_id ?? ''),
@@ -64,6 +91,9 @@ export async function GET(req: NextRequest) {
     }))
     return { trucks: t, rows: r }
   })
+
+  const overflow = csvExportOverflowResponse(trucks.length)
+  if (overflow) return overflow
 
   type MonthRollup = { km: number; hours: number; manpower: number; days: number }
   const grid = new Map<string, Map<number, MonthRollup>>()
@@ -125,7 +155,7 @@ export async function GET(req: NextRequest) {
     entityType: 'truck_log_entry',
     action: 'export',
     summary: `Exported ${year} vehicle log summary (${trucks.length} vehicles)`,
-    metadata: { format: 'csv', year },
+    metadata: { format: 'csv', year, q: q ?? null },
   })
 
   const selection = selectCsvColumns(url.searchParams, csvColumns(headers))

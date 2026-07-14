@@ -12,8 +12,19 @@
 // ungrouped) is materialised into inspection_record_criteria with the group
 // label snapshotted so the fill view can render section headers.
 
-import { relations } from 'drizzle-orm'
-import { boolean, index, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 import { inspectionBankResponseType } from './inspection-bank'
@@ -27,9 +38,7 @@ export const inspectionTypeGroups = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    typeId: uuid('type_id')
-      .notNull()
-      .references(() => inspectionTypes.id, { onDelete: 'cascade' }),
+    typeId: uuid('type_id').notNull(),
     sequence: integer('sequence').default(0).notNull(),
     label: text('label').notNull(),
     description: text('description'),
@@ -37,7 +46,13 @@ export const inspectionTypeGroups = pgTable(
   },
   (t) => ({
     tenantIdx: index('inspection_type_groups_tenant_idx').on(t.tenantId),
-    typeSeqIdx: index('inspection_type_groups_type_seq_idx').on(t.typeId, t.sequence),
+    tenantIdIdUx: uniqueIndex('inspection_type_groups_tenant_id_id_ux').on(t.tenantId, t.id),
+    typeSeqIdx: index('inspection_type_groups_type_seq_idx').on(t.tenantId, t.typeId, t.sequence),
+    typeFk: foreignKey({
+      name: 'inspection_type_groups_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [inspectionTypes.tenantId, inspectionTypes.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -50,16 +65,13 @@ export const inspectionTypeCriteria = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    typeId: uuid('type_id')
-      .notNull()
-      .references(() => inspectionTypes.id, { onDelete: 'cascade' }),
+    typeId: uuid('type_id').notNull(),
     // Null = ungrouped. Groups can be deleted without losing the criterion.
-    groupId: uuid('group_id').references(() => inspectionTypeGroups.id, {
-      onDelete: 'set null',
-    }),
+    groupId: uuid('group_id'),
     sequence: integer('sequence').default(0).notNull(),
     text: text('text').notNull(),
     responseType: inspectionBankResponseType('response_type').default('pass_fail_na').notNull(),
+    choiceOptions: jsonb('choice_options').$type<string[]>().default([]).notNull(),
     requiresPhoto: boolean('requires_photo').default(false).notNull(),
     requiresComment: boolean('requires_comment').default(false).notNull(),
     // Provenance when copied in from a bank. No FK — banks can be edited or
@@ -71,9 +83,32 @@ export const inspectionTypeCriteria = pgTable(
   (t) => ({
     tenantIdx: index('inspection_type_criteria_tenant_idx').on(t.tenantId),
     typeGroupSeqIdx: index('inspection_type_criteria_type_group_seq_idx').on(
+      t.tenantId,
       t.typeId,
       t.groupId,
       t.sequence,
+    ),
+    groupIdx: index('inspection_type_criteria_group_idx').on(t.tenantId, t.groupId),
+    typeFk: foreignKey({
+      name: 'inspection_type_criteria_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [inspectionTypes.tenantId, inspectionTypes.id],
+    }).onDelete('cascade'),
+    groupFk: foreignKey({
+      name: 'inspection_type_criteria_tenant_group_fk',
+      columns: [t.tenantId, t.groupId],
+      foreignColumns: [inspectionTypeGroups.tenantId, inspectionTypeGroups.id],
+    }),
+    choiceOptionsCk: check(
+      'inspection_type_criteria_choice_options_ck',
+      sql`(
+        ${t.responseType} = 'choice'
+        AND jsonb_typeof(${t.choiceOptions}) = 'array'
+        AND jsonb_array_length(${t.choiceOptions}) BETWEEN 2 AND 50
+      ) OR (
+        ${t.responseType} <> 'choice'
+        AND ${t.choiceOptions} = '[]'::jsonb
+      )`,
     ),
   }),
 )
@@ -81,8 +116,8 @@ export const inspectionTypeCriteria = pgTable(
 export const inspectionTypeGroupsRelations = relations(inspectionTypeGroups, ({ one, many }) => ({
   tenant: one(tenants, { fields: [inspectionTypeGroups.tenantId], references: [tenants.id] }),
   type: one(inspectionTypes, {
-    fields: [inspectionTypeGroups.typeId],
-    references: [inspectionTypes.id],
+    fields: [inspectionTypeGroups.tenantId, inspectionTypeGroups.typeId],
+    references: [inspectionTypes.tenantId, inspectionTypes.id],
   }),
   criteria: many(inspectionTypeCriteria),
 }))
@@ -90,11 +125,11 @@ export const inspectionTypeGroupsRelations = relations(inspectionTypeGroups, ({ 
 export const inspectionTypeCriteriaRelations = relations(inspectionTypeCriteria, ({ one }) => ({
   tenant: one(tenants, { fields: [inspectionTypeCriteria.tenantId], references: [tenants.id] }),
   type: one(inspectionTypes, {
-    fields: [inspectionTypeCriteria.typeId],
-    references: [inspectionTypes.id],
+    fields: [inspectionTypeCriteria.tenantId, inspectionTypeCriteria.typeId],
+    references: [inspectionTypes.tenantId, inspectionTypes.id],
   }),
   group: one(inspectionTypeGroups, {
-    fields: [inspectionTypeCriteria.groupId],
-    references: [inspectionTypeGroups.id],
+    fields: [inspectionTypeCriteria.tenantId, inspectionTypeCriteria.groupId],
+    references: [inspectionTypeGroups.tenantId, inspectionTypeGroups.id],
   }),
 }))

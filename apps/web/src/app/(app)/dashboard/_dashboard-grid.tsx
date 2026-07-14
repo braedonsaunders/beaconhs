@@ -44,6 +44,7 @@ import type { SaveQuickActionsAction } from './_quick-actions-shared'
 import { resetDashboardLayout, saveDashboardLayout } from './actions'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { isUuid } from '@/lib/list-params'
 
 // react-grid-layout's ResponsiveGridLayout is purely client (DOM-measured).
 const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
@@ -55,8 +56,6 @@ const BREAKPOINTS = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
 const ROW_HEIGHT = 48
 const MARGIN: readonly [number, number] = [16, 16]
 const RESIZE_HANDLES = ['se'] as const
-const UUID_RE = /^[0-9a-f-]{36}$/i
-
 type LayoutWidget = DashboardLayoutData['widgets'][number]
 type LibraryCard = { id: string; name: string; description: string }
 type DashboardGridActionResult = { ok: true } | { ok: false; error?: string }
@@ -381,7 +380,7 @@ export function DashboardGrid({
                       </>
                     ) : null}
                     {node ??
-                      (UUID_RE.test(w.id) ? (
+                      (isUuid(w.id) ? (
                         <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-3 text-center dark:border-teal-800/50 dark:bg-teal-950/30">
                           <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
                             {cardNameById.get(w.id) ?? 'Insights card'}

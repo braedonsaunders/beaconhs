@@ -26,6 +26,7 @@ export const documentTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('document_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('document_types_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantKeyUx: uniqueIndex('document_types_tenant_key_ux').on(t.tenantId, t.key),
   }),
 )
@@ -37,9 +38,7 @@ export const documentCategories = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    parentId: uuid('parent_id').references((): any => documentCategories.id, {
-      onDelete: 'set null',
-    }),
+    parentId: uuid('parent_id'),
     name: text('name').notNull(),
     description: text('description'),
     ...timestamps,
@@ -47,7 +46,8 @@ export const documentCategories = pgTable(
   },
   (t) => ({
     tenantIdx: index('document_categories_tenant_idx').on(t.tenantId),
-    parentIdx: index('document_categories_parent_idx').on(t.parentId),
+    tenantIdIdUx: uniqueIndex('document_categories_tenant_id_id_ux').on(t.tenantId, t.id),
+    parentIdx: index('document_categories_parent_idx').on(t.tenantId, t.parentId),
     // Sibling names are the user-visible identity of a category. Deleted rows
     // must not reserve a name forever, and top-level NULL parents must compare
     // equal (Postgres normally treats every NULL as distinct in a unique
@@ -65,8 +65,8 @@ export const documentTypesRelations = relations(documentTypes, ({ one }) => ({
 export const documentCategoriesRelations = relations(documentCategories, ({ one, many }) => ({
   tenant: one(tenants, { fields: [documentCategories.tenantId], references: [tenants.id] }),
   parent: one(documentCategories, {
-    fields: [documentCategories.parentId],
-    references: [documentCategories.id],
+    fields: [documentCategories.tenantId, documentCategories.parentId],
+    references: [documentCategories.tenantId, documentCategories.id],
   }),
   children: many(documentCategories),
 }))

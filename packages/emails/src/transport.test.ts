@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sealSecret } from '@beaconhs/crypto'
+import { isValidEmailAddress } from '@beaconhs/email-render/delivery-input'
 import { isEmailProvider } from './providers'
 import {
-  isValidEmailAddress,
   resolveEffectiveTransport,
   resolveEmailTransport,
   sendVia,
@@ -415,7 +415,30 @@ describe('sendVia (HTTP providers)', () => {
     })
   })
 
-  it('sendgrid → sends the complete payload using only configured transport addresses', async () => {
+  it('normalizes transport-significant subject whitespace before provider delivery', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('', { status: 202, headers: { 'x-message-id': 'sg-safe' } }))
+    const t: EmailTransport = { provider: 'sendgrid', apiKey: 'SG.k', from: 'a@b.io' }
+
+    await expect(
+      sendVia(t, { ...INPUT, subject: '  Safety\r\nBcc: victim@example.com  ' }),
+    ).resolves.toEqual({ id: 'sg-safe' })
+    const [, init] = fetchMock.mock.calls[0]!
+    expect(JSON.parse(init!.body as string).subject).toBe('Safety Bcc: victim@example.com')
+  })
+
+  it('rejects an empty normalized subject before contacting a provider', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    const t: EmailTransport = { provider: 'sendgrid', apiKey: 'SG.k', from: 'a@b.io' }
+
+    await expect(sendVia(t, { ...INPUT, subject: '\r\n\t' })).rejects.toThrow(
+      'Email subject is required',
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sendgrid → sends the complete single-recipient payload using configured addresses', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('', { status: 202, headers: { 'x-message-id': 'sg-full' } }))
@@ -426,7 +449,7 @@ describe('sendVia (HTTP providers)', () => {
       replyTo: 'default-reply@b.io',
     }
     const input: SendEmailInput = {
-      to: ['one@example.com', 'two@example.com'],
+      to: 'one@example.com',
       subject: 'Safety report',
       text: 'Plain report',
       html: '<p>HTML report</p>',
@@ -445,7 +468,7 @@ describe('sendVia (HTTP providers)', () => {
     expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer SG.full')
     expect(init!.signal).toBeInstanceOf(AbortSignal)
     expect(JSON.parse(init!.body as string)).toEqual({
-      personalizations: [{ to: [{ email: 'one@example.com' }, { email: 'two@example.com' }] }],
+      personalizations: [{ to: [{ email: 'one@example.com' }] }],
       from: { email: 'default@b.io', name: 'Default' },
       reply_to: { email: 'default-reply@b.io' },
       subject: 'Safety report',
@@ -462,6 +485,16 @@ describe('sendVia (HTTP providers)', () => {
         },
       ],
     })
+  })
+
+  it('rejects a multi-recipient provider payload before contacting SendGrid', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    const t: EmailTransport = { provider: 'sendgrid', apiKey: 'SG.k', from: 'a@b.io' }
+
+    await expect(
+      sendVia(t, { ...INPUT, to: ['one@example.com', 'two@example.com'] }),
+    ).rejects.toThrow('exactly one recipient')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('sendgrid → sanitizes structured API errors and redacts its credential', async () => {

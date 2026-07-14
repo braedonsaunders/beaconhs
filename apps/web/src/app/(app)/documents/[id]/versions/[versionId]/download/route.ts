@@ -9,6 +9,7 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { getObjectStream } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,8 @@ export async function GET(
   routeCtx: { params: Promise<{ id: string; versionId: string }> },
 ): Promise<Response> {
   const { id, versionId } = await routeCtx.params
+  if (!isUuid(id) || !isUuid(versionId)) return new NextResponse('Not found', { status: 404 })
+
   const kind = req.nextUrl.searchParams.get('kind') === 'docx' ? 'docx' : 'pdf'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.read')

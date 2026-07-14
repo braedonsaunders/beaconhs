@@ -6,12 +6,12 @@
 
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { ArrowLeft } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Button, PageHeader } from '@beaconhs/ui'
-import type { SelectOption } from '@beaconhs/ui'
 import {
   attachments,
+  documentAcknowledgmentSessions,
   documentAcknowledgments,
   documentVersions,
   documents,
@@ -21,7 +21,7 @@ import { attachmentUrl } from '@/lib/attachment-url'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { SignOffSheet, type SheetSigner } from './_sign-off-sheet'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +37,8 @@ export default async function SignOffPage({
   const { id } = await params
   const sp = await searchParams
   const resumeSessionId = pickString(sp.session) ?? null
+  if (!isUuid(id) || (resumeSessionId !== null && !isUuid(resumeSessionId))) notFound()
+
   const backHref = `/documents/${id}?tab=acknowledgments`
 
   const ctx = await requireRequestContext()
@@ -49,7 +51,9 @@ export default async function SignOffPage({
     const [doc] = await tx
       .select({ id: documents.id, title: documents.title, key: documents.key })
       .from(documents)
-      .where(eq(documents.id, id))
+      .where(
+        and(eq(documents.id, id), eq(documents.status, 'published'), isNull(documents.deletedAt)),
+      )
       .limit(1)
     if (!doc) return null
 
@@ -60,54 +64,61 @@ export default async function SignOffPage({
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
-    const peopleRows = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        jobTitle: people.jobTitle,
-      })
-      .from(people)
-      .where(sql`${people.deletedAt} is null and ${people.status} = 'active'`)
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(1000)
-
     let roster: SheetSigner[] = []
+    let invalidSession = false
     if (resumeSessionId) {
-      const rows = await tx
-        .select({
-          ackId: documentAcknowledgments.id,
-          personId: documentAcknowledgments.personId,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          acknowledgedAt: documentAcknowledgments.acknowledgedAt,
-          signatureAttachmentId: attachments.id,
-        })
-        .from(documentAcknowledgments)
-        .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
-        .leftJoin(attachments, eq(attachments.id, documentAcknowledgments.signatureAttachmentId))
-        .where(eq(documentAcknowledgments.sessionId, resumeSessionId))
-        .orderBy(asc(documentAcknowledgments.acknowledgedAt))
-      roster = rows.map((r) => ({
-        ackId: r.ackId,
-        personId: r.personId,
-        name: `${r.firstName} ${r.lastName}`.trim() || '(unnamed)',
-        acknowledgedAt: r.acknowledgedAt.toISOString(),
-        signatureUrl: r.signatureAttachmentId ? attachmentUrl(r.signatureAttachmentId) : null,
-      }))
+      const [session] = pub
+        ? await tx
+            .select({ id: documentAcknowledgmentSessions.id })
+            .from(documentAcknowledgmentSessions)
+            .where(
+              and(
+                eq(documentAcknowledgmentSessions.id, resumeSessionId),
+                eq(documentAcknowledgmentSessions.documentId, id),
+                eq(documentAcknowledgmentSessions.versionId, pub.id),
+                isNull(documentAcknowledgmentSessions.deletedAt),
+              ),
+            )
+            .limit(1)
+        : []
+      invalidSession = !session
+      if (session) {
+        const rows = await tx
+          .select({
+            ackId: documentAcknowledgments.id,
+            personId: documentAcknowledgments.personId,
+            firstName: people.firstName,
+            lastName: people.lastName,
+            acknowledgedAt: documentAcknowledgments.acknowledgedAt,
+            signatureAttachmentId: attachments.id,
+          })
+          .from(documentAcknowledgments)
+          .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
+          .leftJoin(attachments, eq(attachments.id, documentAcknowledgments.signatureAttachmentId))
+          .where(
+            and(
+              eq(documentAcknowledgments.sessionId, session.id),
+              eq(documentAcknowledgments.documentId, id),
+              eq(documentAcknowledgments.versionId, pub!.id),
+            ),
+          )
+          .orderBy(asc(documentAcknowledgments.acknowledgedAt))
+        roster = rows.map((r) => ({
+          ackId: r.ackId,
+          personId: r.personId,
+          name: `${r.firstName} ${r.lastName}`.trim() || '(unnamed)',
+          acknowledgedAt: r.acknowledgedAt.toISOString(),
+          signatureUrl: r.signatureAttachmentId ? attachmentUrl(r.signatureAttachmentId) : null,
+        }))
+      }
     }
 
-    return { doc, pub: pub ?? null, peopleRows, roster }
+    return { doc, pub: pub ?? null, roster, invalidSession }
   })
 
   if (!data) notFound()
-  const { doc, pub, peopleRows, roster } = data
-
-  const options: SelectOption[] = peopleRows.map((p) => ({
-    value: p.id,
-    label: `${p.firstName} ${p.lastName}`.trim(),
-    hint: p.jobTitle ?? undefined,
-  }))
+  const { doc, pub, roster, invalidSession } = data
+  if (invalidSession) notFound()
 
   return (
     <PageContainer>
@@ -136,7 +147,6 @@ export default async function SignOffPage({
             versionId={pub.id}
             versionNumber={pub.version}
             defaultTitle={doc.title}
-            peopleOptions={options}
             initialRoster={roster}
             initialSessionId={resumeSessionId}
             backHref={backHref}

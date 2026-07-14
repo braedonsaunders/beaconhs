@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   lintWorkerTriggerCompatibility,
   planAutomation,
+  actionDataSchema,
   type ActionData,
   type AutomationGraph,
   type TriggerData,
@@ -62,6 +63,30 @@ describe('lintWorkerTriggerCompatibility', () => {
     ).toContain(
       'Trigger trigger: "scheduled" can only send inline worker emails without PDF attachments.',
     )
+  })
+})
+
+describe('send_email design source', () => {
+  it('keeps bounded HTML as the sole editable source and drops project JSON', () => {
+    const parsed = actionDataSchema.parse({
+      action: 'send_email',
+      to: [{ type: 'submitter' }],
+      mode: 'design',
+      sourceHtml: '<p>Hello</p>',
+      compiledHtml: '<p>Hello</p>',
+      design: { components: [{ script: 'alert(1)' }] },
+    })
+
+    expect(parsed).toMatchObject({ sourceHtml: '<p>Hello</p>', compiledHtml: '<p>Hello</p>' })
+    expect(parsed).not.toHaveProperty('design')
+    expect(() =>
+      actionDataSchema.parse({
+        action: 'send_email',
+        to: [{ type: 'submitter' }],
+        mode: 'design',
+        sourceHtml: 'x'.repeat(512_001),
+      }),
+    ).toThrow()
   })
 })
 

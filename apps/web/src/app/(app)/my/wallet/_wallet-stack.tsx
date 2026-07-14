@@ -62,13 +62,25 @@ const KIND = {
   },
 } as const
 
-export function WalletStack({ cards, design }: { cards: WalletCard[]; design: WalletDesign }) {
+export function WalletStack({
+  cards,
+  design,
+  filtered = false,
+}: {
+  cards: WalletCard[]
+  design: WalletDesign
+  filtered?: boolean
+}) {
   if (cards.length === 0) {
     return (
       <EmptyState
         icon={<CreditCard size={32} />}
-        title="No credentials yet"
-        description="Completed training and granted skills appear here as wallet cards you can flip, carry, and download."
+        title={filtered ? 'No credentials match these filters' : 'No credentials yet'}
+        description={
+          filtered
+            ? 'Clear the search or filters to see your other credentials.'
+            : 'Completed training and granted skills appear here as wallet cards you can flip, carry, and download.'
+        }
       />
     )
   }

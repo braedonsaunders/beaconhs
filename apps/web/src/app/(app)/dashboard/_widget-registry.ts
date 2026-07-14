@@ -67,7 +67,7 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     id: 'kpi-training-compliance',
     category: 'kpi',
     label: 'Training compliance',
-    description: 'Share of assigned training records currently completed.',
+    description: 'Share of training and certification requirements currently completed.',
     defaultSize: { w: 3, h: 3 },
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },

@@ -8,7 +8,7 @@
 // caller owns RLS scoping + auditing. Nothing here touches RequestContext.
 
 import { and, desc, eq, ilike, isNull, or } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import { primaryPersonTitleName, type Database } from '@beaconhs/db'
 import {
   equipmentCheckouts,
   equipmentItems,
@@ -18,6 +18,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { isUuid } from './list-params'
+import { refreshEquipmentAvailability } from './equipment-custody'
 
 const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
 type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
@@ -114,12 +115,11 @@ export function parseStationScanInput(value: unknown): StationScanInput | null {
   if (
     input.returnedNotes !== undefined &&
     input.returnedNotes !== null &&
-    typeof input.returnedNotes !== 'string'
+    (typeof input.returnedNotes !== 'string' || input.returnedNotes.length > 2_000)
   ) {
     return null
   }
-  const returnedNotes =
-    typeof input.returnedNotes === 'string' ? input.returnedNotes.trim().slice(0, 2_000) : null
+  const returnedNotes = typeof input.returnedNotes === 'string' ? input.returnedNotes.trim() : null
 
   return {
     code,
@@ -178,7 +178,7 @@ export async function searchStationCore(
       id: people.id,
       firstName: people.firstName,
       lastName: people.lastName,
-      jobTitle: people.jobTitle,
+      jobTitle: primaryPersonTitleName(people.id, people.tenantId),
       employeeNo: people.employeeNo,
     })
     .from(people)
@@ -225,7 +225,7 @@ async function personName(
   const [p] = await tx
     .select({ first: people.firstName, last: people.lastName })
     .from(people)
-    .where(eq(people.id, personId))
+    .where(and(eq(people.id, personId), eq(people.status, 'active'), isNull(people.deletedAt)))
     .limit(1)
   return p ? `${p.first} ${p.last}`.trim() : null
 }
@@ -238,7 +238,7 @@ async function locationName(
   const [o] = await tx
     .select({ name: orgUnits.name })
     .from(orgUnits)
-    .where(eq(orgUnits.id, orgUnitId))
+    .where(and(eq(orgUnits.id, orgUnitId), isNull(orgUnits.deletedAt)))
     .limit(1)
   return o?.name ?? null
 }
@@ -272,6 +272,7 @@ export async function stationScanCore(
       name: equipmentItems.name,
       status: equipmentItems.status,
       available: equipmentItems.isAvailableForCheckout,
+      isMissing: equipmentItems.isMissing,
     })
     .from(equipmentItems)
     .where(
@@ -281,6 +282,7 @@ export async function stationScanCore(
       ),
     )
     .limit(1)
+    .for('update')
   if (!item) {
     // Not equipment — a person badge (employee number) sets the active holder.
     const [p] = await tx
@@ -288,7 +290,7 @@ export async function stationScanCore(
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
-        jobTitle: people.jobTitle,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
       })
       .from(people)
       .where(
@@ -332,11 +334,14 @@ export async function stationScanCore(
           : 'checked_out'
 
   if (action === 'checked_out') {
-    if (isOut) {
-      return { ok: false, error: `${item.assetTag} is already checked out` }
+    if (item.isMissing) {
+      return { ok: false, error: `${item.assetTag} is reported missing` }
     }
     if (item.status !== 'in_service') {
       return { ok: false, error: `${item.assetTag} is ${item.status.replace(/_/g, ' ')}` }
+    }
+    if (isOut) {
+      return { ok: false, error: `${item.assetTag} is already checked out` }
     }
     const holderPersonId = args.activePersonId ?? null
     if (args.requireHolderOnCheckout && !holderPersonId) {
@@ -400,6 +405,9 @@ export async function stationScanCore(
   }
 
   // ---- check in: snap to home, clear holder, mark available -----------------
+  if (!isOut) {
+    return { ok: false, error: `${item.assetTag} is already checked in` }
+  }
   const homeOrgUnitId = args.homeOrgUnitId
   if (!homeOrgUnitId) {
     return { ok: false, error: 'Set a default check-in location before checking equipment in' }
@@ -412,16 +420,17 @@ export async function stationScanCore(
     }
   }
   const condition: ReturnCondition = args.condition ?? 'good'
+  const now = new Date()
   if (open) {
     await tx
       .update(equipmentCheckouts)
       .set({
-        returnedAt: new Date(),
+        returnedAt: now,
         returnedCondition: condition,
         returnedNotes: args.returnedNotes ?? null,
         checkedInByTenantUserId: args.actorTenantUserId,
       })
-      .where(eq(equipmentCheckouts.id, open.id))
+      .where(and(eq(equipmentCheckouts.id, open.id), isNull(equipmentCheckouts.returnedAt)))
   }
   await tx
     .update(equipmentItems)
@@ -429,16 +438,19 @@ export async function stationScanCore(
       currentHolderPersonId: null,
       currentSiteOrgUnitId: homeOrgUnitId,
       lastSeenSiteOrgUnitId: homeOrgUnitId,
-      lastSeenAt: new Date(),
-      isAvailableForCheckout: item.status === 'in_service',
+      lastSeenAt: now,
+      isMissing: false,
+      missingFoundAt: item.isMissing ? now : undefined,
     })
     .where(eq(equipmentItems.id, item.id))
+  await refreshEquipmentAvailability(tx, [item.id])
   await tx.insert(equipmentLocationHistory).values({
     tenantId: args.tenantId,
     itemId: item.id,
     siteOrgUnitId: homeOrgUnitId,
     holderPersonId: null,
     recordedByTenantUserId: args.actorTenantUserId,
+    recordedAt: now,
     note: `Checked in (${condition}) at station${args.returnedNotes ? ` — ${args.returnedNotes}` : ''}`,
   })
   return {

@@ -7,6 +7,7 @@ import { loadDefinitionById } from '../../../_definitions'
 import { ReportStudio } from '../../../_studio/studio.client'
 import { updateCustomDefinition } from '../../../_studio/actions'
 import { loadReportStudioEntities } from '../../../_studio/entities'
+import { isUuid } from '@/lib/list-params'
 
 export const metadata = { title: 'Edit report' }
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,8 @@ export default async function EditCustomDefinitionPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
 
   const definition = await loadDefinitionById(ctx.tenantId!, id)

@@ -103,6 +103,7 @@ function PhotoRow({
       <RawImage
         src={photo.url}
         alt={photo.caption ?? photo.filename}
+        optimizationReason="authenticated"
         className="h-10 w-10 shrink-0 rounded object-cover"
       />
       <div className="min-w-0 flex-1">

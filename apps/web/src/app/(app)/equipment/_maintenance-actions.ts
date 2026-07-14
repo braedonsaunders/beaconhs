@@ -11,16 +11,26 @@ import {
   equipmentInspectionTypes,
   equipmentItems,
   equipmentReminders,
+  people,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
+import { moduleScopeWhere } from '@/lib/visibility'
 import {
   addIntervalToDate,
   formatInterval,
   parseIntervalUnit,
   type EquipmentIntervalUnit,
 } from '@/lib/equipment/intervals'
+import {
+  optionalTextInput,
+  optionalUuidInput,
+  requiredDateInput,
+  requiredTextInput,
+  requireUuidInput,
+} from '@/lib/mutation-input'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -68,10 +78,11 @@ export async function saveEquipmentSchedule(input: {
 
   const result = await ctx.db(async (tx) => {
     const [item] = await tx
-      .select({ id: equipmentItems.id, name: equipmentItems.name })
+      .select({ id: equipmentItems.id, name: equipmentItems.name, typeId: equipmentItems.typeId })
       .from(equipmentItems)
       .where(and(eq(equipmentItems.id, input.equipmentItemId), isNull(equipmentItems.deletedAt)))
       .limit(1)
+      .for('update')
     if (!item) return null
     if (inspectionTypeId) {
       const [type] = await tx
@@ -101,7 +112,16 @@ export async function saveEquipmentSchedule(input: {
           ),
         )
         .returning({ id: equipmentInspectionSchedules.id })
-      return row ? { id: row.id, created: false } : null
+      if (!row) return null
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment',
+        entityId: input.equipmentItemId,
+        action: 'update',
+        summary: `Updated inspection schedule (${formatInterval(interval.value, interval.unit)})`,
+        after: { scheduleId: row.id, inspectionTypeId, label, nextDueOn: input.nextDueOn },
+      })
+      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
+      return { id: row.id, created: false }
     }
     const [row] = await tx
       .insert(equipmentInspectionSchedules)
@@ -112,20 +132,18 @@ export async function saveEquipmentSchedule(input: {
         createdByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: equipmentInspectionSchedules.id })
-    return row ? { id: row.id, created: true } : null
+    if (!row) return null
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: input.equipmentItemId,
+      action: 'update',
+      summary: `Added inspection schedule (${formatInterval(interval.value, interval.unit)})`,
+      after: { scheduleId: row.id, inspectionTypeId, label, nextDueOn: input.nextDueOn },
+    })
+    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
+    return { id: row.id, created: true }
   })
   if (!result) return { ok: false, error: 'Failed to save schedule.' }
-
-  await recordAudit(ctx, {
-    entityType: 'equipment',
-    entityId: input.equipmentItemId,
-    action: 'update',
-    summary: `${result.created ? 'Added' : 'Updated'} inspection schedule (${formatInterval(
-      interval.value,
-      interval.unit,
-    )})`,
-    after: { scheduleId: result.id, inspectionTypeId, label, nextDueOn: input.nextDueOn },
-  })
   revalidateMaintenance(input.equipmentItemId)
   return { ok: true }
 }
@@ -137,6 +155,13 @@ export async function deleteEquipmentSchedule(input: {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
   const deleted = await ctx.db(async (tx) => {
+    const [item] = await tx
+      .select({ id: equipmentItems.id, typeId: equipmentItems.typeId })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, input.equipmentItemId), isNull(equipmentItems.deletedAt)))
+      .limit(1)
+      .for('update')
+    if (!item) return false
     const [row] = await tx
       .delete(equipmentInspectionSchedules)
       .where(
@@ -146,16 +171,18 @@ export async function deleteEquipmentSchedule(input: {
         ),
       )
       .returning({ id: equipmentInspectionSchedules.id })
-    return row != null
+    if (!row) return false
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: input.equipmentItemId,
+      action: 'update',
+      summary: 'Removed inspection schedule',
+      before: { scheduleId: input.id },
+    })
+    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
+    return true
   })
   if (!deleted) return { ok: false, error: 'Schedule not found.' }
-  await recordAudit(ctx, {
-    entityType: 'equipment',
-    entityId: input.equipmentItemId,
-    action: 'update',
-    summary: 'Removed inspection schedule',
-    before: { scheduleId: input.id },
-  })
   revalidateMaintenance(input.equipmentItemId)
   return { ok: true }
 }
@@ -175,60 +202,105 @@ export async function saveEquipmentReminder(input: {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
 
-  const title = input.title.trim()
-  if (!title) return { ok: false, error: 'Title is required.' }
-  if (!DATE_RE.test(input.dueOn)) return { ok: false, error: 'Due date is required.' }
+  let parsed: {
+    id: string | null
+    equipmentItemId: string
+    title: string
+    details: string | null
+    dueOn: string
+    assignedToPersonId: string | null
+  }
+  try {
+    parsed = {
+      id: optionalUuidInput(input.id, 'Reminder'),
+      equipmentItemId: requireUuidInput(input.equipmentItemId, 'Equipment item'),
+      title: requiredTextInput(input.title, 'Title', 500),
+      details: optionalTextInput(input.details, 'Details', 10_000),
+      dueOn: requiredDateInput(input.dueOn, 'Due date'),
+      assignedToPersonId: optionalUuidInput(input.assignedToPersonId, 'Assignee'),
+    }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid reminder.' }
+  }
   const repeat = parseValueUnit(input.repeatIntervalValue, input.repeatIntervalUnit)
 
   const saved = await ctx.db(async (tx) => {
+    const scope = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
     const [item] = await tx
-      .select({ id: equipmentItems.id })
+      .select({ id: equipmentItems.id, status: equipmentItems.status })
       .from(equipmentItems)
-      .where(and(eq(equipmentItems.id, input.equipmentItemId), isNull(equipmentItems.deletedAt)))
+      .where(
+        and(eq(equipmentItems.id, parsed.equipmentItemId), isNull(equipmentItems.deletedAt), scope),
+      )
       .limit(1)
-    if (!item) return null
+    if (!item) return { ok: false as const, error: 'Equipment item was not found.' }
+    if (!parsed.id && (item.status === 'retired' || item.status === 'lost')) {
+      return { ok: false as const, error: 'Select an active equipment item.' }
+    }
+    if (parsed.assignedToPersonId) {
+      const [assignee] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(
+            eq(people.id, parsed.assignedToPersonId),
+            eq(people.status, 'active'),
+            isNull(people.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!assignee) return { ok: false as const, error: 'Select an active assignee.' }
+    }
     const values = {
-      title,
-      details: input.details?.trim() || null,
-      dueOn: input.dueOn,
+      title: parsed.title,
+      details: parsed.details,
+      dueOn: parsed.dueOn,
       repeatIntervalValue: repeat?.value ?? null,
       repeatIntervalUnit: repeat?.unit ?? null,
-      assignedToPersonId: input.assignedToPersonId || null,
+      assignedToPersonId: parsed.assignedToPersonId,
     }
-    if (input.id) {
+    if (parsed.id) {
       const [row] = await tx
         .update(equipmentReminders)
         .set({ ...values, updatedAt: new Date() })
         .where(
           and(
-            eq(equipmentReminders.id, input.id),
-            eq(equipmentReminders.equipmentItemId, input.equipmentItemId),
+            eq(equipmentReminders.id, parsed.id),
+            eq(equipmentReminders.equipmentItemId, parsed.equipmentItemId),
           ),
         )
         .returning({ id: equipmentReminders.id })
-      return row ? { id: row.id, created: false } : null
+      return row
+        ? { ok: true as const, id: row.id, created: false }
+        : { ok: false as const, error: 'Reminder was not found.' }
     }
     const [row] = await tx
       .insert(equipmentReminders)
       .values({
         tenantId: ctx.tenantId,
-        equipmentItemId: input.equipmentItemId,
+        equipmentItemId: parsed.equipmentItemId,
         ...values,
         createdByTenantUserId: ctx.membership?.id ?? null,
       })
       .returning({ id: equipmentReminders.id })
-    return row ? { id: row.id, created: true } : null
+    return row
+      ? { ok: true as const, id: row.id, created: true }
+      : { ok: false as const, error: 'Reminder was not saved.' }
   })
-  if (!saved) return { ok: false, error: 'Failed to save reminder.' }
+  if (!saved.ok) return saved
 
   await recordAudit(ctx, {
     entityType: 'equipment',
-    entityId: input.equipmentItemId,
+    entityId: parsed.equipmentItemId,
     action: 'update',
-    summary: `${saved.created ? 'Added' : 'Updated'} reminder "${title}" (due ${input.dueOn})`,
-    after: { reminderId: saved.id, dueOn: input.dueOn },
+    summary: `${saved.created ? 'Added' : 'Updated'} reminder "${parsed.title}" (due ${parsed.dueOn})`,
+    after: { reminderId: saved.id, dueOn: parsed.dueOn },
   })
-  revalidateMaintenance(input.equipmentItemId)
+  revalidateMaintenance(parsed.equipmentItemId)
   return { ok: true }
 }
 

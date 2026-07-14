@@ -4,7 +4,12 @@ import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SAFE_DISTANCE_PERMISSION } from '@/lib/safe-distance-access'
@@ -76,8 +81,11 @@ export async function GET(req: NextRequest) {
       .leftJoin(orgUnits, eq(orgUnits.id, safeDistanceRecords.siteOrgUnitId))
       .where(whereClause)
       .orderBy(...orderBy)
-      .limit(10_000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
   })
+
+  const overflow = csvExportOverflowResponse(rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'safe_distance_record',

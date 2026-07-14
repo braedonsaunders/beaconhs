@@ -11,6 +11,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { BrowserPrintButton } from '@/components/browser-print-controls'
 import { isUuid } from '@/lib/list-params'
 import { canUseSafeDistance } from '@/lib/safe-distance-access'
 import {
@@ -44,8 +45,10 @@ export default async function SafeDistancePrintPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
-  if (!canUseSafeDistance(ctx) || !isUuid(id)) notFound()
+  if (!canUseSafeDistance(ctx)) notFound()
   const detail = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -145,9 +148,7 @@ export default async function SafeDistancePrintPage({
         </div>
         <div>
           <a href={`/tools/safe-distance/${id}`}>Back</a>
-          <button type="button" data-print>
-            Print
-          </button>
+          <BrowserPrintButton />
         </div>
       </div>
 
@@ -258,15 +259,6 @@ export default async function SafeDistancePrintPage({
           </div>
         </div>
       </div>
-
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `document.addEventListener('click', (e) => {
-            const t = e.target instanceof Element ? e.target : null;
-            if (t && t.closest('[data-print]')) window.print();
-          });`,
-        }}
-      />
     </div>
   )
 }

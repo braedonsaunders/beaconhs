@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import { ArrowLeft, CheckCircle2, LogIn, LogOut, Search, X } from 'lucide-react'
-import { Select } from '@beaconhs/ui'
-import { recordKioskScan, unlockKiosk, type KioskDirectory } from './actions'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { ArrowLeft, CheckCircle2, LogIn, LogOut, X } from 'lucide-react'
+import { RemoteSearchSelect, type RemoteSearchLoader } from '@/components/remote-search-select'
+import { loadKioskOptions, recordKioskScan, unlockKiosk } from './actions'
 
-type Person = { id: string; firstName: string; lastName: string; jobTitle: string | null }
+type Person = { id: string; name: string; detail: string | null }
 
 type Stage =
   | { kind: 'pin' }
@@ -15,9 +15,7 @@ type Stage =
 
 export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   const [stage, setStage] = useState<Stage>({ kind: 'pin' })
-  const [directory, setDirectory] = useState<KioskDirectory | null>(null)
   const [pinInput, setPinInput] = useState('')
-  const [query, setQuery] = useState('')
   const [siteId, setSiteId] = useState<string>('')
   const [crewId, setCrewId] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
@@ -34,20 +32,35 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
     }
   }
 
+  function returnToPicker(pin: string) {
+    clearDoneTimeout()
+    setError(null)
+    setStage({ kind: 'pick', pin })
+  }
+
   useEffect(() => clearDoneTimeout, [])
 
-  const filtered = useMemo(() => {
-    const people = directory?.people ?? []
-    const q = query.trim().toLowerCase()
-    if (!q) return people.slice(0, 50)
-    return people
-      .filter(
-        (p) =>
-          `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
-          (p.jobTitle ?? '').toLowerCase().includes(q),
-      )
-      .slice(0, 50)
-  }, [query, directory])
+  const activePin = stage.kind === 'pin' ? '' : stage.pin
+  const pickerLoader = useCallback(
+    (kind: 'person' | 'site' | 'crew'): RemoteSearchLoader =>
+      ({ query, selected }) =>
+        activePin
+          ? loadKioskOptions({ tenantId, pin: activePin, kind, query, selected })
+          : Promise.resolve({ options: [], hasMore: false }),
+    [activePin, tenantId],
+  )
+  const peopleLoader = useCallback<RemoteSearchLoader>(
+    (input) => pickerLoader('person')(input),
+    [pickerLoader],
+  )
+  const siteLoader = useCallback<RemoteSearchLoader>(
+    (input) => pickerLoader('site')(input),
+    [pickerLoader],
+  )
+  const crewLoader = useCallback<RemoteSearchLoader>(
+    (input) => pickerLoader('crew')(input),
+    [pickerLoader],
+  )
 
   function submitPin(e: React.FormEvent) {
     e.preventDefault()
@@ -58,14 +71,16 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
     }
     const pin = pinInput.trim()
     start(async () => {
-      const result = await unlockKiosk({ tenantId, pin })
-      if (!result.ok) {
-        setError(result.error)
-        setDirectory(null)
-        return
+      try {
+        const result = await unlockKiosk({ tenantId, pin })
+        if (!result.ok) {
+          setError(result.error)
+          return
+        }
+        setStage({ kind: 'pick', pin })
+      } catch {
+        setError('The kiosk could not be unlocked. Check the connection and try again.')
       }
-      setDirectory(result.directory)
-      setStage({ kind: 'pick', pin })
     })
   }
 
@@ -80,31 +95,34 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
     const pin = stage.pin
     const person = stage.person
     start(async () => {
-      const result = await recordKioskScan({
-        tenantId,
-        personId: person.id,
-        kind: scanKind,
-        siteOrgUnitId: siteId || null,
-        crewId: crewId || null,
-        deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : null,
-        pin,
-      })
-      if (!result.ok) {
-        setError(result.error)
-        if (result.error === 'Invalid PIN' || result.error.includes('PIN')) {
-          setStage({ kind: 'pin' })
-          setDirectory(null)
-          setPinInput('')
+      try {
+        const result = await recordKioskScan({
+          tenantId,
+          personId: person.id,
+          kind: scanKind,
+          siteOrgUnitId: siteId || null,
+          crewId: crewId || null,
+          deviceLabel: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : null,
+          pin,
+        })
+        if (!result.ok) {
+          setError(result.error)
+          if (result.error === 'Invalid PIN' || result.error.includes('PIN')) {
+            setStage({ kind: 'pin' })
+            setPinInput('')
+          }
+          return
         }
-        return
+        setStage({ kind: 'done', pin, person, scanKind, at: new Date() })
+        clearDoneTimeout()
+        doneTimeoutRef.current = setTimeout(() => {
+          doneTimeoutRef.current = null
+          setError(null)
+          setStage({ kind: 'pick', pin })
+        }, 4000)
+      } catch {
+        setError('The scan could not be saved. Check the connection and try again.')
       }
-      setStage({ kind: 'done', pin, person, scanKind, at: new Date() })
-      clearDoneTimeout()
-      doneTimeoutRef.current = setTimeout(() => {
-        doneTimeoutRef.current = null
-        setStage({ kind: 'pick', pin })
-        setQuery('')
-      }, 4000)
     })
   }
 
@@ -128,14 +146,17 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
             inputMode="numeric"
             autoFocus
             value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
+            onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 12))}
+            pattern="[0-9]{4,12}"
+            maxLength={12}
             placeholder="PIN"
             className="w-full rounded-lg border-0 bg-slate-900 px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-slate-500 focus:ring-2 focus:ring-teal-500 focus:outline-none"
           />
           {error ? <p className="text-center text-sm text-red-400">{error}</p> : null}
           <button
             type="submit"
-            className="w-full rounded-lg bg-teal-500 px-4 py-3 text-base font-semibold text-white hover:bg-teal-400"
+            disabled={pending}
+            className="w-full rounded-lg bg-teal-500 px-4 py-3 text-base font-semibold text-white hover:bg-teal-400 disabled:opacity-50"
           >
             Unlock kiosk
           </button>
@@ -152,52 +173,35 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
             <div>
               <h1 className="text-lg font-semibold text-slate-900">{tenantName}</h1>
-              <p className="text-xs text-slate-500">Tap your name to sign in or out</p>
-            </div>
-            <div className="relative max-w-md flex-1">
-              <Search
-                size={16}
-                className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
-              />
-              <input
-                type="search"
-                placeholder="Search your name…"
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white py-3 pr-3 pl-10 text-base text-slate-900 placeholder-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
-              />
+              <p className="text-xs text-slate-500">Search for your name to sign in or out</p>
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-3xl p-6">
-          {filtered.length === 0 ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-              {query ? `No people match "${query}"` : 'No employees in the directory'}
-            </div>
-          ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {filtered.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => pickPerson(p)}
-                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm hover:border-teal-500 hover:bg-teal-50"
-                  >
-                    <div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {p.firstName} {p.lastName}
-                      </div>
-                      {p.jobTitle ? (
-                        <div className="text-xs text-slate-500">{p.jobTitle}</div>
-                      ) : null}
-                    </div>
-                    <span className="text-xs tracking-wide text-teal-700 uppercase">Tap →</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <label className="mb-2 block text-sm font-medium text-slate-700">Your name</label>
+            <RemoteSearchSelect
+              loadOptions={peopleLoader}
+              value=""
+              onChange={() => undefined}
+              onOptionChange={(person) => {
+                if (person) {
+                  pickPerson({ id: person.value, name: person.label, detail: person.hint ?? null })
+                }
+              }}
+              placeholder="Search your name…"
+              searchPlaceholder="Type your name, employee number, or job title…"
+              sheetTitle="Choose your name"
+              ariaLabel="Search the employee directory"
+              clearable={false}
+              className="w-full"
+              triggerClassName="h-14 text-base"
+            />
+            <p className="mt-3 text-xs text-slate-500">
+              Results load securely as you type. Add more of your name if the list says more results
+              exist.
+            </p>
+          </div>
         </main>
       </div>
     )
@@ -211,66 +215,58 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           <div className="mb-4 flex items-center justify-between">
             <button
               type="button"
-              onClick={() => setStage({ kind: 'pick', pin: stage.pin })}
+              onClick={() => returnToPicker(stage.pin)}
               className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-teal-700"
             >
               <ArrowLeft size={14} /> Back
             </button>
             <button
               type="button"
-              onClick={() => setStage({ kind: 'pick', pin: stage.pin })}
+              onClick={() => returnToPicker(stage.pin)}
               className="text-slate-400 hover:text-slate-700"
               aria-label="Close"
             >
               <X size={20} />
             </button>
           </div>
-          <h2 className="text-2xl font-semibold text-slate-900">
-            {stage.person.firstName} {stage.person.lastName}
-          </h2>
-          {stage.person.jobTitle ? (
-            <p className="text-sm text-slate-500">{stage.person.jobTitle}</p>
+          <h2 className="text-2xl font-semibold text-slate-900">{stage.person.name}</h2>
+          {stage.person.detail ? (
+            <p className="text-sm text-slate-500">{stage.person.detail}</p>
           ) : null}
 
           <div className="mt-4 grid grid-cols-1 gap-3">
-            {(directory?.sites.length ?? 0) > 0 ? (
-              <div>
-                <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                  Site (optional)
-                </label>
-                <Select
-                  value={siteId}
-                  onChange={(e) => setSiteId(e.target.value)}
-                  className="mt-1 w-full py-2 pl-3 text-sm text-slate-900"
-                >
-                  <option value="">— No site —</option>
-                  {directory?.sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : null}
-            {(directory?.crews.length ?? 0) > 0 ? (
-              <div>
-                <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                  Crew (optional)
-                </label>
-                <Select
-                  value={crewId}
-                  onChange={(e) => setCrewId(e.target.value)}
-                  className="mt-1 w-full py-2 pl-3 text-sm text-slate-900"
-                >
-                  <option value="">— No crew —</option>
-                  {directory?.crews.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            ) : null}
+            <div>
+              <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+                Site (optional)
+              </label>
+              <RemoteSearchSelect
+                loadOptions={siteLoader}
+                value={siteId}
+                onChange={setSiteId}
+                placeholder="No site"
+                emptyLabel="No site"
+                searchPlaceholder="Search sites…"
+                sheetTitle="Choose a site"
+                ariaLabel="Choose an optional site"
+                className="mt-1 w-full"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+                Crew (optional)
+              </label>
+              <RemoteSearchSelect
+                loadOptions={crewLoader}
+                value={crewId}
+                onChange={setCrewId}
+                placeholder="No crew"
+                emptyLabel="No crew"
+                searchPlaceholder="Search crews…"
+                sheetTitle="Choose a crew"
+                ariaLabel="Choose an optional crew"
+                className="mt-1 w-full"
+              />
+            </div>
           </div>
 
           {error ? <p className="mt-4 text-center text-sm text-red-600">{error}</p> : null}
@@ -311,16 +307,12 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           {stage.scanKind === 'in' ? 'Signed in' : 'Signed out'}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          {stage.person.firstName} {stage.person.lastName} ·{' '}
+          {stage.person.name} ·{' '}
           {stage.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </p>
         <button
           type="button"
-          onClick={() => {
-            clearDoneTimeout()
-            setStage({ kind: 'pick', pin: stage.pin })
-            setQuery('')
-          }}
+          onClick={() => returnToPicker(stage.pin)}
           className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800"
         >
           Done

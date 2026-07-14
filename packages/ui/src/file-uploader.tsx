@@ -224,7 +224,7 @@ export function FileUploader({
       // even when several are dropped at once.
       const list = multiple ? Array.from(files) : Array.from(files).slice(0, 1)
       const queued = list.map<Item>((file) => ({
-        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: globalThis.crypto.randomUUID(),
         file,
         status: 'queued',
       }))

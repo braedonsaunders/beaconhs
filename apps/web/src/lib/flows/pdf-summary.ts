@@ -6,7 +6,7 @@ import 'server-only'
 // labelled rows.
 
 import { plainValue } from '@beaconhs/email-render'
-import type { PdfEmailableJobData } from '@beaconhs/jobs'
+import type { RecordSummaryPdfJobData } from '@beaconhs/jobs'
 
 const SKIP_KEYS = new Set(['compliance_score', 'compliance_status'])
 
@@ -118,7 +118,7 @@ export function buildRecordSummaryPdfJob(args: {
   reference?: unknown
   subtitle?: unknown
   values: Record<string, unknown>
-}): PdfEmailableJobData {
+}): RecordSummaryPdfJobData {
   const { sections, photos } = summarizeFlowCollections(args.values)
   return {
     kind: 'record_summary',

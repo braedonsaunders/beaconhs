@@ -63,8 +63,8 @@ export default async function OrgUnitsPage({
 
   const parent = alias(orgUnits, 'parent')
 
-  const { rows, total, levelCounts, activeCount, archivedCount, syncOrigins, parentOptions } =
-    await ctx.db(async (tx) => {
+  const { rows, total, levelCounts, activeCount, archivedCount, syncOrigins } = await ctx.db(
+    async (tx) => {
       const searchFilters: SQL<unknown>[] = []
       if (params.q) {
         const term = `%${params.q}%`
@@ -129,13 +129,6 @@ export default async function OrgUnitsPage({
         pageRows.map((r) => r.id),
       )
 
-      const parentOptions = await tx
-        .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
-        .from(orgUnits)
-        .where(isNull(orgUnits.deletedAt))
-        .orderBy(asc(orgUnits.level), asc(orgUnits.name))
-        .limit(500)
-
       return {
         rows: pageRows,
         total: Number(tot?.c ?? 0),
@@ -143,9 +136,9 @@ export default async function OrgUnitsPage({
         activeCount: Number(tallies?.active ?? 0),
         archivedCount: Number(tallies?.archived ?? 0),
         syncOrigins,
-        parentOptions,
       }
-    })
+    },
+  )
 
   const sortProps = { basePath: BASE, currentParams: sp, dir: params.dir }
   const newHref = mergeHref(BASE, sp, { drawer: 'new', error: undefined })
@@ -323,10 +316,6 @@ export default async function OrgUnitsPage({
         open={pickString(sp.drawer) === 'new'}
         closeHref={closeHref}
         levels={LEVELS.map((l) => ({ value: l, label: levelLabel(l) }))}
-        parentOptions={parentOptions.map((u) => ({
-          value: u.id,
-          label: `${levelLabel(u.level)}: ${u.name}`,
-        }))}
         saveAction={addOrgUnit}
       />
     </ListPageLayout>

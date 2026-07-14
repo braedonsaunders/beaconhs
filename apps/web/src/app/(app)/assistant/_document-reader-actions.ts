@@ -16,6 +16,8 @@ import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { presignExistingGet } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { documentReadFilter } from '@/lib/assistant/doc-access'
+import { documentVersionVisibilityWhere } from '@/lib/document-version-policy'
+import { isUuid } from '@/lib/list-params'
 
 export type ReaderDocument = {
   id: string
@@ -35,14 +37,13 @@ export type ReaderDocument = {
 
 type ReaderResult = { ok: true; doc: ReaderDocument } | { ok: false; error: string }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export async function getReaderDocument(id: string): Promise<ReaderResult> {
-  if (!UUID.test(id)) return { ok: false, error: 'not_found' }
+  if (!isUuid(id)) return { ok: false, error: 'not_found' }
   const ctx = await requireRequestContext()
   if (!can(ctx, 'documents.read') && !can(ctx, 'documents.manage')) {
     return { ok: false, error: 'forbidden' }
   }
+  const includeUnpublished = ctx.isSuperAdmin || can(ctx, 'documents.manage')
   return ctx.db(async (tx) => {
     const conds: SQL[] = [eq(documents.id, id), isNull(documents.deletedAt)]
     const filter = documentReadFilter(ctx)
@@ -71,7 +72,7 @@ export async function getReaderDocument(id: string): Promise<ReaderResult> {
         attachmentId: documentVersions.contentAttachmentId,
       })
       .from(documentVersions)
-      .where(eq(documentVersions.documentId, id))
+      .where(documentVersionVisibilityWhere(id, includeUnpublished))
       .orderBy(desc(documentVersions.version))
       .limit(1)
 

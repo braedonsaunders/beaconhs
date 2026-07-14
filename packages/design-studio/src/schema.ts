@@ -1,19 +1,31 @@
 export type DesignUnit = 'in'
 
+/**
+ * Canonical persistence/rendering limits for design documents. Read-time
+ * normalization and strict write validators share these values so a document
+ * accepted at a save boundary is never later truncated by a different cap.
+ */
+export const DESIGN_DOCUMENT_LIMITS = {
+  maxJsonBytes: 512_000,
+  maxArtboards: 12,
+  maxElementsPerArtboard: 240,
+  documentNameLength: 120,
+  artboardNameLength: 80,
+  elementNameLength: 80,
+  idLength: 80,
+  textLength: 4_000,
+  fieldFallbackLength: 200,
+  fieldAffixLength: 40,
+  imageUrlLength: 2_000,
+  fontFamilyLength: 120,
+  sealTextLength: 80,
+} as const
+
 export type ArtboardFormat =
-  | 'letter-landscape'
-  | 'letter-portrait'
-  | 'cr80-front'
-  | 'cr80-back'
-  | 'label-4x6'
-  | 'custom'
+  'letter-landscape' | 'letter-portrait' | 'cr80-front' | 'cr80-back' | 'label-4x6' | 'custom'
 
 export type DesignDocumentKind =
-  | 'training-credential'
-  | 'training-slides'
-  | 'equipment-label'
-  | 'person-badge'
-  | 'generic'
+  'training-credential' | 'training-slides' | 'equipment-label' | 'person-badge' | 'generic'
 
 export type DesignDocument = {
   version: 1
@@ -238,9 +250,7 @@ export type PersonBadgeDesignData = {
 
 /** Any data shape a design document can be rendered against. */
 export type DesignDocumentData =
-  | CredentialDesignData
-  | EquipmentLabelDesignData
-  | PersonBadgeDesignData
+  CredentialDesignData | EquipmentLabelDesignData | PersonBadgeDesignData
 
 export function isDesignDocument(value: unknown): value is DesignDocument {
   const doc = value as Partial<DesignDocument> | null
@@ -275,13 +285,13 @@ export function normalizeDesignDocument(input: unknown, fallback: DesignDocument
   if (!isDesignDocument(input)) return fallback
   const artboards = input.artboards
     .filter((artboard) => artboard && typeof artboard.id === 'string')
-    .slice(0, 12)
+    .slice(0, DESIGN_DOCUMENT_LIMITS.maxArtboards)
     .map((artboard, index) => normalizeArtboard(artboard, fallback.artboards[index]))
   return {
     version: 1,
     engine: 'fabric',
     kind: input.kind ?? fallback.kind,
-    name: input.name.trim().slice(0, 120) || fallback.name,
+    name: input.name.trim().slice(0, DESIGN_DOCUMENT_LIMITS.documentNameLength) || fallback.name,
     unit: 'in',
     dpi: clampNumber(input.dpi, 72, 300, fallback.dpi),
     artboards: artboards.length ? artboards : fallback.artboards,
@@ -308,7 +318,10 @@ function normalizeArtboard(
   const size = format === 'custom' ? fallbackSize : artboardSizeForFormat(format)
   return {
     id: slugId(input.id, fallback?.id ?? 'artboard'),
-    name: input.name?.trim().slice(0, 80) || fallback?.name || 'Artboard',
+    name:
+      input.name?.trim().slice(0, DESIGN_DOCUMENT_LIMITS.artboardNameLength) ||
+      fallback?.name ||
+      'Artboard',
     format,
     width: clampNumber(input.width, 1, 40, size.width),
     height: clampNumber(input.height, 1, 40, size.height),
@@ -316,7 +329,9 @@ function normalizeArtboard(
     bleed: clampNumber(input.bleed, 0, 0.25, fallback?.bleed ?? 0),
     printProfile: normalizePrintProfile(input.printProfile, fallback?.printProfile),
     elements: Array.isArray(input.elements)
-      ? input.elements.slice(0, 240).map((element, index) => normalizeElement(element, index))
+      ? input.elements
+          .slice(0, DESIGN_DOCUMENT_LIMITS.maxElementsPerArtboard)
+          .map((element, index) => normalizeElement(element, index))
       : (fallback?.elements ?? []),
   }
 }
@@ -349,11 +364,13 @@ function normalizePrintProfile(
 function normalizeElement(input: DesignElement, index: number): DesignElement {
   const base = {
     id: slugId(input.id, `element-${index + 1}`),
-    name: input.name?.trim().slice(0, 80) || `Element ${index + 1}`,
+    name:
+      input.name?.trim().slice(0, DESIGN_DOCUMENT_LIMITS.elementNameLength) ||
+      `Element ${index + 1}`,
     x: clampNumber(input.x, -40, 40, 0.25),
     y: clampNumber(input.y, -40, 40, 0.25),
     width: clampNumber(input.width, 0.05, 40, 1),
-    height: clampNumber(input.height, 0.05, 40, 0.4),
+    height: clampNumber(input.height, 0.001, 40, 0.4),
     rotation: clampNumber(input.rotation, -360, 360, 0),
     opacity: clampNumber(input.opacity, 0, 1, 1),
     visible: input.visible !== false,
@@ -361,15 +378,20 @@ function normalizeElement(input: DesignElement, index: number): DesignElement {
   }
   switch (input.kind) {
     case 'text':
-      return { ...base, kind: 'text', text: input.text ?? '', ...normalizeText(input) }
+      return {
+        ...base,
+        kind: 'text',
+        text: (input.text ?? '').slice(0, DESIGN_DOCUMENT_LIMITS.textLength),
+        ...normalizeText(input),
+      }
     case 'field':
       return {
         ...base,
         kind: 'field',
         field: input.field,
-        fallback: input.fallback?.slice(0, 200),
-        prefix: input.prefix?.slice(0, 40),
-        suffix: input.suffix?.slice(0, 40),
+        fallback: input.fallback?.slice(0, DESIGN_DOCUMENT_LIMITS.fieldFallbackLength),
+        prefix: input.prefix?.slice(0, DESIGN_DOCUMENT_LIMITS.fieldAffixLength),
+        suffix: input.suffix?.slice(0, DESIGN_DOCUMENT_LIMITS.fieldAffixLength),
         transform: ['none', 'uppercase', 'date-long', 'date-short'].includes(input.transform ?? '')
           ? input.transform
           : 'none',
@@ -386,7 +408,7 @@ function normalizeElement(input: DesignElement, index: number): DesignElement {
         source: ['tenant.logo', 'recipient.photo', 'upload', 'url'].includes(input.source)
           ? input.source
           : 'url',
-        url: input.url?.slice(0, 2000),
+        url: input.url?.slice(0, DESIGN_DOCUMENT_LIMITS.imageUrlLength),
         fit: input.fit === 'cover' ? 'cover' : 'contain',
         radius: clampNumber(input.radius, 0, 1, 0),
       }
@@ -402,7 +424,7 @@ function normalizeElement(input: DesignElement, index: number): DesignElement {
       return {
         ...base,
         kind: 'seal',
-        text: input.text?.slice(0, 80),
+        text: input.text?.slice(0, DESIGN_DOCUMENT_LIMITS.sealTextLength),
         fill: safeColor(input.fill, '#c2a05c'),
         stroke: safeColor(input.stroke, '#7a5f2b'),
       }
@@ -414,7 +436,9 @@ function normalizeElement(input: DesignElement, index: number): DesignElement {
 
 function normalizeText(input: Partial<TextStyle>): TextStyle {
   return {
-    fontFamily: input.fontFamily?.slice(0, 120) || "'Archivo', Arial, sans-serif",
+    fontFamily:
+      input.fontFamily?.slice(0, DESIGN_DOCUMENT_LIMITS.fontFamilyLength) ||
+      "'Archivo', Arial, sans-serif",
     fontSize: clampNumber(input.fontSize, 3, 120, 14),
     fontWeight: ['400', '500', '600', '700', '800'].includes(input.fontWeight ?? '')
       ? input.fontWeight
@@ -437,7 +461,7 @@ function normalizeFillStroke(input: Partial<FillStroke>): FillStroke {
 }
 
 export function safeColor(value: string | null | undefined, fallback: string): string {
-  return value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback
+  return value && (value === 'transparent' || /^#[0-9a-fA-F]{6}$/.test(value)) ? value : fallback
 }
 
 export function slugId(value: string | null | undefined, fallback: string): string {
@@ -445,7 +469,7 @@ export function slugId(value: string | null | undefined, fallback: string): stri
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return (id || fallback).slice(0, 80)
+  return (id || fallback).slice(0, DESIGN_DOCUMENT_LIMITS.idLength)
 }
 
 export function clampNumber(

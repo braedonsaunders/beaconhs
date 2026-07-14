@@ -76,9 +76,11 @@ export function createPpeIssueReportFlowAdapter(
         status: r.status ?? null,
         status_label: titleize(r.status),
         resolution: r.resolution ?? '',
+        source: r.source,
+        source_inspection_id: r.inspectionId ?? null,
         reported_at: fmtDateTime(r.reportedAt),
         resolved_at: fmtDateTime(r.resolvedAt),
-        reported_by_name: head.reportedByName ?? '',
+        reported_by_name: r.reportedByNameSnapshot ?? head.reportedByName ?? '',
         // Linked PPE item (the bespoke PDF's PPE Item panel).
         type_name: head.typeName ?? '',
         type_category: head.typeCategory ?? '',

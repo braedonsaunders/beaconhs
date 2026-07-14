@@ -240,6 +240,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
           { key: 'person_name', label: 'Person', kind: 'text' },
           { key: 'body_parts', label: 'Body parts', kind: 'text' },
           { key: 'injury_types', label: 'Injury types', kind: 'text' },
+          { key: 'injury_result', label: 'Injury result / outcome', kind: 'text' },
           { key: 'treatment', label: 'Treatment', kind: 'text' },
           { key: 'treated_at_facility', label: 'Treated at', kind: 'text' },
           { key: 'worked_hours_prior_to', label: 'Hours worked prior', kind: 'number' },
@@ -400,6 +401,8 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
         fields: [
           { key: 'group', label: 'Group', kind: 'text' },
           { key: 'question', label: 'Item', kind: 'text' },
+          { key: 'response_type', label: 'Response type', kind: 'text' },
+          { key: 'options', label: 'Configured choices', kind: 'text' },
           { key: 'answer', label: 'Answer', kind: 'text' },
           { key: 'severity', label: 'Severity', kind: 'text' },
           { key: 'non_compliance', label: 'Non-compliance', kind: 'text' },
@@ -639,8 +642,8 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
   },
   // PPE INSPECTIONS — one ppe_inspections row (pre-use or annual check on a
   // PPE item). The legacy "PPE Inspection (date)" email is an on_submit flow.
-  // Per-criterion answers are not persisted by the PPE model, so this subject
-  // carries the derived result + notes, not a criteria collection.
+  // Immutable criterion snapshots and photo links are available to email/PDF
+  // templates as collections.
   ppe: {
     subjectType: 'module',
     subjectKey: 'ppe',
@@ -668,6 +671,26 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
       { key: 'inspected_by_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
     ],
+    collections: [
+      {
+        key: 'criteria',
+        label: 'Inspection items',
+        fields: [
+          { key: 'question', label: 'Item', kind: 'text' },
+          { key: 'answer', label: 'Answer', kind: 'text' },
+          { key: 'severity', label: 'Severity', kind: 'text' },
+          { key: 'non_compliance', label: 'Failure description', kind: 'text' },
+        ],
+      },
+      {
+        key: 'photos',
+        label: 'Photos',
+        fields: [
+          { key: 'url', label: 'Image URL', kind: 'text' },
+          { key: 'caption', label: 'Caption', kind: 'text' },
+        ],
+      },
+    ],
   },
   // PPE ISSUE REPORTS — one ppe_issue_reports row (a damage/defect report
   // against a PPE item), distinct from 'ppe' (inspections). Exists so userland
@@ -684,6 +707,8 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'description', label: 'Description', kind: 'text' },
       { key: 'status_label', label: 'Status', kind: 'text' },
       { key: 'resolution', label: 'Resolution', kind: 'text' },
+      { key: 'source', label: 'Source', kind: 'text' },
+      { key: 'source_inspection_id', label: 'Source inspection (id)', kind: 'text' },
       { key: 'reported_at', label: 'Reported at', kind: 'date' },
       { key: 'resolved_at', label: 'Resolved at', kind: 'date' },
       { key: 'reported_by_name', label: 'Reported by', kind: 'text' },
@@ -796,6 +821,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
         label: 'Documents reviewed',
         fields: [
           { key: 'title', label: 'Document', kind: 'text' },
+          { key: 'version', label: 'Version', kind: 'text' },
           { key: 'status', label: 'Status', kind: 'text' },
         ],
       },

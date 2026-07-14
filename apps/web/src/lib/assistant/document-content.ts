@@ -13,6 +13,7 @@ import { and, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { getObject } from '@beaconhs/storage'
+import { documentVersionVisibilityWhere } from '@/lib/document-version-policy'
 import { documentReadFilter } from './doc-access'
 
 type DocumentTextSource = 'html' | 'pdf' | 'empty'
@@ -34,26 +35,7 @@ type DocumentText = {
 
 /** Returned when the document isn't found or the user may not read it. */
 type DocumentTextResult =
-  | { ok: true; doc: DocumentText }
-  | { ok: false; error: 'not_found' | 'forbidden' }
-
-// ---- plain-text helpers ----------------------------------------------------
-
-function htmlToText(html: string | null | undefined): string {
-  if (!html) return ''
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<\/(p|div|li|h[1-6]|tr|br)>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
+  { ok: true; doc: DocumentText } | { ok: false; error: 'not_found' | 'forbidden' }
 
 // ---- extraction cache ------------------------------------------------------
 
@@ -113,6 +95,7 @@ export async function getDocumentText(
   if (!can(ctx, 'documents.read') && !can(ctx, 'documents.manage')) {
     return { ok: false, error: 'forbidden' }
   }
+  const includeUnpublished = ctx.isSuperAdmin || can(ctx, 'documents.manage')
   return ctx.db(async (tx): Promise<DocumentTextResult> => {
     const conds: SQL[] = [eq(documents.id, id), isNull(documents.deletedAt)]
     const filter = documentReadFilter(ctx)
@@ -129,7 +112,9 @@ export async function getDocumentText(
       .limit(1)
     if (!doc) return { ok: false, error: 'not_found' }
 
-    // Latest version drives the cache key + the content source.
+    // The latest visible version drives the cache key + content source.
+    // Managers may inspect an uploaded replacement before publishing; readers
+    // remain on the last explicitly published version.
     const [version] = await tx
       .select({
         id: documentVersions.id,
@@ -138,7 +123,7 @@ export async function getDocumentText(
         attachmentId: documentVersions.contentAttachmentId,
       })
       .from(documentVersions)
-      .where(eq(documentVersions.documentId, id))
+      .where(documentVersionVisibilityWhere(id, includeUnpublished))
       .orderBy(desc(documentVersions.version))
       .limit(1)
 
@@ -202,6 +187,7 @@ export async function getDocumentPdfBytes(
   if (!can(ctx, 'documents.read') && !can(ctx, 'documents.manage')) {
     return { ok: false, error: 'forbidden' }
   }
+  const includeUnpublished = ctx.isSuperAdmin || can(ctx, 'documents.manage')
   return ctx.db(async (tx): Promise<DocumentPdfBytesResult> => {
     const conds: SQL[] = [eq(documents.id, id), isNull(documents.deletedAt)]
     const filter = documentReadFilter(ctx)
@@ -216,7 +202,7 @@ export async function getDocumentPdfBytes(
     const [version] = await tx
       .select({ attachmentId: documentVersions.contentAttachmentId })
       .from(documentVersions)
-      .where(eq(documentVersions.documentId, id))
+      .where(documentVersionVisibilityWhere(id, includeUnpublished))
       .orderBy(desc(documentVersions.version))
       .limit(1)
     if (!version?.attachmentId) return { ok: false, error: 'not_pdf' }

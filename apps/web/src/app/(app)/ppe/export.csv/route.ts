@@ -4,7 +4,12 @@ import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
 
@@ -62,8 +67,11 @@ export async function GET(req: NextRequest) {
       .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
       .where(whereClause)
       .orderBy(...orderBy)
-      .limit(10_000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
   })
+
+  const overflow = csvExportOverflowResponse(rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'ppe_item',

@@ -10,6 +10,7 @@
 
 import { z } from 'zod'
 import { and, count, desc, eq, gte, ilike, inArray, isNull, lt, or, type SQL } from 'drizzle-orm'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import {
   correctiveActions,
   documentCategories,
@@ -654,7 +655,7 @@ const findPeople: AssistantToolDef = {
           firstName: people.firstName,
           lastName: people.lastName,
           employeeNo: people.employeeNo,
-          jobTitle: people.jobTitle,
+          jobTitle: primaryPersonTitleName(people.id, people.tenantId),
         })
         .from(people)
         .where(and(...conds))

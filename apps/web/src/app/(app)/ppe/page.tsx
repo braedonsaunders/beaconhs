@@ -12,7 +12,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
-import { createAndIssuePpe, listPeopleForBulkPpe } from './_actions'
+import { createAndIssuePpe } from './_actions'
 import { PpeDrawers } from './_drawers'
 import { PpeRecordsTable, type PpeTableRow } from './_records-table'
 
@@ -150,13 +150,6 @@ export default async function PpePage({
     }
   })
 
-  // People enumeration is only needed (and only permitted) for issuance flows.
-  const holders = canIssue ? await listPeopleForBulkPpe() : []
-  const peopleOptions = holders.map((h) => ({
-    value: h.id,
-    label: h.name,
-    hint: h.employeeNo ?? undefined,
-  }))
   const issueDrawer = pickString(sp.drawer) === 'issue' ? 'issue' : null
 
   const tableRows: PpeTableRow[] = rows.map(({ item, type, holder, assignedAt }) => ({
@@ -222,7 +215,6 @@ export default async function PpePage({
         <>
           <PpeRecordsTable
             rows={tableRows}
-            holders={holders}
             basePath="/ppe"
             currentParams={sp}
             sort={params.sort}
@@ -241,7 +233,6 @@ export default async function PpePage({
         openDrawer={issueDrawer}
         closeHref="/ppe"
         types={types}
-        people={peopleOptions}
         issueAction={createAndIssuePpe}
       />
     </ListPageLayout>

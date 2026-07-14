@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useState, useTransition } from 'react'
 import { Trash2, UserPlus } from 'lucide-react'
-import { Badge, Button, Drawer, SearchSelect } from '@beaconhs/ui'
+import { Badge, Button, Drawer } from '@beaconhs/ui'
+import { RemoteSearchSelect, type RemoteSearchLoader } from '@/components/remote-search-select'
 import {
   getShareData,
+  loadAssistantShareTargets,
   shareAssistantConversation,
   unshareAssistantConversation,
   type ShareData,
@@ -26,10 +28,20 @@ export function ShareDrawer({
   const [pending, start] = useTransition()
 
   useEffect(() => {
+    let active = true
     if (open && conversationId) {
       getShareData(conversationId)
-        .then(setData)
-        .catch(() => setData({ shares: [], users: [], roles: [] }))
+        .then((next) => {
+          if (!active) return
+          setData(next)
+          setError(null)
+        })
+        .catch(() => {
+          if (active) setError('Sharing settings could not be loaded.')
+        })
+    }
+    return () => {
+      active = false
     }
   }, [open, conversationId])
 
@@ -40,38 +52,51 @@ export function ShareDrawer({
     onClose()
   }
 
-  function refresh() {
-    if (conversationId)
-      getShareData(conversationId)
-        .then(setData)
-        .catch(() => {})
-  }
+  const refresh = useCallback(async () => {
+    if (!conversationId) return
+    try {
+      setData(await getShareData(conversationId))
+      setError(null)
+    } catch {
+      setError('Sharing settings could not be refreshed.')
+    }
+  }, [conversationId])
+
+  const loadOptions = useCallback<RemoteSearchLoader>(
+    ({ query, selected }) =>
+      conversationId
+        ? loadAssistantShareTargets({ conversationId, targetType, query, selected })
+        : Promise.resolve({ options: [], hasMore: false }),
+    [conversationId, targetType],
+  )
 
   function add() {
     if (!conversationId || !targetId) return
     setError(null)
     start(async () => {
-      const r = await shareAssistantConversation({ conversationId, targetType, targetId })
-      if (!r.ok) setError(r.error ?? 'Could not share.')
-      else {
-        setTargetId('')
-        refresh()
+      try {
+        const r = await shareAssistantConversation({ conversationId, targetType, targetId })
+        if (!r.ok) setError(r.error ?? 'Could not share.')
+        else {
+          setTargetId('')
+          await refresh()
+        }
+      } catch {
+        setError('Could not share this conversation.')
       }
     })
   }
 
   function remove(id: string) {
     start(async () => {
-      await unshareAssistantConversation(id)
-      refresh()
+      try {
+        await unshareAssistantConversation(id)
+        await refresh()
+      } catch {
+        setError('Could not remove access from this conversation.')
+      }
     })
   }
-
-  const options =
-    (targetType === 'user' ? data?.users : data?.roles)?.map((t) => ({
-      value: t.id,
-      label: t.name,
-    })) ?? []
 
   return (
     <Drawer
@@ -104,10 +129,19 @@ export function ShareDrawer({
                 </Badge>
               ))}
             </div>
-          ) : (
+          ) : data ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Not shared with anyone yet.
             </p>
+          ) : error ? (
+            <div className="space-y-2">
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">Loading sharing…</p>
           )}
         </div>
 
@@ -137,11 +171,16 @@ export function ShareDrawer({
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
-              <SearchSelect
+              <RemoteSearchSelect
+                key={`${targetType}:${data?.shares.map((share) => share.id).join(',') ?? ''}`}
                 value={targetId}
                 onChange={setTargetId}
-                options={options}
+                loadOptions={loadOptions}
                 placeholder={targetType === 'user' ? 'Choose a person…' : 'Choose a role…'}
+                searchPlaceholder={targetType === 'user' ? 'Search people…' : 'Search roles…'}
+                sheetTitle={targetType === 'user' ? 'Choose a person' : 'Choose a role'}
+                ariaLabel={targetType === 'user' ? 'Person to share with' : 'Role to share with'}
+                disabled={!conversationId || !data || pending}
               />
             </div>
             <Button type="button" onClick={add} disabled={!targetId || pending}>
@@ -149,7 +188,7 @@ export function ShareDrawer({
               Add
             </Button>
           </div>
-          {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+          {error && data ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
         </div>
       </div>
     </Drawer>

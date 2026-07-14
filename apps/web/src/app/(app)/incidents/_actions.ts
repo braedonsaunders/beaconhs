@@ -19,18 +19,12 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
 import { moduleScopeWhere } from '@/lib/visibility'
+import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 
 type BulkActionResult =
-  | { ok: true; updated: number; skipped: number }
-  | { ok: false; error: string }
+  { ok: true; updated: number; skipped: number } | { ok: false; error: string }
 
 type BulkCsvResult = { ok: true; filename: string; content: string } | { ok: false; error: string }
-
-const MAX_BULK = 500
-
-function makeBatchId(): string {
-  return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
 
 /**
  * Soft-delete a batch of incidents. Already-locked rows are skipped so the
@@ -43,9 +37,13 @@ export async function bulkArchiveIncidents(args: {
   if (!can(ctx, 'incidents.update')) {
     return { ok: false, error: 'You do not have permission to update incidents.' }
   }
-  if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
-  const ids = args.incidentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.incidentIds, {
+    singular: 'incident',
+    plural: 'incidents',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
     // Re-scope to the caller's read tier so a self/site-tier user can't drive
@@ -111,10 +109,16 @@ export async function bulkSetIncidentClassification(args: {
   if (!can(ctx, 'incidents.update')) {
     return { ok: false, error: 'You do not have permission to update incidents.' }
   }
-  if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
-  if (!args.classificationId) return { ok: false, error: 'Select a classification.' }
-  const ids = args.incidentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.incidentIds, {
+    singular: 'incident',
+    plural: 'incidents',
+  })
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.classificationId)) {
+    return { ok: false, error: 'Select a classification.' }
+  }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   // Confirm classification belongs to this tenant.
   const classificationExists = await ctx.db(async (tx) => {
@@ -211,9 +215,13 @@ export async function bulkExportIncidentsCsv(args: {
   if (ctx.impersonation) {
     return { ok: false, error: 'Exports are disabled while viewing as another user.' }
   }
-  if (args.incidentIds.length === 0) return { ok: false, error: 'No incidents selected.' }
-  const ids = args.incidentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.incidentIds, {
+    singular: 'incident',
+    plural: 'incidents',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const rows = await ctx.db(async (tx) => {
     // Scope the ids to the caller's read tier so a self/site-tier user can't

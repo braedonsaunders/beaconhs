@@ -16,13 +16,14 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { describePhoto, extractEntryMeta } from '@beaconhs/ai'
+import { AI_VISION_LIMITS, describePhoto, extractEntryMeta } from '@beaconhs/ai'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import { presignGet } from '@beaconhs/storage'
+import { getObject, headObject } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { journalEntrySubmittedEvent } from '@beaconhs/integrations'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import {
@@ -42,9 +43,12 @@ import type {
   GroupBy,
   JournalEntryDetail,
   JournalFilters,
-  TreeNode,
+  TreeCursor,
+  TreePage,
   WorkspaceData,
 } from './_types'
+import { isTreeCursor } from './_tree-pages'
+import { normalizeJournalTags } from './_tag-policy'
 import { isUuid } from '@/lib/list-params'
 import {
   canCreateJournal,
@@ -139,12 +143,7 @@ export async function updateEntry(input: {
   const { id, patch } = input
 
   const values: Record<string, unknown> = {}
-  if (patch.title !== undefined) {
-    if (patch.title !== null && typeof patch.title !== 'string') {
-      return { ok: false, error: 'Invalid journal title.' }
-    }
-    values.title = patch.title?.slice(0, 300) ?? null
-  }
+  let cleanTags: string[] | undefined
   if (patch.bodyHtml !== undefined) {
     if (typeof patch.bodyHtml !== 'string' || patch.bodyHtml.length > 1_000_000) {
       return { ok: false, error: 'Journal content is invalid or too large.' }
@@ -178,6 +177,11 @@ export async function updateEntry(input: {
     if (!validDate(patch.entryDate)) return { ok: false, error: 'Invalid journal date.' }
     values.entryDate = patch.entryDate
   }
+  if (patch.tags !== undefined) {
+    cleanTags = normalizeJournalTags(patch.tags) ?? undefined
+    if (!cleanTags) return { ok: false, error: 'Invalid journal tags.' }
+    values.tagsCache = cleanTags
+  }
   if (Object.keys(values).length === 0) return { ok: false, error: 'Nothing to update.' }
 
   const where = await mutationWhere(ctx, id, 'edit')
@@ -198,11 +202,39 @@ export async function updateEntry(input: {
         .limit(1)
       if (!supervisor) return []
     }
-    return tx
+    const rows = await tx
       .update(journalEntries)
       .set(values)
       .where(where)
       .returning({ updatedAt: journalEntries.updatedAt })
+    if (!rows[0]) return []
+    if (cleanTags) {
+      await tx.delete(journalEntryTags).where(eq(journalEntryTags.entryId, id))
+      if (cleanTags.length > 0) {
+        await tx.insert(journalEntryTags).values(
+          cleanTags.map((tag) => ({
+            tenantId: ctx.tenantId,
+            entryId: id,
+            tag,
+            source: 'user' as const,
+          })),
+        )
+      }
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'journal_entry',
+      entityId: id,
+      action: 'update',
+      summary: 'Autosaved journal entry',
+      metadata: { fields: Object.keys(values) },
+    })
+    if (values.entryDate !== undefined) {
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'journal',
+        targetRef: {},
+      })
+    }
+    return rows
   })
   if (!row) return { ok: false, error: 'Entry not found.' }
   // Autosave is high-frequency — the client owns optimistic state, so we skip
@@ -243,6 +275,16 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
           }),
         },
       })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'journal_entry',
+        entityId: id,
+        action: 'publish',
+        summary: `Submitted ${submitted.reference}`,
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'journal',
+        targetRef: {},
+      })
     }
     return rows
   })
@@ -255,12 +297,6 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
       error: existing ? 'This entry has already been submitted.' : 'Entry not found.',
     }
   }
-  await recordAudit(ctx, {
-    entityType: 'journal_entry',
-    entityId: id,
-    action: 'publish',
-    summary: `Submitted ${row.reference}`,
-  })
   // Background categorisation: when enabled (Admin → AI → Automation), summarise
   // and tag the submitted entry so logs stay organised without the worker doing
   // it. Best-effort — never block a submit on AI.
@@ -289,75 +325,20 @@ export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
         event: 'on_delete',
         occurrenceKey: 'deleted',
       })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'journal_entry',
+        entityId: id,
+        action: 'delete',
+        summary: `Deleted ${rows[0].reference}`,
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'journal',
+        targetRef: {},
+      })
     }
     return rows
   })
   if (!row) return { ok: false, error: 'Entry not found.' }
-  await recordAudit(ctx, {
-    entityType: 'journal_entry',
-    entityId: id,
-    action: 'delete',
-    summary: `Deleted ${row.reference}`,
-  })
-  revalidatePath('/journals')
-  return { ok: true }
-}
-
-// ---- tags -------------------------------------------------------------------
-
-export async function setEntryTags(input: {
-  id: string
-  tags: string[]
-}): Promise<ActionOk | ActionErr> {
-  const ctx = await requireRequestContext()
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    !isUuid(input.id) ||
-    !Array.isArray(input.tags) ||
-    input.tags.length > 100
-  ) {
-    return { ok: false, error: 'Invalid journal tags.' }
-  }
-  const where = await mutationWhere(ctx, input.id, 'edit')
-  const clean = Array.from(
-    new Set(
-      input.tags
-        .filter((tag): tag is string => typeof tag === 'string')
-        .map((tag) => tag.trim().toLowerCase().slice(0, 80))
-        .filter(Boolean),
-    ),
-  ).slice(0, 20)
-
-  const done = await ctx.db(async (tx) => {
-    const [e] = await tx
-      .select({ id: journalEntries.id })
-      .from(journalEntries)
-      .where(where)
-      .limit(1)
-    if (!e) return false
-    await tx.delete(journalEntryTags).where(eq(journalEntryTags.entryId, input.id))
-    if (clean.length > 0) {
-      await tx.insert(journalEntryTags).values(
-        clean.map((tag) => ({
-          tenantId: ctx.tenantId,
-          entryId: input.id,
-          tag,
-          source: 'user' as const,
-        })),
-      )
-    }
-    await tx.update(journalEntries).set({ tagsCache: clean }).where(eq(journalEntries.id, input.id))
-    return true
-  })
-  if (!done) return { ok: false, error: 'Entry not found.' }
-  await recordAudit(ctx, {
-    entityType: 'journal_entry',
-    entityId: input.id,
-    action: 'update',
-    summary: 'Updated journal tags',
-    metadata: { tags: clean },
-  })
   revalidatePath('/journals')
   return { ok: true }
 }
@@ -381,6 +362,7 @@ async function applyEntryAi(ctx: RequestContext, id: string): Promise<EntryMetaR
 
   const meta = await extractEntryMeta(aiConfig, entry.bodyText ?? '')
   if (!meta) return null
+  const normalizedAiTags = normalizeJournalTags(meta.tags) ?? []
 
   await ctx.db(async (tx) => {
     await tx
@@ -393,11 +375,11 @@ async function applyEntryAi(ctx: RequestContext, id: string): Promise<EntryMetaR
     await tx
       .delete(journalEntryTags)
       .where(and(eq(journalEntryTags.entryId, id), eq(journalEntryTags.source, 'ai')))
-    if (meta.tags.length > 0) {
+    if (normalizedAiTags.length > 0) {
       await tx
         .insert(journalEntryTags)
         .values(
-          meta.tags.map((tag) => ({
+          normalizedAiTags.map((tag) => ({
             tenantId: ctx.tenantId,
             entryId: id,
             tag,
@@ -416,7 +398,7 @@ async function applyEntryAi(ctx: RequestContext, id: string): Promise<EntryMetaR
       .where(eq(journalEntries.id, id))
   })
 
-  return { summary: meta.summary, tags: meta.tags }
+  return { summary: meta.summary, tags: normalizedAiTags }
 }
 
 // ---- photos -----------------------------------------------------------------
@@ -534,6 +516,8 @@ export async function describeJournalPhoto(
         id: journalEntryPhotos.id,
         entryId: journalEntryPhotos.entryId,
         r2Key: attachments.r2Key,
+        kind: attachments.kind,
+        sizeBytes: attachments.sizeBytes,
       })
       .from(journalEntryPhotos)
       .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
@@ -542,6 +526,9 @@ export async function describeJournalPhoto(
     return p ?? null
   })
   if (!photo) return { ok: false, error: 'Photo not found.' }
+  if (photo.kind !== 'image' || photo.sizeBytes > AI_VISION_LIMITS.imageBytes) {
+    return { ok: false, error: 'Photo is not a supported AI image.' }
+  }
 
   // Visibility check on the parent entry before mutating it (or spending AI
   // budget) — mirrors attachJournalPhotos / removeJournalPhoto.
@@ -560,9 +547,18 @@ export async function describeJournalPhoto(
   // object store via URL, so we send the image data directly.
   let insight
   try {
-    const signed = await presignGet({ key: photo.r2Key })
-    const resp = await fetch(signed)
-    const bytes = new Uint8Array(await resp.arrayBuffer())
+    const metadata = await headObject({ key: photo.r2Key })
+    if (!metadata || metadata.contentLength !== photo.sizeBytes) {
+      throw new Error('Photo storage metadata does not match its attachment record.')
+    }
+    if (metadata.contentLength > AI_VISION_LIMITS.imageBytes) {
+      throw new Error('Photo is too large for AI analysis.')
+    }
+    const stored = await getObject({ key: photo.r2Key })
+    if (stored.length !== photo.sizeBytes) {
+      throw new Error('Photo size changed while it was being read.')
+    }
+    const bytes = new Uint8Array(stored)
     insight = await describePhoto(aiConfig, { image: bytes })
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Vision failed.' }
@@ -599,10 +595,18 @@ export async function fetchWorkspace(input: {
 export async function fetchTree(input: {
   groupBy: GroupBy
   filters: JournalFilters
-}): Promise<TreeNode[]> {
+  cursor?: TreeCursor | null
+}): Promise<TreePage> {
   const ctx = await requireRequestContext()
   // Workspace tree is always personal — self-scoped.
-  return buildTree(ctx, input.groupBy, input.filters, true)
+  return buildTree(
+    ctx,
+    input.groupBy,
+    input.filters,
+    true,
+    null,
+    isTreeCursor(input.cursor) ? input.cursor : null,
+  )
 }
 
 export async function fetchEntry(id: string): Promise<JournalEntryDetail | null> {
@@ -652,10 +656,18 @@ export async function fetchAuthorTree(input: {
   author: AuthorRef
   groupBy: GroupBy
   filters: JournalFilters
-}): Promise<TreeNode[]> {
+  cursor?: TreeCursor | null
+}): Promise<TreePage> {
   const ctx = await requireRequestContext()
-  if (!journalCanBrowseAll(ctx)) return []
-  return buildTree(ctx, input.groupBy, input.filters, false, input.author)
+  if (!journalCanBrowseAll(ctx)) return { nodes: [], hasMore: false, nextCursor: null }
+  return buildTree(
+    ctx,
+    input.groupBy,
+    input.filters,
+    false,
+    input.author,
+    isTreeCursor(input.cursor) ? input.cursor : null,
+  )
 }
 
 export async function emailEntry(id: string): Promise<ActionOk<{ sent: number }> | ActionErr> {

@@ -8,7 +8,7 @@
 // All statements carry an explicit tenant_id predicate in addition to RLS —
 // belt-and-braces, since these are tenant-wide bulk operations keyed by tag text.
 
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm'
 import { journalEntries, journalEntryTags, journalTags } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
@@ -28,60 +28,117 @@ const norm = (s: string) => s.trim().toLowerCase()
 // Correlated subquery that rebuilds an entry's tags_cache from its tag rows.
 const recomputedCache = sql`coalesce((select jsonb_agg(t.tag order by t.tag) from ${journalEntryTags} t where t.entry_id = ${journalEntries.id}), '[]'::jsonb)`
 
-/** Every tag in the tenant — used (with counts + source split) ∪ defined. */
-export async function listManagedTags(ctx: RequestContext): Promise<ManagedTag[]> {
+type ManagedTagDbRow = {
+  name: string
+  usage: number | string
+  ai_count: number | string
+  user_count: number | string
+  color: string | null
+  description: string | null
+  defined: boolean
+}
+
+function managedTagsQuery(tenantId: string): SQL {
+  return sql`
+    with usage as (
+      select ${journalEntryTags.tag} as name,
+        count(*)::int as usage,
+        count(*) filter (where ${journalEntryTags.source} = 'ai')::int as ai_count,
+        count(*) filter (where ${journalEntryTags.source} = 'user')::int as user_count
+      from ${journalEntryTags}
+      where ${journalEntryTags.tenantId} = ${tenantId}
+      group by ${journalEntryTags.tag}
+    ), defs as (
+      select ${journalTags.name} as name, ${journalTags.color} as color,
+        ${journalTags.description} as description
+      from ${journalTags}
+      where ${journalTags.tenantId} = ${tenantId}
+    )
+    select coalesce(usage.name, defs.name) as name,
+      coalesce(usage.usage, 0)::int as usage,
+      coalesce(usage.ai_count, 0)::int as ai_count,
+      coalesce(usage.user_count, 0)::int as user_count,
+      defs.color,
+      defs.description,
+      (defs.name is not null) as defined
+    from usage
+    full outer join defs on defs.name = usage.name
+  `
+}
+
+function mapManagedTag(row: ManagedTagDbRow): ManagedTag {
+  return {
+    name: row.name,
+    usage: Number(row.usage),
+    aiCount: Number(row.ai_count),
+    userCount: Number(row.user_count),
+    color: row.color,
+    description: row.description,
+    defined: row.defined,
+  }
+}
+
+/** Searchable, bounded tag page across the used ∪ governed vocabulary. */
+export async function listManagedTags(
+  ctx: RequestContext,
+  options: {
+    q?: string
+    status?: 'defined' | 'ad_hoc'
+    page: number
+    perPage: number
+  },
+): Promise<{ rows: ManagedTag[]; total: number; allTotal: number; totalUses: number }> {
   return ctx.db(async (tx) => {
-    const usageRows = await tx
-      .select({
-        tag: journalEntryTags.tag,
-        usage: sql<number>`count(*)::int`,
-        ai: sql<number>`count(*) filter (where ${journalEntryTags.source} = 'ai')::int`,
-        usr: sql<number>`count(*) filter (where ${journalEntryTags.source} = 'user')::int`,
-      })
-      .from(journalEntryTags)
-      .where(eq(journalEntryTags.tenantId, ctx.tenantId))
-      .groupBy(journalEntryTags.tag)
-
-    const defs = await tx
-      .select({
-        name: journalTags.name,
-        color: journalTags.color,
-        description: journalTags.description,
-      })
-      .from(journalTags)
-      .where(eq(journalTags.tenantId, ctx.tenantId))
-
-    const map = new Map<string, ManagedTag>()
-    for (const u of usageRows) {
-      map.set(u.tag, {
-        name: u.tag,
-        usage: Number(u.usage),
-        aiCount: Number(u.ai),
-        userCount: Number(u.usr),
-        color: null,
-        description: null,
-        defined: false,
-      })
+    const conditions: SQL[] = []
+    if (options.q) {
+      const term = `%${options.q}%`
+      conditions.push(sql`(name ilike ${term} or description ilike ${term})`)
     }
-    for (const d of defs) {
-      const existing = map.get(d.name)
-      if (existing) {
-        existing.color = d.color
-        existing.description = d.description
-        existing.defined = true
-      } else {
-        map.set(d.name, {
-          name: d.name,
-          usage: 0,
-          aiCount: 0,
-          userCount: 0,
-          color: d.color,
-          description: d.description,
-          defined: true,
-        })
-      }
+    if (options.status) conditions.push(sql`defined = ${options.status === 'defined'}`)
+    const where = conditions.length > 0 ? sql`where ${sql.join(conditions, sql` and `)}` : sql``
+    const managed = managedTagsQuery(ctx.tenantId)
+    const [rowResult, countResult, statsResult] = await Promise.all([
+      tx.execute<ManagedTagDbRow>(sql`
+        with managed as (${managed})
+        select * from managed
+        ${where}
+        order by usage desc, name asc
+        limit ${options.perPage}
+        offset ${(options.page - 1) * options.perPage}
+      `),
+      tx.execute<{ total: number | string }>(sql`
+        with managed as (${managed})
+        select count(*)::int as total from managed ${where}
+      `),
+      tx.execute<{ total: number | string; uses: number | string }>(sql`
+        with managed as (${managed})
+        select count(*)::int as total, coalesce(sum(usage), 0)::int as uses from managed
+      `),
+    ])
+    const rows = rowResult as unknown as ManagedTagDbRow[]
+    const countRows = countResult as unknown as Array<{ total: number | string }>
+    const statsRows = statsResult as unknown as Array<{
+      total: number | string
+      uses: number | string
+    }>
+    return {
+      rows: rows.map(mapManagedTag),
+      total: Number(countRows[0]?.total ?? 0),
+      allTotal: Number(statsRows[0]?.total ?? 0),
+      totalUses: Number(statsRows[0]?.uses ?? 0),
     }
-    return [...map.values()].sort((a, b) => b.usage - a.usage || a.name.localeCompare(b.name))
+  })
+}
+
+export async function managedTagExists(ctx: RequestContext, value: string): Promise<boolean> {
+  const name = norm(value)
+  if (!name) return false
+  return ctx.db(async (tx) => {
+    const result = await tx.execute<{ found: boolean }>(sql`
+      with managed as (${managedTagsQuery(ctx.tenantId)})
+      select exists(select 1 from managed where name = ${name}) as found
+    `)
+    return Boolean((result as unknown as Array<{ found: boolean }>)[0]?.found)
   })
 }
 
@@ -125,9 +182,8 @@ export async function mergeTags(
   if (!tgt || srcs.length === 0) return 0
 
   return ctx.db(async (tx) => {
-    // Entries carrying any source or the target — their cache needs rebuilding.
-    const touched = await tx
-      .select({ id: journalEntryTags.entryId })
+    const [touchedRow] = await tx
+      .select({ c: sql<number>`count(distinct ${journalEntryTags.entryId})::int` })
       .from(journalEntryTags)
       .where(
         and(
@@ -135,7 +191,7 @@ export async function mergeTags(
           inArray(journalEntryTags.tag, [...srcs, tgt]),
         ),
       )
-    const entryIds = Array.from(new Set(touched.map((r) => r.id)))
+    const touchedCount = Number(touchedRow?.c ?? 0)
 
     // 1) Drop source rows on entries that already carry the target — the
     //    (entry_id, tag) unique index would reject repointing them.
@@ -156,12 +212,24 @@ export async function mergeTags(
       .update(journalEntryTags)
       .set({ tag: tgt })
       .where(and(eq(journalEntryTags.tenantId, ctx.tenantId), inArray(journalEntryTags.tag, srcs)))
-    // 3) Rebuild the denormalised cache for each touched entry.
-    if (entryIds.length > 0) {
+    // 3) Rebuild the denormalised cache in-database. After repointing, every
+    // affected entry carries the target; updating pre-existing target entries
+    // again is harmless and avoids materializing an unbounded ID list.
+    if (touchedCount > 0) {
       await tx
         .update(journalEntries)
         .set({ tagsCache: recomputedCache })
-        .where(and(eq(journalEntries.tenantId, ctx.tenantId), inArray(journalEntries.id, entryIds)))
+        .where(
+          and(
+            eq(journalEntries.tenantId, ctx.tenantId),
+            sql`exists (
+              select 1 from ${journalEntryTags} target_tag
+              where target_tag.tenant_id = ${ctx.tenantId}
+                and target_tag.entry_id = ${journalEntries.id}
+                and target_tag.tag = ${tgt}
+            )`,
+          ),
+        )
     }
     // 4) Reconcile definition rows: seed the target's metadata from a source if
     //    it has none of its own, then drop the now-merged source definitions.
@@ -189,7 +257,7 @@ export async function mergeTags(
         .delete(journalTags)
         .where(and(eq(journalTags.tenantId, ctx.tenantId), inArray(journalTags.name, srcs)))
     }
-    return entryIds.length
+    return touchedCount
   })
 }
 
@@ -203,24 +271,26 @@ export async function deleteTag(ctx: RequestContext, name: string): Promise<numb
   const tag = norm(name)
   if (!tag) return 0
   return ctx.db(async (tx) => {
-    const touched = await tx
-      .select({ id: journalEntryTags.entryId })
-      .from(journalEntryTags)
-      .where(and(eq(journalEntryTags.tenantId, ctx.tenantId), eq(journalEntryTags.tag, tag)))
-    const entryIds = Array.from(new Set(touched.map((r) => r.id)))
-
-    await tx
-      .delete(journalEntryTags)
-      .where(and(eq(journalEntryTags.tenantId, ctx.tenantId), eq(journalEntryTags.tag, tag)))
-    if (entryIds.length > 0) {
-      await tx
-        .update(journalEntries)
-        .set({ tagsCache: recomputedCache })
-        .where(and(eq(journalEntries.tenantId, ctx.tenantId), inArray(journalEntries.id, entryIds)))
-    }
+    const refreshed = await tx.execute<{ id: string }>(sql`
+      with removed as (
+        delete from ${journalEntryTags}
+        where ${journalEntryTags.tenantId} = ${ctx.tenantId}
+          and ${journalEntryTags.tag} = ${tag}
+        returning ${journalEntryTags.entryId} as entry_id
+      )
+      update ${journalEntries} entry
+      set tags_cache = coalesce((
+        select jsonb_agg(t.tag order by t.tag)
+        from ${journalEntryTags} t
+        where t.entry_id = entry.id
+      ), '[]'::jsonb)
+      where entry.tenant_id = ${ctx.tenantId}
+        and entry.id in (select entry_id from removed)
+      returning entry.id
+    `)
     await tx
       .delete(journalTags)
       .where(and(eq(journalTags.tenantId, ctx.tenantId), eq(journalTags.name, tag)))
-    return entryIds.length
+    return (refreshed as unknown as Array<{ id: string }>).length
   })
 }

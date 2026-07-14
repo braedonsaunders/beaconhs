@@ -5,7 +5,7 @@
 // (desktop), and a day-grouped work list that is the primary mobile surface.
 
 import Link from 'next/link'
-import { and, asc, desc, eq, isNull, lte, notInArray, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, lte, notInArray, sql, type SQL } from 'drizzle-orm'
 import {
   AlarmClock,
   BellRing,
@@ -107,6 +107,7 @@ type UnitDrawerData = {
     assignee: string | null
     repeat: string | null
   }[]
+  remindersTotal: number
   inspections: {
     id: string
     reference: string
@@ -178,7 +179,7 @@ export default async function EquipmentMaintenancePage({
       catFilter ? eq(equipmentItems.categoryId, catFilter) : undefined,
     ]
 
-    const [scheduleRows, reminderRows, oilRows, categories, itemOptions] = await Promise.all([
+    const [scheduleRows, reminderRows, oilRows, categories] = await Promise.all([
       tx
         .select({
           schedule: equipmentInspectionSchedules,
@@ -245,30 +246,7 @@ export default async function EquipmentMaintenancePage({
         .select({ id: equipmentCategories.id, name: equipmentCategories.name })
         .from(equipmentCategories)
         .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name)),
-      // Unit picker for the add-reminder drawer.
-      tx
-        .select({
-          id: equipmentItems.id,
-          name: equipmentItems.name,
-          assetTag: equipmentItems.assetTag,
-        })
-        .from(equipmentItems)
-        .where(and(...itemFilters.filter((f) => f != null)))
-        .orderBy(asc(equipmentItems.name))
-        .limit(1000),
     ])
-    // Active people for the reminder assignee picker.
-    const assigneeOptions = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(eq(people.status, 'active'))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(500)
 
     // Quick-detail flyout: the clicked unit's whole maintenance picture. Same
     // visibility scope as the list; an out-of-scope id simply renders nothing.
@@ -291,56 +269,68 @@ export default async function EquipmentMaintenancePage({
         .where(and(eq(equipmentItems.id, drawerUnitId), isNull(equipmentItems.deletedAt), vis))
         .limit(1)
       if (row) {
-        const [unitSchedules, unitReminders, unitInspections] = await Promise.all([
-          tx
-            .select({
-              id: equipmentInspectionSchedules.id,
-              typeName: equipmentInspectionTypes.name,
-              label: equipmentInspectionSchedules.label,
-              inspectionTypeId: equipmentInspectionSchedules.inspectionTypeId,
-              intervalValue: equipmentInspectionSchedules.intervalValue,
-              intervalUnit: equipmentInspectionSchedules.intervalUnit,
-              lastCompletedOn: equipmentInspectionSchedules.lastCompletedOn,
-              nextDueOn: equipmentInspectionSchedules.nextDueOn,
-              isActive: equipmentInspectionSchedules.isActive,
-            })
-            .from(equipmentInspectionSchedules)
-            .leftJoin(
-              equipmentInspectionTypes,
-              eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
-            )
-            .where(eq(equipmentInspectionSchedules.equipmentItemId, drawerUnitId))
-            .orderBy(asc(equipmentInspectionSchedules.nextDueOn)),
-          tx
-            .select({ reminder: equipmentReminders, assignee: people })
-            .from(equipmentReminders)
-            .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
-            .where(
-              and(
-                eq(equipmentReminders.equipmentItemId, drawerUnitId),
-                isNull(equipmentReminders.completedAt),
-              ),
-            )
-            .orderBy(asc(equipmentReminders.dueOn))
-            .limit(25),
-          tx
-            .select({
-              id: equipmentInspectionRecords.id,
-              reference: equipmentInspectionRecords.reference,
-              occurredAt: equipmentInspectionRecords.occurredAt,
-              result: equipmentInspectionRecords.result,
-              status: equipmentInspectionRecords.status,
-            })
-            .from(equipmentInspectionRecords)
-            .where(
-              and(
-                eq(equipmentInspectionRecords.equipmentItemId, drawerUnitId),
-                isNull(equipmentInspectionRecords.deletedAt),
-              ),
-            )
-            .orderBy(desc(equipmentInspectionRecords.occurredAt))
-            .limit(5),
-        ])
+        const [unitSchedules, unitReminders, unitRemindersTotal, unitInspections] =
+          await Promise.all([
+            tx
+              .select({
+                id: equipmentInspectionSchedules.id,
+                typeName: equipmentInspectionTypes.name,
+                label: equipmentInspectionSchedules.label,
+                inspectionTypeId: equipmentInspectionSchedules.inspectionTypeId,
+                intervalValue: equipmentInspectionSchedules.intervalValue,
+                intervalUnit: equipmentInspectionSchedules.intervalUnit,
+                lastCompletedOn: equipmentInspectionSchedules.lastCompletedOn,
+                nextDueOn: equipmentInspectionSchedules.nextDueOn,
+                isActive: equipmentInspectionSchedules.isActive,
+              })
+              .from(equipmentInspectionSchedules)
+              .leftJoin(
+                equipmentInspectionTypes,
+                eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
+              )
+              .where(eq(equipmentInspectionSchedules.equipmentItemId, drawerUnitId))
+              .orderBy(asc(equipmentInspectionSchedules.nextDueOn)),
+            tx
+              .select({ reminder: equipmentReminders, assignee: people })
+              .from(equipmentReminders)
+              .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
+              .where(
+                and(
+                  eq(equipmentReminders.equipmentItemId, drawerUnitId),
+                  isNull(equipmentReminders.completedAt),
+                ),
+              )
+              .orderBy(asc(equipmentReminders.dueOn))
+              .limit(25),
+            tx
+              .select({ c: count() })
+              .from(equipmentReminders)
+              .where(
+                and(
+                  eq(equipmentReminders.equipmentItemId, drawerUnitId),
+                  isNull(equipmentReminders.completedAt),
+                ),
+              )
+              .then((rows) => Number(rows[0]?.c ?? 0)),
+            tx
+              .select({
+                id: equipmentInspectionRecords.id,
+                reference: equipmentInspectionRecords.reference,
+                occurredAt: equipmentInspectionRecords.occurredAt,
+                result: equipmentInspectionRecords.result,
+                status: equipmentInspectionRecords.status,
+              })
+              .from(equipmentInspectionRecords)
+              .where(
+                and(
+                  eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
+                  eq(equipmentInspectionRecords.equipmentItemId, drawerUnitId),
+                  isNull(equipmentInspectionRecords.deletedAt),
+                ),
+              )
+              .orderBy(desc(equipmentInspectionRecords.occurredAt))
+              .limit(5),
+          ])
         unit = {
           item: row.item,
           typeName: row.typeName,
@@ -358,11 +348,12 @@ export default async function EquipmentMaintenancePage({
                 ? formatInterval(r.reminder.repeatIntervalValue, r.reminder.repeatIntervalUnit)
                 : null,
           })),
+          remindersTotal: unitRemindersTotal,
           inspections: unitInspections,
         }
       }
     }
-    return { scheduleRows, reminderRows, oilRows, categories, itemOptions, assigneeOptions, unit }
+    return { scheduleRows, reminderRows, oilRows, categories, unit }
   })
 
   // ---- Merge the three sources into one agenda -------------------------------
@@ -466,6 +457,17 @@ export default async function EquipmentMaintenancePage({
         repeatIntervalValue: editingReminderRow.reminder.repeatIntervalValue,
         repeatIntervalUnit: editingReminderRow.reminder.repeatIntervalUnit,
         assignedToPersonId: editingReminderRow.reminder.assignedToPersonId,
+        equipmentItemOption: {
+          value: editingReminderRow.itemId,
+          label: `${editingReminderRow.itemName} (${editingReminderRow.assetTag})`,
+        },
+        assignedToOption: editingReminderRow.assignee
+          ? {
+              value: editingReminderRow.assignee.id,
+              label: `${editingReminderRow.assignee.lastName}, ${editingReminderRow.assignee.firstName}`,
+              hint: editingReminderRow.assignee.employeeNo ?? undefined,
+            }
+          : undefined,
       }
     : null
 
@@ -726,16 +728,9 @@ export default async function EquipmentMaintenancePage({
       <ReminderDrawer
         open={manage && (drawerKey === 'reminder-new' || reminderEditing != null)}
         closeHref={closeHref}
-        itemOptions={data.itemOptions.map((i) => ({
-          value: i.id,
-          label: `${i.name} (${i.assetTag})`,
-        }))}
+        itemLookup="equipment-reminder-items"
         editing={reminderEditing}
-        people={data.assigneeOptions.map((p) => ({
-          value: p.id,
-          label: `${p.lastName}, ${p.firstName}`,
-          hint: p.employeeNo ?? undefined,
-        }))}
+        peopleLookup="equipment-reminder-assignees"
       />
     </ListPageLayout>
   )
@@ -927,7 +922,11 @@ function UnitMaintenanceDrawer({
 
           <section className="space-y-2">
             <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              Open reminders ({unit.reminders.length})
+              Open reminders (
+              {unit.reminders.length === unit.remindersTotal
+                ? unit.remindersTotal
+                : `${unit.reminders.length} of ${unit.remindersTotal}`}
+              )
             </h3>
             {unit.reminders.length === 0 ? (
               <p className="text-slate-500 dark:text-slate-400">No open reminders.</p>
@@ -970,6 +969,11 @@ function UnitMaintenanceDrawer({
                 ))}
               </ul>
             )}
+            {unit.reminders.length < unit.remindersTotal ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Open the full record to search and page through every reminder.
+              </p>
+            ) : null}
           </section>
 
           {unit.item.requiresOilChange ? (

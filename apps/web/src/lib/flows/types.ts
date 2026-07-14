@@ -6,7 +6,7 @@
 // somehow present, is reported as unsupported rather than crashing the run.
 
 import type { ActionData, EvalContext } from '@beaconhs/forms-core'
-import type { PdfEmailableJobData } from '@beaconhs/jobs'
+import type { RecordSummaryPdfJobData } from '@beaconhs/jobs'
 
 export type FlowActorRef = {
   tenantUserId: string | null
@@ -16,7 +16,8 @@ export type FlowActorRef = {
 
 export type ExtraActionHelpers = {
   values: Record<string, unknown>
-  fieldPatch: Record<string, unknown>
+  /** Stage a validated field update and expose it to later nodes in this run. */
+  setField(field: string, value: unknown): void
   evalCtx: EvalContext
   executionKey?: string
 }
@@ -62,5 +63,5 @@ export type FlowSubjectAdapter = {
    * the same values). Callers prefer the subject's assigned PDF document
    * template and use this only when none is configured. Null ⇒ no PDF.
    */
-  pdfJob?(values: Record<string, unknown>): PdfEmailableJobData | null
+  pdfJob?(values: Record<string, unknown>): RecordSummaryPdfJobData | null
 }

@@ -18,10 +18,11 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { toEmbedUrl } from '../../_lib/blocks'
 import { lessonProseCss } from '../../_editor/prose'
 import type { LessonLite, ModuleLite } from './_workspace'
 import { RawImage } from '@/components/raw-image'
+import { SanitizedRichContent } from '@/components/sanitized-rich-content'
+import { safeTrainingExternalUrl, trainingFrameSandbox } from '@/lib/training-external-url'
 import { CollaboraEmbed } from '@/components/collabora-embed'
 import { getPptxInstructorPlaybackSession } from '../../pptx/_actions'
 
@@ -272,7 +273,7 @@ function Stage({
     return (
       <div className="app-scroll max-h-full w-full max-w-4xl overflow-y-auto rounded-lg bg-white px-12 py-10 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100">
         {html ? (
-          <div className="lesson-prose" dangerouslySetInnerHTML={{ __html: html }} />
+          <SanitizedRichContent html={html} className="lesson-prose" allowApplicationImages />
         ) : (
           <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
         )}
@@ -293,7 +294,11 @@ function Stage({
         subtitle="Hands-on — an evaluator watches each learner and signs them off against the criteria below."
       >
         {html ? (
-          <div className="lesson-prose mt-5 text-left" dangerouslySetInnerHTML={{ __html: html }} />
+          <SanitizedRichContent
+            html={html}
+            className="lesson-prose mt-5 text-left"
+            allowApplicationImages
+          />
         ) : null}
         {eff.lesson.practicalCriteria.length > 0 ? (
           <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left dark:border-slate-700 dark:bg-slate-800/50">
@@ -317,15 +322,16 @@ function Stage({
   // Video — uploaded file or hosted embed.
   if (eff.kind === 'video') {
     const fileUrl = eff.attachmentId ? attachmentUrls[eff.attachmentId] : null
-    const url = eff.embedUrl || fileUrl
+    const external = safeTrainingExternalUrl(eff.embedUrl)
+    const url = external?.url || fileUrl
     if (!url) return <EmptyCard label="No video configured." />
-    const hosted = /youtube|youtu\.be|vimeo/.test(url)
     return (
       <div className="aspect-video w-full max-w-[160vh] overflow-hidden rounded-lg shadow-2xl">
-        {hosted ? (
+        {external?.provider ? (
           <iframe
-            src={toEmbedUrl(url)}
+            src={url}
             className="h-full w-full"
+            sandbox={trainingFrameSandbox(external.provider)}
             allowFullScreen
             title={eff.lesson.title}
           />
@@ -358,6 +364,7 @@ function Stage({
         <RawImage
           src={meta.url}
           alt={eff.lesson.title}
+          optimizationReason="authenticated"
           className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
         />
       )
@@ -377,11 +384,13 @@ function Stage({
 
   // Embedded page.
   if (eff.kind === 'embed') {
-    if (!eff.embedUrl) return <EmptyCard label="No URL configured." />
+    const external = safeTrainingExternalUrl(eff.embedUrl)
+    if (!external) return <EmptyCard label="No valid external URL configured." />
     return (
       <iframe
-        src={toEmbedUrl(eff.embedUrl)}
+        src={external.url}
         className="h-full w-full max-w-[160vh] rounded-lg bg-white shadow-2xl dark:bg-slate-900"
+        sandbox={trainingFrameSandbox(external.provider)}
         title={eff.lesson.title}
       />
     )

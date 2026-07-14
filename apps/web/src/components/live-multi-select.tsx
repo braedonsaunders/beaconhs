@@ -41,12 +41,14 @@ export function LiveMultiSelect({
   emptyLabel?: string
 }) {
   const [ids, setIds] = useState<string[]>(initialValue)
-  const baseline = useRef(initialValue.join(','))
+  const initialValueKey = JSON.stringify(initialValue)
+  const baseline = useRef(initialValueKey)
   const { state, save, retry } = useAutoSave({
     prepare: (value) => {
       const fd = new FormData()
       fd.set('id', id)
-      for (const v of value ? value.split(',').filter(Boolean) : []) fd.append('value', v)
+      const selected = value ? (JSON.parse(value) as string[]) : []
+      for (const v of selected) fd.append('value', v)
       return fd
     },
     updateAction,
@@ -57,20 +59,18 @@ export function LiveMultiSelect({
 
   // Adopt the server value on revalidation while idle (another section saved).
   useEffect(() => {
-    const next = initialValue.join(',')
-    if (state === 'idle' && next !== baseline.current) {
-      baseline.current = next
-      setIds(initialValue)
+    if (state === 'idle' && initialValueKey !== baseline.current) {
+      baseline.current = initialValueKey
+      setIds(JSON.parse(initialValueKey) as string[])
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialValue.join(','), state])
+  }, [initialValueKey, state])
 
   const optMap = new Map(options.map((o) => [o.value, o]))
   const available = options.filter((o) => !ids.includes(o.value))
 
   function commit(next: string[]) {
     setIds(next)
-    save(next.join(','))
+    save(JSON.stringify(next))
   }
 
   return (

@@ -13,12 +13,15 @@ import {
   trainingLessons,
   trainingRecords,
 } from '@beaconhs/db/schema'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { issueTrainingCertificate } from '@/lib/training-certificate-issuance'
+import { assertTrainingEnrollmentOpen } from '@/lib/training-mutation-validation'
 import { addMonthsIso } from '../../_lib/dates'
 import { deliveryMeta } from '../../_lib/delivery'
 
 type CompletionResult = {
   completed: boolean
+  newlyCompleted: boolean
   percent: number
   recordId: string | null
   certificateId: string | null
@@ -38,16 +41,17 @@ async function issueCourseRecordAndComplete(
     details: string
     currentLessonId?: string
   },
-): Promise<{ recordId: string | null; certificateId: string | null }> {
+): Promise<{ recordId: string; certificateId: string }> {
   const { tenantId, enrollmentId, courseId, personId, instructor, details, currentLessonId } = args
   const now = new Date()
   const [course] = await tx
     .select()
     .from(trainingCourses)
-    .where(eq(trainingCourses.id, courseId))
+    .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
     .limit(1)
+  if (!course) throw new Error('Course not found')
   const completedOn = now.toISOString().slice(0, 10)
-  const expiresOn = course?.validForMonths ? addMonthsIso(completedOn, course.validForMonths) : null
+  const expiresOn = course.validForMonths ? addMonthsIso(completedOn, course.validForMonths) : null
   const [rec] = await tx
     .insert(trainingRecords)
     .values({
@@ -62,22 +66,33 @@ async function issueCourseRecordAndComplete(
       certificateType: 'auto',
     })
     .returning()
-  let certificateId: string | null = null
-  if (rec) {
-    const cert = await issueTrainingCertificate(tx, { tenantId, recordId: rec.id })
-    certificateId = cert.id
-  }
-  await tx
+  if (!rec) throw new Error('Could not issue the training record.')
+  const cert = await issueTrainingCertificate(tx, { tenantId, recordId: rec.id })
+  const [completedEnrollment] = await tx
     .update(trainingEnrollments)
     .set({
       status: 'completed',
       completedAt: now,
       progressPercent: 100,
       ...(currentLessonId ? { currentLessonId } : {}),
-      recordId: rec?.id ?? null,
+      recordId: rec.id,
     })
-    .where(eq(trainingEnrollments.id, enrollmentId))
-  return { recordId: rec?.id ?? null, certificateId }
+    .where(
+      and(
+        eq(trainingEnrollments.id, enrollmentId),
+        eq(trainingEnrollments.courseId, courseId),
+        eq(trainingEnrollments.personId, personId),
+        eq(trainingEnrollments.status, 'in_progress'),
+        isNull(trainingEnrollments.deletedAt),
+      ),
+    )
+    .returning({ id: trainingEnrollments.id })
+  if (!completedEnrollment) throw new Error('Enrollment is not active.')
+  await materializeEvidenceTargetObligations(tx, tenantId, {
+    sourceModule: 'training',
+    targetRef: { courseId },
+  })
+  return { recordId: rec.id, certificateId: cert.id }
 }
 
 // Self-directed completion for `online` courses: there are no lessons to track,
@@ -92,10 +107,21 @@ export async function completeOnlineEnrollment(
     .from(trainingEnrollments)
     .where(eq(trainingEnrollments.id, args.enrollmentId))
     .limit(1)
+    .for('update')
   if (!enr) throw new Error('Enrollment not found')
-  if (enr.status === 'completed') {
-    return { completed: true, percent: 100, recordId: enr.recordId ?? null, certificateId: null }
+  if (enr.courseId !== args.courseId || enr.personId !== args.personId) {
+    throw new Error('Enrollment not found')
   }
+  if (enr.status === 'completed') {
+    return {
+      completed: true,
+      newlyCompleted: false,
+      percent: 100,
+      recordId: enr.recordId ?? null,
+      certificateId: null,
+    }
+  }
+  assertTrainingEnrollmentOpen(enr.status)
   const { recordId, certificateId } = await issueCourseRecordAndComplete(tx, {
     tenantId: args.tenantId,
     enrollmentId: args.enrollmentId,
@@ -104,7 +130,7 @@ export async function completeOnlineEnrollment(
     instructor: 'Online course',
     details: `Completed online course (enrollment ${args.enrollmentId})`,
   })
-  return { completed: true, percent: 100, recordId, certificateId }
+  return { completed: true, newlyCompleted: true, percent: 100, recordId, certificateId }
 }
 
 export async function recomputeEnrollmentCompletion(
@@ -124,17 +150,32 @@ export async function recomputeEnrollmentCompletion(
     .from(trainingEnrollments)
     .where(eq(trainingEnrollments.id, enrollmentId))
     .limit(1)
+    .for('update')
   if (!enr) throw new Error('Enrollment not found')
+  if (enr.courseId !== courseId || enr.personId !== personId) {
+    throw new Error('Enrollment not found')
+  }
+  if (enr.status === 'completed') {
+    return {
+      completed: true,
+      newlyCompleted: false,
+      percent: 100,
+      recordId: enr.recordId ?? null,
+      certificateId: null,
+    }
+  }
+  assertTrainingEnrollmentOpen(enr.status)
 
   const [course] = await tx
     .select({ deliveryType: trainingCourses.deliveryType })
     .from(trainingCourses)
-    .where(eq(trainingCourses.id, courseId))
+    .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
     .limit(1)
+  if (!course) throw new Error('Course not found')
   // Classroom (instructor issues records at class completion) and external
   // certificate (manual entry) never mint a record from the enrollment path —
   // finishing the content just marks the enrollment complete.
-  const autoIssues = course ? deliveryMeta(course.deliveryType).autoIssuesRecord : false
+  const autoIssues = deliveryMeta(course.deliveryType).autoIssuesRecord
 
   const lessons = await tx
     .select()
@@ -154,7 +195,7 @@ export async function recomputeEnrollmentCompletion(
   const required = lessons.filter((l) => l.isRequired)
   const allRequiredDone = required.length > 0 && required.every((l) => completedIds.has(l.id))
 
-  if (allRequiredDone && enr.status !== 'completed') {
+  if (allRequiredDone) {
     if (autoIssues) {
       const { recordId, certificateId } = await issueCourseRecordAndComplete(tx, {
         tenantId,
@@ -165,11 +206,17 @@ export async function recomputeEnrollmentCompletion(
         details: `Completed via the learning player (enrollment ${enrollmentId})`,
         currentLessonId,
       })
-      return { completed: true, percent: 100, recordId, certificateId }
+      return {
+        completed: true,
+        newlyCompleted: true,
+        percent: 100,
+        recordId,
+        certificateId,
+      }
     }
     // Content finished, but the record is issued elsewhere (instructor at class
     // completion). Mark the enrollment complete without a record/certificate.
-    await tx
+    const [completedEnrollment] = await tx
       .update(trainingEnrollments)
       .set({
         status: 'completed',
@@ -177,17 +224,53 @@ export async function recomputeEnrollmentCompletion(
         progressPercent: 100,
         ...(currentLessonId ? { currentLessonId } : {}),
       })
-      .where(eq(trainingEnrollments.id, enrollmentId))
-    return { completed: true, percent: 100, recordId: null, certificateId: null }
+      .where(
+        and(
+          eq(trainingEnrollments.id, enrollmentId),
+          eq(trainingEnrollments.courseId, courseId),
+          eq(trainingEnrollments.personId, personId),
+          eq(trainingEnrollments.status, 'in_progress'),
+          isNull(trainingEnrollments.deletedAt),
+        ),
+      )
+      .returning({ id: trainingEnrollments.id })
+    if (!completedEnrollment) throw new Error('Enrollment is not active.')
+    await materializeEvidenceTargetObligations(tx, tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId },
+    })
+    return {
+      completed: true,
+      newlyCompleted: true,
+      percent: 100,
+      recordId: null,
+      certificateId: null,
+    }
   }
 
-  await tx
+  const [updatedEnrollment] = await tx
     .update(trainingEnrollments)
     .set({
-      status: enr.status === 'completed' ? 'completed' : 'in_progress',
+      status: 'in_progress',
       progressPercent: percent,
       ...(currentLessonId ? { currentLessonId } : {}),
     })
-    .where(eq(trainingEnrollments.id, enrollmentId))
-  return { completed: false, percent, recordId: null, certificateId: null }
+    .where(
+      and(
+        eq(trainingEnrollments.id, enrollmentId),
+        eq(trainingEnrollments.courseId, courseId),
+        eq(trainingEnrollments.personId, personId),
+        eq(trainingEnrollments.status, 'in_progress'),
+        isNull(trainingEnrollments.deletedAt),
+      ),
+    )
+    .returning({ id: trainingEnrollments.id })
+  if (!updatedEnrollment) throw new Error('Enrollment is not active.')
+  return {
+    completed: false,
+    newlyCompleted: false,
+    percent,
+    recordId: null,
+    certificateId: null,
+  }
 }

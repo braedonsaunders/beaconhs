@@ -14,6 +14,10 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+    // Several active dependencies (Better Auth, Drizzle, Excalidraw/Fabric and
+    // Next) publish declaration files for optional runtimes or incompatible
+    // peer versions that fail under TypeScript 6. Application source is still
+    // checked strictly; only third-party declaration internals are skipped.
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,

@@ -4,10 +4,12 @@
 // automatically (debounced); no Save button. The document content + PDF live in
 // the right pane (Write / PDF switch).
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, CloudUpload } from 'lucide-react'
-import { Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
+import { AlertCircle, Check, CloudUpload } from 'lucide-react'
+import { Input, Label, Select, Textarea } from '@beaconhs/ui'
+import { DOCUMENT_METADATA_LIMITS } from '@/lib/document-metadata-limits'
+import { toast } from '@/lib/toast'
 import { updateDocumentMeta } from './_actions'
 
 type OverviewMeta = {
@@ -20,7 +22,7 @@ type OverviewMeta = {
   nextReviewOn: string
 }
 
-type SaveState = 'idle' | 'saving' | 'saved'
+type SaveState = 'saving' | 'saved' | 'error'
 
 export function DocumentOverview({
   documentId,
@@ -38,41 +40,67 @@ export function DocumentOverview({
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pending = useRef<OverviewMeta | null>(null)
+  const flushing = useRef(false)
 
-  const flush = useCallback(
-    async (next: OverviewMeta) => {
-      const res = await updateDocumentMeta({
-        documentId,
-        title: next.title,
-        key: next.key,
-        categoryId: next.categoryId || null,
-        typeId: next.typeId || null,
-        description: next.description || null,
-        reviewFrequencyMonths: next.reviewFrequencyMonths.trim()
-          ? Number(next.reviewFrequencyMonths)
-          : null,
-        nextReviewOn: next.nextReviewOn || null,
-      })
-      setSaveState(res.ok ? 'saved' : 'idle')
-      // Reflect title/status changes elsewhere on the page, but debounced so we
-      // don't refresh on every keystroke.
-      if (res.ok) {
-        if (refreshTimer.current) clearTimeout(refreshTimer.current)
-        refreshTimer.current = setTimeout(() => router.refresh(), 400)
+  const flush = useCallback(async () => {
+    if (flushing.current) return
+    flushing.current = true
+    let lastSaveSucceeded = false
+    try {
+      while (pending.current) {
+        const next = pending.current
+        pending.current = null
+        const res = await updateDocumentMeta({
+          documentId,
+          title: next.title,
+          key: next.key,
+          categoryId: next.categoryId || null,
+          typeId: next.typeId || null,
+          description: next.description || null,
+          reviewFrequencyMonths: next.reviewFrequencyMonths.trim()
+            ? Number(next.reviewFrequencyMonths)
+            : null,
+          nextReviewOn: next.nextReviewOn || null,
+        })
+        lastSaveSucceeded = res.ok
+        if (!res.ok) {
+          setSaveState('error')
+          toast.error(res.error ?? 'Document details could not be saved.')
+        }
       }
-    },
-    [documentId, router],
-  )
+    } finally {
+      flushing.current = false
+    }
+
+    // Refresh only after the newest queued edit is durable. Refreshing an
+    // older response could otherwise replace newer local text with stale props.
+    if (lastSaveSucceeded && !pending.current) {
+      setSaveState('saved')
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      refreshTimer.current = setTimeout(() => router.refresh(), 400)
+    }
+  }, [documentId, router])
 
   function field<K extends keyof OverviewMeta>(k: K, v: OverviewMeta[K]) {
     setM((prev) => {
       const next = { ...prev, [k]: v }
       setSaveState('saving')
+      pending.current = next
       if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => void flush(next), 650)
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      timer.current = setTimeout(() => void flush(), 650)
       return next
     })
   }
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+    },
+    [],
+  )
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -88,7 +116,9 @@ export function DocumentOverview({
           <Input
             id="o-title"
             value={m.title}
+            maxLength={DOCUMENT_METADATA_LIMITS.title}
             onChange={(e) => field('title', e.currentTarget.value)}
+            onBlur={() => void flush()}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -98,6 +128,7 @@ export function DocumentOverview({
               id="o-category"
               value={m.categoryId}
               onChange={(e) => field('categoryId', e.currentTarget.value)}
+              onBlur={() => void flush()}
             >
               <option value="">—</option>
               {categories.map((c) => (
@@ -113,6 +144,7 @@ export function DocumentOverview({
               id="o-type"
               value={m.typeId}
               onChange={(e) => field('typeId', e.currentTarget.value)}
+              onBlur={() => void flush()}
             >
               <option value="">—</option>
               {types.map((t) => (
@@ -134,7 +166,9 @@ export function DocumentOverview({
             id="o-key"
             className="font-mono"
             value={m.key}
+            maxLength={DOCUMENT_METADATA_LIMITS.key}
             onChange={(e) => field('key', e.currentTarget.value)}
+            onBlur={() => void flush()}
           />
         </div>
         <div className="space-y-1.5">
@@ -143,7 +177,9 @@ export function DocumentOverview({
             id="o-desc"
             rows={2}
             value={m.description}
+            maxLength={DOCUMENT_METADATA_LIMITS.description}
             onChange={(e) => field('description', e.currentTarget.value)}
+            onBlur={() => void flush()}
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -153,8 +189,10 @@ export function DocumentOverview({
               id="o-review"
               type="number"
               min="1"
+              max={DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths}
               value={m.reviewFrequencyMonths}
               onChange={(e) => field('reviewFrequencyMonths', e.currentTarget.value)}
+              onBlur={() => void flush()}
               placeholder="12"
             />
           </div>
@@ -165,6 +203,7 @@ export function DocumentOverview({
               type="date"
               value={m.nextReviewOn}
               onChange={(e) => field('nextReviewOn', e.currentTarget.value)}
+              onBlur={() => void flush()}
             />
           </div>
         </div>
@@ -180,13 +219,15 @@ function SaveBadge({ state }: { state: SaveState }) {
         <CloudUpload size={12} /> Saving…
       </span>
     )
+  if (state === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-600" role="status">
+        <AlertCircle size={12} /> Not saved
+      </span>
+    )
+  }
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 text-xs',
-        state === 'saved' ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500',
-      )}
-    >
+    <span className="inline-flex items-center gap-1 text-xs text-teal-600" role="status">
       <Check size={12} /> Saved
     </span>
   )

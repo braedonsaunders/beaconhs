@@ -18,7 +18,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { Pagination } from '@/components/pagination'
-import { obligationRollup, kindLabel } from './_hub'
+import { obligationOverview, kindLabel } from './_hub'
 import { PercentBar } from './_shared'
 import { ComplianceSubNav } from './_sub-nav'
 
@@ -39,21 +39,18 @@ export default async function ComplianceOverviewPage({
   if (!can(ctx, 'compliance.read')) redirect('/compliance/mine')
   const canAssign = can(ctx, 'compliance.assign')
   const params = parseListParams(sp, { sort: 'overdue', allowedSorts: ['overdue'] as const })
-  const rollup = await obligationRollup(ctx)
+  const overview = await obligationOverview(ctx, {
+    q: params.q,
+    page: params.page,
+    perPage: params.perPage,
+  })
 
   // KPIs are the org-wide scoreboard — always over every obligation, never the
   // searched/paged subset.
-  const totalSubjects = rollup.reduce((s, r) => s + r.total, 0)
-  const totalCompleted = rollup.reduce((s, r) => s + r.completed, 0)
-  const totalOverdue = rollup.reduce((s, r) => s + r.overdue, 0)
+  const totalSubjects = overview.summary.subjects
+  const totalCompleted = overview.summary.completed
+  const totalOverdue = overview.summary.overdue
   const overall = totalSubjects === 0 ? 0 : Math.round((totalCompleted / totalSubjects) * 100)
-
-  const q = params.q?.toLowerCase()
-  const filtered = q ? rollup.filter((r) => r.title.toLowerCase().includes(q)) : rollup
-  const total = filtered.length
-  const pageCount = Math.max(1, Math.ceil(total / params.perPage))
-  const page = Math.min(params.page, pageCount)
-  const rows = filtered.slice((page - 1) * params.perPage, page * params.perPage)
 
   return (
     <ListPageLayout
@@ -76,7 +73,7 @@ export default async function ComplianceOverviewPage({
     >
       <div className="space-y-6">
         <div className="grid gap-3 sm:grid-cols-4">
-          <Kpi label="Obligations" value={rollup.length} />
+          <Kpi label="Obligations" value={overview.summary.obligations} />
           <Kpi label="Subjects tracked" value={totalSubjects.toLocaleString()} />
           <Kpi
             label="Overdue / expiring"
@@ -91,7 +88,7 @@ export default async function ComplianceOverviewPage({
           <SearchInput placeholder="Search obligations by title…" />
         </TableToolbar>
 
-        {rollup.length === 0 ? (
+        {overview.summary.obligations === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
             No obligations.
             {canAssign ? (
@@ -104,7 +101,7 @@ export default async function ComplianceOverviewPage({
               </>
             ) : null}
           </div>
-        ) : total === 0 ? (
+        ) : overview.total === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
             No obligations match your search.
           </div>
@@ -122,7 +119,7 @@ export default async function ComplianceOverviewPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
+                {overview.rows.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>
                       <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
@@ -165,8 +162,8 @@ export default async function ComplianceOverviewPage({
             <Pagination
               basePath={BASE}
               currentParams={sp}
-              total={total}
-              page={page}
+              total={overview.total}
+              page={overview.page}
               perPage={params.perPage}
             />
           </>

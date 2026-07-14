@@ -4,13 +4,15 @@
 // keeps these self-contained so admins can phrase tasks specifically per
 // title without polluting the HazID library.
 //
-// Each task supports a per-person acknowledgement record (signature data
-// URL + timestamp + actor) — this lets supervisors audit which workers
-// have signed off on their job description after a revision.
+// Each task supports a per-person acknowledgement record (private signature
+// attachment + timestamp, with actor attribution in the audit log). This lets
+// supervisors audit which workers signed off on their job description while
+// keeping the acknowledged wording immutable.
 
 import { relations } from 'drizzle-orm'
 import {
   doublePrecision,
+  foreignKey,
   index,
   pgTable,
   text,
@@ -19,6 +21,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
+import { attachments } from './attachments'
 import { tenants } from './core'
 import { people } from './org'
 import { personTitles } from './people-titles'
@@ -30,9 +33,7 @@ export const jobTitleTasks = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    titleId: uuid('title_id')
-      .notNull()
-      .references(() => personTitles.id, { onDelete: 'cascade' }),
+    titleId: uuid('title_id').notNull(),
     task: text('task').notNull(),
     description: text('description'),
     entityOrder: doublePrecision('entity_order').default(0).notNull(),
@@ -41,8 +42,14 @@ export const jobTitleTasks = pgTable(
   },
   (t) => ({
     tenantIdx: index('job_title_tasks_tenant_idx').on(t.tenantId),
-    titleIdx: index('job_title_tasks_title_idx').on(t.titleId),
-    orderIdx: index('job_title_tasks_order_idx').on(t.titleId, t.entityOrder),
+    tenantIdIdUx: uniqueIndex('job_title_tasks_tenant_id_id_ux').on(t.tenantId, t.id),
+    titleIdx: index('job_title_tasks_title_idx').on(t.tenantId, t.titleId),
+    orderIdx: index('job_title_tasks_order_idx').on(t.tenantId, t.titleId, t.entityOrder),
+    titleFk: foreignKey({
+      name: 'job_title_tasks_tenant_title_fk',
+      columns: [t.tenantId, t.titleId],
+      foreignColumns: [personTitles.tenantId, personTitles.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -53,12 +60,8 @@ export const jobTitleTaskAcknowledgments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    taskId: uuid('task_id')
-      .notNull()
-      .references(() => jobTitleTasks.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id').notNull(),
+    personId: uuid('person_id').notNull(),
     acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }).defaultNow().notNull(),
     signatureAttachmentId: uuid('signature_attachment_id'),
     notes: text('notes'),
@@ -66,17 +69,32 @@ export const jobTitleTaskAcknowledgments = pgTable(
   },
   (t) => ({
     tenantIdx: index('job_title_task_acks_tenant_idx').on(t.tenantId),
-    taskIdx: index('job_title_task_acks_task_idx').on(t.taskId),
-    personIdx: index('job_title_task_acks_person_idx').on(t.personId),
-    uniqueAck: uniqueIndex('job_title_task_acks_unique_ux').on(t.taskId, t.personId),
+    taskIdx: index('job_title_task_acks_task_idx').on(t.tenantId, t.taskId),
+    personIdx: index('job_title_task_acks_person_idx').on(t.tenantId, t.personId),
+    uniqueAck: uniqueIndex('job_title_task_acks_unique_ux').on(t.tenantId, t.taskId, t.personId),
+    taskFk: foreignKey({
+      name: 'job_title_task_acks_tenant_task_fk',
+      columns: [t.tenantId, t.taskId],
+      foreignColumns: [jobTitleTasks.tenantId, jobTitleTasks.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'job_title_task_acks_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
+    signatureAttachmentFk: foreignKey({
+      name: 'job_title_task_acks_tenant_signature_attachment_fk',
+      columns: [t.tenantId, t.signatureAttachmentId],
+      foreignColumns: [attachments.tenantId, attachments.id],
+    }),
   }),
 )
 
 export const jobTitleTasksRelations = relations(jobTitleTasks, ({ one, many }) => ({
   tenant: one(tenants, { fields: [jobTitleTasks.tenantId], references: [tenants.id] }),
   title: one(personTitles, {
-    fields: [jobTitleTasks.titleId],
-    references: [personTitles.id],
+    fields: [jobTitleTasks.tenantId, jobTitleTasks.titleId],
+    references: [personTitles.tenantId, personTitles.id],
   }),
   acknowledgments: many(jobTitleTaskAcknowledgments),
 }))
@@ -89,12 +107,19 @@ export const jobTitleTaskAcknowledgmentsRelations = relations(
       references: [tenants.id],
     }),
     task: one(jobTitleTasks, {
-      fields: [jobTitleTaskAcknowledgments.taskId],
-      references: [jobTitleTasks.id],
+      fields: [jobTitleTaskAcknowledgments.tenantId, jobTitleTaskAcknowledgments.taskId],
+      references: [jobTitleTasks.tenantId, jobTitleTasks.id],
     }),
     person: one(people, {
-      fields: [jobTitleTaskAcknowledgments.personId],
-      references: [people.id],
+      fields: [jobTitleTaskAcknowledgments.tenantId, jobTitleTaskAcknowledgments.personId],
+      references: [people.tenantId, people.id],
+    }),
+    signatureAttachment: one(attachments, {
+      fields: [
+        jobTitleTaskAcknowledgments.tenantId,
+        jobTitleTaskAcknowledgments.signatureAttachmentId,
+      ],
+      references: [attachments.tenantId, attachments.id],
     }),
   }),
 )

@@ -6,7 +6,7 @@
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { CreditCard, FileText, Printer, Star } from 'lucide-react'
+import { FileText, Star } from 'lucide-react'
 import {
   and,
   asc,
@@ -24,7 +24,6 @@ import {
 import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   people,
-  tenants,
   trainingSkillAssignments,
   trainingSkillAuthorities,
   trainingSkillTypes,
@@ -34,8 +33,6 @@ import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
-import { enabledCredentialOutputs } from '@/lib/credential-designs'
-import { CredentialDownloadButton } from '@/components/credential-download-button'
 import { SearchInput } from '@/components/search-input'
 import { SearchFilter } from '@/components/search-filter'
 import { Pagination } from '@/components/pagination'
@@ -92,165 +89,154 @@ export default async function SkillsPage({
   const today = now.toISOString().slice(0, 10)
   const in90 = new Date(nowMs + 90 * 86_400_000).toISOString().slice(0, 10)
 
-  const { rows, total, authorities, tenantSettings, peopleList, skillTypesList } = await ctx.db(
-    async (tx) => {
-      // read.self → only the viewer's own skills; managers/read.all → everyone.
-      const vis = canManage
-        ? undefined
-        : await moduleScopeWhere(ctx, tx, {
-            prefix: 'training',
-            personCol: trainingSkillAssignments.personId,
-          })
-      const filters: SQL<unknown>[] = [isNull(trainingSkillAssignments.deletedAt)]
-      if (vis) filters.push(vis)
-      if (params.q) {
-        const term = `%${params.q}%`
-        const cond = or(
-          ilike(people.firstName, term),
-          ilike(people.lastName, term),
-          ilike(people.employeeNo, term),
-          ilike(trainingSkillTypes.name, term),
-          ilike(trainingSkillTypes.code, term),
-          ilike(trainingSkillAuthorities.name, term),
-        )
-        if (cond) filters.push(cond)
-      }
-      if (authorityFilter) filters.push(eq(trainingSkillAuthorities.id, authorityFilter))
-      if (personFilter) filters.push(eq(trainingSkillAssignments.personId, personFilter))
-      if (skillFilter) filters.push(eq(trainingSkillTypes.id, skillFilter))
-      // Defaults to "valid" when no status param is present; the "All" chip
-      // navigates to an explicit `all` sentinel to show every skill.
-      const effectiveStatus = statusFilter ?? 'valid'
-      if (effectiveStatus === 'expired') {
-        filters.push(isNotNull(trainingSkillAssignments.expiresOn))
-        filters.push(lte(trainingSkillAssignments.expiresOn, today))
-      } else if (effectiveStatus === 'expiring') {
-        filters.push(isNotNull(trainingSkillAssignments.expiresOn))
-        filters.push(gt(trainingSkillAssignments.expiresOn, today))
-        filters.push(lte(trainingSkillAssignments.expiresOn, in90))
-      } else if (effectiveStatus === 'valid') {
-        const c = or(
-          isNull(trainingSkillAssignments.expiresOn),
-          gt(trainingSkillAssignments.expiresOn, today),
-        )
-        if (c) filters.push(c)
-      }
-      const whereClause = filters.length ? and(...filters) : undefined
+  const { rows, total, authorities, peopleList, skillTypesList } = await ctx.db(async (tx) => {
+    // read.self → only the viewer's own skills; managers/read.all → everyone.
+    const vis = canManage
+      ? undefined
+      : await moduleScopeWhere(ctx, tx, {
+          prefix: 'training',
+          personCol: trainingSkillAssignments.personId,
+        })
+    const filters: SQL<unknown>[] = [isNull(trainingSkillAssignments.deletedAt)]
+    if (vis) filters.push(vis)
+    if (params.q) {
+      const term = `%${params.q}%`
+      const cond = or(
+        ilike(people.firstName, term),
+        ilike(people.lastName, term),
+        ilike(people.employeeNo, term),
+        ilike(trainingSkillTypes.name, term),
+        ilike(trainingSkillTypes.code, term),
+        ilike(trainingSkillAuthorities.name, term),
+      )
+      if (cond) filters.push(cond)
+    }
+    if (authorityFilter) filters.push(eq(trainingSkillAuthorities.id, authorityFilter))
+    if (personFilter) filters.push(eq(trainingSkillAssignments.personId, personFilter))
+    if (skillFilter) filters.push(eq(trainingSkillTypes.id, skillFilter))
+    // Defaults to "valid" when no status param is present; the "All" chip
+    // navigates to an explicit `all` sentinel to show every skill.
+    const effectiveStatus = statusFilter ?? 'valid'
+    if (effectiveStatus === 'expired') {
+      filters.push(isNotNull(trainingSkillAssignments.expiresOn))
+      filters.push(lte(trainingSkillAssignments.expiresOn, today))
+    } else if (effectiveStatus === 'expiring') {
+      filters.push(isNotNull(trainingSkillAssignments.expiresOn))
+      filters.push(gt(trainingSkillAssignments.expiresOn, today))
+      filters.push(lte(trainingSkillAssignments.expiresOn, in90))
+    } else if (effectiveStatus === 'valid') {
+      const c = or(
+        isNull(trainingSkillAssignments.expiresOn),
+        gt(trainingSkillAssignments.expiresOn, today),
+      )
+      if (c) filters.push(c)
+    }
+    const whereClause = filters.length ? and(...filters) : undefined
 
-      const orderBy =
-        params.sort === 'person'
-          ? params.dir === 'asc'
-            ? [asc(people.lastName), asc(people.firstName)]
-            : [desc(people.lastName), desc(people.firstName)]
-          : params.sort === 'skill'
-            ? [params.dir === 'asc' ? asc(trainingSkillTypes.name) : desc(trainingSkillTypes.name)]
-            : params.sort === 'authority'
+    const orderBy =
+      params.sort === 'person'
+        ? params.dir === 'asc'
+          ? [asc(people.lastName), asc(people.firstName)]
+          : [desc(people.lastName), desc(people.firstName)]
+        : params.sort === 'skill'
+          ? [params.dir === 'asc' ? asc(trainingSkillTypes.name) : desc(trainingSkillTypes.name)]
+          : params.sort === 'authority'
+            ? [
+                params.dir === 'asc'
+                  ? asc(trainingSkillAuthorities.name)
+                  : desc(trainingSkillAuthorities.name),
+              ]
+            : params.sort === 'granted_on'
               ? [
                   params.dir === 'asc'
-                    ? asc(trainingSkillAuthorities.name)
-                    : desc(trainingSkillAuthorities.name),
+                    ? asc(trainingSkillAssignments.grantedOn)
+                    : desc(trainingSkillAssignments.grantedOn),
                 ]
-              : params.sort === 'granted_on'
-                ? [
-                    params.dir === 'asc'
-                      ? asc(trainingSkillAssignments.grantedOn)
-                      : desc(trainingSkillAssignments.grantedOn),
-                  ]
-                : [
-                    params.dir === 'asc'
-                      ? asc(trainingSkillAssignments.expiresOn)
-                      : desc(trainingSkillAssignments.expiresOn),
-                  ]
+              : [
+                  params.dir === 'asc'
+                    ? asc(trainingSkillAssignments.expiresOn)
+                    : desc(trainingSkillAssignments.expiresOn),
+                ]
 
-      const base = tx
-        .select({
-          assignment: trainingSkillAssignments,
-          type: trainingSkillTypes,
-          authority: trainingSkillAuthorities,
-          person: people,
-        })
-        .from(trainingSkillAssignments)
-        .innerJoin(
-          trainingSkillTypes,
-          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-        )
-        .innerJoin(
-          trainingSkillAuthorities,
-          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-        )
-        .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+    const base = tx
+      .select({
+        assignment: trainingSkillAssignments,
+        type: trainingSkillTypes,
+        authority: trainingSkillAuthorities,
+        person: people,
+      })
+      .from(trainingSkillAssignments)
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
+      .innerJoin(
+        trainingSkillAuthorities,
+        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+      )
+      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
 
-      const [tot] = await tx
-        .select({ c: count() })
-        .from(trainingSkillAssignments)
-        .innerJoin(
-          trainingSkillTypes,
-          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-        )
-        .innerJoin(
-          trainingSkillAuthorities,
-          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-        )
-        .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-        .where(whereClause)
+    const [tot] = await tx
+      .select({ c: count() })
+      .from(trainingSkillAssignments)
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
+      .innerJoin(
+        trainingSkillAuthorities,
+        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+      )
+      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+      .where(whereClause)
 
-      const data = await base
-        .where(whereClause)
-        .orderBy(...orderBy)
-        .limit(params.perPage)
-        .offset((params.page - 1) * params.perPage)
+    const data = await base
+      .where(whereClause)
+      .orderBy(...orderBy)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
 
-      const auths = await tx
-        .select({ id: trainingSkillAuthorities.id, name: trainingSkillAuthorities.name })
-        .from(trainingSkillAuthorities)
-        .orderBy(asc(trainingSkillAuthorities.name))
+    const auths = await tx
+      .select({ id: trainingSkillAuthorities.id, name: trainingSkillAuthorities.name })
+      .from(trainingSkillAuthorities)
+      .orderBy(asc(trainingSkillAuthorities.name))
 
-      const [tenant] = await tx
-        .select({ settings: tenants.settings })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId))
-        .limit(1)
+    // Filter option lists: only people/skill types that actually hold an
+    // assignment (so the dropdowns aren't padded with never-credentialed
+    // rows), scoped to the assignments the viewer can see.
+    const peopleList = await tx
+      .selectDistinct({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+      })
+      .from(trainingSkillAssignments)
+      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+      .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
+      .orderBy(asc(people.lastName), asc(people.firstName))
+    const skillTypesList = await tx
+      .selectDistinct({
+        id: trainingSkillTypes.id,
+        name: trainingSkillTypes.name,
+        code: trainingSkillTypes.code,
+      })
+      .from(trainingSkillAssignments)
+      .innerJoin(
+        trainingSkillTypes,
+        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+      )
+      .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
+      .orderBy(asc(trainingSkillTypes.name))
 
-      // Filter option lists: only people/skill types that actually hold an
-      // assignment (so the dropdowns aren't padded with never-credentialed
-      // rows), scoped to the assignments the viewer can see.
-      const peopleList = await tx
-        .selectDistinct({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(trainingSkillAssignments)
-        .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-        .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-      const skillTypesList = await tx
-        .selectDistinct({
-          id: trainingSkillTypes.id,
-          name: trainingSkillTypes.name,
-          code: trainingSkillTypes.code,
-        })
-        .from(trainingSkillAssignments)
-        .innerJoin(
-          trainingSkillTypes,
-          eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-        )
-        .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
-        .orderBy(asc(trainingSkillTypes.name))
-
-      return {
-        rows: data,
-        total: Number(tot?.c ?? 0),
-        authorities: auths,
-        tenantSettings: tenant?.settings ?? {},
-        peopleList,
-        skillTypesList,
-      }
-    },
-  )
-  const credentialOutputs = enabledCredentialOutputs(tenantSettings)
-
+    return {
+      rows: data,
+      total: Number(tot?.c ?? 0),
+      authorities: auths,
+      peopleList,
+      skillTypesList,
+    }
+  })
   return (
     <ListPageLayout
       header={
@@ -384,7 +370,7 @@ export default async function SkillsPage({
                     Expires
                   </SortableTh>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Credential</TableHead>
+                  <TableHead className="text-right">Credentials</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -441,38 +427,12 @@ export default async function SkillsPage({
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1.5">
-                          {credentialOutputs.map((output) => (
-                            <span key={output.id} className="inline-flex gap-1">
-                              <CredentialDownloadButton
-                                endpoint={`/training/skills/${assignment.id}/certificate`}
-                                outputId={output.id}
-                                variant="ghost"
-                                size="sm"
-                                title={`Open ${output.name}`}
-                                pendingLabel=""
-                              >
-                                {output.format === 'wallet' ? (
-                                  <CreditCard size={15} />
-                                ) : (
-                                  <FileText size={15} />
-                                )}
-                              </CredentialDownloadButton>
-                              {output.format === 'wallet' ? (
-                                <CredentialDownloadButton
-                                  endpoint={`/training/skills/${assignment.id}/certificate`}
-                                  outputId={output.id}
-                                  action="print"
-                                  variant="ghost"
-                                  size="sm"
-                                  title={`Print ${output.name}`}
-                                  pendingLabel=""
-                                >
-                                  <Printer size={15} />
-                                </CredentialDownloadButton>
-                              ) : null}
-                            </span>
-                          ))}
+                        <div className="flex justify-end">
+                          <Button asChild variant="ghost" size="sm">
+                            <Link href={`/training/skills/${assignment.id}?tab=outputs`}>
+                              <FileText size={15} /> View
+                            </Link>
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

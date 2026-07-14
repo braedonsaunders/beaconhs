@@ -646,8 +646,8 @@ function NodeBody({
         <div className="space-y-1">
           {pickerFields.length === 0 ? (
             <p className="text-[10px] text-slate-500 italic">
-              No picker fields in this template. Add an equipment / person / site / PPE / document /
-              course picker first.
+              No compatible picker fields in this template. Add a person, customer, project, site,
+              or area picker first.
             </p>
           ) : (
             <Select
@@ -738,10 +738,9 @@ const GROUPS: { kind: OpDef['group']; label: string }[] = [
   { kind: 'entity', label: 'Entity attribute' },
 ]
 
-// Tautology sentinel: `isNotSet` on a field that never exists always evaluates
-// TRUE, so a fresh/cleared `if` takes its THEN branch (an `isSet` here would
-// silently always take the ELSE branch).
-const ALWAYS_TRUE: LogicRule = { op: 'isNotSet', field: '__never_set__' }
+// An empty conjunction is true and does not require an invented field id, so
+// fresh conditional formulas remain valid under schema reference checks.
+const ALWAYS_TRUE: LogicRule = { op: 'and', rules: [] }
 
 function makeDefault(kind: FormulaExpression['kind']): FormulaExpression {
   switch (kind) {

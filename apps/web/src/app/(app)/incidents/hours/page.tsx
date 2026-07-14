@@ -7,7 +7,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Trash2 } from 'lucide-react'
-import { asc, desc, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -26,7 +26,11 @@ import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/g
 import { recordAudit } from '@/lib/audit'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
 import { IncidentsSubNav } from '../_sub-nav'
 import { HoursDrawer, type HoursEditing } from './_drawers'
 
@@ -157,8 +161,14 @@ export default async function HoursPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'period', dir: 'desc', allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'period',
+    dir: 'desc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const drawerParam = pickString(sp.drawer)
+  const siteParam = pickString(sp.site)
   const ctx = await requireModuleManage('incidents')
 
   const dir = params.dir === 'asc' ? asc : desc
@@ -169,22 +179,53 @@ export default async function HoursPage({
         ? dir(incidentHoursPeriods.employeeCount)
         : dir(incidentHoursPeriods.periodStart)
 
-  const { rows, sites } = await ctx.db(async (tx) => {
-    const all = await tx
-      .select({ period: incidentHoursPeriods, site: orgUnits })
-      .from(incidentHoursPeriods)
-      .leftJoin(orgUnits, eq(orgUnits.id, incidentHoursPeriods.siteOrgUnitId))
-      .orderBy(orderBy)
+  const { rows, sites, total, totalHours } = await ctx.db(async (tx) => {
     const siteRows = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
       .where(eq(orgUnits.level, 'site'))
       .orderBy(asc(orgUnits.name))
-    return { rows: all, sites: siteRows }
+    const selectedSiteId = siteRows.some((site) => site.id === siteParam) ? siteParam : undefined
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(incidentHoursPeriods.periodLabel, `%${params.q}%`),
+          ilike(orgUnits.name, `%${params.q}%`),
+          sql`${incidentHoursPeriods.periodStart}::text ilike ${`%${params.q}%`}`,
+          sql`${incidentHoursPeriods.periodEnd}::text ilike ${`%${params.q}%`}`,
+        )
+      : undefined
+    const siteFilter =
+      siteParam === 'unassigned'
+        ? isNull(incidentHoursPeriods.siteOrgUnitId)
+        : selectedSiteId
+          ? eq(incidentHoursPeriods.siteOrgUnitId, selectedSiteId)
+          : undefined
+    const where = and(search, siteFilter)
+    const [summary] = await tx
+      .select({
+        total: count(),
+        totalHours: sql<string>`coalesce(sum(${incidentHoursPeriods.totalHours}), 0)`,
+      })
+      .from(incidentHoursPeriods)
+      .leftJoin(orgUnits, eq(orgUnits.id, incidentHoursPeriods.siteOrgUnitId))
+      .where(where)
+    const data = await tx
+      .select({ period: incidentHoursPeriods, site: orgUnits })
+      .from(incidentHoursPeriods)
+      .leftJoin(orgUnits, eq(orgUnits.id, incidentHoursPeriods.siteOrgUnitId))
+      .where(where)
+      .orderBy(orderBy)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
+    return {
+      rows: data,
+      sites: siteRows,
+      total: Number(summary?.total ?? 0),
+      totalHours: Number(summary?.totalHours ?? 0),
+    }
   })
 
-  const totalRecorded = rows.reduce((sum, r) => sum + Number(r.period.totalHours), 0)
-  const periodCount = rows.length
+  const hasFilters = Boolean(params.q || siteParam)
 
   const today = new Date().toISOString().slice(0, 10)
   const lastMonthStart = new Date()
@@ -234,17 +275,34 @@ export default async function HoursPage({
           />
           <IncidentsSubNav active="hours" />
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
-            <Stat label="Periods logged" value={periodCount.toLocaleString()} />
-            <Stat label="Hours total" value={totalRecorded.toLocaleString()} />
+            <Stat label="Periods logged" value={total.toLocaleString()} />
+            <Stat label="Hours total" value={totalHours.toLocaleString()} />
           </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search period, date, or site…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="site"
+              label="Site"
+              options={[
+                ...sites.map((site) => ({ value: site.id, label: site.name })),
+                { value: 'unassigned', label: 'All-sites entries' },
+              ]}
+            />
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<Plus size={32} />}
-          title="No periods logged"
-          description="Add a period — typically one per site per month — to supply the worked hours behind frequency-rate reports."
+          title={hasFilters ? 'No periods match your filters' : 'No periods logged'}
+          description={
+            hasFilters
+              ? 'Clear the search or site filter to see other hours entries.'
+              : 'Add a period — typically one per site per month — to supply the worked hours behind frequency-rate reports.'
+          }
           action={
             <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
               <Button>Add period</Button>
@@ -334,6 +392,14 @@ export default async function HoursPage({
           </TableBody>
         </Table>
       )}
+
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={total}
+        page={params.page}
+        perPage={params.perPage}
+      />
 
       <HoursDrawer
         mode={mode}

@@ -1,9 +1,9 @@
 // Unified compliance engine schema.
 //
-// ONE obligation model for every module. The old per-module "assignment" tables
-// (inspection_assignments, document_assignments, training_audience_assignments,
-// form_assignments, journal_assignments) collapse into `compliance_obligations`
-// + `compliance_audience`. Crucially this model does NOT care whether the thing
+// ONE obligation model for every module. All former module-specific assignment
+// stores are retired; requirements are authored directly in
+// `compliance_obligations` + `compliance_audience`. Crucially this model does
+// NOT care whether the thing
 // being required is satisfied by a PERSON (per_person), a RECORD that mustn't
 // expire (per_record), or a per-(person×task) sign-off (per_task) — so you can
 // author "all Foremen hold a valid First Aid cert", "every Crane is inspected
@@ -12,11 +12,13 @@
 //
 // Completion EVIDENCE stays in each module's own tables (training_records,
 // inspection_records, equipment_items, …) and is read by per-module adapters.
-// `compliance_status` is the materialized scoreboard (populated live today, by a
-// worker scan later); `compliance_dispatches` is the recurring-fire ledger.
+// `compliance_status` is the materialized scoreboard (refreshed immediately on
+// supported mutations and reconciled by the scheduled worker scan);
+// `compliance_dispatches` is the recurring-fire ledger.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
+  check,
   date,
   foreignKey,
   index,
@@ -29,7 +31,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { id, softDelete, timestamps } from './_helpers'
+import { durablePublication, id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { people } from './org'
 
@@ -44,9 +46,6 @@ export const complianceSourceModule = pgEnum('compliance_source_module', [
   'ppe_inspection', // PPE of a type stays within its inspection/expiry cadence
   'job_title_signoff', // people with a title acknowledge a task
   'corrective_action',
-  'permit',
-  'lone_worker',
-  'custom',
   // Frequency activity: people each produce/sign a hazard assessment on a cadence
   // (replaces the legacy "Hazard ID — Signatures" report).
   'hazard_assessment',
@@ -230,6 +229,7 @@ export const complianceDispatches = pgTable(
       }>
     } | null>(),
     error: text('error'),
+    ...durablePublication,
     ...timestamps,
   },
   (t) => ({
@@ -249,6 +249,30 @@ export const complianceDispatches = pgTable(
       columns: [t.tenantId, t.obligationId],
       foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
     }).onDelete('cascade'),
+    publishAvailableIdx: index('compliance_dispatches_publish_available_idx').on(
+      t.status,
+      t.publishAvailableAt,
+    ),
+    publishClaimedIdx: index('compliance_dispatches_publish_claimed_idx').on(
+      t.status,
+      t.publishClaimedAt,
+    ),
+    publishAttemptsCheck: check(
+      'compliance_dispatches_publish_attempts_ck',
+      sql`${t.publishAttempts} >= 0`,
+    ),
+    publishLeaseStateCheck: check(
+      'compliance_dispatches_publish_lease_state_ck',
+      sql`(
+        (${t.status} = 'queued' AND (
+          (${t.publishLeaseId} IS NULL AND ${t.publishClaimedAt} IS NULL)
+          OR
+          (${t.publishLeaseId} IS NOT NULL AND ${t.publishClaimedAt} IS NOT NULL)
+        ))
+        OR
+        (${t.status} <> 'queued' AND ${t.publishLeaseId} IS NULL AND ${t.publishClaimedAt} IS NULL)
+      )`,
+    ),
   }),
 )
 

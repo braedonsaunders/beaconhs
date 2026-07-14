@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer, cn } from '@beaconhs/ui'
 import {
+  CUSTOM_FIELD_LIMITS,
   CUSTOM_FIELD_TYPES,
   CUSTOM_FIELD_TYPE_META,
   type CustomFieldEntityKind,
@@ -164,6 +165,13 @@ function DesignerForm({
       setError('Add at least one option.')
       return
     }
+    if (
+      cleanOptions &&
+      new Set(cleanOptions.map((option) => option.value)).size !== cleanOptions.length
+    ) {
+      setError('Each option needs a unique label.')
+      return
+    }
     const config = {
       ...(meta.hasOptions ? { options: cleanOptions } : {}),
       ...(meta.supportsUnit && unit.trim() ? { unit: unit.trim() } : {}),
@@ -171,6 +179,47 @@ function DesignerForm({
       ...(meta.supportsRange && max.trim() ? { max: Number(max) } : {}),
       ...(meta.supportsRange && step.trim() ? { step: Number(step) } : {}),
       ...(placeholder.trim() ? { placeholder: placeholder.trim() } : {}),
+    }
+    const nextSubtypeId = hasSubtype ? subtypeId || null : null
+    const destructiveChanges: string[] = []
+    if (editing && nextSubtypeId && editing.subtypeId !== nextSubtypeId) {
+      destructiveChanges.push(
+        `saved values on records outside the selected ${subtypeLabel?.toLowerCase() ?? 'type'} will be removed`,
+      )
+    }
+    if (editing && meta.hasOptions) {
+      const nextValues = new Set((cleanOptions ?? []).map((option) => option.value))
+      const removed = (editing.config?.options ?? []).filter(
+        (option) => !nextValues.has(option.value),
+      )
+      if (removed.length > 0) {
+        destructiveChanges.push(
+          `saved selections using ${removed.length} removed option${removed.length === 1 ? '' : 's'} will be cleared`,
+        )
+      }
+    }
+    if (editing && fieldType === 'number') {
+      const oldMin = editing.config?.min ?? null
+      const oldMax = editing.config?.max ?? null
+      const oldStep = editing.config?.step ?? null
+      const nextMin = min.trim() ? Number(min) : null
+      const nextMax = max.trim() ? Number(max) : null
+      const nextStep = step.trim() ? Number(step) : null
+      if (
+        (nextMin !== null && (oldMin === null || nextMin > oldMin)) ||
+        (nextMax !== null && (oldMax === null || nextMax < oldMax)) ||
+        nextStep !== oldStep
+      ) {
+        destructiveChanges.push(
+          'saved numbers that do not fit the new range or step will be cleared',
+        )
+      }
+    }
+    if (
+      destructiveChanges.length > 0 &&
+      !window.confirm(`Save this change? ${destructiveChanges.join('; ')}. This cannot be undone.`)
+    ) {
+      return
     }
     start(async () => {
       const res = await saveAction({
@@ -183,7 +232,7 @@ function DesignerForm({
         required,
         groupLabel: groupLabel.trim() || null,
         groupKey: groupKey || null,
-        subtypeId: hasSubtype ? subtypeId || null : null,
+        subtypeId: nextSubtypeId,
         sortOrder: Number(sortOrder) || 0,
         isActive,
       })
@@ -208,6 +257,7 @@ function DesignerForm({
           value={label}
           onChange={(e) => setLabel(e.currentTarget.value)}
           placeholder="e.g. LEL sensor reading"
+          maxLength={CUSTOM_FIELD_LIMITS.label}
           required
         />
         <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -261,6 +311,7 @@ function DesignerForm({
               value={groupLabel}
               onChange={(e) => setGroupLabel(e.currentTarget.value)}
               placeholder="e.g. Gas detector"
+              maxLength={CUSTOM_FIELD_LIMITS.groupLabel}
             />
           </div>
         ) : null}
@@ -285,6 +336,12 @@ function DesignerForm({
             Scope the field to one {subtypeLabel?.toLowerCase() ?? 'type'}, or leave on “All” to
             show it on every record.
           </p>
+          {editing ? (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Moving this field to a specific {subtypeLabel?.toLowerCase() ?? 'type'} permanently
+              removes its saved values from records outside that scope.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -299,6 +356,7 @@ function DesignerForm({
                   onChange={(e) => updateOption(i, { label: e.currentTarget.value })}
                   placeholder="Label"
                   className="flex-1"
+                  maxLength={CUSTOM_FIELD_LIMITS.optionLabel}
                 />
                 <button
                   type="button"
@@ -311,7 +369,13 @@ function DesignerForm({
               </div>
             ))}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={addOption}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addOption}
+            disabled={options.length >= CUSTOM_FIELD_LIMITS.options}
+          >
             <Plus size={14} /> Add option
           </Button>
         </div>
@@ -327,6 +391,7 @@ function DesignerForm({
                 value={unit}
                 onChange={(e) => setUnit(e.currentTarget.value)}
                 placeholder="e.g. ppm, %, kg"
+                maxLength={CUSTOM_FIELD_LIMITS.unit}
               />
             </div>
           ) : null}
@@ -337,6 +402,7 @@ function DesignerForm({
                 <Input
                   id="cf-min"
                   type="number"
+                  step="any"
                   value={min}
                   onChange={(e) => setMin(e.currentTarget.value)}
                 />
@@ -346,6 +412,7 @@ function DesignerForm({
                 <Input
                   id="cf-max"
                   type="number"
+                  step="any"
                   value={max}
                   onChange={(e) => setMax(e.currentTarget.value)}
                 />
@@ -355,6 +422,7 @@ function DesignerForm({
                 <Input
                   id="cf-step"
                   type="number"
+                  step="any"
                   value={step}
                   onChange={(e) => setStep(e.currentTarget.value)}
                 />
@@ -372,6 +440,7 @@ function DesignerForm({
           onChange={(e) => setHelpText(e.currentTarget.value)}
           rows={2}
           placeholder="Optional guidance shown under the field."
+          maxLength={CUSTOM_FIELD_LIMITS.helpText}
         />
       </div>
 
@@ -381,17 +450,19 @@ function DesignerForm({
           <Input
             id="cf-sort"
             type="number"
+            step={1}
             value={sortOrder}
             onChange={(e) => setSortOrder(e.currentTarget.value)}
           />
         </div>
-        {fieldType !== 'boolean' ? (
+        {meta.supportsPlaceholder ? (
           <div className="space-y-1.5">
             <Label htmlFor="cf-placeholder">Placeholder</Label>
             <Input
               id="cf-placeholder"
               value={placeholder}
               onChange={(e) => setPlaceholder(e.currentTarget.value)}
+              maxLength={CUSTOM_FIELD_LIMITS.placeholder}
             />
           </div>
         ) : null}

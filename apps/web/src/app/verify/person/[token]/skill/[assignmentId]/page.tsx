@@ -3,6 +3,7 @@
 // holder's own /my/wallet. Access is keyed entirely off the badge token.
 
 import { and, desc, eq, isNull } from 'drizzle-orm'
+import { notFound } from 'next/navigation'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import {
   attachments,
@@ -18,6 +19,7 @@ import { presignGet } from '@beaconhs/storage'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { resolveCredentialOutput } from '@/lib/credential-designs'
 import { activeTenantPredicate } from '@/lib/active-tenant'
+import { isUuid } from '@/lib/list-params'
 import { EXPIRING_DAYS, isoDaysFromNow, standingFor, todayIsoDate } from '../../_format'
 import { factDay, PublicCardNotFound, PublicCardPage, verifyQrDataUrl } from '../../_card-page'
 
@@ -29,6 +31,8 @@ export default async function VerifyPersonSkillPage({
   params: Promise<{ token: string; assignmentId: string }>
 }) {
   const { token, assignmentId } = await params
+  if (!isUuid(assignmentId)) notFound()
+
   const backHref = `/verify/person/${token}`
 
   const data = await withSuperAdmin(db, async (tx) => {

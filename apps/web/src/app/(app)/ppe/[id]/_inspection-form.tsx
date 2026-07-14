@@ -14,7 +14,8 @@
 
 import * as React from 'react'
 import { CheckCircle2, CircleDashed, XCircle } from 'lucide-react'
-import { Badge, Button, Input, Label, cn } from '@beaconhs/ui'
+import { Badge, Button, Input, Label, Textarea, cn } from '@beaconhs/ui'
+import { FileUpload, type AttachedFile } from '@/components/file-upload'
 
 type Answer = 'pass' | 'fail' | 'n_a'
 type Criterion = {
@@ -22,6 +23,7 @@ type Criterion = {
   question: string
   description: string | null
   severity: 'low' | 'medium' | 'high' | 'critical'
+  requiresPhoto: boolean
 }
 
 const ANSWERS: { value: Answer; label: string }[] = [
@@ -44,9 +46,23 @@ export function PpeInspectionForm({
   action: (fd: FormData) => Promise<void>
 }) {
   const [answers, setAnswers] = React.useState<Record<string, Answer>>({})
+  const [reasons, setReasons] = React.useState<Record<string, string>>({})
+  const [photos, setPhotos] = React.useState<Record<string, AttachedFile[]>>({})
+  const [uploading, setUploading] = React.useState<Record<string, boolean>>({})
 
   const answeredCount = criteria.filter((c) => answers[c.id]).length
-  const allAnswered = criteria.length > 0 && answeredCount === criteria.length
+  const missingEvidence = criteria.filter((criterion) => {
+    const answer = answers[criterion.id]
+    if (!answer) return false
+    if (answer === 'fail' && !(reasons[criterion.id] ?? '').trim()) return true
+    return criterion.requiresPhoto && answer !== 'n_a' && (photos[criterion.id]?.length ?? 0) === 0
+  }).length
+  const uploadingCount = Object.values(uploading).filter(Boolean).length
+  const allAnswered =
+    criteria.length > 0 &&
+    answeredCount === criteria.length &&
+    missingEvidence === 0 &&
+    uploadingCount === 0
   const anyFail = criteria.some((c) => answers[c.id] === 'fail')
   const status: 'pass' | 'fail' | 'incomplete' = !allAnswered
     ? 'incomplete'
@@ -69,10 +85,16 @@ export function PpeInspectionForm({
               {kindLabel} criteria
             </p>
             <p className="text-xs text-slate-500">
-              Answer every criterion. High+ severity failures auto-spawn a corrective action.
+              Answer every criterion. High and critical failures create a corrective action.
             </p>
           </div>
-          <StatusBadge status={status} answered={answeredCount} total={criteria.length} />
+          <StatusBadge
+            status={status}
+            answered={answeredCount}
+            total={criteria.length}
+            missingEvidence={missingEvidence}
+            uploadingCount={uploadingCount}
+          />
         </div>
 
         <ul className="space-y-2">
@@ -129,6 +151,7 @@ export function PpeInspectionForm({
                           name={`criterion_${c.id}`}
                           value={a.value}
                           checked={active}
+                          disabled={uploading[c.id] === true}
                           onChange={() => setAnswers((prev) => ({ ...prev, [c.id]: a.value }))}
                           className="sr-only"
                         />
@@ -138,6 +161,57 @@ export function PpeInspectionForm({
                   })}
                 </div>
               </div>
+              {answers[c.id] === 'fail' ? (
+                <div className="mt-3 space-y-1.5 border-t border-red-200 pt-3 dark:border-red-900/70">
+                  <Label htmlFor={`criterion_reason_${c.id}`}>
+                    What failed? <span className="text-red-600">*</span>
+                  </Label>
+                  <Textarea
+                    id={`criterion_reason_${c.id}`}
+                    name={`criterion_reason_${c.id}`}
+                    value={reasons[c.id] ?? ''}
+                    maxLength={10_000}
+                    required
+                    rows={2}
+                    placeholder="Describe the defect or unsafe condition"
+                    onChange={(event) =>
+                      setReasons((previous) => ({ ...previous, [c.id]: event.target.value }))
+                    }
+                  />
+                </div>
+              ) : null}
+              {answers[c.id] && answers[c.id] !== 'n_a' ? (
+                <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>
+                      Photo evidence
+                      {c.requiresPhoto ? <span className="text-red-600"> *</span> : ''}
+                    </Label>
+                    {!c.requiresPhoto ? (
+                      <span className="text-xs text-slate-500">Optional</span>
+                    ) : null}
+                  </div>
+                  <FileUpload
+                    variant="photo"
+                    maxFiles={10}
+                    value={photos[c.id] ?? []}
+                    onChange={(files) => setPhotos((previous) => ({ ...previous, [c.id]: files }))}
+                    onUploadingChange={(isUploading) =>
+                      setUploading((previous) =>
+                        previous[c.id] === isUploading
+                          ? previous
+                          : { ...previous, [c.id]: isUploading },
+                      )
+                    }
+                  />
+                  <p className="text-xs text-slate-500">Up to 10 photos.</p>
+                </div>
+              ) : null}
+              <input
+                type="hidden"
+                name={`criterion_photos_${c.id}`}
+                value={(photos[c.id] ?? []).map((file) => file.attachmentId).join(',')}
+              />
             </li>
           ))}
         </ul>
@@ -149,7 +223,13 @@ export function PpeInspectionForm({
       </div>
 
       <div className="sticky bottom-0 mt-4 flex items-center justify-between gap-3 border-t border-slate-200 bg-white/95 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
-        <StatusBadge status={status} answered={answeredCount} total={criteria.length} />
+        <StatusBadge
+          status={status}
+          answered={answeredCount}
+          total={criteria.length}
+          missingEvidence={missingEvidence}
+          uploadingCount={uploadingCount}
+        />
         <Button type="submit" disabled={!allAnswered}>
           {status === 'fail' ? 'Record failed inspection' : 'Record inspection'}
         </Button>
@@ -162,15 +242,24 @@ function StatusBadge({
   status,
   answered,
   total,
+  missingEvidence,
+  uploadingCount,
 }: {
   status: 'pass' | 'fail' | 'incomplete'
   answered: number
   total: number
+  missingEvidence: number
+  uploadingCount: number
 }) {
   if (status === 'incomplete') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-        <CircleDashed size={13} /> {answered} of {total} answered
+        <CircleDashed size={13} />{' '}
+        {uploadingCount > 0
+          ? `Uploading ${uploadingCount} photo${uploadingCount === 1 ? '' : 's'}…`
+          : answered === total && missingEvidence > 0
+            ? `${missingEvidence} evidence item${missingEvidence === 1 ? '' : 's'} needed`
+            : `${answered} of ${total} answered`}
       </span>
     )
   }

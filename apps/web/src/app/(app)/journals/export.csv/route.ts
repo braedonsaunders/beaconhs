@@ -2,7 +2,12 @@ import type { NextRequest } from 'next/server'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { listEntries } from '../_data'
 import type { JournalDefinition, JournalFilters, JournalStatus } from '../_types'
@@ -26,7 +31,10 @@ export async function GET(req: NextRequest) {
     to: get('to'),
   }
 
-  const rows = await listEntries(ctx, filters, { limit: 5000 })
+  const rows = await listEntries(ctx, filters, { limit: CSV_EXPORT_QUERY_LIMIT })
+
+  const overflow = csvExportOverflowResponse(rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'journal_entry',

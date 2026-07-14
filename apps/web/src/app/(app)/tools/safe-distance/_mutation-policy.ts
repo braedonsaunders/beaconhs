@@ -52,7 +52,6 @@ const identitySchema = z
   })
   .strict()
 
-export type SafeDistanceSaveInput = z.input<typeof saveSchema>
 type ValidSafeDistanceSave = z.output<typeof saveSchema> & {
   description: string | null
   siteOrgUnitId: string | null
@@ -148,13 +147,10 @@ export function parseSafeDistanceIdentity(
 }
 
 type SafeDistanceStateMutation =
-  | { kind: 'save' }
-  | { kind: 'delete' }
-  | { kind: 'set_lock'; locked: boolean }
+  { kind: 'save' } | { kind: 'delete' } | { kind: 'set_lock'; locked: boolean }
 
 type SafeDistanceStateDecision =
-  | { ok: true; changed: boolean }
-  | { ok: false; error: string; reason: 'locked' | 'conflict' }
+  { ok: true; changed: boolean } | { ok: false; error: string; reason: 'locked' | 'conflict' }
 
 /**
  * Evaluated while the record row is held FOR UPDATE. The version prevents a

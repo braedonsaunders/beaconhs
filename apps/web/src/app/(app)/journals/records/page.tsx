@@ -18,11 +18,23 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
-import { countEntries, listEntries, listRecordsFacets, listTagSuggestions } from '../_data'
-import { getAuthorPersonId, journalCanBrowseAll, journalScopeWhere } from '../_lib'
-import type { JournalDefinition, JournalFilters, JournalSort, JournalStatus } from '../_types'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
+import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { countEntries, listEntries, listRecordsFacets, listTagColors } from '../_data'
+import { journalCanBrowseAll } from '../_lib'
+import {
+  JOURNAL_TAG_NAME_LIMIT,
+  type JournalDefinition,
+  type JournalFilters,
+  type JournalSort,
+  type JournalStatus,
+} from '../_types'
 import { JournalRecordsTable } from './_records-table'
+import {
+  loadJournalRecordAuthorOptions,
+  loadJournalRecordSiteOptions,
+  loadJournalRecordTagOptions,
+} from './_tag-picker-actions'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Journal records' }
@@ -38,6 +50,14 @@ const TYPE_OPTIONS = [
   { value: 'worker', label: 'Worker' },
   { value: 'supervisor', label: 'Supervisor' },
 ]
+
+function validDateParam(value: string | undefined): string | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    ? value
+    : undefined
+}
 
 export default async function JournalRecordsPage({
   searchParams,
@@ -56,21 +76,34 @@ export default async function JournalRecordsPage({
     allowedSorts: SORTS,
   })
 
+  const statusParam = pickString(sp.status)
+  const definitionParam = pickString(sp.definition)
+  const siteParam = pickString(sp.site)
+  const personParam = pickString(sp.person)
+  const tagParam = pickString(sp.tag)
   const filters: JournalFilters = {
     q: params.q,
-    status: pickString(sp.status) as JournalStatus | undefined,
-    definition: pickString(sp.definition) as JournalDefinition | undefined,
-    site: pickString(sp.site),
-    person: pickString(sp.person),
-    tag: pickString(sp.tag),
-    from: pickString(sp.from),
-    to: pickString(sp.to),
+    status: STATUS_OPTIONS.some((option) => option.value === statusParam)
+      ? (statusParam as JournalStatus)
+      : undefined,
+    definition: TYPE_OPTIONS.some((option) => option.value === definitionParam)
+      ? (definitionParam as JournalDefinition)
+      : undefined,
+    site: siteParam && isUuid(siteParam) ? siteParam : undefined,
+    person: personParam && isUuid(personParam) ? personParam : undefined,
+    tag:
+      tagParam &&
+      tagParam.length <= JOURNAL_TAG_NAME_LIMIT &&
+      !/[\u0000-\u001f\u007f]/.test(tagParam)
+        ? tagParam
+        : undefined,
+    from: validDateParam(pickString(sp.from)),
+    to: validDateParam(pickString(sp.to)),
   }
   const fromRaw = filters.from ?? ''
   const toRaw = filters.to ?? ''
 
-  const scope = journalScopeWhere(ctx, await getAuthorPersonId(ctx))
-  const [items, total, facets, tags] = await Promise.all([
+  const [items, total, facets] = await Promise.all([
     listEntries(ctx, filters, {
       limit: params.perPage,
       offset: (params.page - 1) * params.perPage,
@@ -79,10 +112,12 @@ export default async function JournalRecordsPage({
     }),
     countEntries(ctx, filters),
     listRecordsFacets(ctx),
-    listTagSuggestions(ctx, scope),
   ])
 
-  const tagColors = Object.fromEntries(tags.map((t) => [t.name, t.color]))
+  const tagColors = await listTagColors(
+    ctx,
+    items.flatMap((item) => item.tags),
+  )
   const sortProps = {
     basePath: '/journals/records',
     currentParams: sp,
@@ -124,36 +159,36 @@ export default async function JournalRecordsPage({
               allLabel="Any type"
               options={TYPE_OPTIONS}
             />
-            {facets.people.length > 0 ? (
-              <FilterChips
-                basePath="/journals/records"
-                currentParams={sp}
-                paramKey="person"
-                label="Author"
-                allLabel="All authors"
-                options={facets.people.map((p) => ({ value: p.id, label: p.name, count: p.count }))}
-              />
-            ) : null}
-            {facets.sites.length > 0 ? (
-              <FilterChips
-                basePath="/journals/records"
-                currentParams={sp}
-                paramKey="site"
-                label="Location"
-                allLabel="All locations"
-                options={facets.sites.map((s) => ({ value: s.id, label: s.name, count: s.count }))}
-              />
-            ) : null}
-            {tags.length > 0 ? (
-              <FilterChips
-                basePath="/journals/records"
-                currentParams={sp}
-                paramKey="tag"
-                label="Tag"
-                allLabel="Any tag"
-                options={tags.slice(0, 12).map((t) => ({ value: t.name, label: t.name }))}
-              />
-            ) : null}
+            <RemoteSearchFilter
+              loadOptions={loadJournalRecordAuthorOptions}
+              basePath="/journals/records"
+              currentParams={sp}
+              paramKey="person"
+              placeholder="All authors"
+              allLabel="All authors"
+              searchPlaceholder="Search journal authors…"
+              ariaLabel="Filter journal records by author"
+            />
+            <RemoteSearchFilter
+              loadOptions={loadJournalRecordSiteOptions}
+              basePath="/journals/records"
+              currentParams={sp}
+              paramKey="site"
+              placeholder="All locations"
+              allLabel="All locations"
+              searchPlaceholder="Search journal locations…"
+              ariaLabel="Filter journal records by location"
+            />
+            <RemoteSearchFilter
+              loadOptions={loadJournalRecordTagOptions}
+              basePath="/journals/records"
+              currentParams={sp}
+              paramKey="tag"
+              placeholder="Any tag"
+              allLabel="Any tag"
+              searchPlaceholder="Search tags used by journals…"
+              ariaLabel="Filter journal records by tag"
+            />
             <form method="get" className="flex items-center gap-1 text-xs">
               {Object.entries({
                 q: filters.q,

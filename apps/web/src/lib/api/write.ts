@@ -2,10 +2,11 @@
 // (that includes views and only a reporting subset of columns) — each writable
 // entity has a hand-written, validated create that mirrors the real server
 // action: zod-validated body, tenant-scoped FK checks, insert, audit. Adding an
-// entity = add a handler here; `WRITABLE_ENTITY_KEYS` and OpenAPI are derived
-// from this map, so docs and runtime permissions stay in sync.
+// entity = add a handler here; OpenAPI is derived from this map, so docs and
+// runtime permissions stay in sync.
 
 import { randomBytes, randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { and, eq, isNull } from 'drizzle-orm'
@@ -17,7 +18,6 @@ import {
   departments,
   documentCategories,
   documents,
-  documentStatus,
   documentTypes,
   equipmentCategories,
   equipmentItems,
@@ -37,16 +37,41 @@ import {
   ppeItems,
   ppeTypes,
   tenantUsers,
+  trainingCertificates,
   trainingCourses,
   trainingRecords,
   trainingRecordSource,
 } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import {
+  materializeEvidenceTargetObligations,
+  materializeEvidenceTargetsObligations,
+} from '@beaconhs/compliance'
 import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
-import { recordAudit } from '@/lib/audit'
-import { findIncompleteCriteria, materialiseCriteriaForRecord } from '@/app/(app)/inspections/_lib'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import {
+  documentKeyFromTitle,
+  isDocumentKeyConflict,
+  parseDocumentKey,
+} from '@/lib/document-key-policy'
+import { DOCUMENT_METADATA_LIMITS } from '@/lib/document-metadata-limits'
+import { softDeleteDocumentsInTransaction } from '@/lib/document-deletion'
+import {
+  InspectionTransitionError,
+  assertInspectionStatusTransitionInTx,
+  inspectionStatusMilestonePatch,
+  lockInspectionRecordForMutation,
+  materialiseCriteriaForRecordInTx,
+  nextInspectionReferenceInTx,
+} from '@/app/(app)/inspections/_lib'
 import { nextReference } from '@/lib/reference'
+import { openEquipmentCheckoutItemIds, refreshEquipmentAvailability } from '@/lib/equipment-custody'
+import {
+  materializeEquipmentTypeEvidence,
+  materializePpeTypeEvidence,
+} from '@/lib/compliance-type-evidence'
+import { isUuid } from '@/lib/list-params'
 import { ApiError } from './errors'
 
 type Json = Record<string, unknown>
@@ -70,9 +95,7 @@ type WriteRegistration = {
   }
 }
 
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
-  message: 'Expected a uuid',
-})
+const uuid = z.string().refine(isUuid, { message: 'Expected a uuid' })
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Expected a date (YYYY-MM-DD)' })
 const metadata = z.record(z.string(), z.unknown()).default({})
 
@@ -579,24 +602,28 @@ async function createCorrectiveAction(ctx: RequestContext, raw: unknown): Promis
           }),
         },
       })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'corrective_action',
+        entityId: created.id,
+        action: 'create',
+        summary: `Created ${created.reference}: ${created.title}`,
+        after: {
+          reference: created.reference,
+          severity: created.severity,
+          source: created.source,
+          dueOn: created.dueOn,
+          siteOrgUnitId: created.siteOrgUnitId,
+        },
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
+      })
     }
     return created
   })
 
   if (!row) throw new ApiError(500, 'internal', 'Failed to create corrective action')
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: row.id,
-    action: 'create',
-    summary: `Created ${row.reference}: ${row.title}`,
-    after: {
-      reference: row.reference,
-      severity: row.severity,
-      source: row.source,
-      dueOn: row.dueOn,
-      siteOrgUnitId: row.siteOrgUnitId,
-    },
-  })
   revalidatePath('/corrective-actions')
 
   return correctiveActionResult(row)
@@ -640,6 +667,7 @@ async function updateCorrectiveAction(
       .from(correctiveActions)
       .where(eq(correctiveActions.id, id))
       .limit(1)
+      .for('update')
     if (!before || before.deletedAt) {
       throw ApiError.notFound(`No corrective_actions with id ${id}`)
     }
@@ -700,28 +728,34 @@ async function updateCorrectiveAction(
         occurrenceKey: randomUUID(),
       })
     }
+    if (updated) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'corrective_action',
+        entityId: id,
+        action: 'update',
+        summary: `Updated ${updated.reference}: ${updated.title}`,
+        before: {
+          title: before.title,
+          status: before.status,
+          severity: before.severity,
+          ownerTenantUserId: before.ownerTenantUserId,
+        },
+        after: {
+          title: updated.title,
+          status: updated.status,
+          severity: updated.severity,
+          ownerTenantUserId: updated.ownerTenantUserId,
+        },
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
+      })
+    }
     return { before, updated }
   })
 
   if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update corrective action')
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${result.updated.reference}: ${result.updated.title}`,
-    before: {
-      title: result.before.title,
-      status: result.before.status,
-      severity: result.before.severity,
-      ownerTenantUserId: result.before.ownerTenantUserId,
-    },
-    after: {
-      title: result.updated.title,
-      status: result.updated.status,
-      severity: result.updated.severity,
-      ownerTenantUserId: result.updated.ownerTenantUserId,
-    },
-  })
   revalidatePath('/corrective-actions')
   revalidatePath(`/corrective-actions/${id}`)
   return correctiveActionResult(result.updated)
@@ -734,25 +768,30 @@ async function deleteCorrectiveAction(ctx: RequestContext, id: string): Promise<
       .from(correctiveActions)
       .where(eq(correctiveActions.id, id))
       .limit(1)
+      .for('update')
     if (!before || before.deletedAt) {
       throw ApiError.notFound(`No corrective_actions with id ${id}`)
     }
     if (before.locked) throw ApiError.invalid('Corrective action is locked and cannot be archived')
     const deletedAt = new Date()
     await tx.update(correctiveActions).set({ deletedAt }).where(eq(correctiveActions.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: id,
+      action: 'delete',
+      summary: `Archived ${before.reference}: ${before.title}`,
+      before: {
+        reference: before.reference,
+        title: before.title,
+        status: before.status,
+      },
+      after: { deletedAt },
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'corrective_action',
+      targetRef: {},
+    })
     return { before, deletedAt }
-  })
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: id,
-    action: 'delete',
-    summary: `Archived ${result.before.reference}: ${result.before.title}`,
-    before: {
-      reference: result.before.reference,
-      title: result.before.title,
-      status: result.before.status,
-    },
-    after: { deletedAt: result.deletedAt },
   })
   revalidatePath('/corrective-actions')
   revalidatePath(`/corrective-actions/${id}`)
@@ -829,14 +868,6 @@ async function ensureInspectionType(tx: TenantTx, typeId: string): Promise<void>
   if (!type) throw ApiError.invalid(`No published inspection type with id ${typeId}`)
 }
 
-async function nextInspectionReferenceInTx(
-  tx: TenantTx,
-  tenantId: string,
-  occurredAt: Date,
-): Promise<string> {
-  return nextReference(tx, tenantId, 'inspection', occurredAt.getFullYear())
-}
-
 async function createInspection(ctx: RequestContext, raw: unknown): Promise<WriteResult> {
   const parsed = inspectionCreate.safeParse(raw)
   if (!parsed.success) throw validationError(parsed.error)
@@ -873,31 +904,34 @@ async function createInspection(ctx: RequestContext, raw: unknown): Promise<Writ
         metadata: b.metadata,
       })
       .returning()
-    if (created) {
-      await recordModuleFlowEvent(tx, ctx, {
-        subjectId: created.id,
-        moduleKey: 'inspections',
-        event: 'on_create',
-        occurrenceKey: randomUUID(),
-      })
-    }
+    if (!created) throw new ApiError(500, 'internal', 'Failed to create inspection record')
+    const materialised = await materialiseCriteriaForRecordInTx(
+      tx,
+      ctx.tenantId,
+      created.id,
+      created.typeId,
+    )
+    await recordModuleFlowEvent(tx, ctx, {
+      subjectId: created.id,
+      moduleKey: 'inspections',
+      event: 'on_create',
+      occurrenceKey: created.id,
+    })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: created.id,
+      action: 'create',
+      summary: `Started ${created.reference} — materialised ${materialised} criteria`,
+      after: {
+        reference: created.reference,
+        typeId: created.typeId,
+        occurredAt: created.occurredAt,
+        siteOrgUnitId: created.siteOrgUnitId,
+      },
+    })
     return created
   })
 
-  if (!row) throw new ApiError(500, 'internal', 'Failed to create inspection record')
-  const materialised = await materialiseCriteriaForRecord(ctx, row.id, row.typeId)
-  await recordAudit(ctx, {
-    entityType: 'inspection_record',
-    entityId: row.id,
-    action: 'create',
-    summary: `Started ${row.reference} — materialised ${materialised} criteria`,
-    after: {
-      reference: row.reference,
-      typeId: row.typeId,
-      occurredAt: row.occurredAt,
-      siteOrgUnitId: row.siteOrgUnitId,
-    },
-  })
   revalidatePath('/inspections/records')
   return inspectionResult(row)
 }
@@ -934,13 +968,11 @@ async function updateInspection(
   const b = parsed.data
 
   const result = await ctx.db(async (tx) => {
-    const [before] = await tx
-      .select()
-      .from(inspectionRecords)
-      .where(eq(inspectionRecords.id, id))
-      .limit(1)
-    if (!before || before.deletedAt) throw ApiError.notFound(`No inspections with id ${id}`)
-    if (before.locked) throw ApiError.invalid('Inspection is locked and cannot be updated')
+    const before = await lockInspectionRecordForMutation(tx, ctx.tenantId, id)
+    if (!before) throw ApiError.notFound(`No inspections with id ${id}`)
+    if (before.locked || before.status === 'closed') {
+      throw ApiError.invalid('Inspection is closed or locked and cannot be updated')
+    }
 
     if (b.typeId && b.typeId !== before.typeId) {
       throw ApiError.invalid('Inspection type cannot be changed after record creation')
@@ -972,39 +1004,54 @@ async function updateInspection(
     }
     if (hasOwn(b, 'notes')) patch.notes = stripEmpty(b.notes)
     if (hasOwn(b, 'metadata')) patch.metadata = b.metadata
-    if (hasOwn(b, 'status')) {
-      patch.status = b.status
-      if (b.status === 'submitted' || b.status === 'closed') {
-        const missing = await findIncompleteCriteria(ctx, id)
-        if (missing.length > 0) {
-          throw ApiError.invalid(
-            `Cannot submit: ${missing.length} inspection item${missing.length === 1 ? '' : 's'} incomplete`,
-            missing,
-          )
+    const requestedStatus = b.status
+    if (requestedStatus !== undefined && requestedStatus !== before.status) {
+      const prospective = { ...before, ...patch }
+      try {
+        await assertInspectionStatusTransitionInTx(tx, ctx.tenantId, prospective, requestedStatus)
+      } catch (error) {
+        if (error instanceof InspectionTransitionError) {
+          throw ApiError.invalid(error.message, error.details)
         }
-        patch.submittedAt = new Date()
-        patch.submittedByTenantUserId = safeTenantUserId(ctx)
+        throw error
       }
-      if (b.status === 'closed') {
-        patch.closedAt = new Date()
-        patch.closedByTenantUserId = safeTenantUserId(ctx)
-        patch.locked = true
-      }
-      if (b.status === 'draft' || b.status === 'in_progress') {
-        patch.submittedAt = null
-        patch.submittedByTenantUserId = null
-        patch.closedAt = null
-        patch.closedByTenantUserId = null
-      }
+      Object.assign(
+        patch,
+        inspectionStatusMilestonePatch(
+          prospective,
+          requestedStatus,
+          safeTenantUserId(ctx),
+          new Date(),
+        ),
+      )
+    } else if (requestedStatus !== undefined) {
+      patch.status = requestedStatus
     }
     assertPatchNotEmpty(patch)
 
+    const effectivePatch = Object.fromEntries(
+      Object.entries(patch).filter(
+        ([key, value]) => !isDeepStrictEqual(before[key as keyof typeof before], value),
+      ),
+    ) as Partial<typeof inspectionRecords.$inferInsert>
+    if (Object.keys(effectivePatch).length === 0) {
+      return { before, updated: before, changed: false }
+    }
+
     const [updated] = await tx
       .update(inspectionRecords)
-      .set(patch)
-      .where(eq(inspectionRecords.id, id))
+      .set(effectivePatch)
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, id),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
       .returning()
-    if (updated && before.status !== updated.status) {
+    if (!updated) throw new ApiError(500, 'internal', 'Failed to update inspection record')
+    const statusChanged = before.status !== updated.status
+    if (statusChanged) {
       const occurrenceKey = randomUUID()
       await recordModuleFlowEvent(tx, ctx, {
         subjectId: id,
@@ -1013,7 +1060,9 @@ async function updateInspection(
         toStatus: updated.status,
         occurrenceKey,
       })
-      if (updated.status === 'submitted') {
+      const wasSubmitted = before.status === 'submitted'
+      const isSubmitted = updated.status === 'submitted' || updated.status === 'closed'
+      if (isSubmitted && !wasSubmitted) {
         await recordModuleFlowEvent(tx, ctx, {
           subjectId: id,
           moduleKey: 'inspections',
@@ -1022,55 +1071,79 @@ async function updateInspection(
         })
       }
     }
-    return { before, updated }
+    if (
+      statusChanged ||
+      hasOwn(effectivePatch, 'occurredAt') ||
+      hasOwn(effectivePatch, 'inspectorTenantUserId')
+    ) {
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'inspection',
+        targetRef: { inspectionTypeId: updated.typeId },
+      })
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${updated.reference}`,
+      before: {
+        status: before.status,
+        occurredAt: before.occurredAt,
+        siteOrgUnitId: before.siteOrgUnitId,
+      },
+      after: {
+        status: updated.status,
+        occurredAt: updated.occurredAt,
+        siteOrgUnitId: updated.siteOrgUnitId,
+      },
+    })
+    return { before, updated, changed: true }
   })
 
-  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update inspection record')
-  await recordAudit(ctx, {
-    entityType: 'inspection_record',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${result.updated.reference}`,
-    before: {
-      status: result.before.status,
-      occurredAt: result.before.occurredAt,
-      siteOrgUnitId: result.before.siteOrgUnitId,
-    },
-    after: {
-      status: result.updated.status,
-      occurredAt: result.updated.occurredAt,
-      siteOrgUnitId: result.updated.siteOrgUnitId,
-    },
-  })
-  revalidatePath('/inspections/records')
-  revalidatePath(`/inspections/records/${id}`)
+  if (result.changed) {
+    revalidatePath('/inspections/records')
+    revalidatePath(`/inspections/records/${id}`)
+  }
   return inspectionResult(result.updated)
 }
 
 async function deleteInspection(ctx: RequestContext, id: string): Promise<WriteResult> {
   const result = await ctx.db(async (tx) => {
-    const [before] = await tx
-      .select()
-      .from(inspectionRecords)
-      .where(eq(inspectionRecords.id, id))
-      .limit(1)
-    if (!before || before.deletedAt) throw ApiError.notFound(`No inspections with id ${id}`)
-    if (before.locked) throw ApiError.invalid('Inspection is locked and cannot be archived')
+    const before = await lockInspectionRecordForMutation(tx, ctx.tenantId, id)
+    if (!before) throw ApiError.notFound(`No inspections with id ${id}`)
+    if (before.locked || before.status === 'closed') {
+      throw ApiError.invalid('Inspection is closed or locked and cannot be archived')
+    }
     const deletedAt = new Date()
-    await tx.update(inspectionRecords).set({ deletedAt }).where(eq(inspectionRecords.id, id))
+    const [archived] = await tx
+      .update(inspectionRecords)
+      .set({ deletedAt })
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, id),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
+      .returning({ id: inspectionRecords.id })
+    if (!archived) throw new ApiError(500, 'internal', 'Failed to archive inspection record')
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'inspection',
+      targetRef: { inspectionTypeId: before.typeId },
+    })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: id,
+      action: 'delete',
+      summary: `Archived ${before.reference}`,
+      before: {
+        reference: before.reference,
+        status: before.status,
+        occurredAt: before.occurredAt,
+      },
+      after: { deletedAt },
+    })
     return { before, deletedAt }
-  })
-  await recordAudit(ctx, {
-    entityType: 'inspection_record',
-    entityId: id,
-    action: 'delete',
-    summary: `Archived ${result.before.reference}`,
-    before: {
-      reference: result.before.reference,
-      status: result.before.status,
-      occurredAt: result.before.occurredAt,
-    },
-    after: { deletedAt: result.deletedAt },
   })
   revalidatePath('/inspections/records')
   revalidatePath(`/inspections/records/${id}`)
@@ -1107,7 +1180,8 @@ const INSPECTION_PATCH_BODY: Json = {
     status: {
       type: 'string',
       enum: inspectionRecordStatus.enumValues,
-      description: 'Submitting or closing requires all materialized criteria to be complete.',
+      description:
+        'Submitting or closing requires complete criteria. Closing also enforces the inspection type’s required customer signature and foreman.',
     },
   },
 }
@@ -1115,33 +1189,22 @@ const INSPECTION_PATCH_BODY: Json = {
 // --- documents ---------------------------------------------------------------
 
 const documentCreate = z.object({
-  title: z.string().trim().min(1).max(240),
-  key: z.string().trim().max(160).nullish(),
-  description: z.string().max(5000).nullish(),
+  title: z.string().trim().min(1).max(DOCUMENT_METADATA_LIMITS.title),
+  key: z.string().trim().max(DOCUMENT_METADATA_LIMITS.key).nullish(),
+  description: z.string().max(DOCUMENT_METADATA_LIMITS.description).nullish(),
   typeId: uuid.nullish(),
   categoryId: uuid.nullish(),
   ownerTenantUserId: uuid.nullish(),
-  reviewFrequencyMonths: z.number().int().positive().max(120).nullish(),
+  reviewFrequencyMonths: z
+    .number()
+    .int()
+    .positive()
+    .max(DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths)
+    .nullish(),
   nextReviewOn: isoDate.nullish(),
-  requiredForRoleKeys: z.array(z.string().trim().min(1).max(120)).default([]),
-  requiredForTradeIds: z.array(uuid).default([]),
 })
 
-const documentPatch = documentCreate.partial().extend({
-  requiredForRoleKeys: z.array(z.string().trim().min(1).max(120)).optional(),
-  requiredForTradeIds: z.array(uuid).optional(),
-  status: z.enum(documentStatus.enumValues).optional(),
-})
-
-function slugifyDocumentKey(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_\-\s]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120)
-}
+const documentPatch = documentCreate.partial()
 
 async function ensureDocumentType(tx: TenantTx, id: string | null | undefined): Promise<void> {
   if (!id) return
@@ -1175,8 +1238,6 @@ function documentResult(row: typeof documents.$inferSelect): WriteResult {
     owner_tenant_user_id: row.ownerTenantUserId,
     review_frequency_months: row.reviewFrequencyMonths,
     next_review_on: row.nextReviewOn,
-    required_for_role_keys: row.requiredForRoleKeys,
-    required_for_trade_ids: row.requiredForTradeIds,
   }
 }
 
@@ -1184,48 +1245,58 @@ async function createDocument(ctx: RequestContext, raw: unknown): Promise<WriteR
   const parsed = documentCreate.safeParse(raw)
   if (!parsed.success) throw validationError(parsed.error)
   const b = parsed.data
-  const key = slugifyDocumentKey(b.key || b.title) || `document-${randomBytes(4).toString('hex')}`
+  const parsedKey = b.key ? parseDocumentKey(b.key) : null
+  if (parsedKey && !parsedKey.ok) throw ApiError.invalid(parsedKey.error)
+  const key =
+    (parsedKey?.ok ? parsedKey.key : documentKeyFromTitle(b.title)) ||
+    `document-${randomBytes(4).toString('hex')}`
 
-  const row = await ctx.db(async (tx) => {
-    await ensureDocumentType(tx, b.typeId)
-    await ensureDocumentCategory(tx, b.categoryId)
-    await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
+  let row: typeof documents.$inferSelect | null
+  try {
+    row = await ctx.db(async (tx) => {
+      await ensureDocumentType(tx, b.typeId)
+      await ensureDocumentCategory(tx, b.categoryId)
+      await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
 
-    const [created] = await tx
-      .insert(documents)
-      .values({
-        tenantId: ctx.tenantId,
-        key,
-        title: b.title,
-        description: stripEmpty(b.description),
-        typeId: b.typeId ?? null,
-        categoryId: b.categoryId ?? null,
-        status: 'draft',
-        ownerTenantUserId: b.ownerTenantUserId ?? null,
-        reviewFrequencyMonths: b.reviewFrequencyMonths ?? null,
-        nextReviewOn: optionalDate(b.nextReviewOn),
-        requiredForRoleKeys: b.requiredForRoleKeys,
-        requiredForTradeIds: b.requiredForTradeIds,
+      const [created] = await tx
+        .insert(documents)
+        .values({
+          tenantId: ctx.tenantId,
+          key,
+          title: b.title,
+          description: stripEmpty(b.description),
+          typeId: b.typeId ?? null,
+          categoryId: b.categoryId ?? null,
+          status: 'draft',
+          ownerTenantUserId: b.ownerTenantUserId ?? null,
+          reviewFrequencyMonths: b.reviewFrequencyMonths ?? null,
+          nextReviewOn: optionalDate(b.nextReviewOn),
+        })
+        .returning()
+      if (!created) return null
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document',
+        entityId: created.id,
+        action: 'create',
+        summary: `Created document ${created.key}: ${created.title}`,
+        after: {
+          key: created.key,
+          title: created.title,
+          status: created.status,
+          typeId: created.typeId,
+          categoryId: created.categoryId,
+        },
       })
-      .returning()
-    if (!created) return null
-    return created
-  })
+      return created
+    })
+  } catch (error) {
+    if (isDocumentKeyConflict(error)) {
+      throw ApiError.conflict(`A live document already uses the key "${key}"`)
+    }
+    throw error
+  }
 
   if (!row) throw new ApiError(500, 'internal', 'Failed to create document')
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: row.id,
-    action: 'create',
-    summary: `Created document ${row.key}: ${row.title}`,
-    after: {
-      key: row.key,
-      title: row.title,
-      status: row.status,
-      typeId: row.typeId,
-      categoryId: row.categoryId,
-    },
-  })
   revalidatePath('/documents')
   return documentResult(row)
 }
@@ -1235,78 +1306,97 @@ async function updateDocument(ctx: RequestContext, id: string, raw: unknown): Pr
   if (!parsed.success) throw validationError(parsed.error)
   const b = parsed.data
 
-  const result = await ctx.db(async (tx) => {
-    const [before] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
-    if (!before || before.deletedAt) throw ApiError.notFound(`No documents with id ${id}`)
+  let updated: typeof documents.$inferSelect | undefined
+  try {
+    updated = await ctx.db(async (tx) => {
+      const [before] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+      if (!before || before.deletedAt) throw ApiError.notFound(`No documents with id ${id}`)
 
-    await ensureDocumentType(tx, b.typeId)
-    await ensureDocumentCategory(tx, b.categoryId)
-    await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
+      await ensureDocumentType(tx, b.typeId)
+      await ensureDocumentCategory(tx, b.categoryId)
+      await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
 
-    const patch: Partial<typeof documents.$inferInsert> = {}
-    if (hasOwn(b, 'title')) patch.title = b.title
-    if (hasOwn(b, 'key')) {
-      const key = slugifyDocumentKey(b.key ?? '')
-      if (key) patch.key = key
+      const patch: Partial<typeof documents.$inferInsert> = {}
+      if (hasOwn(b, 'title')) patch.title = b.title
+      if (hasOwn(b, 'key') && b.key != null) {
+        const parsedKey = parseDocumentKey(b.key)
+        if (!parsedKey.ok) throw ApiError.invalid(parsedKey.error)
+        patch.key = parsedKey.key
+      }
+      if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
+      if (hasOwn(b, 'typeId')) patch.typeId = b.typeId ?? null
+      if (hasOwn(b, 'categoryId')) patch.categoryId = b.categoryId ?? null
+      if (hasOwn(b, 'ownerTenantUserId')) patch.ownerTenantUserId = b.ownerTenantUserId ?? null
+      if (hasOwn(b, 'reviewFrequencyMonths')) {
+        patch.reviewFrequencyMonths = b.reviewFrequencyMonths ?? null
+      }
+      if (hasOwn(b, 'nextReviewOn')) patch.nextReviewOn = optionalDate(b.nextReviewOn)
+      assertPatchNotEmpty(patch)
+
+      const [row] = await tx.update(documents).set(patch).where(eq(documents.id, id)).returning()
+      if (row) {
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'document',
+          entityId: id,
+          action: row.status === 'published' ? 'publish' : 'update',
+          summary: `Updated document ${row.key}: ${row.title}`,
+          before: {
+            key: before.key,
+            title: before.title,
+            status: before.status,
+          },
+          after: {
+            key: row.key,
+            title: row.title,
+            status: row.status,
+          },
+        })
+      }
+      return row
+    })
+  } catch (error) {
+    if (isDocumentKeyConflict(error)) {
+      throw ApiError.conflict('A live document already uses that key')
     }
-    if (hasOwn(b, 'description')) patch.description = stripEmpty(b.description)
-    if (hasOwn(b, 'typeId')) patch.typeId = b.typeId ?? null
-    if (hasOwn(b, 'categoryId')) patch.categoryId = b.categoryId ?? null
-    if (hasOwn(b, 'status')) patch.status = b.status
-    if (hasOwn(b, 'ownerTenantUserId')) patch.ownerTenantUserId = b.ownerTenantUserId ?? null
-    if (hasOwn(b, 'reviewFrequencyMonths')) {
-      patch.reviewFrequencyMonths = b.reviewFrequencyMonths ?? null
-    }
-    if (hasOwn(b, 'nextReviewOn')) patch.nextReviewOn = optionalDate(b.nextReviewOn)
-    if (hasOwn(b, 'requiredForRoleKeys')) patch.requiredForRoleKeys = b.requiredForRoleKeys ?? []
-    if (hasOwn(b, 'requiredForTradeIds')) patch.requiredForTradeIds = b.requiredForTradeIds ?? []
-    assertPatchNotEmpty(patch)
+    throw error
+  }
 
-    const [updated] = await tx.update(documents).set(patch).where(eq(documents.id, id)).returning()
-    return { before, updated }
-  })
-
-  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update document')
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: result.updated.status === 'published' ? 'publish' : 'update',
-    summary: `Updated document ${result.updated.key}: ${result.updated.title}`,
-    before: {
-      key: result.before.key,
-      title: result.before.title,
-      status: result.before.status,
-    },
-    after: {
-      key: result.updated.key,
-      title: result.updated.title,
-      status: result.updated.status,
-    },
-  })
+  if (!updated) throw new ApiError(500, 'internal', 'Failed to update document')
   revalidatePath('/documents')
   revalidatePath(`/documents/${id}`)
-  return documentResult(result.updated)
+  return documentResult(updated)
 }
 
 async function deleteDocument(ctx: RequestContext, id: string): Promise<WriteResult> {
   const result = await ctx.db(async (tx) => {
-    const [before] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1)
+    const [before] = await tx
+      .select()
+      .from(documents)
+      .where(eq(documents.id, id))
+      .limit(1)
+      .for('update')
     if (!before || before.deletedAt) throw ApiError.notFound(`No documents with id ${id}`)
-    const deletedAt = new Date()
-    await tx.update(documents).set({ deletedAt }).where(eq(documents.id, id))
-    return { before, deletedAt }
-  })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: 'delete',
-    summary: `Archived document ${result.before.key}: ${result.before.title}`,
-    before: {
-      key: result.before.key,
-      title: result.before.title,
-      status: result.before.status,
-    },
-    after: { deletedAt: result.deletedAt },
+    const deleted = await softDeleteDocumentsInTransaction(tx, ctx.tenantId, [id])
+    if (deleted.protectedIds.includes(id)) {
+      throw ApiError.conflict(
+        'This document is required by an active compliance obligation or a published book. End the obligation or unpublish the book first.',
+      )
+    }
+    if (!deleted.deletedIds.includes(id)) throw ApiError.notFound(`No documents with id ${id}`)
+    if (!deleted.deletedAt) throw new Error('Document deletion timestamp was not recorded')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document',
+      entityId: id,
+      action: 'delete',
+      summary: `Deleted document ${before.key}: ${before.title}`,
+      before: {
+        key: before.key,
+        title: before.title,
+        status: before.status,
+      },
+      after: { deletedAt: deleted.deletedAt },
+    })
+    return { before, deletedAt: deleted.deletedAt }
   })
   revalidatePath('/documents')
   revalidatePath(`/documents/${id}`)
@@ -1322,29 +1412,15 @@ const DOCUMENT_BODY: Json = {
     title: { type: 'string', maxLength: 240 },
     key: { type: 'string', description: 'Slug. Defaults from title when omitted.' },
     description: { type: 'string' },
-    category: { type: 'string', description: 'Legacy/freeform category label.' },
     typeId: { type: 'string', format: 'uuid' },
     categoryId: { type: 'string', format: 'uuid' },
     ownerTenantUserId: { type: 'string', format: 'uuid' },
     reviewFrequencyMonths: { type: 'integer', minimum: 1, maximum: 120 },
     nextReviewOn: { type: 'string', format: 'date' },
-    requiredForRoleKeys: { type: 'array', items: { type: 'string' } },
-    requiredForTradeIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
   },
 }
 
-const DOCUMENT_PATCH_BODY: Json = {
-  ...optionalObjectSchema(DOCUMENT_BODY),
-  properties: {
-    ...(DOCUMENT_BODY.properties as Json),
-    status: {
-      type: 'string',
-      enum: documentStatus.enumValues,
-      description:
-        'Metadata lifecycle status only. Publishing document content still runs through the editor/version workflow.',
-    },
-  },
-}
+const DOCUMENT_PATCH_BODY: Json = optionalObjectSchema(DOCUMENT_BODY)
 
 // --- equipment ---------------------------------------------------------------
 
@@ -1374,32 +1450,54 @@ const equipmentCreate = z.object({
   metadata,
 })
 
+type EquipmentReferenceInput = Pick<
+  z.infer<typeof equipmentCreate>,
+  'typeId' | 'categoryId' | 'currentSiteOrgUnitId' | 'currentHolderPersonId'
+>
+
+async function ensureEquipmentReferences(
+  tx: TenantTx,
+  input: EquipmentReferenceInput,
+): Promise<void> {
+  if (input.typeId) {
+    const [type] = await tx
+      .select({ id: equipmentTypes.id })
+      .from(equipmentTypes)
+      .where(eq(equipmentTypes.id, input.typeId))
+      .limit(1)
+    if (!type) throw ApiError.invalid(`No equipment type with id ${input.typeId} in this tenant`)
+  }
+  if (input.categoryId) {
+    const [category] = await tx
+      .select({ id: equipmentCategories.id })
+      .from(equipmentCategories)
+      .where(eq(equipmentCategories.id, input.categoryId))
+      .limit(1)
+    if (!category) {
+      throw ApiError.invalid(`No equipment category with id ${input.categoryId} in this tenant`)
+    }
+  }
+  await ensureSite(tx, input.currentSiteOrgUnitId)
+  await ensurePerson(tx, input.currentHolderPersonId, 'holder')
+  if (input.currentHolderPersonId) {
+    const [activeHolder] = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.id, input.currentHolderPersonId), eq(people.status, 'active')))
+      .limit(1)
+    if (!activeHolder) {
+      throw ApiError.invalid(`Holder ${input.currentHolderPersonId} is not active`)
+    }
+  }
+}
+
 async function createEquipment(ctx: RequestContext, raw: unknown): Promise<WriteResult> {
   const parsed = equipmentCreate.safeParse(raw)
   if (!parsed.success) throw validationError(parsed.error)
   const b = parsed.data
 
   const row = await ctx.db(async (tx) => {
-    if (b.typeId) {
-      const [type] = await tx
-        .select({ id: equipmentTypes.id })
-        .from(equipmentTypes)
-        .where(eq(equipmentTypes.id, b.typeId))
-        .limit(1)
-      if (!type) throw ApiError.invalid(`No equipment type with id ${b.typeId} in this tenant`)
-    }
-    if (b.categoryId) {
-      const [category] = await tx
-        .select({ id: equipmentCategories.id })
-        .from(equipmentCategories)
-        .where(eq(equipmentCategories.id, b.categoryId))
-        .limit(1)
-      if (!category) {
-        throw ApiError.invalid(`No equipment category with id ${b.categoryId} in this tenant`)
-      }
-    }
-    await ensureSite(tx, b.currentSiteOrgUnitId)
-    await ensurePerson(tx, b.currentHolderPersonId, 'holder')
+    await ensureEquipmentReferences(tx, b)
 
     const [existing] = await tx
       .select({ id: equipmentItems.id })
@@ -1408,6 +1506,7 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
       .limit(1)
     if (existing) throw ApiError.invalid(`Equipment asset tag "${b.assetTag}" already exists`)
 
+    const custodyRecordedAt = b.currentSiteOrgUnitId || b.currentHolderPersonId ? new Date() : null
     const [created] = await tx
       .insert(equipmentItems)
       .values({
@@ -1431,6 +1530,9 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
         warrantyExpiresOn: optionalDate(b.warrantyExpiresOn),
         currentSiteOrgUnitId: b.currentSiteOrgUnitId ?? null,
         currentHolderPersonId: b.currentHolderPersonId ?? null,
+        lastSeenAt: custodyRecordedAt,
+        lastSeenSiteOrgUnitId: b.currentSiteOrgUnitId ?? null,
+        lastSeenHolderPersonId: b.currentHolderPersonId ?? null,
         requiresPreUseInspection: b.requiresPreUseInspection,
         requiresOilChange: b.requiresOilChange,
         oilChangeIntervalMonths: b.oilChangeIntervalMonths ?? null,
@@ -1440,23 +1542,40 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
         metadata: b.metadata,
       })
       .returning()
+    if (created && custodyRecordedAt) {
+      await tx.insert(equipmentLocationHistory).values({
+        tenantId: ctx.tenantId,
+        itemId: created.id,
+        siteOrgUnitId: b.currentSiteOrgUnitId ?? null,
+        holderPersonId: b.currentHolderPersonId ?? null,
+        recordedByTenantUserId: safeTenantUserId(ctx),
+        recordedAt: custodyRecordedAt,
+        note: 'Initial placement via public API',
+      })
+    }
+    if (created) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment',
+        entityId: created.id,
+        action: 'create',
+        summary: `Created equipment ${created.assetTag}: ${created.name}`,
+        after: {
+          assetTag: created.assetTag,
+          name: created.name,
+          status: created.status,
+          currentSiteOrgUnitId: created.currentSiteOrgUnitId,
+          currentHolderPersonId: created.currentHolderPersonId,
+        },
+      })
+      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [created.typeId])
+    }
     return created
   })
 
   if (!row) throw new ApiError(500, 'internal', 'Failed to create equipment item')
-  await recordAudit(ctx, {
-    entityType: 'equipment_item',
-    entityId: row.id,
-    action: 'create',
-    summary: `Created equipment ${row.assetTag}: ${row.name}`,
-    after: {
-      assetTag: row.assetTag,
-      name: row.name,
-      status: row.status,
-      currentSiteOrgUnitId: row.currentSiteOrgUnitId,
-    },
-  })
   revalidatePath('/equipment')
+  revalidatePath('/equipment/station')
+  revalidatePath('/dashboard')
 
   return equipmentResult(row)
 }
@@ -1490,28 +1609,10 @@ async function updateEquipment(
       .from(equipmentItems)
       .where(eq(equipmentItems.id, id))
       .limit(1)
+      .for('update')
     if (!before || before.deletedAt) throw ApiError.notFound(`No equipment with id ${id}`)
 
-    if (b.typeId) {
-      const [type] = await tx
-        .select({ id: equipmentTypes.id })
-        .from(equipmentTypes)
-        .where(eq(equipmentTypes.id, b.typeId))
-        .limit(1)
-      if (!type) throw ApiError.invalid(`No equipment type with id ${b.typeId} in this tenant`)
-    }
-    if (b.categoryId) {
-      const [category] = await tx
-        .select({ id: equipmentCategories.id })
-        .from(equipmentCategories)
-        .where(eq(equipmentCategories.id, b.categoryId))
-        .limit(1)
-      if (!category) {
-        throw ApiError.invalid(`No equipment category with id ${b.categoryId} in this tenant`)
-      }
-    }
-    await ensureSite(tx, b.currentSiteOrgUnitId)
-    await ensurePerson(tx, b.currentHolderPersonId, 'holder')
+    await ensureEquipmentReferences(tx, b)
 
     const nextAssetTag = hasOwn(b, 'assetTag') ? b.assetTag : undefined
     if (nextAssetTag && nextAssetTag !== before.assetTag) {
@@ -1566,58 +1667,89 @@ async function updateEquipment(
     const nextHolder = hasOwn(b, 'currentHolderPersonId')
       ? (b.currentHolderPersonId ?? null)
       : before.currentHolderPersonId
-    const nextStatus = hasOwn(b, 'status') ? b.status : before.status
-    if (hasOwn(b, 'currentHolderPersonId') || hasOwn(b, 'status')) {
-      patch.isAvailableForCheckout = !nextHolder && nextStatus === 'in_service'
-    }
-    assertPatchNotEmpty(patch)
-
-    const [updated] = await tx
-      .update(equipmentItems)
-      .set(patch)
-      .where(eq(equipmentItems.id, id))
-      .returning()
-
     const nextSite = hasOwn(b, 'currentSiteOrgUnitId')
       ? (b.currentSiteOrgUnitId ?? null)
       : before.currentSiteOrgUnitId
-    if (nextSite !== before.currentSiteOrgUnitId || nextHolder !== before.currentHolderPersonId) {
+    const custodyChanged =
+      nextSite !== before.currentSiteOrgUnitId || nextHolder !== before.currentHolderPersonId
+    const custodyChangedAt = custodyChanged ? new Date() : null
+    if (custodyChanged) {
+      const openIds = await openEquipmentCheckoutItemIds(tx, [id])
+      if (openIds.has(id)) {
+        throw ApiError.invalid('Check this equipment item in before changing direct custody')
+      }
+      patch.lastSeenAt = custodyChangedAt
+      patch.lastSeenSiteOrgUnitId = nextSite
+      patch.lastSeenHolderPersonId = nextHolder
+      patch.isMissing = false
+      if (before.isMissing) patch.missingFoundAt = custodyChangedAt
+    }
+    assertPatchNotEmpty(patch)
+
+    await tx.update(equipmentItems).set(patch).where(eq(equipmentItems.id, id))
+    if (hasOwn(b, 'currentHolderPersonId') || hasOwn(b, 'status') || custodyChanged) {
+      await refreshEquipmentAvailability(tx, [id])
+    }
+    if (b.status !== undefined && b.status !== before.status) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'equipment-assets',
+        event: 'status_change',
+        toStatus: b.status,
+        occurrenceKey: randomUUID(),
+      })
+    }
+
+    if (custodyChanged) {
       await tx.insert(equipmentLocationHistory).values({
         tenantId: ctx.tenantId,
         itemId: id,
         siteOrgUnitId: nextSite,
         holderPersonId: nextHolder,
         recordedByTenantUserId: safeTenantUserId(ctx),
+        recordedAt: custodyChangedAt!,
         note: 'Updated via public API',
       })
+    }
+
+    const [updated] = await tx
+      .select()
+      .from(equipmentItems)
+      .where(eq(equipmentItems.id, id))
+      .limit(1)
+
+    if (updated) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment',
+        entityId: id,
+        action: 'update',
+        summary: `Updated equipment ${updated.assetTag}: ${updated.name}`,
+        before: {
+          assetTag: before.assetTag,
+          name: before.name,
+          status: before.status,
+          currentSiteOrgUnitId: before.currentSiteOrgUnitId,
+          currentHolderPersonId: before.currentHolderPersonId,
+        },
+        after: {
+          assetTag: updated.assetTag,
+          name: updated.name,
+          status: updated.status,
+          currentSiteOrgUnitId: updated.currentSiteOrgUnitId,
+          currentHolderPersonId: updated.currentHolderPersonId,
+        },
+      })
+      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [before.typeId, updated.typeId])
     }
 
     return { before, updated }
   })
 
   if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update equipment item')
-  await recordAudit(ctx, {
-    entityType: 'equipment_item',
-    entityId: id,
-    action: 'update',
-    summary: `Updated equipment ${result.updated.assetTag}: ${result.updated.name}`,
-    before: {
-      assetTag: result.before.assetTag,
-      name: result.before.name,
-      status: result.before.status,
-      currentSiteOrgUnitId: result.before.currentSiteOrgUnitId,
-      currentHolderPersonId: result.before.currentHolderPersonId,
-    },
-    after: {
-      assetTag: result.updated.assetTag,
-      name: result.updated.name,
-      status: result.updated.status,
-      currentSiteOrgUnitId: result.updated.currentSiteOrgUnitId,
-      currentHolderPersonId: result.updated.currentHolderPersonId,
-    },
-  })
   revalidatePath('/equipment')
   revalidatePath(`/equipment/${id}`)
+  revalidatePath('/equipment/station')
+  revalidatePath('/dashboard')
   return equipmentResult(result.updated)
 }
 
@@ -1628,25 +1760,36 @@ async function deleteEquipment(ctx: RequestContext, id: string): Promise<WriteRe
       .from(equipmentItems)
       .where(eq(equipmentItems.id, id))
       .limit(1)
+      .for('update')
     if (!before || before.deletedAt) throw ApiError.notFound(`No equipment with id ${id}`)
+    const openIds = await openEquipmentCheckoutItemIds(tx, [id])
+    if (openIds.has(id)) {
+      throw ApiError.invalid('Check this equipment item in before archiving it')
+    }
+    if (before.currentHolderPersonId) {
+      throw ApiError.invalid('Clear this equipment item’s holder before archiving it')
+    }
     const deletedAt = new Date()
     await tx.update(equipmentItems).set({ deletedAt }).where(eq(equipmentItems.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: id,
+      action: 'delete',
+      summary: `Archived equipment ${before.assetTag}: ${before.name}`,
+      before: {
+        assetTag: before.assetTag,
+        name: before.name,
+        status: before.status,
+      },
+      after: { deletedAt },
+    })
+    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [before.typeId])
     return { before, deletedAt }
-  })
-  await recordAudit(ctx, {
-    entityType: 'equipment_item',
-    entityId: id,
-    action: 'delete',
-    summary: `Archived equipment ${result.before.assetTag}: ${result.before.name}`,
-    before: {
-      assetTag: result.before.assetTag,
-      name: result.before.name,
-      status: result.before.status,
-    },
-    after: { deletedAt: result.deletedAt },
   })
   revalidatePath('/equipment')
   revalidatePath(`/equipment/${id}`)
+  revalidatePath('/equipment/station')
+  revalidatePath('/dashboard')
   return { id, deleted: true, deletedAt: result.deletedAt.toISOString() }
 }
 
@@ -1742,22 +1885,25 @@ async function createPpe(ctx: RequestContext, raw: unknown): Promise<WriteResult
         metadata: b.metadata,
       })
       .returning()
+    if (created) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'ppe_item',
+        entityId: created.id,
+        action: 'create',
+        summary: `Added PPE item${created.serialNumber ? ` ${created.serialNumber}` : ''}`,
+        after: {
+          typeId: created.typeId,
+          serialNumber: created.serialNumber,
+          status: created.status,
+          currentHolderPersonId: created.currentHolderPersonId,
+        },
+      })
+      await materializePpeTypeEvidence(tx, ctx.tenantId, [created.typeId])
+    }
     return created
   })
 
   if (!row) throw new ApiError(500, 'internal', 'Failed to create PPE item')
-  await recordAudit(ctx, {
-    entityType: 'ppe_item',
-    entityId: row.id,
-    action: 'create',
-    summary: `Added PPE item${row.serialNumber ? ` ${row.serialNumber}` : ''}`,
-    after: {
-      typeId: row.typeId,
-      serialNumber: row.serialNumber,
-      status: row.status,
-      currentHolderPersonId: row.currentHolderPersonId,
-    },
-  })
   revalidatePath('/ppe')
 
   return ppeResult(row)
@@ -1786,7 +1932,12 @@ async function updatePpe(ctx: RequestContext, id: string, raw: unknown): Promise
   const b = parsed.data
 
   const result = await ctx.db(async (tx) => {
-    const [before] = await tx.select().from(ppeItems).where(eq(ppeItems.id, id)).limit(1)
+    const [before] = await tx
+      .select()
+      .from(ppeItems)
+      .where(eq(ppeItems.id, id))
+      .limit(1)
+      .for('update')
     if (!before || before.deletedAt) throw ApiError.notFound(`No ppe with id ${id}`)
 
     if (b.typeId) {
@@ -1833,28 +1984,31 @@ async function updatePpe(ctx: RequestContext, id: string, raw: unknown): Promise
     assertPatchNotEmpty(patch)
 
     const [updated] = await tx.update(ppeItems).set(patch).where(eq(ppeItems.id, id)).returning()
+    if (updated) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'ppe_item',
+        entityId: id,
+        action: 'update',
+        summary: `Updated PPE item${updated.serialNumber ? ` ${updated.serialNumber}` : ''}`,
+        before: {
+          typeId: before.typeId,
+          serialNumber: before.serialNumber,
+          status: before.status,
+          currentHolderPersonId: before.currentHolderPersonId,
+        },
+        after: {
+          typeId: updated.typeId,
+          serialNumber: updated.serialNumber,
+          status: updated.status,
+          currentHolderPersonId: updated.currentHolderPersonId,
+        },
+      })
+      await materializePpeTypeEvidence(tx, ctx.tenantId, [before.typeId, updated.typeId])
+    }
     return { before, updated }
   })
 
   if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update PPE item')
-  await recordAudit(ctx, {
-    entityType: 'ppe_item',
-    entityId: id,
-    action: 'update',
-    summary: `Updated PPE item${result.updated.serialNumber ? ` ${result.updated.serialNumber}` : ''}`,
-    before: {
-      typeId: result.before.typeId,
-      serialNumber: result.before.serialNumber,
-      status: result.before.status,
-      currentHolderPersonId: result.before.currentHolderPersonId,
-    },
-    after: {
-      typeId: result.updated.typeId,
-      serialNumber: result.updated.serialNumber,
-      status: result.updated.status,
-      currentHolderPersonId: result.updated.currentHolderPersonId,
-    },
-  })
   revalidatePath('/ppe')
   revalidatePath(`/ppe/${id}`)
   return ppeResult(result.updated)
@@ -1862,23 +2016,29 @@ async function updatePpe(ctx: RequestContext, id: string, raw: unknown): Promise
 
 async function deletePpe(ctx: RequestContext, id: string): Promise<WriteResult> {
   const result = await ctx.db(async (tx) => {
-    const [before] = await tx.select().from(ppeItems).where(eq(ppeItems.id, id)).limit(1)
+    const [before] = await tx
+      .select()
+      .from(ppeItems)
+      .where(eq(ppeItems.id, id))
+      .limit(1)
+      .for('update')
     if (!before || before.deletedAt) throw ApiError.notFound(`No ppe with id ${id}`)
     const deletedAt = new Date()
     await tx.update(ppeItems).set({ deletedAt }).where(eq(ppeItems.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'ppe_item',
+      entityId: id,
+      action: 'delete',
+      summary: `Archived PPE item${before.serialNumber ? ` ${before.serialNumber}` : ''}`,
+      before: {
+        typeId: before.typeId,
+        serialNumber: before.serialNumber,
+        status: before.status,
+      },
+      after: { deletedAt },
+    })
+    await materializePpeTypeEvidence(tx, ctx.tenantId, [before.typeId])
     return { before, deletedAt }
-  })
-  await recordAudit(ctx, {
-    entityType: 'ppe_item',
-    entityId: id,
-    action: 'delete',
-    summary: `Archived PPE item${result.before.serialNumber ? ` ${result.before.serialNumber}` : ''}`,
-    before: {
-      typeId: result.before.typeId,
-      serialNumber: result.before.serialNumber,
-      status: result.before.status,
-    },
-    after: { deletedAt: result.deletedAt },
   })
   revalidatePath('/ppe')
   revalidatePath(`/ppe/${id}`)
@@ -1908,6 +2068,21 @@ const PPE_BODY: Json = {
 const PPE_PATCH_BODY = optionalObjectSchema(PPE_BODY)
 
 // --- training_records --------------------------------------------------------
+
+async function materializeTrainingRecordCourses(
+  tx: TenantTx,
+  tenantId: string,
+  courseIds: readonly (string | null)[],
+): Promise<void> {
+  await materializeEvidenceTargetsObligations(
+    tx,
+    tenantId,
+    [...new Set(courseIds.filter((id): id is string => Boolean(id)))].map((courseId) => ({
+      sourceModule: 'training' as const,
+      targetRef: { courseId },
+    })),
+  )
+}
 
 const trainingRecordCreate = z.object({
   personId: uuid,
@@ -1963,22 +2138,23 @@ async function createTrainingRecord(ctx: RequestContext, raw: unknown): Promise<
         issuedByTenantUserId: safeTenantUserId(ctx),
       })
       .returning()
+    if (!created) throw new ApiError(500, 'internal', 'Failed to create training record')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_record',
+      entityId: created.id,
+      action: 'create',
+      summary: 'Created training record via API',
+      after: {
+        personId: created.personId,
+        courseId: created.courseId,
+        source: created.source,
+        completedOn: created.completedOn,
+      },
+    })
+    await materializeTrainingRecordCourses(tx, ctx.tenantId, [created.courseId])
     return created
   })
 
-  if (!row) throw new ApiError(500, 'internal', 'Failed to create training record')
-  await recordAudit(ctx, {
-    entityType: 'training_record',
-    entityId: row.id,
-    action: 'create',
-    summary: 'Created training record via API',
-    after: {
-      personId: row.personId,
-      courseId: row.courseId,
-      source: row.source,
-      completedOn: row.completedOn,
-    },
-  })
   revalidatePath('/training')
 
   return trainingRecordResult(row)
@@ -2013,6 +2189,7 @@ async function updateTrainingRecord(
       .select()
       .from(trainingRecords)
       .where(eq(trainingRecords.id, id))
+      .for('update')
       .limit(1)
     if (!before || before.deletedAt) {
       throw ApiError.notFound(`No training_records with id ${id}`)
@@ -2056,28 +2233,36 @@ async function updateTrainingRecord(
       .set(patch)
       .where(eq(trainingRecords.id, id))
       .returning()
+    if (!updated) throw new ApiError(500, 'internal', 'Failed to update training record')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_record',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated training record via API',
+      before: {
+        personId: before.personId,
+        courseId: before.courseId,
+        completedOn: before.completedOn,
+        expiresOn: before.expiresOn,
+      },
+      after: {
+        personId: updated.personId,
+        courseId: updated.courseId,
+        completedOn: updated.completedOn,
+        expiresOn: updated.expiresOn,
+      },
+    })
+    if (
+      hasOwn(b, 'personId') ||
+      hasOwn(b, 'courseId') ||
+      hasOwn(b, 'completedOn') ||
+      hasOwn(b, 'expiresOn')
+    ) {
+      await materializeTrainingRecordCourses(tx, ctx.tenantId, [before.courseId, updated.courseId])
+    }
     return { before, updated }
   })
 
-  if (!result.updated) throw new ApiError(500, 'internal', 'Failed to update training record')
-  await recordAudit(ctx, {
-    entityType: 'training_record',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated training record via API',
-    before: {
-      personId: result.before.personId,
-      courseId: result.before.courseId,
-      completedOn: result.before.completedOn,
-      expiresOn: result.before.expiresOn,
-    },
-    after: {
-      personId: result.updated.personId,
-      courseId: result.updated.courseId,
-      completedOn: result.updated.completedOn,
-      expiresOn: result.updated.expiresOn,
-    },
-  })
   revalidatePath('/training')
   revalidatePath(`/training/records/${id}`)
   return trainingRecordResult(result.updated)
@@ -2089,26 +2274,37 @@ async function deleteTrainingRecord(ctx: RequestContext, id: string): Promise<Wr
       .select()
       .from(trainingRecords)
       .where(eq(trainingRecords.id, id))
+      .for('update')
       .limit(1)
     if (!before || before.deletedAt) {
       throw ApiError.notFound(`No training_records with id ${id}`)
     }
     const deletedAt = new Date()
-    await tx.update(trainingRecords).set({ deletedAt }).where(eq(trainingRecords.id, id))
+    const [revoked] = await tx
+      .update(trainingRecords)
+      .set({ deletedAt })
+      .where(and(eq(trainingRecords.id, id), isNull(trainingRecords.deletedAt)))
+      .returning({ id: trainingRecords.id })
+    if (!revoked) throw new ApiError(500, 'internal', 'Failed to revoke training record')
+    await tx
+      .update(trainingCertificates)
+      .set({ revokedAt: deletedAt, revokedReason: 'Training record revoked via API' })
+      .where(and(eq(trainingCertificates.recordId, id), isNull(trainingCertificates.revokedAt)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_record',
+      entityId: id,
+      action: 'delete',
+      summary: 'Revoked training record via API',
+      before: {
+        personId: before.personId,
+        courseId: before.courseId,
+        completedOn: before.completedOn,
+        expiresOn: before.expiresOn,
+      },
+      after: { deletedAt },
+    })
+    await materializeTrainingRecordCourses(tx, ctx.tenantId, [before.courseId])
     return { before, deletedAt }
-  })
-  await recordAudit(ctx, {
-    entityType: 'training_record',
-    entityId: id,
-    action: 'delete',
-    summary: 'Revoked training record via API',
-    before: {
-      personId: result.before.personId,
-      courseId: result.before.courseId,
-      completedOn: result.before.completedOn,
-      expiresOn: result.before.expiresOn,
-    },
-    after: { deletedAt: result.deletedAt },
   })
   revalidatePath('/training')
   revalidatePath(`/training/records/${id}`)
@@ -2250,9 +2446,6 @@ const WRITES: Record<string, WriteRegistration> = {
     },
   },
 }
-
-/** Entity keys that accept POST creates — the single source of truth. */
-const WRITABLE_ENTITY_KEYS = Object.keys(WRITES)
 
 export function isWritable(entityKey: string): boolean {
   return entityKey in WRITES

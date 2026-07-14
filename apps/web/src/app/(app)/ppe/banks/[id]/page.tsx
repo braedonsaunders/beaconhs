@@ -6,6 +6,7 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
+import { isUuid } from '@/lib/list-params'
 import { PpeBankBuilder } from './_bank-builder'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function PpeBankDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('ppe')
 
   const data = await ctx.db(async (tx) => {

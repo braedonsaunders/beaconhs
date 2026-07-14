@@ -31,6 +31,7 @@
 // reseed script, which publishes a new version instead of inserting.)
 
 import { and, eq } from 'drizzle-orm'
+import type { Database } from '../client'
 import { formTemplates, formTemplateVersions } from '../schema'
 import type { FormSchemaV1 } from '../schema/forms'
 
@@ -218,16 +219,10 @@ export const LIFT_PLAN_TEMPLATE_SCHEMA: FormSchemaV1 = {
   },
 }
 
-// Anything providing a transaction with the same surface as our drizzle
-// instance can run this seeder. We accept `any` because:
-//   - seed.ts hands us a `tx: any` (its function signatures use any throughout)
-//   - the tenant-create server action hands us a drizzle PgTransaction whose
-//     generic params would force us to import + re-export the full schema
-//     module to satisfy the structural type
-// The function is small and well-scoped, so the `any` here is contained.
-//
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DrizzleTx = any
+// Both the root client and a transaction expose these query builders. Keeping
+// the structural surface narrow lets provisioning and seed transactions share
+// this helper without erasing their types.
+type DrizzleTx = Pick<Database, 'select' | 'insert' | 'update'>
 
 /**
  * Idempotently seed the built-in lift-plan form template for one tenant.

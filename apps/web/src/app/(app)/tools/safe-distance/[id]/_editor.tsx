@@ -23,7 +23,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { PersonSelectField } from '@/components/person-select-field'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { saveSafeDistanceRecordForm, type ActionResult } from '../_actions'
 import {
   MAX_SAFE_DISTANCE_DESCRIPTION_LENGTH,
@@ -58,8 +58,6 @@ type SegRow = {
   diameter: string
 }
 
-type Option = { value: string; label: string; hint?: string }
-
 type SafeDistanceEditorProps = {
   record: {
     id: string
@@ -81,9 +79,6 @@ type SafeDistanceEditorProps = {
     lengthValue: string
     internalDiameter: string
   }>
-  sites: Array<{ id: string; name: string }>
-  supervisors: Option[]
-  operators: Option[]
 }
 
 let keyCounter = 0
@@ -94,13 +89,7 @@ function nextKey(): string {
 
 const M3_TO_FT3 = 35.3147
 
-export function SafeDistanceEditor({
-  record,
-  initialSegments,
-  sites,
-  supervisors,
-  operators,
-}: SafeDistanceEditorProps) {
+export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEditorProps) {
   const [saveState, saveAction] = useActionState(saveSafeDistanceRecordForm, {
     ok: true,
   } as ActionResult)
@@ -414,25 +403,23 @@ export function SafeDistanceEditor({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="siteOrgUnitId">Site</Label>
-                <Select
+                <RemoteSelectField
+                  lookup="safe-distance-sites"
                   id="siteOrgUnitId"
                   name="siteOrgUnitId"
                   defaultValue={record.siteOrgUnitId ?? ''}
-                >
-                  <option value="">— No site —</option>
-                  {sites.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
+                  placeholder="Select a site…"
+                  searchPlaceholder="Search sites…"
+                  sheetTitle="Select a site"
+                  emptyLabel="— No site —"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="supervisorTenantUserId">Supervisor (sign-off)</Label>
-                <PersonSelectField
+                <RemoteSelectField
+                  lookup="safe-distance-supervisors"
                   name="supervisorTenantUserId"
                   defaultValue={record.supervisorTenantUserId ?? ''}
-                  options={supervisors}
                   placeholder="Select a supervisor…"
                   clearable
                   emptyLabel="— None —"
@@ -440,10 +427,10 @@ export function SafeDistanceEditor({
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="operatorPersonId">Operator</Label>
-                <PersonSelectField
+                <RemoteSelectField
+                  lookup="safe-distance-operators"
                   name="operatorPersonId"
                   defaultValue={record.operatorPersonId ?? ''}
-                  options={operators}
                   placeholder="Select an operator…"
                   clearable
                   emptyLabel="— None —"

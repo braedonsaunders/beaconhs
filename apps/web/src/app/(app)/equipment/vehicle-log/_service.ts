@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, gte, inArray, isNull, lt } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import {
   equipmentCategories,
   equipmentItems,
@@ -14,12 +15,27 @@ import {
   type TruckLogImportStatus,
   type VehicleLogEnabledModes,
 } from '@beaconhs/db/schema'
-import { unsealSecret, type SealedSecret } from '@beaconhs/sync'
+import { secureFetch, unsealSecret, type SealedSecret } from '@beaconhs/sync'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { recordAudit } from '@/lib/audit'
+import {
+  assertVehicleLogImportPayload,
+  collectVehicleLogOrgUnitCandidates,
+  normalizeVehicleLogImportUrl,
+  prepareVehicleLogImportDays,
+  validateVehicleLogImportEndpoint,
+} from '@/lib/vehicle-log-import-policy'
+import { resolveVehicleEquipmentWhere } from './_equipment-policy'
+import { optionalUuidInput, requireUuidInput } from '@/lib/mutation-input'
+import {
+  normalizeVehicleLogEntryInput,
+  type NormalizedVehicleLogEntryInput,
+  type SaveVehicleLogEntryInput,
+  type VehicleLogMode,
+} from './_entry-input'
 
-export type VehicleLogMode = TruckLogEntryMode
+export type { SaveVehicleLogEntryInput, VehicleLogMode } from './_entry-input'
 
 type VehicleLogSelectorOption = {
   id: string
@@ -135,26 +151,6 @@ export type VehicleLogWorkspace = {
   }
 }
 
-export type SaveVehicleLogEntryInput = {
-  equipmentItemId: string
-  driverPersonId: string
-  entryDate: string
-  entryMode: VehicleLogMode
-  startOdometer?: number | null
-  endOdometer?: number | null
-  businessKm?: number | null
-  personalKm?: number | null
-  siteOrgUnitId?: string | null
-  otherDestination?: string | null
-  hoursOnSite?: string | null
-  manpowerCount?: number | null
-  notes?: string | null
-  sourceConnectionId?: string | null
-  sourceExternalId?: string | null
-  importStatus?: TruckLogImportStatus
-  importMeta?: Record<string, unknown>
-}
-
 export type ApplyVehicleLogImportInput = {
   equipmentItemId: string
   driverPersonId: string
@@ -196,6 +192,16 @@ function parseMonth(raw: string | null | undefined): { year: number; month: numb
   return { year: now.getFullYear(), month: now.getMonth() + 1 }
 }
 
+function parseRequiredMonth(raw: unknown): { year: number; month: number } {
+  const normalized = typeof raw === 'string' ? raw.trim() : ''
+  if (!MONTH.test(normalized)) throw new Error('Vehicle log month is invalid.')
+  const [year, month] = normalized.split('-').map(Number)
+  if (!year || !month || month < 1 || month > 12) {
+    throw new Error('Vehicle log month is invalid.')
+  }
+  return { year, month }
+}
+
 function shiftMonth(year: number, month: number, delta: number) {
   const total = year * 12 + (month - 1) + delta
   const nextYear = Math.floor(total / 12)
@@ -224,11 +230,6 @@ function parseNumber(value: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function parseHours(value: string | number | null | undefined): string | null {
-  const n = parseNumber(value)
-  return n == null ? null : n.toFixed(2)
-}
-
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -255,8 +256,9 @@ function vehicleLogImportConfig(connection: SyncConnectionRow): VehicleLogImport
   const vehicleLogImport = recordValue(config.vehicleLogImport)
   if (vehicleLogImport.kind !== 'http_monthly') return null
 
-  const url = stringValue(vehicleLogImport.url)
-  if (!url) return null
+  const rawUrl = stringValue(vehicleLogImport.url)
+  if (!rawUrl) return null
+  const url = normalizeVehicleLogImportUrl(rawUrl)
 
   return {
     kind: 'http_monthly',
@@ -285,7 +287,7 @@ function buildImportSources(connections: SyncConnectionRow[]): VehicleLogImportS
   })
 }
 
-export function computeTotalKm(input: {
+function computeTotalKm(input: {
   entryMode: VehicleLogMode
   startOdometer?: number | null
   endOdometer?: number | null
@@ -308,6 +310,80 @@ export function computeTotalKm(input: {
     return (input.businessKm ?? 0) + (input.personalKm ?? 0)
   }
   return null
+}
+
+async function assertManualVehicleLogReferences(
+  ctx: RequestContext,
+  tx: Database,
+  input: Pick<
+    NormalizedVehicleLogEntryInput,
+    'equipmentItemId' | 'driverPersonId' | 'siteOrgUnitId'
+  >,
+): Promise<void> {
+  const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+  const [vehicle] = await tx
+    .select({ id: equipmentItems.id })
+    .from(equipmentItems)
+    .where(and(vehicleWhere, eq(equipmentItems.id, input.equipmentItemId)))
+    .limit(1)
+  if (!vehicle) throw new Error('Vehicle was not found or is outside your equipment scope.')
+
+  const [driver] = await tx
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(
+        eq(people.id, input.driverPersonId),
+        eq(people.status, 'active'),
+        isNull(people.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!driver) throw new Error('Select an active driver.')
+
+  if (input.siteOrgUnitId) {
+    const [site] = await tx
+      .select({ id: orgUnits.id })
+      .from(orgUnits)
+      .where(
+        and(
+          eq(orgUnits.id, input.siteOrgUnitId),
+          eq(orgUnits.level, 'customer'),
+          isNull(orgUnits.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!site) throw new Error('Select an active customer.')
+  }
+}
+
+function manualEntryFields(input: NormalizedVehicleLogEntryInput) {
+  const {
+    entryMode,
+    startOdometer,
+    endOdometer,
+    businessKm,
+    personalKm,
+    siteOrgUnitId,
+    otherDestination,
+    hoursOnSite,
+    manpowerCount,
+    notes,
+  } = input
+  const kmDriven = computeTotalKm({ entryMode, startOdometer, endOdometer, businessKm, personalKm })
+  return {
+    entryMode,
+    startOdometer: entryMode === 'odometer' ? startOdometer : null,
+    endOdometer: entryMode === 'odometer' ? endOdometer : null,
+    kmDriven,
+    businessKm: entryMode === 'destination' ? businessKm : null,
+    personalKm,
+    siteOrgUnitId,
+    otherDestination,
+    hoursOnSite,
+    manpowerCount,
+    notes,
+  }
 }
 
 function entryDraft(
@@ -365,6 +441,7 @@ export async function loadVehicleLogWorkspace(
   const requestedMode = parseVehicleLogMode(opts.mode)
 
   const result = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const [driversRaw, vehiclesRaw, sitesRaw, connectionRows, settingsRows] = await Promise.all([
       tx
         .select({
@@ -377,8 +454,7 @@ export async function loadVehicleLogWorkspace(
         })
         .from(people)
         .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(1000),
+        .orderBy(asc(people.lastName), asc(people.firstName)),
       tx
         .select({
           id: equipmentItems.id,
@@ -390,17 +466,15 @@ export async function loadVehicleLogWorkspace(
         .from(equipmentItems)
         .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
         .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
-        .where(isNull(equipmentItems.deletedAt))
-        .orderBy(asc(equipmentItems.assetTag))
-        .limit(1000),
+        .where(vehicleWhere)
+        .orderBy(asc(equipmentItems.assetTag)),
       // The Customer / site picker offers TOP-LEVEL locations only (legacy
       // logged against the customer, never a project/site).
       tx
         .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
         .from(orgUnits)
         .where(eq(orgUnits.level, 'customer'))
-        .orderBy(asc(orgUnits.name))
-        .limit(5000),
+        .orderBy(asc(orgUnits.name)),
       tx
         .select({
           id: syncConnections.id,
@@ -428,13 +502,7 @@ export async function loadVehicleLogWorkspace(
       label: `${p.lastName}, ${p.firstName}`,
       hint: p.employeeNo ?? p.externalEmployeeId,
     }))
-    const vehicleCandidates = vehiclesRaw.filter(
-      (v) =>
-        (v.category ?? '').toLowerCase().includes('vehicle') ||
-        (v.typeName ?? '').toLowerCase().includes('truck'),
-    )
-    const vehicleRows = vehicleCandidates.length > 0 ? vehicleCandidates : vehiclesRaw
-    const vehicles = vehicleRows.map((v) => ({
+    const vehicles = vehiclesRaw.map((v) => ({
       id: v.id,
       label: v.name,
       hint: v.assetTag,
@@ -449,7 +517,7 @@ export async function loadVehicleLogWorkspace(
       ? (driversRaw.find((d) => d.id === opts.driverPersonId) ?? null)
       : null
     const selectedVehicle = opts.equipmentItemId
-      ? (vehicleRows.find((v) => v.id === opts.equipmentItemId) ?? null)
+      ? (vehiclesRaw.find((v) => v.id === opts.equipmentItemId) ?? null)
       : null
     const importSources = buildImportSources(connectionRows)
     const importSourceMeta = {
@@ -575,66 +643,28 @@ export async function loadVehicleLogWorkspace(
   return result
 }
 
-export function assertNonNegativeKm(
-  fields: Record<string, number | string | null | undefined>,
-): void {
-  for (const [label, value] of Object.entries(fields)) {
-    const n = parseNumber(value)
-    if (n != null && n < 0) throw new Error(`${label} must be zero or greater.`)
-  }
-}
-
 export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehicleLogEntryInput) {
-  if (!input.equipmentItemId || !input.driverPersonId || !ISO_DATE.test(input.entryDate)) {
-    throw new Error('Vehicle, driver and date are required.')
-  }
-  const entryMode: VehicleLogMode = input.entryMode === 'odometer' ? 'odometer' : 'destination'
-  const startOdometer = parseNumber(input.startOdometer)
-  const endOdometer = parseNumber(input.endOdometer)
-  const businessKm = parseNumber(input.businessKm)
-  const personalKm = parseNumber(input.personalKm)
-  assertNonNegativeKm({
-    'Start odometer': startOdometer,
-    'End odometer': endOdometer,
-    'Business km': businessKm,
-    'Personal km': personalKm,
-    'Hours on site': input.hoursOnSite,
-    'Crew count': input.manpowerCount,
-  })
-  const kmDriven = computeTotalKm({ entryMode, startOdometer, endOdometer, businessKm, personalKm })
-  const hoursOnSite = parseHours(input.hoursOnSite)
-  const importStatus = input.importStatus ?? 'manual'
-  const now = new Date()
-
+  const normalized = normalizeVehicleLogEntryInput(input)
+  const { equipmentItemId, driverPersonId, entryDate, entryMode } = normalized
   const fields = {
-    entryMode,
-    startOdometer: entryMode === 'odometer' ? startOdometer : null,
-    endOdometer: entryMode === 'odometer' ? endOdometer : null,
-    kmDriven,
-    businessKm: entryMode === 'destination' ? businessKm : null,
-    // Personal km exists in both modes — the legacy simple (odometer) log has
-    // its own PERSONAL column alongside start/end.
-    personalKm,
-    siteOrgUnitId: input.siteOrgUnitId || null,
-    otherDestination: input.otherDestination?.trim() || null,
-    hoursOnSite,
-    manpowerCount: parseNumber(input.manpowerCount),
-    notes: input.notes?.trim() || null,
-    sourceConnectionId: input.sourceConnectionId || null,
-    sourceExternalId: input.sourceExternalId || null,
-    importStatus,
-    importedAt: importStatus === 'manual' ? null : now,
-    importMeta: input.importMeta ?? {},
+    ...manualEntryFields(normalized),
+    sourceConnectionId: null,
+    sourceExternalId: null,
+    importStatus: 'manual' as const,
+    importedAt: null,
+    importMeta: {},
   }
 
   const row = await ctx.db(async (tx) => {
+    await assertManualVehicleLogReferences(ctx, tx, normalized)
+
     const [inserted] = await tx
       .insert(truckLogEntries)
       .values({
         tenantId: ctx.tenantId,
-        equipmentItemId: input.equipmentItemId,
-        driverPersonId: input.driverPersonId,
-        entryDate: input.entryDate,
+        equipmentItemId,
+        driverPersonId,
+        entryDate,
         ...fields,
         createdByTenantUserId: ctx.membership?.id ?? null,
       })
@@ -664,18 +694,90 @@ export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehi
     entityType: 'truck_log_entry',
     entityId: row.id,
     action: 'update',
-    summary: `Saved vehicle log for ${input.entryDate}`,
+    summary: `Saved vehicle log for ${entryDate}`,
     after: {
-      equipmentItemId: input.equipmentItemId,
-      driverPersonId: input.driverPersonId,
-      entryDate: input.entryDate,
-      kmDriven,
-      importStatus,
+      equipmentItemId,
+      driverPersonId,
+      entryDate,
+      kmDriven: fields.kmDriven,
+      importStatus: 'manual',
     },
     metadata: { operation: 'upsert' },
   })
-  revalidateVehicleLogPaths(input.equipmentItemId, input.entryDate)
-  return entryDraft(row, input.entryDate, entryMode)
+  revalidateVehicleLogPaths(equipmentItemId, entryDate)
+  return entryDraft(row, entryDate, entryMode)
+}
+
+export async function updateVehicleLogEntry(
+  ctx: RequestContext,
+  entryIdValue: unknown,
+  input: SaveVehicleLogEntryInput,
+): Promise<VehicleLogEntryDraft> {
+  const entryId = requireUuidInput(entryIdValue, 'Vehicle log entry')
+  const result = await ctx.db(async (tx) => {
+    const [existing] = await tx
+      .select({
+        id: truckLogEntries.id,
+        entryMode: truckLogEntries.entryMode,
+        equipmentItemId: truckLogEntries.equipmentItemId,
+      })
+      .from(truckLogEntries)
+      .where(eq(truckLogEntries.id, entryId))
+      .limit(1)
+      .for('update')
+    if (!existing) throw new Error('Vehicle log entry was not found.')
+
+    const normalized = normalizeVehicleLogEntryInput({
+      ...input,
+      entryMode: existing.entryMode,
+    })
+    await assertManualVehicleLogReferences(ctx, tx, normalized)
+    const fields = manualEntryFields(normalized)
+    let updated: typeof truckLogEntries.$inferSelect | undefined
+    try {
+      const rows = await tx
+        .update(truckLogEntries)
+        .set({
+          equipmentItemId: normalized.equipmentItemId,
+          driverPersonId: normalized.driverPersonId,
+          entryDate: normalized.entryDate,
+          ...fields,
+        })
+        .where(eq(truckLogEntries.id, entryId))
+        .returning()
+      updated = rows[0]
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === '23505') {
+        throw new Error(
+          'An entry already exists for that vehicle, driver, and date. Edit that entry instead.',
+        )
+      }
+      throw error
+    }
+    if (!updated) throw new Error('Vehicle log entry was not updated.')
+    return { existing, normalized, updated }
+  })
+
+  await recordAudit(ctx, {
+    entityType: 'truck_log_entry',
+    entityId: entryId,
+    action: 'update',
+    summary: `Updated entry for ${result.normalized.entryDate}`,
+    after: {
+      equipmentItemId: result.normalized.equipmentItemId,
+      driverPersonId: result.normalized.driverPersonId,
+      entryDate: result.normalized.entryDate,
+      kmDriven: result.updated.kmDriven,
+      manpowerCount: result.normalized.manpowerCount,
+      hoursOnSite: result.normalized.hoursOnSite,
+    },
+  })
+  revalidateVehicleLogPaths(result.normalized.equipmentItemId, result.normalized.entryDate)
+  if (result.existing.equipmentItemId !== result.normalized.equipmentItemId) {
+    revalidatePath(`/equipment/${result.existing.equipmentItemId}`)
+  }
+  revalidatePath(`/equipment/vehicle-log/${entryId}`)
+  return entryDraft(result.updated, result.normalized.entryDate, result.normalized.entryMode)
 }
 
 type VehicleLogImportEntry = {
@@ -834,11 +936,42 @@ function buildOrgUnitMaps(rows: OrgUnitLookupRow[]) {
   return { byCode, byName, byExternalId }
 }
 
+function orgUnitLookupPredicates(
+  candidates: ReturnType<typeof collectVehicleLogOrgUnitCandidates>,
+): SQL[] {
+  const predicates: SQL[] = []
+  if (candidates.codes.length > 0) {
+    predicates.push(inArray(sql<string>`lower(${orgUnits.code})`, candidates.codes))
+  }
+  if (candidates.names.length > 0) {
+    predicates.push(inArray(sql<string>`lower(${orgUnits.name})`, candidates.names))
+  }
+  if (candidates.externalIds.length > 0) {
+    for (const key of ['netsuiteId', 'NetsuiteID', 'netSuiteId', 'legacyId', 'externalId']) {
+      predicates.push(
+        inArray(
+          sql<string>`lower(coalesce(${orgUnits.metadata} ->> ${key}, ''))`,
+          candidates.externalIds,
+        ),
+      )
+    }
+  }
+  return predicates
+}
+
 async function loadImportSetup(
   ctx: RequestContext,
   input: ApplyVehicleLogImportInput,
 ): Promise<ImportSetup> {
   return ctx.db(async (tx) => {
+    const connectionWhere = input.sourceConnectionId
+      ? and(isNull(syncConnections.deletedAt), eq(syncConnections.id, input.sourceConnectionId))
+      : and(
+          isNull(syncConnections.deletedAt),
+          eq(syncConnections.status, 'connected'),
+          sql`${syncConnections.config} -> 'vehicleLogImport' ->> 'kind' = 'http_monthly'`,
+          sql`coalesce(${syncConnections.config} -> 'vehicleLogImport' ->> 'enabled', 'true') <> 'false'`,
+        )
     const [drivers, equipment, connections] = await Promise.all([
       tx
         .select({
@@ -872,7 +1005,8 @@ async function loadImportSetup(
           secrets: syncConnections.secrets,
         })
         .from(syncConnections)
-        .where(isNull(syncConnections.deletedAt)),
+        .where(connectionWhere)
+        .limit(input.sourceConnectionId ? 1 : 2),
     ])
     const driver = drivers[0]
     if (!driver) throw new Error('Driver was not found.')
@@ -915,42 +1049,46 @@ async function fetchVehicleLogImport(
 ): Promise<{
   entries: VehicleLogImportEntry[]
   pulled: number
-  resolved: number
   source: Record<string, unknown>
 }> {
   const externalId = driverExternalId(setup.driver)
   if (!externalId) {
     throw new Error('The selected driver does not have an external employee ID for this source.')
   }
+  const endpoint = await validateVehicleLogImportEndpoint(setup.config.url)
   const token = unsealConnectionSecret(setup.connection, setup.config.tokenSecretKey)
   if (!token) {
     throw new Error(`${setup.connection.name} is missing its import token.`)
   }
 
-  const response = await fetch(setup.config.url, {
+  const body = JSON.stringify({
+    month: input.month,
+    employeeExternalId: externalId,
+    driver: {
+      id: setup.driver.id,
+      firstName: setup.driver.firstName,
+      lastName: setup.driver.lastName,
+      employeeNo: setup.driver.employeeNo,
+      externalEmployeeId: externalId,
+    },
+    equipment: {
+      id: setup.equipment.id,
+      assetTag: setup.equipment.assetTag,
+      name: setup.equipment.name,
+    },
+  })
+  const response = await secureFetch(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify({
-      month: input.month,
-      employeeExternalId: externalId,
-      driver: {
-        id: setup.driver.id,
-        firstName: setup.driver.firstName,
-        lastName: setup.driver.lastName,
-        employeeNo: setup.driver.employeeNo,
-        externalEmployeeId: externalId,
-      },
-      equipment: {
-        id: setup.equipment.id,
-        assetTag: setup.equipment.assetTag,
-        name: setup.equipment.name,
-      },
-    }),
-    signal: AbortSignal.timeout(setup.config.timeoutMs),
+    body,
+    timeoutMs: setup.config.timeoutMs,
+    maxRequestBytes: 64 * 1024,
+    maxResponseBytes: 4 * 1024 * 1024,
+    maxRedirects: 1,
   })
   if (!response.ok) {
     const text = await response.text().catch(() => '')
@@ -959,14 +1097,14 @@ async function fetchVehicleLogImport(
     )
   }
 
-  const payload = recordValue(await response.json())
-  const rawEntries = Array.isArray(payload.entries) ? payload.entries : []
+  const payload: unknown = await response.json()
+  assertVehicleLogImportPayload(payload)
+  const rawEntries = payload.entries
   const entries = rawEntries.map(readImportEntry)
   const stats = recordValue(payload.stats)
   return {
     entries,
     pulled: sourceStat(stats, 'pulled', rawEntries.length),
-    resolved: sourceStat(stats, 'resolved', entries.filter((entry) => !entry.skipReason).length),
     source: recordValue(payload.source),
   }
 }
@@ -991,37 +1129,60 @@ export async function applyVehicleLogImportToVehicleLog(
   ctx: RequestContext,
   input: ApplyVehicleLogImportInput,
 ): Promise<ApplyVehicleLogImportResult> {
-  if (!input.equipmentItemId || !input.driverPersonId) {
-    throw new Error('Vehicle and driver are required.')
+  const parsedMonth = parseRequiredMonth(input.month)
+  const normalizedInput: ApplyVehicleLogImportInput = {
+    equipmentItemId: requireUuidInput(input.equipmentItemId, 'Vehicle'),
+    driverPersonId: requireUuidInput(input.driverPersonId, 'Driver'),
+    month: monthKey(parsedMonth.year, parsedMonth.month),
+    sourceConnectionId: optionalUuidInput(input.sourceConnectionId, 'Import source'),
   }
-  const { year, month } = parseMonth(input.month)
+  const { year, month } = parseRequiredMonth(normalizedInput.month)
   const monthKeyValue = monthKey(year, month)
   const start = dateKey(year, month, 1)
   const next = shiftMonth(year, month, 1)
   const endExclusive = dateKey(next.year, next.month, 1)
 
-  const setup = await loadImportSetup(ctx, input)
-  const imported = await fetchVehicleLogImport(setup, { ...input, month: monthKeyValue })
+  const setup = await loadImportSetup(ctx, normalizedInput)
+  const imported = await fetchVehicleLogImport(setup, {
+    ...normalizedInput,
+    month: monthKeyValue,
+  })
+  const prepared = prepareVehicleLogImportDays(imported.entries, start, endExclusive)
+  const candidates = collectVehicleLogOrgUnitCandidates(prepared.entries)
+  const lookupPredicates = orgUnitLookupPredicates(candidates)
 
   const result = await ctx.db(async (tx) => {
+    const matchingOrgUnits =
+      lookupPredicates.length > 0
+        ? tx
+            .select({
+              id: orgUnits.id,
+              code: orgUnits.code,
+              name: orgUnits.name,
+              metadata: orgUnits.metadata,
+            })
+            .from(orgUnits)
+            .where(
+              and(
+                inArray(orgUnits.level, ['customer', 'project', 'site']),
+                or(...lookupPredicates),
+              ),
+            )
+            .orderBy(
+              sql`case ${orgUnits.level} when 'site' then 0 when 'project' then 1 else 2 end`,
+              asc(orgUnits.name),
+              asc(orgUnits.id),
+            )
+        : Promise.resolve([])
     const [siteRows, existingEntries] = await Promise.all([
-      tx
-        .select({
-          id: orgUnits.id,
-          code: orgUnits.code,
-          name: orgUnits.name,
-          metadata: orgUnits.metadata,
-        })
-        .from(orgUnits)
-        .where(inArray(orgUnits.level, ['customer', 'project', 'site']))
-        .limit(5000),
+      matchingOrgUnits,
       tx
         .select()
         .from(truckLogEntries)
         .where(
           and(
-            eq(truckLogEntries.driverPersonId, input.driverPersonId),
-            eq(truckLogEntries.equipmentItemId, input.equipmentItemId),
+            eq(truckLogEntries.driverPersonId, normalizedInput.driverPersonId),
+            eq(truckLogEntries.equipmentItemId, normalizedInput.equipmentItemId),
             gte(truckLogEntries.entryDate, start),
             lt(truckLogEntries.entryDate, endExclusive),
           ),
@@ -1029,25 +1190,8 @@ export async function applyVehicleLogImportToVehicleLog(
     ])
     const siteMaps = buildOrgUnitMaps(siteRows.map((row) => ({ ...row, metadata: row.metadata })))
     const byDate = new Map<string, ResolvedImportEntry>()
-    let skipped = 0
-    for (const entry of imported.entries) {
-      if (
-        !entry.date ||
-        !ISO_DATE.test(entry.date) ||
-        entry.date < start ||
-        entry.date >= endExclusive
-      ) {
-        skipped += 1
-        continue
-      }
-      if (!entry.sourceExternalId) {
-        skipped += 1
-        continue
-      }
-      if (entry.skipReason || entry.businessKm == null || entry.businessKm <= 0) {
-        skipped += 1
-        continue
-      }
+    let skipped = prepared.skipped
+    for (const entry of prepared.entries) {
       const siteOrgUnitId = resolveSiteOrgUnitId(entry, siteMaps)
       if (!siteOrgUnitId) {
         skipped += 1
@@ -1075,8 +1219,8 @@ export async function applyVehicleLogImportToVehicleLog(
       })
       const values = {
         tenantId: ctx.tenantId,
-        equipmentItemId: input.equipmentItemId,
-        driverPersonId: input.driverPersonId,
+        equipmentItemId: normalizedInput.equipmentItemId,
+        driverPersonId: normalizedInput.driverPersonId,
         entryDate: entry.date,
         entryMode: 'destination' as const,
         startOdometer: null,
@@ -1119,14 +1263,14 @@ export async function applyVehicleLogImportToVehicleLog(
 
   await recordAudit(ctx, {
     entityType: 'truck_log_entry',
-    entityId: input.equipmentItemId,
+    entityId: normalizedInput.equipmentItemId,
     action: 'update',
     summary: `Imported ${result.created + result.updated} vehicle log day(s) from ${setup.connection.name}`,
-    after: { ...input, sourceConnectionId: setup.connection.id, ...result },
+    after: { ...normalizedInput, sourceConnectionId: setup.connection.id, ...result },
     metadata: { operation: 'vehicle_log_import' },
   })
   revalidatePath('/equipment/vehicle-log')
-  revalidatePath(`/equipment/${input.equipmentItemId}`)
+  revalidatePath(`/equipment/${normalizedInput.equipmentItemId}`)
   return result
 }
 
@@ -1134,10 +1278,9 @@ export async function deleteVehicleLogMonth(
   ctx: RequestContext,
   input: ApplyVehicleLogImportInput,
 ): Promise<number> {
-  if (!input.equipmentItemId || !input.driverPersonId) {
-    throw new Error('Vehicle and driver are required.')
-  }
-  const { year, month } = parseMonth(input.month)
+  const equipmentItemId = requireUuidInput(input.equipmentItemId, 'Vehicle')
+  const driverPersonId = requireUuidInput(input.driverPersonId, 'Driver')
+  const { year, month } = parseRequiredMonth(input.month)
   const start = dateKey(year, month, 1)
   const next = shiftMonth(year, month, 1)
   const endExclusive = dateKey(next.year, next.month, 1)
@@ -1148,8 +1291,8 @@ export async function deleteVehicleLogMonth(
       .from(truckLogEntries)
       .where(
         and(
-          eq(truckLogEntries.driverPersonId, input.driverPersonId),
-          eq(truckLogEntries.equipmentItemId, input.equipmentItemId),
+          eq(truckLogEntries.driverPersonId, driverPersonId),
+          eq(truckLogEntries.equipmentItemId, equipmentItemId),
           gte(truckLogEntries.entryDate, start),
           lt(truckLogEntries.entryDate, endExclusive),
         ),
@@ -1167,13 +1310,13 @@ export async function deleteVehicleLogMonth(
   if (ids.length > 0) {
     await recordAudit(ctx, {
       entityType: 'truck_log_entry',
-      entityId: input.equipmentItemId,
+      entityId: equipmentItemId,
       action: 'delete',
       summary: `Deleted ${ids.length} vehicle log entries for ${input.month}`,
-      before: input,
+      before: { equipmentItemId, driverPersonId, month: monthKey(year, month) },
       metadata: { operation: 'delete_month', deletedCount: ids.length },
     })
-    revalidateVehicleLogPaths(input.equipmentItemId, start)
+    revalidateVehicleLogPaths(equipmentItemId, start)
   }
   return ids.length
 }

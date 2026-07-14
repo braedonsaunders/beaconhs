@@ -57,6 +57,7 @@ function SendEmailDialogSession({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   // Notification groups — loaded lazily when the dialog opens; the picker only
   // appears if the tenant has any. Choosing one appends its members' emails to
   // the recipients field (which is controlled so it can be programmatically set).
@@ -121,9 +122,15 @@ function SendEmailDialogSession({
         <form
           action={(fd) => {
             startTransition(async () => {
-              await sendAction(fd)
-              setSubmitted(true)
-              setTimeout(() => router.replace(window.location.pathname as any), 800)
+              setError(null)
+              try {
+                await sendAction(fd)
+                setSubmitted(true)
+                setTimeout(() => router.replace(window.location.pathname as any), 800)
+              } catch (sendError) {
+                console.error('[send-email-dialog] delivery failed', sendError)
+                setError('Email could not be sent. Check the recipients and try again.')
+              }
             })
           }}
           className="space-y-4 p-5"
@@ -191,6 +198,11 @@ function SendEmailDialogSession({
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+            {error ? (
+              <p role="alert" className="mr-auto text-xs text-red-600 dark:text-red-400">
+                {error}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => router.replace(window.location.pathname as any)}

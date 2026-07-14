@@ -17,13 +17,15 @@ import {
   trainingLessons,
 } from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
+import { safeTrainingExternalUrl } from '@/lib/training-external-url'
+import { configuredTrainingBlockedOrigins } from '@/lib/training-external-url.server'
 import type { ModuleLite } from '../_workspace'
 import type { AssessmentMeta, AttachmentMeta, ItemContent, QuizQuestion } from '../_presenter'
 
 type CoursePresentation = {
   course: typeof trainingCourses.$inferSelect
   modules: ModuleLite[]
-  /** Slim list for the builder's library picker. */
+  /** Library items referenced by this course (picker candidates load remotely). */
   contentItems: { id: string; title: string; kind: string }[]
   itemContents: Record<string, ItemContent>
   quizQuestions: Record<string, QuizQuestion[]>
@@ -42,6 +44,7 @@ export async function loadCoursePresentation(
     .where(eq(trainingCourses.id, courseId))
     .limit(1)
   if (!course) return null
+  const trainingUrlOptions = { blockedOrigins: configuredTrainingBlockedOrigins() }
 
   const mods = await tx
     .select()
@@ -57,11 +60,21 @@ export async function loadCoursePresentation(
     .where(and(eq(trainingLessons.courseId, courseId), isNull(trainingLessons.deletedAt)))
     .orderBy(asc(trainingLessons.sortOrder), asc(trainingLessons.createdAt))
 
-  const contentItemRows = await tx
-    .select()
-    .from(trainingContentItems)
-    .where(isNull(trainingContentItems.deletedAt))
-    .orderBy(asc(trainingContentItems.title))
+  const usedItemIds = [
+    ...new Set(lessons.map((lesson) => lesson.contentItemId).filter((id): id is string => !!id)),
+  ]
+  const contentItemRows = usedItemIds.length
+    ? await tx
+        .select()
+        .from(trainingContentItems)
+        .where(
+          and(
+            isNull(trainingContentItems.deletedAt),
+            inArray(trainingContentItems.id, usedItemIds),
+          ),
+        )
+        .orderBy(asc(trainingContentItems.title))
+    : []
 
   // Quiz questions + assessment metadata for the quiz guide page.
   const usedTypeIds = [
@@ -91,17 +104,13 @@ export async function loadCoursePresentation(
         .where(inArray(trainingAssessmentTypes.id, usedTypeIds))
     : []
 
-  // Resolve uploaded media plus the PPTX masters referenced by the course.
-  // Collabora streams PPTX bytes through WOPI; no slide-image derivatives are
-  // collected or exposed to the presenter.
+  // Resolve uploaded media plus the PPTX masters used by Collabora playback.
   const attIds = new Set<string>()
   for (const l of lessons) {
     if (l.attachmentId) attIds.add(l.attachmentId)
     if (l.sourceAttachmentId) attIds.add(l.sourceAttachmentId)
   }
-  const usedItemIds = new Set(lessons.map((l) => l.contentItemId).filter(Boolean))
   for (const it of contentItemRows) {
-    if (!usedItemIds.has(it.id)) continue
     if (it.attachmentId) attIds.add(it.attachmentId)
     if (it.sourceAttachmentId) attIds.add(it.sourceAttachmentId)
   }
@@ -157,7 +166,7 @@ export async function loadCoursePresentation(
       {
         kind: it.kind,
         contentHtml: it.contentHtml,
-        embedUrl: it.embedUrl,
+        embedUrl: safeTrainingExternalUrl(it.embedUrl, trainingUrlOptions)?.url ?? null,
         attachmentId: it.attachmentId,
         sourceAttachmentId: it.sourceAttachmentId,
       },
@@ -180,10 +189,10 @@ export async function loadCoursePresentation(
         assessmentTypeId: l.assessmentTypeId,
         classId: l.classId,
         attachmentId: l.attachmentId,
-        embedUrl: l.embedUrl,
+        embedUrl: safeTrainingExternalUrl(l.embedUrl, trainingUrlOptions)?.url ?? null,
         contentItemId: l.contentItemId,
         durationMinutes: l.durationMinutes,
-        contentJson: l.contentJson,
+        minTimeSeconds: l.minTimeSeconds,
         contentHtml: l.contentHtml,
         practicalCriteria: l.practicalCriteria ?? [],
         sourceAttachmentId: l.sourceAttachmentId,

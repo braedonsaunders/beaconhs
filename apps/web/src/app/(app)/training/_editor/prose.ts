@@ -43,23 +43,5 @@ ${s} p.is-editor-empty:first-child::before { content: attr(data-placeholder); co
 :where(.dark) ${s} a { color: #5eead4; }
 :where(.dark) ${s} p.is-editor-empty:first-child::before { color: #64748b; }
 
-/* Slide regions: scale typography relative to the slide, inherit slide colors. */
-.slide-rich { color: inherit; font-size: clamp(0.7rem, 1.8cqw, 1.05rem); line-height: 1.55; }
-.slide-rich > * + * { margin-top: 0.5em; }
-.slide-rich h1, .slide-rich h2, .slide-rich h3 { font-weight: 700; line-height: 1.25; }
-.slide-rich h1 { font-size: 1.5em; }
-.slide-rich h2 { font-size: 1.25em; }
-.slide-rich h3 { font-size: 1.1em; }
-.slide-rich p { margin: 0; }
-.slide-rich p + p { margin-top: 0.45em; }
-.slide-rich ul, .slide-rich ol { padding-left: 1.3em; }
-.slide-rich ul { list-style: disc; }
-.slide-rich ol { list-style: decimal; }
-.slide-rich li { margin-top: 0.2em; }
-.slide-rich blockquote { border-left: 3px solid currentColor; opacity: 0.9; padding-left: 0.7em; }
-.slide-rich img { max-width: 100%; border-radius: 0.4rem; }
-.slide-rich a { text-decoration: underline; text-underline-offset: 2px; }
-.slide-rich .ProseMirror:focus { outline: none; }
-.slide-rich p.is-editor-empty:first-child::before { content: attr(data-placeholder); opacity: 0.4; float: left; height: 0; pointer-events: none; }
 `
 }

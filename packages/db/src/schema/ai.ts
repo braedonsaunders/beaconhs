@@ -41,6 +41,13 @@ export const aiConversations = pgTable(
     tenantIdIdUx: uniqueIndex('ai_conversations_tenant_id_id_ux').on(t.tenantId, t.id),
     scopeIdx: index('ai_conversations_scope_idx').on(t.tenantId, t.scope, t.scopeRefId),
     userIdx: index('ai_conversations_user_idx').on(t.tenantId, t.userId),
+    ownerScopeUpdatedIdx: index('ai_conversations_owner_scope_updated_idx').on(
+      t.tenantId,
+      t.userId,
+      t.scope,
+      t.updatedAt,
+      t.id,
+    ),
   }),
 )
 
@@ -62,7 +69,7 @@ export const aiMessages = pgTable(
     ...timestamps,
   },
   (t) => ({
-    conversationIdx: index('ai_messages_conversation_idx').on(t.conversationId, t.createdAt),
+    conversationIdx: index('ai_messages_conversation_idx').on(t.conversationId, t.createdAt, t.id),
     tenantIdx: index('ai_messages_tenant_idx').on(t.tenantId),
     conversationFk: foreignKey({
       name: 'ai_messages_tenant_conversation_fk',

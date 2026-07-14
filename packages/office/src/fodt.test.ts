@@ -97,6 +97,24 @@ describe('replaceTextInFodt', () => {
     expect(out).toContain('<text:p>delta</text:p>')
   })
 
+  it('preserves a legal greater-than character inside a quoted XML attribute', () => {
+    const fodt = wrap('<text:p><text:span text:style-name="a>b">HELLO</text:span></text:p>')
+    const { fodt: out, results } = replaceTextInFodt(fodt, [{ find: 'HELLO', replace: 'NEW' }])
+    expect(results).toEqual([{ find: 'HELLO', count: 1 }])
+    expect(out).toContain('<text:span text:style-name="a>b">NEW</text:span>')
+  })
+
+  it('preserves processing instructions, comments, and doctype subsets while scanning', () => {
+    const fodt =
+      '<?xml version="1.0"?><!DOCTYPE office:document [<!ENTITY gt ">">]><!-- a > b -->' +
+      '<office:document><text:p>HELLO</text:p></office:document>'
+    const { fodt: out } = replaceTextInFodt(fodt, [{ find: 'HELLO', replace: 'NEW' }])
+    expect(out).toBe(
+      '<?xml version="1.0"?><!DOCTYPE office:document [<!ENTITY gt ">">]><!-- a > b -->' +
+        '<office:document><text:p>NEW</text:p></office:document>',
+    )
+  })
+
   it('ignores empty find strings', () => {
     const fodt = wrap('<text:p>text</text:p>')
     const { results } = replaceTextInFodt(fodt, [{ find: '', replace: 'x' }])

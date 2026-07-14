@@ -11,18 +11,21 @@
     "./outbox": "./src/outbox.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
+    "@beaconhs/email-render": "workspace:*",
     "@beaconhs/emails": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

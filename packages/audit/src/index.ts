@@ -12,7 +12,11 @@ export type AuditAction =
   | 'login'
   | 'logout'
   | 'export'
+  | 'copy'
+  | 'send'
   | 'view_sensitive'
+  | 'impersonate'
+  | 'impersonate_stop'
 
 export type AuditEvent = {
   tenantId: string

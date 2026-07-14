@@ -30,11 +30,6 @@ export const SAFE_DISTANCE_METHOD_SUBTITLES: Record<SafeDistanceMethod, string> 
   lloyds: '(96-02) Form T-0240 S4.3',
 }
 
-const SAFE_DISTANCE_UNIT_LABELS: Record<SafeDistanceUnit, string> = {
-  metric: 'Metric',
-  imperial: 'Imperial',
-}
-
 export const SEGMENT_UNIT_LABELS: Record<SafeDistanceSegmentUnit, string> = {
   inch: 'Inch',
   feet: 'Feet',

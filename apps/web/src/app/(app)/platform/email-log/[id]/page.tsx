@@ -1,4 +1,6 @@
+import { notFound } from 'next/navigation'
 import { EmailLogDetailView } from '@/components/email-log/detail-view'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +15,8 @@ export default async function PlatformEmailLogDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   return (
     <EmailLogDetailView
       id={id}

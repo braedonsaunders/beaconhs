@@ -25,13 +25,14 @@ export async function resolveFlowGate(args: {
     !args ||
     typeof args !== 'object' ||
     (args.decision !== 'approve' && args.decision !== 'reject') ||
-    (args.comment !== undefined && args.comment !== null && typeof args.comment !== 'string')
+    (args.comment !== undefined && args.comment !== null && typeof args.comment !== 'string') ||
+    (typeof args.comment === 'string' && args.comment.trim().length > 2_000)
   ) {
     return { ok: false, error: 'Invalid approval request' }
   }
   const { gateId, decision } = args
   if (!isUuid(gateId)) return { ok: false, error: 'Approval not found' }
-  const comment = typeof args.comment === 'string' ? args.comment.trim().slice(0, 2_000) : null
+  const comment = typeof args.comment === 'string' ? args.comment.trim() || null : null
 
   const [gate] = await ctx.db((tx) =>
     tx.select().from(flowGates).where(eq(flowGates.id, gateId)).limit(1),

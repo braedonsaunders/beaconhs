@@ -14,6 +14,7 @@ import {
 import { apiKeys, formTemplates } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { formatDateTime } from '@/lib/datetime'
+import { isUuid } from '@/lib/list-params'
 import { PERMISSION_GROUPS } from '@/lib/permissions-meta'
 import { PermissionMatrix } from '../../roles/_components/permission-matrix'
 import { revokeApiKey, updateApiKey } from '../_actions'
@@ -68,8 +69,10 @@ export default async function ApiKeyEditPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const ctx = await requireApiKeyAdmin()
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
+  const ctx = await requireApiKeyAdmin()
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
 

@@ -1,5 +1,5 @@
 // /incidents/injury-types — flat CRUD over the tenant's injury-type taxonomy.
-// Each incident_injury row picks one of these.
+// Injury rows assign one or more of these through the canonical join table.
 //
 // Standard table primitive for the list; create + edit happen in a right-side
 // flyout (?drawer=new | ?drawer=<id>). Archive / delete stay as row actions.
@@ -7,7 +7,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Trash2, Archive, ArchiveRestore } from 'lucide-react'
-import { asc, desc, eq, count, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, count, ilike, inArray, or, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -20,13 +20,17 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { incidentInjuries, incidentInjuryTypes } from '@beaconhs/db/schema'
+import { incidentInjuryTypeAssignments, incidentInjuryTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
+import { TableToolbar } from '@/components/table-toolbar'
 import { IncidentsSubNav } from '../_sub-nav'
 import { InjuryTypeDrawer } from './_drawers'
 
@@ -128,8 +132,8 @@ async function deleteInjuryType(formData: FormData): Promise<void> {
   const [{ usage } = { usage: 0 }] = await ctx.db((tx) =>
     tx
       .select({ usage: count() })
-      .from(incidentInjuries)
-      .where(eq(incidentInjuries.injuryTypeId, id)),
+      .from(incidentInjuryTypeAssignments)
+      .where(eq(incidentInjuryTypeAssignments.injuryTypeId, id)),
   )
   if (Number(usage ?? 0) > 0) {
     await ctx.db((tx) =>
@@ -159,8 +163,16 @@ export default async function InjuryTypesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
-  const params = parseListParams(sp, { sort: 'name', dir: 'asc', allowedSorts: SORTS })
+  const params = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const drawerParam = pickString(sp.drawer)
+  const statusParam = pickString(sp.status)
+  const statusFilter =
+    statusParam === 'active' || statusParam === 'archived' ? statusParam : undefined
   const ctx = await requireModuleManage('incidents')
 
   const dir = params.dir === 'asc' ? asc : desc
@@ -171,16 +183,41 @@ export default async function InjuryTypesPage({
         ? dir(incidentInjuryTypes.isActive)
         : dir(incidentInjuryTypes.name)
 
-  const { rows, usageById } = await ctx.db(async (tx) => {
-    const all = await tx.select().from(incidentInjuryTypes).orderBy(orderBy)
-    const usage = await tx
-      .select({ id: incidentInjuries.injuryTypeId, c: count() })
-      .from(incidentInjuries)
-      .where(sql`${incidentInjuries.injuryTypeId} is not null`)
-      .groupBy(incidentInjuries.injuryTypeId)
+  const { rows, total, usageById } = await ctx.db(async (tx) => {
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(incidentInjuryTypes.name, `%${params.q}%`),
+          ilike(incidentInjuryTypes.oshaCode, `%${params.q}%`),
+          ilike(incidentInjuryTypes.description, `%${params.q}%`),
+        )
+      : undefined
+    const status =
+      statusFilter === 'active'
+        ? eq(incidentInjuryTypes.isActive, 1)
+        : statusFilter === 'archived'
+          ? eq(incidentInjuryTypes.isActive, 0)
+          : undefined
+    const where = and(search, status)
+    const [totalRow] = await tx.select({ c: count() }).from(incidentInjuryTypes).where(where)
+    const data = await tx
+      .select()
+      .from(incidentInjuryTypes)
+      .where(where)
+      .orderBy(orderBy)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
+    const rowIds = data.map((row) => row.id)
+    const usage =
+      rowIds.length === 0
+        ? []
+        : await tx
+            .select({ id: incidentInjuryTypeAssignments.injuryTypeId, c: count() })
+            .from(incidentInjuryTypeAssignments)
+            .where(inArray(incidentInjuryTypeAssignments.injuryTypeId, rowIds))
+            .groupBy(incidentInjuryTypeAssignments.injuryTypeId)
     const usageMap: Record<string, number> = {}
     for (const u of usage) if (u.id) usageMap[u.id] = Number(u.c)
-    return { rows: all, usageById: usageMap }
+    return { rows: data, total: Number(totalRow?.c ?? 0), usageById: usageMap }
   })
 
   const editing =
@@ -205,14 +242,33 @@ export default async function InjuryTypesPage({
             }
           />
           <IncidentsSubNav active="injury-types" />
+          <TableToolbar>
+            <SearchInput placeholder="Search name, OSHA code, or description…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<Plus size={32} />}
-          title="No injury types"
-          description="Add labels such as laceration, strain, fracture, burn, or chemical exposure."
+          title={
+            params.q || statusFilter ? 'No injury types match your filters' : 'No injury types'
+          }
+          description={
+            params.q || statusFilter
+              ? 'Clear the search or status filter to see other injury types.'
+              : 'Add labels such as laceration, strain, fracture, burn, or chemical exposure.'
+          }
           action={
             <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
               <Button>New injury type</Button>
@@ -315,6 +371,14 @@ export default async function InjuryTypesPage({
           </TableBody>
         </Table>
       )}
+
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={total}
+        page={params.page}
+        perPage={params.perPage}
+      />
 
       <InjuryTypeDrawer
         mode={mode}

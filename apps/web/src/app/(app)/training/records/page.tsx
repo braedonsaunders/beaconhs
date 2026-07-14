@@ -26,13 +26,12 @@ import {
   type SQL,
 } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { people, tenants, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import { people, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
-import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { SearchInput } from '@/components/search-input'
 import { SearchFilter } from '@/components/search-filter'
 import { Pagination } from '@/components/pagination'
@@ -93,8 +92,8 @@ export default async function TrainingRecordsPage({
   const today = new Date().toISOString().slice(0, 10)
   const todayMs = new Date(today).getTime()
 
-  const { rows, total, sourceCounts, expiryCounts, tenantSettings, peopleList, coursesList } =
-    await ctx.db(async (tx) => {
+  const { rows, total, sourceCounts, expiryCounts, peopleList, coursesList } = await ctx.db(
+    async (tx) => {
       // read.self → only the viewer's own records; read.all → the whole tenant.
       const vis = await moduleScopeWhere(ctx, tx, {
         prefix: 'training',
@@ -207,12 +206,6 @@ export default async function TrainingRecordsPage({
           ),
         )
 
-      const [tenant] = await tx
-        .select({ settings: tenants.settings })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId))
-        .limit(1)
-
       // Filter option lists. People scoped to the records the viewer can see
       // (vis) so a self-only viewer doesn't get the whole directory; courses are
       // tenant-wide catalogue entries.
@@ -241,13 +234,11 @@ export default async function TrainingRecordsPage({
           expired: Number(expiredCount?.c ?? 0),
           current: Number(currentCount?.c ?? 0),
         } as Record<string, number>,
-        tenantSettings: tenant?.settings ?? {},
         peopleList,
         coursesList,
       }
-    })
-  const credentialOutputs = enabledCredentialOutputs(tenantSettings)
-
+    },
+  )
   const tableRows: TrainingRecordsTableRow[] = rows.map(({ record, person, course, isLatest }) => {
     let daysToExpiry: number | null = null
     if (record.expiresOn) {
@@ -362,7 +353,6 @@ export default async function TrainingRecordsPage({
         <>
           <TrainingRecordsTable
             rows={tableRows}
-            credentialOutputs={credentialOutputs}
             basePath="/training/records"
             currentParams={sp}
             sort={params.sort}

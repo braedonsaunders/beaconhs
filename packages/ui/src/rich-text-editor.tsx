@@ -29,6 +29,10 @@ export type RichTextEditorProps = {
   className?: string
   /** Min editor height (default '160px'). */
   minHeight?: string
+  /** Canonical application policy for links inserted from the toolbar. */
+  normalizeLink: (value: string) => string | null
+  /** Called when the entered link is rejected by normalizeLink. */
+  onInvalidLink?: () => void
 }
 
 export function RichTextEditor({
@@ -39,6 +43,8 @@ export function RichTextEditor({
   disabled = false,
   className,
   minHeight = '160px',
+  normalizeLink,
+  onInvalidLink,
 }: RichTextEditorProps) {
   // TipTap v3 does not re-render the host component on transactions
   // (`shouldRerenderOnTransaction` defaults to false), so the latest HTML is
@@ -49,6 +55,7 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        link: false,
       }),
       Link.configure({
         openOnClick: false,
@@ -103,7 +110,12 @@ export function RichTextEditor({
         className,
       )}
     >
-      <Toolbar editor={editor} disabled={disabled} />
+      <Toolbar
+        editor={editor}
+        disabled={disabled}
+        normalizeLink={normalizeLink}
+        onInvalidLink={onInvalidLink}
+      />
       <EditorContent editor={editor} />
       {name ? <input type="hidden" name={name} value={html} readOnly /> : null}
     </div>
@@ -112,7 +124,17 @@ export function RichTextEditor({
 
 // ---- Toolbar ---------------------------------------------------------------
 
-function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
+function Toolbar({
+  editor,
+  disabled,
+  normalizeLink,
+  onInvalidLink,
+}: {
+  editor: Editor
+  disabled: boolean
+  normalizeLink: (value: string) => string | null
+  onInvalidLink?: () => void
+}) {
   // TipTap v3 doesn't re-render on transactions, so subscribe to the slices of
   // editor state the toolbar needs (active marks/nodes + undo/redo ability).
   const state = useEditorState({
@@ -229,7 +251,12 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
             editor.chain().focus().extendMarkRange('link').unsetLink().run()
             return
           }
-          editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+          const normalized = normalizeLink(url)
+          if (!normalized) {
+            onInvalidLink?.()
+            return
+          }
+          editor.chain().focus().extendMarkRange('link').setLink({ href: normalized }).run()
         }}
         label="Link"
       >

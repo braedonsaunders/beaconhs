@@ -17,6 +17,7 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -28,7 +29,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { id, timestamps } from './_helpers'
+import { durablePublication, id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenantUsers, tenants } from './core'
 import { roles } from './iam'
@@ -280,12 +281,18 @@ export const reportRuns = pgTable(
     error: text('error'),
     pdfAttachmentId: uuid('pdf_attachment_id'),
     rowCount: integer('row_count'),
+    ...durablePublication,
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('report_runs_tenant_idx').on(t.tenantId),
     scheduleIdx: index('report_runs_schedule_idx').on(t.scheduleId, t.startedAt),
     statusIdx: index('report_runs_status_idx').on(t.status),
+    publishAvailableIdx: index('report_runs_publish_available_idx').on(
+      t.status,
+      t.publishAvailableAt,
+    ),
+    publishClaimedIdx: index('report_runs_publish_claimed_idx').on(t.status, t.publishClaimedAt),
     scheduleOccurrenceUx: uniqueIndex('report_runs_schedule_occurrence_ux').on(
       t.scheduleId,
       t.scheduledFor,
@@ -296,6 +303,19 @@ export const reportRuns = pgTable(
       foreignColumns: [reportSchedules.tenantId, reportSchedules.id],
       name: 'report_runs_tenant_schedule_fk',
     }).onDelete('cascade'),
+    publishAttemptsCheck: check('report_runs_publish_attempts_ck', sql`${t.publishAttempts} >= 0`),
+    publishLeaseStateCheck: check(
+      'report_runs_publish_lease_state_ck',
+      sql`(
+        (${t.status} = 'queued' AND (
+          (${t.publishLeaseId} IS NULL AND ${t.publishClaimedAt} IS NULL)
+          OR
+          (${t.publishLeaseId} IS NOT NULL AND ${t.publishClaimedAt} IS NOT NULL)
+        ))
+        OR
+        (${t.status} <> 'queued' AND ${t.publishLeaseId} IS NULL AND ${t.publishClaimedAt} IS NULL)
+      )`,
+    ),
   }),
 )
 

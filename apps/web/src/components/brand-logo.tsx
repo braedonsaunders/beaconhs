@@ -14,7 +14,6 @@ import type { CSSProperties, SVGProps } from 'react'
 import { cn } from '@beaconhs/ui'
 
 const BRAND_AMBER = '#F5A623'
-const BRAND_NAVY = '#1B2B4A'
 
 const INK_CLASS = 'text-[#1B2B4A] dark:text-slate-100'
 

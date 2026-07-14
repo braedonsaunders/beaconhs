@@ -9,14 +9,6 @@ import { effectiveRoleAssignments } from '@/lib/effective-role-policy'
 
 export type RoleTier = 'super_admin' | 'tenant_admin' | 'safety_manager' | 'foreman' | 'worker'
 
-const ROLE_TIERS: readonly RoleTier[] = [
-  'super_admin',
-  'tenant_admin',
-  'safety_manager',
-  'foreman',
-  'worker',
-] as const
-
 export const TIER_RANK: Record<RoleTier, number> = {
   super_admin: 0,
   tenant_admin: 1,

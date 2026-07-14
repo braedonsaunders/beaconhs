@@ -10,17 +10,10 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Check, ChevronDown, ChevronRight, PenLine, Trash2, UserPlus, Users } from 'lucide-react'
-import {
-  Button,
-  Input,
-  Label,
-  SearchSelect,
-  SignaturePad,
-  Textarea,
-  type SelectOption,
-} from '@beaconhs/ui'
+import { Button, Input, Label, SignaturePad, Textarea } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { addSignOffSigner, removeSignOffSigner } from '../_ack-actions'
-import { uploadSignatureDataUrl } from '@/lib/upload-signature'
+import { RawImage } from '@/components/raw-image'
 
 export type SheetSigner = {
   ackId: string
@@ -42,7 +35,6 @@ export function SignOffSheet({
   versionId,
   versionNumber,
   defaultTitle,
-  peopleOptions,
   initialRoster,
   initialSessionId,
   backHref,
@@ -51,7 +43,6 @@ export function SignOffSheet({
   versionId: string
   versionNumber: number
   defaultTitle: string
-  peopleOptions: SelectOption[]
   initialRoster: SheetSigner[]
   initialSessionId: string | null
   backHref: string
@@ -68,10 +59,6 @@ export function SignOffSheet({
   const [pending, startTransition] = useTransition()
 
   const signedIds = useMemo(() => new Set(roster.map((r) => r.personId)), [roster])
-  const available = useMemo(
-    () => peopleOptions.filter((o) => !signedIds.has(o.value)),
-    [peopleOptions, signedIds],
-  )
 
   function addSigner() {
     if (!personId) {
@@ -84,13 +71,12 @@ export function SignOffSheet({
     }
     startTransition(async () => {
       try {
-        const signatureAttachmentId = await uploadSignatureDataUrl(sig)
         const res = await addSignOffSigner({
           documentId,
           versionId,
           session: { id: sessionId, title, location, notes },
           personId,
-          signatureAttachmentId,
+          signatureDataUrl: sig,
         })
         if (!res.ok) {
           toast.error(res.error)
@@ -190,10 +176,11 @@ export function SignOffSheet({
         <div className="mt-3 space-y-3">
           <div className="space-y-1">
             <Label>Person</Label>
-            <SearchSelect
+            <RemoteSearchSelect
+              lookup="document-signoff-people"
               value={personId}
               onChange={setPersonId}
-              options={available}
+              excludedValues={[...signedIds]}
               placeholder="Select a person…"
               searchPlaceholder="Search people…"
               sheetTitle="Add a signer"
@@ -249,10 +236,10 @@ export function SignOffSheet({
                   </div>
                 </div>
                 {r.signatureUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <RawImage
                     src={r.signatureUrl}
                     alt={`${r.name} signature`}
+                    optimizationReason="authenticated"
                     className="h-9 w-20 shrink-0 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
                   />
                 ) : null}

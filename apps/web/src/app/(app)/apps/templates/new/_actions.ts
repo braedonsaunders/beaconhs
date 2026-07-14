@@ -7,13 +7,12 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
 import { assertCan } from '@beaconhs/tenant'
 import { formTemplates, formTemplateVersions } from '@beaconhs/db/schema'
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { slugify } from '@/app/(app)/apps/_lib/slug'
+import { generatedTemplateKey } from '@/app/(app)/apps/_lib/template-key.server'
 
 export type AppKind = 'form' | 'wizard' | 'checklist' | 'register' | 'mini_app'
 
@@ -196,24 +195,16 @@ export async function createApp(input: {
   const category = input.category?.trim() || null
   const moduleBinding = input.moduleBinding?.trim() || null
   const description = input.description?.trim() || null
-  const key = `${slugify(name) || 'app'}_${Math.random().toString(36).slice(2, 6)}`
+  const key = generatedTemplateKey(name)
 
   const schema = starterSchema(kind, name, description)
 
   const templateId = await ctx.db(async (tx) => {
-    // Guard a key collision (rare given the random suffix).
-    const existing = await tx
-      .select({ id: formTemplates.id })
-      .from(formTemplates)
-      .where(eq(formTemplates.key, key))
-      .limit(1)
-    const finalKey = existing.length ? `${key}_${Math.random().toString(36).slice(2, 5)}` : key
-
     const [tmpl] = await tx
       .insert(formTemplates)
       .values({
         tenantId: ctx.tenantId,
-        key: finalKey,
+        key,
         name,
         kind,
         category: category as never,

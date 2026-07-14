@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, IdCard, Printer, Trash2, Users } from 'lucide-react'
-import { asc, eq } from 'drizzle-orm'
+import { Archive, FileText, IdCard, Printer, Trash2, Users } from 'lucide-react'
+import { and, asc, count, eq, ilike, isNull, or } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -16,9 +16,17 @@ import {
 } from '@beaconhs/ui'
 import { jobTitleTasks, people, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { deleteTitle, unassignTitleFromPerson, updateTitle } from '../../_actions/titles'
+import { isUuid, parseListParams } from '@/lib/list-params'
+import {
+  archiveTitle,
+  restoreTitle,
+  unassignTitleFromPerson,
+  updateTitle,
+} from '../../_actions/titles'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,31 +45,75 @@ export default async function TitleDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const active = pickActiveTab(sp, TABS, 'description')
+  const errorMessage = typeof sp.error === 'string' ? sp.error : null
+  const personParams = parseListParams(
+    {
+      q: sp.personQ,
+      page: sp.personPage,
+      perPage: sp.personPerPage,
+      sort: 'person',
+      dir: 'asc',
+    },
+    { sort: 'person', dir: 'asc', perPage: 20, allowedSorts: ['person'] as const },
+  )
 
   const ctx = await requireModuleManage('people')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(personTitles).where(eq(personTitles.id, id)).limit(1)
     if (!row) return null
-    const tasks = await tx
-      .select()
-      .from(jobTitleTasks)
-      .where(eq(jobTitleTasks.titleId, id))
-      .orderBy(asc(jobTitleTasks.entityOrder), asc(jobTitleTasks.createdAt))
-    const assignments = await tx
-      .select({
-        assignment: personTitleAssignments,
-        person: people,
-      })
-      .from(personTitleAssignments)
-      .innerJoin(people, eq(people.id, personTitleAssignments.personId))
-      .where(eq(personTitleAssignments.titleId, id))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-    return { row, tasks, assignments }
+    const assignmentBase = and(eq(personTitleAssignments.titleId, id), isNull(people.deletedAt))
+    const personSearch = personParams.q
+      ? or(
+          ilike(people.firstName, `%${personParams.q}%`),
+          ilike(people.lastName, `%${personParams.q}%`),
+          ilike(people.employeeNo, `%${personParams.q}%`),
+        )
+      : undefined
+    const assignmentWhere = and(assignmentBase, personSearch)
+    const [[taskCountRow], [assignmentCountRow], [filteredAssignmentCountRow]] = await Promise.all([
+      tx
+        .select({ c: count() })
+        .from(jobTitleTasks)
+        .where(and(eq(jobTitleTasks.titleId, id), isNull(jobTitleTasks.deletedAt))),
+      tx
+        .select({ c: count() })
+        .from(personTitleAssignments)
+        .innerJoin(people, eq(people.id, personTitleAssignments.personId))
+        .where(assignmentBase),
+      tx
+        .select({ c: count() })
+        .from(personTitleAssignments)
+        .innerJoin(people, eq(people.id, personTitleAssignments.personId))
+        .where(assignmentWhere),
+    ])
+    const assignments =
+      active === 'people'
+        ? await tx
+            .select({
+              assignment: personTitleAssignments,
+              person: people,
+            })
+            .from(personTitleAssignments)
+            .innerJoin(people, eq(people.id, personTitleAssignments.personId))
+            .where(assignmentWhere)
+            .orderBy(asc(people.lastName), asc(people.firstName), asc(people.id))
+            .limit(personParams.perPage)
+            .offset((personParams.page - 1) * personParams.perPage)
+        : []
+    return {
+      row,
+      taskCount: Number(taskCountRow?.c ?? 0),
+      assignmentCount: Number(assignmentCountRow?.c ?? 0),
+      filteredAssignmentCount: Number(filteredAssignmentCountRow?.c ?? 0),
+      assignments,
+    }
   })
   if (!data) notFound()
-  const { row, tasks, assignments } = data
+  const { row, taskCount, assignmentCount, filteredAssignmentCount, assignments } = data
 
   const basePath = `/people/titles/${row.id}`
 
@@ -72,29 +124,51 @@ export default async function TitleDetailPage({
           back={{ href: '/people/titles', label: 'Back to titles' }}
           title={row.name}
           subtitle={row.description ?? undefined}
-          badge={<Badge variant="secondary">{assignments.length} assigned</Badge>}
+          badge={
+            <span className="flex items-center gap-2">
+              {row.deletedAt ? <Badge variant="secondary">Archived</Badge> : null}
+              <Badge variant="secondary">{assignmentCount} assigned</Badge>
+            </span>
+          }
           actions={
             <>
-              <Link href={`${basePath}/pdf`} target="_blank">
-                <Button variant="outline">
-                  <Printer size={14} />
-                  Job Description PDF
-                </Button>
-              </Link>
-              <form action={deleteTitle}>
-                <input type="hidden" name="id" value={row.id} />
-                <Button
-                  type="submit"
-                  variant="outline"
-                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </Button>
-              </form>
+              {row.deletedAt ? null : (
+                <Link href={`${basePath}/pdf`} target="_blank">
+                  <Button variant="outline">
+                    <Printer size={14} />
+                    Job Description PDF
+                  </Button>
+                </Link>
+              )}
+              {row.deletedAt ? (
+                <form action={restoreTitle}>
+                  <input type="hidden" name="id" value={row.id} />
+                  <Button type="submit" variant="outline">
+                    Restore
+                  </Button>
+                </form>
+              ) : (
+                <form action={archiveTitle}>
+                  <input type="hidden" name="id" value={row.id} />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                  >
+                    <Archive size={14} />
+                    Archive
+                  </Button>
+                </form>
+              )}
             </>
           }
         />
+
+        {errorMessage ? (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+            {errorMessage}
+          </p>
+        ) : null}
 
         <TabNav
           basePath={basePath}
@@ -102,8 +176,8 @@ export default async function TitleDetailPage({
           active={active}
           tabs={[
             { key: 'description', label: 'Job Description' },
-            { key: 'people', label: 'Assigned people', count: assignments.length },
-            { key: 'tasks', label: 'Tasks', count: tasks.length },
+            { key: 'people', label: 'Assigned people', count: assignmentCount },
+            { key: 'tasks', label: 'Tasks', count: taskCount },
           ]}
         />
 
@@ -120,7 +194,13 @@ export default async function TitleDetailPage({
                 <input type="hidden" name="id" value={row.id} />
                 <div className="space-y-1.5">
                   <Label htmlFor="name">Name *</Label>
-                  <Input id="name" name="name" defaultValue={row.name} required />
+                  <Input
+                    id="name"
+                    name="name"
+                    defaultValue={row.name}
+                    required
+                    disabled={Boolean(row.deletedAt)}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="description">Scope</Label>
@@ -129,6 +209,7 @@ export default async function TitleDetailPage({
                     name="description"
                     rows={3}
                     defaultValue={row.description ?? ''}
+                    disabled={Boolean(row.deletedAt)}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -138,6 +219,7 @@ export default async function TitleDetailPage({
                     name="responsibilities"
                     rows={6}
                     defaultValue={row.responsibilities ?? ''}
+                    disabled={Boolean(row.deletedAt)}
                   />
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -148,6 +230,7 @@ export default async function TitleDetailPage({
                       name="education"
                       rows={4}
                       defaultValue={row.education ?? ''}
+                      disabled={Boolean(row.deletedAt)}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -157,11 +240,14 @@ export default async function TitleDetailPage({
                       name="experience"
                       rows={4}
                       defaultValue={row.experience ?? ''}
+                      disabled={Boolean(row.deletedAt)}
                     />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button type="submit">Save Job Description</Button>
+                  <Button type="submit" disabled={Boolean(row.deletedAt)}>
+                    Save Job Description
+                  </Button>
                 </div>
               </form>
             </CardContent>
@@ -177,10 +263,17 @@ export default async function TitleDetailPage({
                 <Badge variant="secondary">{assignments.length}</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
+              <SearchInput
+                placeholder="Search assigned people…"
+                paramKey="personQ"
+                pageParamKey="personPage"
+              />
               {assignments.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  No one assigned. Assign this title from a person's Title tab.
+                  {personParams.q
+                    ? 'No assigned people match your search.'
+                    : "No one assigned. Assign this title from a person's Overview tab."}
                 </p>
               ) : (
                 <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -214,6 +307,14 @@ export default async function TitleDetailPage({
                   ))}
                 </ul>
               )}
+              <Pagination
+                basePath={basePath}
+                currentParams={sp}
+                total={filteredAssignmentCount}
+                page={personParams.page}
+                perPage={personParams.perPage}
+                pageParamKey="personPage"
+              />
             </CardContent>
           </Card>
         ) : null}
@@ -224,38 +325,30 @@ export default async function TitleDetailPage({
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileText size={16} />
                 Job-description tasks
-                <Badge variant="secondary">{tasks.length}</Badge>
+                <Badge variant="secondary">{taskCount}</Badge>
               </CardTitle>
-              <Link href={`${basePath}/tasks`}>
-                <Button size="sm" variant="outline">
-                  Manage task list →
+              {row.deletedAt ? (
+                <Button size="sm" variant="outline" disabled>
+                  Restore title to manage tasks
                 </Button>
-              </Link>
+              ) : (
+                <Link href={`${basePath}/tasks`}>
+                  <Button size="sm" variant="outline">
+                    Manage task list →
+                  </Button>
+                </Link>
+              )}
             </CardHeader>
             <CardContent>
-              {tasks.length === 0 ? (
+              {taskCount === 0 ? (
                 <p className="text-sm text-slate-500">
                   No tasks. Open the task manager to add tasks and capture per-person sign-offs.
                 </p>
               ) : (
-                <ol className="space-y-1 text-sm">
-                  {tasks.map((t, i) => (
-                    <li
-                      key={t.id}
-                      className="flex items-start gap-3 rounded border border-slate-100 px-3 py-2"
-                    >
-                      <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-slate-900">{t.task}</div>
-                        {t.description ? (
-                          <div className="text-xs text-slate-500">{t.description}</div>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {taskCount} active {taskCount === 1 ? 'task' : 'tasks'}. Open the task manager to
+                  search, edit, reorder, archive, and review acknowledgements.
+                </p>
               )}
             </CardContent>
           </Card>

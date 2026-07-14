@@ -10,7 +10,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 export type ClassificationEditing = {
   id: string
@@ -19,8 +20,6 @@ export type ClassificationEditing = {
   description: string | null
   isRecordable: boolean
 }
-
-type ParentOption = { id: string; label: string }
 
 type SaveAction = (input: {
   id?: string
@@ -34,14 +33,12 @@ type SaveAction = (input: {
 export function ClassificationDrawer({
   mode,
   editing,
-  parentOptions,
   defaultParentId,
   closeHref,
   saveAction,
 }: {
   mode: 'new' | 'edit' | null
   editing: ClassificationEditing | null
-  parentOptions: ParentOption[]
   defaultParentId: string
   closeHref: string
   saveAction: SaveAction
@@ -66,7 +63,6 @@ export function ClassificationDrawer({
       <ClassificationForm
         key={editing?.id ?? `new:${defaultParentId}`}
         editing={editing}
-        parentOptions={parentOptions}
         defaultParentId={defaultParentId}
         saveAction={saveAction}
         onDone={close}
@@ -77,13 +73,11 @@ export function ClassificationDrawer({
 
 function ClassificationForm({
   editing,
-  parentOptions,
   defaultParentId,
   saveAction,
   onDone,
 }: {
   editing: ClassificationEditing | null
-  parentOptions: ParentOption[]
   defaultParentId: string
   saveAction: SaveAction
   onDone: () => void
@@ -128,17 +122,18 @@ function ClassificationForm({
       {editing ? null : (
         <div className="space-y-1.5">
           <Label htmlFor="cl-parent">Parent</Label>
-          <Select
+          <RemoteSearchSelect
             id="cl-parent"
+            lookup="incident-classification-parents"
             value={parentId}
-            onChange={(e) => setParentId(e.currentTarget.value)}
-          >
-            {parentOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </Select>
+            onChange={setParentId}
+            placeholder="Top level"
+            searchPlaceholder="Search top-level classifications…"
+            sheetTitle="Select parent classification"
+            ariaLabel="Parent classification"
+            clearable
+            emptyLabel="— top level —"
+          />
         </div>
       )}
 
@@ -151,6 +146,7 @@ function ClassificationForm({
           onChange={(e) => setName(e.currentTarget.value)}
           placeholder="e.g. Slip / trip / fall"
           required
+          maxLength={200}
         />
       </div>
 
@@ -183,6 +179,7 @@ function ClassificationForm({
           onChange={(e) => setDescription(e.currentTarget.value)}
           rows={3}
           placeholder="Optional notes"
+          maxLength={10000}
         />
       </div>
 

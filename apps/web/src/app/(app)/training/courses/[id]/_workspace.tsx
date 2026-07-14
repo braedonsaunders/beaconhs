@@ -9,7 +9,7 @@
 //               a documents-editor-style ribbon + inline WYSIWYG editor with a
 //               fullscreen toggle (see _lesson-surface.tsx)
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -38,11 +38,13 @@ import {
 } from 'lucide-react'
 import { Badge, Button, FileUploader, Input, Label, RichTextEditor, Select } from '@beaconhs/ui'
 import type { PracticalCriterion } from '@beaconhs/db/schema'
+import { normalizeDocumentHref } from '@beaconhs/forms-core'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { useReseededState } from '@/lib/use-reseeded-state'
-import { LessonSurface } from './_lesson-surface'
+import { LessonSurface, type LessonSaveController } from './_lesson-surface'
+import { LatestAutosaveQueue, type AutosaveSnapshot } from './_lib/autosave-queue'
 import {
   CoursePresenter,
   type AssessmentMeta,
@@ -64,16 +66,13 @@ import {
 import { DELIVERY_OPTIONS, deliveryMeta } from '../../_lib/delivery'
 import { startTrainingRecord } from '../../records/_actions'
 import { startClass } from '../../classes/_actions'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export type LessonKind =
-  | 'rich'
-  | 'video'
-  | 'file'
-  | 'embed'
-  | 'quiz'
-  | 'session'
-  | 'slides'
-  | 'practical'
+  'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
 export type CompletionRule = 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
 
 export type LessonLite = {
@@ -89,7 +88,7 @@ export type LessonLite = {
   embedUrl: string | null
   contentItemId: string | null
   durationMinutes: number | null
-  contentJson: Record<string, unknown> | null
+  minTimeSeconds: number | null
   contentHtml: string | null
   practicalCriteria: PracticalCriterion[]
   /** Set when the deck is mastered by an uploaded PowerPoint file. */
@@ -206,6 +205,11 @@ export function CourseWorkspace({
   modules,
   assessmentTypes,
   classes,
+  classOptions,
+  classTotal,
+  filteredClassTotal,
+  classPage,
+  classPerPage,
   contentItems,
   itemContents,
   quizQuestions,
@@ -214,13 +218,26 @@ export function CourseWorkspace({
   attachmentUrls,
   records,
   recordsTotal,
+  filteredRecordsTotal,
+  recordPage,
+  recordPerPage,
   files,
+  filesTotal,
+  filteredFilesTotal,
+  filePage,
+  filePerPage,
+  currentParams,
 }: {
   course: CourseLite
   credentialOutputs: CredentialOutputLite[]
   modules: ModuleLite[]
   assessmentTypes: { id: string; name: string }[]
   classes: ClassLite[]
+  classOptions: { id: string; title: string }[]
+  classTotal: number
+  filteredClassTotal: number
+  classPage: number
+  classPerPage: number
   contentItems: { id: string; title: string; kind: string }[]
   itemContents: Record<string, ItemContent>
   quizQuestions: Record<string, QuizQuestion[]>
@@ -229,7 +246,15 @@ export function CourseWorkspace({
   attachmentUrls: Record<string, string | null | undefined>
   records: RecordLite[]
   recordsTotal: number
+  filteredRecordsTotal: number
+  recordPage: number
+  recordPerPage: number
   files: FileLite[]
+  filesTotal: number
+  filteredFilesTotal: number
+  filePage: number
+  filePerPage: number
+  currentParams: Record<string, string | string[] | undefined>
 }) {
   const router = useRouter()
   const search = useSearchParams()
@@ -246,9 +271,75 @@ export function CourseWorkspace({
   const [editingId, setEditingId] = useState<string | null>(search.get('lesson'))
   const [dropHover, setDropHover] = useState<string | null>(null)
   const [presenting, setPresenting] = useState(false)
+  const [navigationBusy, setNavigationBusy] = useState(false)
   const [, startTransition] = useTransition()
-  const moduleOrderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lessonOrderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [orderSaveQueue] = useState(() => new LatestAutosaveQueue())
+  const [orderSaveSnapshot, setOrderSaveSnapshot] = useState<AutosaveSnapshot>({
+    state: 'saved',
+    error: null,
+  })
+  const lessonSaveController = useRef<LessonSaveController | null>(null)
+  const navigationPending = useRef(false)
+
+  useEffect(() => orderSaveQueue.subscribe(setOrderSaveSnapshot), [orderSaveQueue])
+
+  const registerLessonSaveController = useCallback((controller: LessonSaveController | null) => {
+    lessonSaveController.current = controller
+  }, [])
+
+  const hasPendingSaves = useCallback(
+    () => orderSaveQueue.hasWork() || Boolean(lessonSaveController.current?.hasWork()),
+    [orderSaveQueue],
+  )
+
+  const flushPendingSaves = useCallback(
+    async (pause: boolean) => {
+      const lessonController = lessonSaveController.current
+      try {
+        const results = await Promise.allSettled([
+          pause ? orderSaveQueue.flushAndPause() : orderSaveQueue.flush(),
+          lessonController
+            ? pause
+              ? lessonController.flushAndPause()
+              : lessonController.flush()
+            : Promise.resolve(),
+        ])
+        const failed = results.find((result) => result.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+      } catch (error) {
+        orderSaveQueue.resume()
+        lessonController?.resume()
+        throw error
+      }
+    },
+    [orderSaveQueue],
+  )
+
+  useEffect(() => {
+    const flushBestEffort = () => {
+      if (!hasPendingSaves()) return
+      void flushPendingSaves(false).catch(() => undefined)
+    }
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasPendingSaves()) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const visibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushBestEffort()
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    window.addEventListener('pagehide', flushBestEffort)
+    window.addEventListener('popstate', flushBestEffort)
+    document.addEventListener('visibilitychange', visibilityChange)
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload)
+      window.removeEventListener('pagehide', flushBestEffort)
+      window.removeEventListener('popstate', flushBestEffort)
+      document.removeEventListener('visibilitychange', visibilityChange)
+      flushBestEffort()
+    }
+  }, [flushPendingSaves, hasPendingSaves])
 
   const allLessons = tree.flatMap((m) => m.lessons)
   const editing = allLessons.find((l) => l.id === editingId) ?? null
@@ -270,29 +361,22 @@ export function CourseWorkspace({
 
   function onReorderModules(next: ModuleLite[]) {
     setTree(next)
-    if (moduleOrderTimer.current) clearTimeout(moduleOrderTimer.current)
-    moduleOrderTimer.current = setTimeout(() => {
-      void reorderModules(
-        course.id,
-        next.map((m) => m.id),
-      )
-    }, 600)
+    const orderedIds = next.map((module) => module.id)
+    orderSaveQueue.schedule('module-order', 600, () => reorderModules(course.id, orderedIds))
   }
   function onReorderLessons(moduleId: string, next: LessonLite[]) {
     setTree((prev) => prev.map((m) => (m.id === moduleId ? { ...m, lessons: next } : m)))
-    if (lessonOrderTimer.current) clearTimeout(lessonOrderTimer.current)
-    lessonOrderTimer.current = setTimeout(() => {
-      void reorderLessons(
-        course.id,
-        next.map((l) => l.id),
-      )
-    }, 600)
+    const orderedIds = next.map((lesson) => lesson.id)
+    orderSaveQueue.schedule(`lesson-order:${moduleId}`, 600, () =>
+      reorderLessons(course.id, orderedIds),
+    )
   }
 
   /** Create a lesson of `kind` in `moduleId` (null → first/new module) and open it. */
   function addElement(kind: LessonKind, moduleId: string | null) {
     startTransition(async () => {
       try {
+        await orderSaveQueue.flush()
         const { id } = await createLessonOfKind(course.id, moduleId, kind)
         router.refresh()
         openLesson(id)
@@ -302,8 +386,99 @@ export function CourseWorkspace({
     })
   }
 
+  const retryOrderSave = useCallback(async () => {
+    try {
+      await orderSaveQueue.retry()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Course order could not be saved.')
+    }
+  }, [orderSaveQueue])
+
+  const openPresenter = useCallback(async () => {
+    if (navigationPending.current) return
+    navigationPending.current = true
+    setNavigationBusy(true)
+    try {
+      await flushPendingSaves(true)
+      setPresenting(true)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Changes could not be saved.')
+    } finally {
+      navigationPending.current = false
+      setNavigationBusy(false)
+    }
+  }, [flushPendingSaves])
+
+  const closePresenter = useCallback(() => {
+    orderSaveQueue.resume()
+    lessonSaveController.current?.resume()
+    setPresenting(false)
+  }, [orderSaveQueue])
+
+  const handleNavigationCapture = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || !hasPendingSaves()) return
+      const target = event.target instanceof Element ? event.target : null
+      const anchor = target?.closest<HTMLAnchorElement>('a[href]')
+      if (!anchor) return
+
+      const opensElsewhere =
+        anchor.target === '_blank' ||
+        anchor.hasAttribute('download') ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      if (opensElsewhere) {
+        void flushPendingSaves(false).catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : 'Changes could not be saved.')
+        })
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      if (navigationPending.current) return
+      navigationPending.current = true
+      setNavigationBusy(true)
+      const destination = new URL(anchor.href, window.location.href)
+      const current = new URL(window.location.href)
+      void flushPendingSaves(true)
+        .then(() => {
+          if (destination.href === current.href) {
+            orderSaveQueue.resume()
+            lessonSaveController.current?.resume()
+            setNavigationBusy(false)
+            return
+          }
+          if (destination.origin === window.location.origin) {
+            router.push(`${destination.pathname}${destination.search}${destination.hash}`)
+          } else {
+            window.location.assign(destination.href)
+          }
+        })
+        .catch((error: unknown) => {
+          setNavigationBusy(false)
+          toast.error(error instanceof Error ? error.message : 'Changes could not be saved.')
+        })
+        .finally(() => {
+          navigationPending.current = false
+        })
+    },
+    [flushPendingSaves, hasPendingSaves, orderSaveQueue, router],
+  )
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      className="relative flex h-full min-h-0 flex-col"
+      aria-busy={navigationBusy}
+      onClickCapture={handleNavigationCapture}
+    >
+      {navigationBusy ? (
+        <div className="absolute inset-0 z-[80] cursor-wait" role="status" aria-live="polite">
+          <span className="sr-only">Saving course changes before continuing…</span>
+        </div>
+      ) : null}
       {/* ---- top header ---- */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
         <SmartBackLink
@@ -317,6 +492,7 @@ export function CourseWorkspace({
               {course.name}
             </span>
             <Badge variant="secondary">{delivery.label}</Badge>
+            <OrderSaveBadge snapshot={orderSaveSnapshot} onRetry={() => void retryOrderSave()} />
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400">
             {course.code}
@@ -342,7 +518,7 @@ export function CourseWorkspace({
             </Link>
           ) : null}
           {showBuilder ? (
-            <Button size="sm" onClick={() => setPresenting(true)} disabled={lessonCount === 0}>
+            <Button size="sm" onClick={() => void openPresenter()} disabled={lessonCount === 0}>
               <Play size={14} /> Play
             </Button>
           ) : null}
@@ -358,7 +534,7 @@ export function CourseWorkspace({
           quizQuestions={quizQuestions}
           assessmentMeta={assessmentMeta}
           attachmentMeta={attachmentMeta}
-          onClose={() => setPresenting(false)}
+          onClose={closePresenter}
         />
       ) : null}
 
@@ -413,10 +589,38 @@ export function CourseWorkspace({
               <BuildPalette onAdd={(kind) => addElement(kind, tree[tree.length - 1]?.id ?? null)} />
             ) : null}
             {activeTab === 'records' ? (
-              <RecordsPanel course={course} records={records} total={recordsTotal} />
+              <RecordsPanel
+                course={course}
+                records={records}
+                total={recordsTotal}
+                filteredTotal={filteredRecordsTotal}
+                page={recordPage}
+                perPage={recordPerPage}
+                currentParams={currentParams}
+              />
             ) : null}
-            {activeTab === 'classes' ? <ClassesPanel classes={classes} /> : null}
-            {activeTab === 'files' ? <FilesPanel courseId={course.id} files={files} /> : null}
+            {activeTab === 'classes' ? (
+              <ClassesPanel
+                courseId={course.id}
+                classes={classes}
+                total={classTotal}
+                filteredTotal={filteredClassTotal}
+                page={classPage}
+                perPage={classPerPage}
+                currentParams={currentParams}
+              />
+            ) : null}
+            {activeTab === 'files' ? (
+              <FilesPanel
+                courseId={course.id}
+                files={files}
+                total={filesTotal}
+                filteredTotal={filteredFilesTotal}
+                page={filePage}
+                perPage={filePerPage}
+                currentParams={currentParams}
+              />
+            ) : null}
           </div>
         </aside>
 
@@ -428,10 +632,11 @@ export function CourseWorkspace({
               courseId={course.id}
               lesson={editing}
               assessmentTypes={assessmentTypes}
-              classes={classes}
+              classes={classOptions}
               contentItems={contentItems}
               attachmentUrls={attachmentUrls}
               onClose={closeLesson}
+              onSaveControllerChange={registerLessonSaveController}
             />
           </div>
         ) : !showBuilder ? (
@@ -456,10 +661,17 @@ export function CourseWorkspace({
                   size="sm"
                   onClick={() =>
                     startTransition(async () => {
-                      const fd = new FormData()
-                      fd.set('title', `Module ${tree.length + 1}`)
-                      await createModule(course.id, fd)
-                      router.refresh()
+                      try {
+                        const fd = new FormData()
+                        fd.set('title', `Module ${tree.length + 1}`)
+                        await orderSaveQueue.flush()
+                        await createModule(course.id, fd)
+                        router.refresh()
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error ? error.message : 'Could not add the module.',
+                        )
+                      }
                     })
                   }
                 >
@@ -527,6 +739,7 @@ export function CourseWorkspace({
                         onDropElement={(kind) => addElement(kind, mod.id)}
                         onReorderLessons={(next) => onReorderLessons(mod.id, next)}
                         onOpenLesson={openLesson}
+                        beforeStructureMutation={() => orderSaveQueue.flush()}
                       />
                     ))}
                   </Reorder.Group>
@@ -755,6 +968,8 @@ function OverviewPanel({
           defaultValue={course.description ?? ''}
           placeholder="What does this course cover?"
           minHeight="120px"
+          normalizeLink={normalizeDocumentHref}
+          onInvalidLink={() => toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')}
         />
       </div>
       {delivery === 'online' ? (
@@ -777,6 +992,10 @@ function OverviewPanel({
               defaultValue={course.instructions ?? ''}
               placeholder="How to access and complete the course…"
               minHeight="120px"
+              normalizeLink={normalizeDocumentHref}
+              onInvalidLink={() =>
+                toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')
+              }
             />
           </div>
         </>
@@ -875,10 +1094,18 @@ function RecordsPanel({
   course,
   records,
   total,
+  filteredTotal,
+  page,
+  perPage,
+  currentParams,
 }: {
   course: CourseLite
   records: RecordLite[]
   total: number
+  filteredTotal: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
 }) {
   const today = new Date().toISOString().slice(0, 10)
   return (
@@ -894,8 +1121,39 @@ function RecordsPanel({
           View all →
         </Link>
       </div>
+      <TableToolbar>
+        <SearchInput placeholder="Search people…" paramKey="recordQ" pageParamKey="recordPage" />
+        <FilterChips
+          basePath={`/training/courses/${course.id}`}
+          currentParams={currentParams}
+          paramKey="recordStatus"
+          pageParamKey="recordPage"
+          label="Status"
+          options={[
+            { value: 'current', label: 'Current' },
+            { value: 'expired', label: 'Expired' },
+            { value: 'no_expiry', label: 'No expiry' },
+          ]}
+        />
+        <FilterChips
+          basePath={`/training/courses/${course.id}`}
+          currentParams={currentParams}
+          paramKey="recordSort"
+          pageParamKey="recordPage"
+          label="Order"
+          defaultValue="recent"
+          hideAll
+          options={[
+            { value: 'recent', label: 'Recent completion' },
+            { value: 'name', label: 'Person name' },
+            { value: 'expiry', label: 'Expiry' },
+          ]}
+        />
+      </TableToolbar>
       {records.length === 0 ? (
-        <p className="px-1 text-xs text-slate-400 dark:text-slate-500">No completions recorded.</p>
+        <p className="px-1 text-xs text-slate-400 dark:text-slate-500">
+          {total === 0 ? 'No completions recorded.' : 'No records match these filters.'}
+        </p>
       ) : (
         records.map((r) => {
           const expired = r.expiresOn && r.expiresOn < today
@@ -918,16 +1176,40 @@ function RecordsPanel({
           )
         })
       )}
+      <Pagination
+        basePath={`/training/courses/${course.id}`}
+        currentParams={currentParams}
+        total={filteredTotal}
+        page={page}
+        perPage={perPage}
+        pageParamKey="recordPage"
+      />
     </div>
   )
 }
 
-function ClassesPanel({ classes }: { classes: ClassLite[] }) {
+function ClassesPanel({
+  courseId,
+  classes,
+  total,
+  filteredTotal,
+  page,
+  perPage,
+  currentParams,
+}: {
+  courseId: string
+  classes: ClassLite[]
+  total: number
+  filteredTotal: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
+}) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
         <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-          Scheduled classes
+          Scheduled classes ({total})
         </p>
         <form action={startClass}>
           <button
@@ -938,9 +1220,39 @@ function ClassesPanel({ classes }: { classes: ClassLite[] }) {
           </button>
         </form>
       </div>
+      <TableToolbar>
+        <SearchInput placeholder="Search classes…" paramKey="classQ" pageParamKey="classPage" />
+        <FilterChips
+          basePath={`/training/courses/${courseId}`}
+          currentParams={currentParams}
+          paramKey="classStatus"
+          pageParamKey="classPage"
+          label="Status"
+          options={[
+            { value: 'scheduled', label: 'Scheduled' },
+            { value: 'completed', label: 'Completed' },
+            { value: 'cancelled', label: 'Cancelled' },
+          ]}
+        />
+        <FilterChips
+          basePath={`/training/courses/${courseId}`}
+          currentParams={currentParams}
+          paramKey="classSort"
+          pageParamKey="classPage"
+          label="Order"
+          defaultValue="upcoming"
+          hideAll
+          options={[
+            { value: 'upcoming', label: 'Earliest first' },
+            { value: 'recent', label: 'Latest first' },
+          ]}
+        />
+      </TableToolbar>
       {classes.length === 0 ? (
         <p className="px-1 text-xs text-slate-400 dark:text-slate-500">
-          No classes scheduled for this course.
+          {total === 0
+            ? 'No classes scheduled for this course.'
+            : 'No classes match these filters.'}
         </p>
       ) : (
         classes.map((c) => (
@@ -958,17 +1270,41 @@ function ClassesPanel({ classes }: { classes: ClassLite[] }) {
           </Link>
         ))
       )}
+      <Pagination
+        basePath={`/training/courses/${courseId}`}
+        currentParams={currentParams}
+        total={filteredTotal}
+        page={page}
+        perPage={perPage}
+        pageParamKey="classPage"
+      />
     </div>
   )
 }
 
-function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }) {
+function FilesPanel({
+  courseId,
+  files,
+  total,
+  filteredTotal,
+  page,
+  perPage,
+  currentParams,
+}: {
+  courseId: string
+  files: FileLite[]
+  total: number
+  filteredTotal: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
+}) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   return (
     <div className="space-y-2">
       <p className="px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-        Course files
+        Course files ({total})
       </p>
       <FileUploader
         requestUploadAction={requestUpload}
@@ -986,6 +1322,39 @@ function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }
         }
         label="Drop a file or click to choose"
       />
+      <TableToolbar>
+        <SearchInput placeholder="Search course files…" paramKey="fileQ" pageParamKey="filePage" />
+        <FilterChips
+          basePath={`/training/courses/${courseId}`}
+          currentParams={currentParams}
+          paramKey="fileType"
+          pageParamKey="filePage"
+          label="Type"
+          options={[
+            { value: 'document', label: 'Documents' },
+            { value: 'image', label: 'Images' },
+            { value: 'video', label: 'Video' },
+          ]}
+        />
+        <FilterChips
+          basePath={`/training/courses/${courseId}`}
+          currentParams={currentParams}
+          paramKey="fileSort"
+          pageParamKey="filePage"
+          label="Order"
+          defaultValue="name"
+          hideAll
+          options={[
+            { value: 'name', label: 'File name' },
+            { value: 'recent', label: 'Newest first' },
+          ]}
+        />
+      </TableToolbar>
+      {files.length === 0 ? (
+        <p className="px-1 text-xs text-slate-400 dark:text-slate-500">
+          {total === 0 ? 'No course files yet.' : 'No files match these filters.'}
+        </p>
+      ) : null}
       {files.map((f) => (
         <div
           key={f.id}
@@ -1021,6 +1390,14 @@ function FilesPanel({ courseId, files }: { courseId: string; files: FileLite[] }
           </button>
         </div>
       ))}
+      <Pagination
+        basePath={`/training/courses/${courseId}`}
+        currentParams={currentParams}
+        total={filteredTotal}
+        page={page}
+        perPage={perPage}
+        pageParamKey="filePage"
+      />
     </div>
   )
 }
@@ -1035,6 +1412,7 @@ function ModuleCard({
   onDropElement,
   onReorderLessons,
   onOpenLesson,
+  beforeStructureMutation,
 }: {
   mod: ModuleLite
   courseId: string
@@ -1043,6 +1421,7 @@ function ModuleCard({
   onDropElement: (kind: LessonKind) => void
   onReorderLessons: (next: LessonLite[]) => void
   onOpenLesson: (id: string) => void
+  beforeStructureMutation: () => Promise<void>
 }) {
   const router = useRouter()
   const controls = useDragControls()
@@ -1084,9 +1463,16 @@ function ModuleCard({
           {renaming ? (
             <form
               action={async (fd) => {
-                await updateModule(mod.id, courseId, fd)
-                setRenaming(false)
-                router.refresh()
+                try {
+                  await beforeStructureMutation()
+                  await updateModule(mod.id, courseId, fd)
+                  setRenaming(false)
+                  router.refresh()
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error ? error.message : 'Could not rename the module.',
+                  )
+                }
               }}
               className="flex flex-1 items-center gap-1.5"
             >
@@ -1128,8 +1514,15 @@ function ModuleCard({
                   )
                     return
                   startTransition(async () => {
-                    await deleteModule(mod.id, courseId)
-                    router.refresh()
+                    try {
+                      await beforeStructureMutation()
+                      await deleteModule(mod.id, courseId)
+                      router.refresh()
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error ? error.message : 'Could not delete the module.',
+                      )
+                    }
                   })
                 }}
                 className="rounded p-1 text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400"
@@ -1208,5 +1601,36 @@ function LessonCard({ lesson, onOpen }: { lesson: LessonLite; onOpen: () => void
         </Button>
       </div>
     </Reorder.Item>
+  )
+}
+
+function OrderSaveBadge({
+  snapshot,
+  onRetry,
+}: {
+  snapshot: AutosaveSnapshot
+  onRetry: () => void
+}) {
+  if (snapshot.state === 'saved') return null
+  if (snapshot.state === 'error') {
+    return (
+      <button
+        type="button"
+        onClick={onRetry}
+        title={snapshot.error ?? 'Course order could not be saved.'}
+        className="text-[11px] font-medium text-red-600 hover:underline dark:text-red-300"
+      >
+        Order not saved — retry
+      </button>
+    )
+  }
+  return (
+    <span
+      aria-live="polite"
+      className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500"
+    >
+      {snapshot.state === 'saving' ? <Loader2 size={11} className="animate-spin" /> : null}
+      {snapshot.state === 'saving' ? 'Saving order…' : 'Order unsaved'}
+    </span>
   )
 }

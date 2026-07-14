@@ -3,6 +3,14 @@
 // place keeps validation identical (hour/minute/day ranges, timezone,
 // recipients, filters JSON) so the two paths cannot drift.
 
+import {
+  assertBoundedReportFilters,
+  assertReportRecipientLimit,
+  normalizeReportRecipientEmails,
+  normalizeReportRecipientUserIds,
+  REPORT_SCHEDULE_LIMITS,
+} from '@beaconhs/reports/schedule-policy'
+
 type ScheduleCadence = 'daily' | 'weekly' | 'monthly'
 
 type ParsedScheduleForm = {
@@ -22,7 +30,10 @@ const CADENCES: readonly ScheduleCadence[] = ['daily', 'weekly', 'monthly']
 
 function parseIntField(raw: FormDataEntryValue | null, fallback: number): number {
   const s = String(raw ?? '').trim()
-  return s === '' ? fallback : Number(s)
+  if (s === '') return fallback
+  if (!/^-?\d+$/.test(s)) return Number.NaN
+  const value = Number(s)
+  return Number.isSafeInteger(value) ? value : Number.NaN
 }
 
 export function parseScheduleForm(formData: FormData): ParsedScheduleForm {
@@ -33,6 +44,7 @@ export function parseScheduleForm(formData: FormData): ParsedScheduleForm {
   const timezone = String(formData.get('timezone') ?? '').trim() || 'America/Toronto'
 
   if (!name) throw new Error('Name is required')
+  if (name.length > REPORT_SCHEDULE_LIMITS.nameChars) throw new Error('Name is too long')
   if (!CADENCES.includes(cadence)) throw new Error('Invalid cadence')
   if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
     throw new Error('Hour must be a whole number between 0 and 23')
@@ -59,29 +71,44 @@ export function parseScheduleForm(formData: FormData): ParsedScheduleForm {
   // Validate the IANA timezone before computeNextRunAt hands it to
   // Intl.DateTimeFormat, which throws a RangeError on unknown names.
   try {
+    if (timezone.length > REPORT_SCHEDULE_LIMITS.timezoneChars) throw new Error('too long')
     new Intl.DateTimeFormat(undefined, { timeZone: timezone })
   } catch {
     throw new Error(`Unknown timezone "${timezone}". Use an IANA name like America/Toronto.`)
   }
 
-  const recipientEmails = String(formData.get('recipientEmails') ?? '')
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  const recipientUserIds = String(formData.get('recipientUserIds') ?? '')
-    .split(/[\n,\s]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
+  const recipientEmailsRaw = String(formData.get('recipientEmails') ?? '')
+  if (recipientEmailsRaw.length > REPORT_SCHEDULE_LIMITS.recipientEmailListChars) {
+    throw new Error('Recipient email list is too large')
+  }
+  const recipientEmails = normalizeReportRecipientEmails(
+    recipientEmailsRaw
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
+  const recipientUserIdsRaw = String(formData.get('recipientUserIds') ?? '')
+  if (recipientUserIdsRaw.length > REPORT_SCHEDULE_LIMITS.recipientUserIdListChars) {
+    throw new Error('Recipient member list is too large')
+  }
+  const recipientUserIds = normalizeReportRecipientUserIds(
+    recipientUserIdsRaw
+      .split(/[\n,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
+  assertReportRecipientLimit(recipientUserIds, recipientEmails)
 
   const filtersRaw = String(formData.get('filters') ?? '').trim()
+  if (filtersRaw.length > REPORT_SCHEDULE_LIMITS.filtersChars) {
+    throw new Error('Report filters are too large')
+  }
   let filters: Record<string, unknown> = {}
   if (filtersRaw) {
     try {
       const parsed: unknown = JSON.parse(filtersRaw)
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('not an object')
-      }
-      filters = parsed as Record<string, unknown>
+      assertBoundedReportFilters(parsed)
+      filters = parsed
     } catch (err) {
       throw new Error(`Invalid filters JSON: ${err instanceof Error ? err.message : String(err)}`)
     }

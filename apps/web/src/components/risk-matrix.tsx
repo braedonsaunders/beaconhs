@@ -20,6 +20,12 @@ import type { RiskMatrixConfig } from '@beaconhs/db/schema'
 
 export type { RiskMatrixConfig }
 type RiskCell = { score: number; label: string; color: string }
+type RiskMatrixSelection = {
+  likelihood: number | null
+  severity: number | null
+  score: number | null
+  label: string | null
+}
 /** A risk band: every cell scoring ≥ `minScore` (and below the next band) wears
  *  this label + colour. */
 export type RiskBandDef = { label: string; color: string; minScore: number }
@@ -396,7 +402,7 @@ export function RiskMatrixField({
   defaultSeverity?: number | null
   disabled?: boolean
   /** Lifts the chosen pair for drawer bodies that build FormData manually. */
-  onChange?: (next: { likelihood: number | null; severity: number | null }) => void
+  onChange?: (next: RiskMatrixSelection) => void
 }) {
   const matrix = useRiskMatrix()
   const [likelihood, setLikelihood] = useState<number | null>(defaultLikelihood ?? null)
@@ -407,7 +413,13 @@ export function RiskMatrixField({
   function setPair(l: number | null, s: number | null) {
     setLikelihood(l)
     setSeverity(s)
-    onChange?.({ likelihood: l, severity: s })
+    const cell = cellFor(matrix, l, s)
+    onChange?.({
+      likelihood: l,
+      severity: s,
+      score: cell?.score ?? null,
+      label: cell?.label ?? null,
+    })
   }
 
   return (

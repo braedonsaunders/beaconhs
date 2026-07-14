@@ -18,6 +18,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { correctiveActions, formResponses, incidents } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
@@ -125,6 +126,10 @@ export async function spawnCorrectiveActionCore(
           }),
         },
       })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
+      })
     }
     if (inserted) return { record: inserted, replayed: false }
     if (input.flowExecutionKey) {
@@ -178,13 +183,7 @@ type SpawnIncidentCoreInput = {
   title: string
   description?: string | null
   type?:
-    | 'injury'
-    | 'illness'
-    | 'near_miss'
-    | 'property_damage'
-    | 'environmental'
-    | 'security'
-    | 'other'
+    'injury' | 'illness' | 'near_miss' | 'property_damage' | 'environmental' | 'security' | 'other'
   severity?: 'first_aid_only' | 'medical_aid' | 'lost_time' | 'fatality' | 'no_injury'
   occurredAt?: string | null
   siteOrgUnitId?: string | null

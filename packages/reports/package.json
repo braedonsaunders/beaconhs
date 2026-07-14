@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./document": "./src/document.ts",
     "./entities": "./src/entities.ts",
-    "./filters": "./src/filters.ts"
+    "./filters": "./src/filters.ts",
+    "./schedule-policy": "./src/schedule-policy.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -23,7 +24,7 @@
   "devDependencies": {
     "@types/node": "^24.13.2",
     "typescript": "^6.0.3",
-    "vite": "8.1.0",
-    "vitest": "4.1.9"
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
   }
 }

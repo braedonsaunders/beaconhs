@@ -58,9 +58,7 @@ function RecordReviewDrawer({
   action: RecordReviewAction
 }) {
   const router = useRouter()
-  const [outcome, setOutcome] = useState<'approved_no_change' | 'updated' | 'retired'>(
-    'approved_no_change',
-  )
+  const [outcome, setOutcome] = useState<'' | 'approved_no_change' | 'updated' | 'retired'>('')
   const [nextReviewOn, setNextReviewOn] = useState(defaultNextReviewOn ?? '')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +66,10 @@ function RecordReviewDrawer({
 
   function submit() {
     setError(null)
+    if (!outcome) {
+      setError('Choose the review outcome.')
+      return
+    }
     startTransition(async () => {
       const res = await action({
         documentId,
@@ -118,9 +120,10 @@ function RecordReviewDrawer({
             id="outcome"
             value={outcome}
             onChange={(e) =>
-              setOutcome(e.currentTarget.value as 'approved_no_change' | 'updated' | 'retired')
+              setOutcome(e.currentTarget.value as '' | 'approved_no_change' | 'updated' | 'retired')
             }
           >
+            <option value="">Choose an outcome…</option>
             <option value="approved_no_change">Approved — no change</option>
             <option value="updated">Updated</option>
             <option value="retired">Retired</option>

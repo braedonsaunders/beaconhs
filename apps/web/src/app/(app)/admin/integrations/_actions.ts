@@ -8,7 +8,12 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@beaconhs/db'
-import { syncConnections, tenantIntegrations } from '@beaconhs/db/schema'
+import {
+  personTitleAssignments,
+  syncConnections,
+  syncCrosswalk,
+  tenantIntegrations,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import {
   type ConnectorRunContext,
@@ -18,10 +23,14 @@ import {
   unsealSecret,
 } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { getDestination } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
 import { isUuid } from '@/lib/list-params'
+import {
+  INTEGRATION_CONNECTION_NAME_MAX_LENGTH,
+  validateRequiredPersistedText,
+} from '@/lib/persisted-text-policy'
 
 const PERM = 'admin.integrations.manage'
 const noop = () => {}
@@ -154,47 +163,81 @@ export async function deleteConnection(formData: FormData): Promise<void> {
   if (!ctx) return
   const id = String(formData.get('id') ?? '')
   if (!isUuid(id)) return
-  const [deleted] = await ctx.db((tx) =>
-    tx
+  const deleted = await ctx.db(async (tx) => {
+    const [row] = await tx
       .update(syncConnections)
       .set({ deletedAt: new Date(), enabled: false })
       .where(and(eq(syncConnections.id, id), isNull(syncConnections.deletedAt)))
-      .returning({ id: syncConnections.id }),
-  )
-  if (!deleted) return
-  await recordAudit(ctx, {
-    entityType: 'sync_connection',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted sync connection',
+      .returning({ id: syncConnections.id })
+    if (!row) return null
+
+    // A deleted connection relinquishes ownership without deleting canonical
+    // data. Convert its source-created title relationships to manual before
+    // clearing the FK, then remove crosswalk ownership so a replacement
+    // connection can claim the same natural-key records cleanly.
+    const handedOffTitles = await tx
+      .update(personTitleAssignments)
+      .set({ isManuallyMaintained: true, sourceConnectionId: null })
+      .where(eq(personTitleAssignments.sourceConnectionId, id))
+      .returning({ id: personTitleAssignments.id })
+    const removedCrosswalks = await tx
+      .delete(syncCrosswalk)
+      .where(eq(syncCrosswalk.connectionId, id))
+      .returning({ id: syncCrosswalk.id })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'sync_connection',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted sync connection and returned its records to manual management',
+      metadata: {
+        handedOffTitleAssignments: handedOffTitles.length,
+        releasedCanonicalRecords: removedCrosswalks.length,
+      },
+    })
+    return row
   })
+  if (!deleted) return
   revalidatePath('/admin/integrations')
 }
 
-export async function renameConnection(formData: FormData): Promise<void> {
+export type RenameConnectionState =
+  { status: 'idle' } | { status: 'success'; name: string } | { status: 'error'; error: string }
+
+export async function renameConnection(
+  _previousState: RenameConnectionState,
+  formData: FormData,
+): Promise<RenameConnectionState> {
   const ctx = await guard()
-  if (!ctx) return
+  if (!ctx) return { status: 'error', error: 'You do not have access to manage integrations.' }
   const id = String(formData.get('id') ?? '')
-  const name = String(formData.get('name') ?? '')
-    .trim()
-    .slice(0, 200)
-  if (!isUuid(id) || !name) return
+  if (!isUuid(id)) return { status: 'error', error: 'Connection not found.' }
+  const parsedName = validateRequiredPersistedText(formData.get('name'), {
+    label: 'Connection name',
+    maxLength: INTEGRATION_CONNECTION_NAME_MAX_LENGTH,
+  })
+  if (!parsedName.ok) return { status: 'error', error: parsedName.error }
+  const connection = await loadConn(ctx, id)
+  if (!connection) return { status: 'error', error: 'Connection not found.' }
+  if (connection.name === parsedName.value) return { status: 'success', name: parsedName.value }
   const [renamed] = await ctx.db((tx) =>
     tx
       .update(syncConnections)
-      .set({ name })
+      .set({ name: parsedName.value })
       .where(and(eq(syncConnections.id, id), isNull(syncConnections.deletedAt)))
       .returning({ id: syncConnections.id }),
   )
-  if (!renamed) return
+  if (!renamed) return { status: 'error', error: 'Connection not found.' }
   await recordAudit(ctx, {
     entityType: 'sync_connection',
     entityId: id,
     action: 'update',
-    summary: `Renamed connection to "${name}"`,
+    summary: `Renamed connection to "${parsedName.value}"`,
+    before: { name: connection.name },
+    after: { name: parsedName.value },
   })
   revalidatePath(`/admin/integrations/${id}`)
   revalidatePath('/admin/integrations')
+  return { status: 'success', name: parsedName.value }
 }
 
 export async function saveConfig(formData: FormData): Promise<void> {
@@ -447,8 +490,26 @@ export async function saveNangoModels(
   if (!ctx) return { ok: false, error: 'Not allowed.' }
   const conn = await loadConn(ctx, id)
   if (!conn) return { ok: false, error: 'Connection not found.' }
-  const clean: Record<string, string> = {}
-  for (const [k, v] of Object.entries(models)) if (v && v.trim()) clean[k] = v.trim()
+  const connector = getConnector(conn.connectorKey)
+  if (!connector || conn.connectorKey !== 'nango') {
+    return { ok: false, error: 'This connection does not support Nango model mappings.' }
+  }
+  const allowedEntities = new Set<string>(connector.entities)
+  const entries = Object.entries(models)
+  if (entries.length > allowedEntities.size) {
+    return { ok: false, error: 'The model mapping contains unsupported entities.' }
+  }
+  for (const [entity, model] of entries) {
+    if (!allowedEntities.has(entity) || typeof model !== 'string' || model.length > 200) {
+      return { ok: false, error: 'The model mapping contains an invalid value.' }
+    }
+  }
+  const clean = Object.fromEntries(
+    entries.flatMap(([entity, model]) => {
+      const value = model.trim()
+      return value ? [[entity, value] as const] : []
+    }),
+  )
   const config: Record<string, unknown> = {
     ...(conn.config as Record<string, unknown>),
     models: clean,

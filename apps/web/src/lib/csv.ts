@@ -9,6 +9,26 @@
 
 import { NextResponse } from 'next/server'
 
+export const CSV_EXPORT_MAX_ROWS = 10_000
+export const CSV_EXPORT_QUERY_LIMIT = CSV_EXPORT_MAX_ROWS + 1
+
+/** Refuse a partial CSV rather than silently presenting it as a complete export. */
+export function csvExportOverflowResponse(rowCount: number): NextResponse | null {
+  if (rowCount <= CSV_EXPORT_MAX_ROWS) return null
+  return NextResponse.json(
+    {
+      error: `This export has more than ${CSV_EXPORT_MAX_ROWS.toLocaleString()} matching rows. Narrow the search or filters and try again.`,
+    },
+    {
+      status: 422,
+      headers: {
+        'Cache-Control': 'private, no-store',
+        'X-BeaconHS-Export-Row-Limit': String(CSV_EXPORT_MAX_ROWS),
+      },
+    },
+  )
+}
+
 export function csvRow(values: (string | number | null | undefined)[]): string {
   return values
     .map((v) => {

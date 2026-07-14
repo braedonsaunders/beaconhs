@@ -5,7 +5,7 @@ import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { documentCategories, documentTypes, documents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -28,8 +28,6 @@ const STATUS_OPTIONS = [
 ] as const
 type DocumentStatus = (typeof STATUS_OPTIONS)[number]['value']
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export default async function DocumentsPage({
   searchParams,
 }: {
@@ -49,9 +47,9 @@ export default async function DocumentsPage({
     ? (statusRaw as DocumentStatus)
     : undefined
   const categoryRaw = pickString(sp.category)
-  const categoryFilter = categoryRaw && UUID_RE.test(categoryRaw) ? categoryRaw : undefined
+  const categoryFilter = categoryRaw && isUuid(categoryRaw) ? categoryRaw : undefined
   const typeRaw = pickString(sp.type)
-  const typeFilter = typeRaw && UUID_RE.test(typeRaw) ? typeRaw : undefined
+  const typeFilter = typeRaw && isUuid(typeRaw) ? typeRaw : undefined
   const ctx = await requireRequestContext()
   // Administration + Health & Safety (documents.manage) get the management table;
   // documents.read holders get a read-only card library of published documents.

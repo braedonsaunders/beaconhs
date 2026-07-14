@@ -180,6 +180,9 @@ export async function testEmailConnection(input: {
   scope: EmailTestScope
   to: string
 }): Promise<{ ok: boolean; message: string }> {
+  if (input.scope !== 'tenant' && input.scope !== 'platform') {
+    throw new Error('Select a valid email settings scope.')
+  }
   const ctx = await requireRequestContext()
   if (input.scope === 'platform') gatePlatform(ctx)
   else gateTenant(ctx)

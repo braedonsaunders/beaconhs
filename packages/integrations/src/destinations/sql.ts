@@ -223,16 +223,7 @@ function weeklySubItems(item: Item): Item[] {
   }))
 }
 
-// Test seam: lets a test inject a fake connection to assert the emitted SQL
-// (per dialect) without a live server. Production never sets this.
-type ConnectFn = (c: Conn, password: string) => Promise<DbConn>
-let connectOverride: ConnectFn | null = null
-function __setSqlConnectOverride(fn: ConnectFn | null): void {
-  connectOverride = fn
-}
-
 function connect(c: Conn, password: string): Promise<DbConn> {
-  if (connectOverride) return connectOverride(c, password)
   return connectDb({
     dbKind: c.dbKind,
     host: c.host,
@@ -377,6 +368,3 @@ export const sqlDestination: DestinationDef = {
   test,
   deliver,
 }
-
-// Reused by the SQL mapping editor for token validation.
-const sqlInternal = { buildWeekRows, parseColumns }

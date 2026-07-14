@@ -1,13 +1,13 @@
 'use server'
 
 // Unified obligation CRUD — writes the ONE `compliance_obligations` table for
-// EVERY kind (the 5 audience assignments + cert requirements + equipment/PPE
-// policies + job-title sign-offs). No more per-module delegation: this is the
-// single engine. Completion is computed by the adapters in @beaconhs/compliance
-// and materialised into compliance_status on create + by the daily worker scan.
+// every authorable requirement kind. Completion is computed by the adapters in
+// @beaconhs/compliance and materialised into compliance_status on create + by
+// the daily worker scan.
 
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import {
   type ComplianceRecurrence,
   type ComplianceTargetRef,
@@ -16,36 +16,53 @@ import {
   complianceStatus,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
-import { materializeObligation } from '@beaconhs/compliance'
+import {
+  ComplianceAudienceTargetError,
+  ComplianceTargetError,
+  lockComplianceAudienceTargets,
+  lockComplianceTarget,
+  materializeObligation,
+  resolveComplianceClock,
+  skipQueuedComplianceDispatches,
+  validateCronRecurrence,
+  validateFrequencyRecurrence,
+} from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
-import type { AudienceItem } from '@/components/audience-picker'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { type RecurrenceValue, frequencyToCron } from '@/components/recurrence'
-import { KIND_META, type ObligationKind, kindLabel, recurrenceKindFor } from './_meta'
+import { parseObligationInput, type ObligationInput } from './_input'
+import { KIND_META, type ObligationKind, kindLabel } from './_meta'
+import { obligationSemanticConfigChanged } from './_semantic-config'
 
-export type ObligationInput = {
-  kind: ObligationKind
-  title: string
-  notes?: string | null
-  audience: AudienceItem[]
-  recurrence: RecurrenceValue
-  // Targets — only the field relevant to `kind` is read.
-  inspectionTypeId?: string
-  documentId?: string
-  trainingItemKind?: 'course' | 'assessment_type'
-  courseId?: string
-  assessmentTypeId?: string
-  certItemKind?: 'course' | 'skill'
-  skillTypeId?: string
-  formTemplateId?: string
-  equipmentTypeId?: string
-  ppeTypeId?: string
-  jobTitleId?: string
-}
+export type { ObligationInput } from './_input'
 
 type ObligationResult =
-  | { ok: true; id: string; kind: ObligationKind }
-  | { ok: false; error: string }
+  { ok: true; id: string; kind: ObligationKind } | { ok: false; error: string }
+
+class ObligationActionError extends Error {}
+
+function expectedError(message: string): never {
+  throw new ObligationActionError(message)
+}
+
+function publicMutationError(error: unknown, fallback: string): string {
+  return error instanceof ObligationActionError ||
+    error instanceof ComplianceTargetError ||
+    error instanceof ComplianceAudienceTargetError
+    ? error.message
+    : fallback
+}
+
+function revalidateObligationPaths(id?: string): void {
+  try {
+    revalidatePath('/compliance/obligations')
+    if (id) revalidatePath(`/compliance/obligations/${id}`)
+  } catch (error) {
+    // The database transaction has already committed. Cache invalidation must
+    // never turn a successful mutation into a false failure that users retry.
+    console.error('[compliance-obligation] cache revalidation failed', error)
+  }
+}
 
 function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; error?: string } {
   switch (input.kind) {
@@ -103,7 +120,12 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
     return { kind: 'expiry', remindBeforeDays: 30 }
   if (kind === 'job_title_signoff') return { kind: 'one_time' }
   if (kind === 'form')
-    return { kind: 'cron', cron: cronFor(), dueOffsetMinutes: r.dueOffsetMinutes }
+    return {
+      kind: 'cron',
+      frequency: r.frequency ?? 'week',
+      cron: cronFor(),
+      dueOffsetMinutes: r.dueOffsetMinutes,
+    }
   if (kind === 'document') return { kind: 'one_time', dueOn: r.dueOn }
   if (kind === 'training')
     return r.kind === 'one_time'
@@ -114,19 +136,32 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
           cron: cronFor(),
           remindBeforeDays: r.remindBeforeDays ?? 7,
         }
-  // inspection / journal → frequency
+  // Inspection / journal / hazard assessment → frequency.
   return {
     kind: 'frequency',
     frequency: r.frequency ?? 'week',
+    cron: cronFor(),
     quantity: Math.max(1, r.quantity ?? 1),
     compliantPercentage: Math.max(0, Math.min(100, r.compliantPercentage ?? 100)),
     dueOffsetMinutes: r.dueOffsetMinutes,
   }
 }
 
+function assertValidRecurrence(
+  recurrence: ComplianceRecurrence,
+  clock: Awaited<ReturnType<typeof resolveComplianceClock>>,
+): void {
+  try {
+    if (recurrence.kind === 'frequency') validateFrequencyRecurrence(recurrence, clock)
+    else if (recurrence.kind === 'cron') validateCronRecurrence(recurrence, clock)
+  } catch (error) {
+    expectedError(error instanceof Error ? error.message : 'The recurrence is invalid')
+  }
+}
+
 // Audience rows (per_person only). Journal with no picks ⇒ everyone.
 function buildAudienceRows(input: ObligationInput): {
-  rows: { kind: string; entityKey: string }[]
+  rows: { kind: ObligationInput['audience'][number]['type']; entityKey: string }[]
   error?: string
 } {
   if (!KIND_META[input.kind].audience) return { rows: [] }
@@ -142,30 +177,71 @@ function buildAudienceRows(input: ObligationInput): {
   return { rows }
 }
 
-// Refresh the materialised scoreboard for one obligation so the hub rollups
-// reflect the change immediately. Best-effort — the daily compliance_scan
-// reconciles anything missed.
-async function rematerialize(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-  id: string,
-): Promise<void> {
-  try {
-    await ctx.db(async (tx) => {
-      const [row] = await tx
-        .select()
-        .from(complianceObligations)
-        .where(eq(complianceObligations.id, id))
-        .limit(1)
-      if (row) await materializeObligation(tx, ctx.tenantId, row)
-    })
-  } catch {
-    /* best-effort — the daily compliance_scan will reconcile */
-  }
+async function lockObligation(tx: Database, tenantId: string, id: string) {
+  const [obligation] = await tx
+    .select()
+    .from(complianceObligations)
+    .where(
+      and(
+        eq(complianceObligations.tenantId, tenantId),
+        eq(complianceObligations.id, id),
+        isNull(complianceObligations.deletedAt),
+      ),
+    )
+    .limit(1)
+    .for('update')
+  if (!obligation) expectedError('Obligation not found')
+  return obligation
 }
 
-export async function createObligation(input: ObligationInput): Promise<ObligationResult> {
+async function purgeMaterializedStatus(tx: Database, tenantId: string, id: string): Promise<void> {
+  await tx
+    .delete(complianceStatus)
+    .where(and(eq(complianceStatus.tenantId, tenantId), eq(complianceStatus.obligationId, id)))
+}
+
+async function setEnabledInTransaction(
+  tx: Database,
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  existing: Awaited<ReturnType<typeof lockObligation>>,
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const [updated] = await tx
+    .update(complianceObligations)
+    .set({ status: enabled ? 'active' : 'paused' })
+    .where(
+      and(
+        eq(complianceObligations.tenantId, ctx.tenantId),
+        eq(complianceObligations.id, id),
+        isNull(complianceObligations.deletedAt),
+      ),
+    )
+    .returning()
+  if (!updated) expectedError('Obligation not found')
+
+  if (enabled) {
+    await materializeObligation(tx, ctx.tenantId, updated)
+  } else {
+    await purgeMaterializedStatus(tx, ctx.tenantId, id)
+    await skipQueuedComplianceDispatches(tx, ctx.tenantId, id)
+  }
+  await recordAuditInTransaction(tx, ctx, {
+    entityType: 'compliance_obligation',
+    entityId: id,
+    action: 'update',
+    summary: enabled ? 'Enabled compliance obligation' : 'Disabled compliance obligation',
+    before: { status: existing.status },
+    after: { status: updated.status },
+  })
+}
+
+export async function createObligation(rawInput: ObligationInput): Promise<ObligationResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.assign')
+  const parsed = parseObligationInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.value
   const meta = KIND_META[input.kind]
 
   if (input.kind === 'journal' && !input.title.trim())
@@ -177,10 +253,17 @@ export async function createObligation(input: ObligationInput): Promise<Obligati
   if (audienceError) return { ok: false, error: audienceError }
 
   const recurrence = buildRecurrence(input.kind, input.recurrence)
-  const recurrenceKind = recurrenceKindFor(input.kind, input.recurrence.kind === 'one_time')
+  const recurrenceKind = recurrence.kind
 
+  let id: string
   try {
-    const id = await ctx.db(async (tx) => {
+    id = await ctx.db(async (tx) => {
+      if (recurrence.kind === 'frequency' || recurrence.kind === 'cron') {
+        const clock = await resolveComplianceClock(tx, ctx.tenantId)
+        assertValidRecurrence(recurrence, clock)
+      }
+      await lockComplianceTarget(tx, ctx.tenantId, input.kind, ref)
+      await lockComplianceAudienceTargets(tx, ctx.tenantId, audienceRows)
       const [row] = await tx
         .insert(complianceObligations)
         .values({
@@ -195,49 +278,44 @@ export async function createObligation(input: ObligationInput): Promise<Obligati
           recurrenceKind: recurrenceKind as never,
           createdByTenantUserId: ctx.membership?.id ?? null,
         })
-        .returning({ id: complianceObligations.id })
+        .returning()
+      if (!row) throw new Error('Failed to create obligation')
       if (audienceRows.length > 0) {
         await tx.insert(complianceAudience).values(
           audienceRows.map((a) => ({
             tenantId: ctx.tenantId,
-            obligationId: row!.id,
+            obligationId: row.id,
             kind: a.kind as never,
             entityKey: a.entityKey,
           })),
         )
       }
-      return row!.id
+      await materializeObligation(tx, ctx.tenantId, row)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'compliance_obligation',
+        entityId: row.id,
+        action: 'create',
+        summary: `Created ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
+      })
+      return row.id
     })
-    await recordAudit(ctx, {
-      entityType: 'compliance_obligation',
-      entityId: id,
-      action: 'create',
-      summary: `Created ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
-    })
-    await rematerialize(ctx, id)
-    revalidatePath('/compliance/obligations')
-    return { ok: true, id, kind: input.kind }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Failed to create obligation' }
+    return { ok: false, error: publicMutationError(err, 'Failed to create obligation') }
   }
+  revalidateObligationPaths()
+  return { ok: true, id, kind: input.kind }
 }
 
 export async function updateObligation(
   id: string,
-  input: ObligationInput,
+  rawInput: ObligationInput,
 ): Promise<ObligationResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.manage')
+  const parsed = parseObligationInput(rawInput)
+  if (!parsed.ok) return parsed
+  const input = parsed.value
   const meta = KIND_META[input.kind]
-
-  const [existing] = await ctx.db((tx) =>
-    tx.select().from(complianceObligations).where(eq(complianceObligations.id, id)).limit(1),
-  )
-  if (!existing || existing.deletedAt) return { ok: false, error: 'Obligation not found' }
-  // The kind determines the subject shape, target and evaluation adapter — it
-  // is fixed at creation. Delete + recreate to change it.
-  if (existing.sourceModule !== input.kind)
-    return { ok: false, error: 'The kind of an obligation cannot be changed' }
 
   if (input.kind === 'journal' && !input.title.trim())
     return { ok: false, error: 'Name is required' }
@@ -247,20 +325,50 @@ export async function updateObligation(
   const { rows: audienceRows, error: audienceError } = buildAudienceRows(input)
   if (audienceError) return { ok: false, error: audienceError }
 
-  // Kinds with no schedule knobs in the form (cert / equipment / PPE /
-  // job-title) keep their stored recurrence untouched — rebuilding would
-  // clobber values authored elsewhere (e.g. the ETL fold-in).
-  const hasScheduleKnobs = Object.values(meta.recurrence).some(Boolean)
-  const recurrence = hasScheduleKnobs
-    ? buildRecurrence(input.kind, input.recurrence)
-    : existing.recurrence
-  const recurrenceKind = hasScheduleKnobs
-    ? recurrenceKindFor(input.kind, input.recurrence.kind === 'one_time')
-    : existing.recurrenceKind
-
   try {
     await ctx.db(async (tx) => {
-      await tx
+      // Identity and target lifecycle writers lock their owner row before
+      // rematerializing obligations. Match that outer lock order here to avoid
+      // obligation↔catalog deadlocks.
+      await lockComplianceTarget(tx, ctx.tenantId, input.kind, ref)
+      await lockComplianceAudienceTargets(tx, ctx.tenantId, audienceRows)
+      const existing = await lockObligation(tx, ctx.tenantId, id)
+      // The kind determines the subject shape, target and evaluation adapter —
+      // it is fixed at creation. Delete + recreate to change it.
+      if (existing.sourceModule !== input.kind)
+        expectedError('The kind of an obligation cannot be changed')
+
+      // Kinds with no schedule knobs in the form (cert / equipment / PPE /
+      // job-title) keep their stored recurrence untouched — rebuilding would
+      // clobber values authored elsewhere (e.g. the ETL fold-in).
+      const hasScheduleKnobs = Object.values(meta.recurrence).some(Boolean)
+      const recurrence = hasScheduleKnobs
+        ? buildRecurrence(input.kind, input.recurrence)
+        : existing.recurrence
+      const recurrenceKind = recurrence.kind
+
+      if (recurrence.kind === 'frequency' || recurrence.kind === 'cron') {
+        const clock = await resolveComplianceClock(tx, ctx.tenantId)
+        assertValidRecurrence(recurrence, clock)
+      }
+      const previousAudience = await tx
+        .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+        .from(complianceAudience)
+        .where(
+          and(
+            eq(complianceAudience.tenantId, ctx.tenantId),
+            eq(complianceAudience.obligationId, id),
+          ),
+        )
+      const semanticConfigChanged = obligationSemanticConfigChanged(
+        {
+          targetRef: existing.targetRef,
+          recurrence: existing.recurrence,
+          audience: previousAudience,
+        },
+        { targetRef: ref, recurrence, audience: audienceRows },
+      )
+      const [updated] = await tx
         .update(complianceObligations)
         .set({
           title: input.title.trim() || meta.label,
@@ -269,10 +377,25 @@ export async function updateObligation(
           recurrence,
           recurrenceKind: recurrenceKind as never,
         })
-        .where(eq(complianceObligations.id, id))
+        .where(
+          and(
+            eq(complianceObligations.tenantId, ctx.tenantId),
+            eq(complianceObligations.id, id),
+            isNull(complianceObligations.deletedAt),
+          ),
+        )
+        .returning()
+      if (!updated) expectedError('Obligation not found')
       // Replace the audience set wholesale — the unique (obligation, kind,
       // entityKey) index makes a diff pointless at this scale.
-      await tx.delete(complianceAudience).where(eq(complianceAudience.obligationId, id))
+      await tx
+        .delete(complianceAudience)
+        .where(
+          and(
+            eq(complianceAudience.tenantId, ctx.tenantId),
+            eq(complianceAudience.obligationId, id),
+          ),
+        )
       if (audienceRows.length > 0) {
         await tx.insert(complianceAudience).values(
           audienceRows.map((a) => ({
@@ -283,20 +406,36 @@ export async function updateObligation(
           })),
         )
       }
+      if (semanticConfigChanged) {
+        // Durable dispatches snapshot the old target/audience/schedule. Retire
+        // unpublished work before rebuilding from an empty status baseline so
+        // current actionable subjects receive a replacement, current alert.
+        await purgeMaterializedStatus(tx, ctx.tenantId, id)
+        await skipQueuedComplianceDispatches(
+          tx,
+          ctx.tenantId,
+          id,
+          'Compliance obligation targeting or schedule changed',
+        )
+      }
+      if (updated.status === 'active') {
+        await materializeObligation(tx, ctx.tenantId, updated)
+      } else {
+        await purgeMaterializedStatus(tx, ctx.tenantId, id)
+        await skipQueuedComplianceDispatches(tx, ctx.tenantId, id)
+      }
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'compliance_obligation',
+        entityId: id,
+        action: 'update',
+        summary: `Updated ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
+      })
     })
-    await recordAudit(ctx, {
-      entityType: 'compliance_obligation',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${kindLabel(input.kind)} obligation "${input.title.trim() || meta.label}"`,
-    })
-    await rematerialize(ctx, id)
-    revalidatePath('/compliance/obligations')
-    revalidatePath(`/compliance/obligations/${id}`)
-    return { ok: true, id, kind: input.kind }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Failed to update obligation' }
+    return { ok: false, error: publicMutationError(err, 'Failed to update obligation') }
   }
+  revalidateObligationPaths(id)
+  return { ok: true, id, kind: input.kind }
 }
 
 export async function setObligationEnabled(
@@ -305,24 +444,46 @@ export async function setObligationEnabled(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.manage')
-  await ctx.db((tx) =>
-    tx
-      .update(complianceObligations)
-      .set({ status: enabled ? 'active' : 'paused' })
-      .where(eq(complianceObligations.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'compliance_obligation',
-    entityId: id,
-    action: 'update',
-    summary: enabled ? 'Enabled compliance obligation' : 'Disabled compliance obligation',
-  })
-  // Re-enabling brings it back into the scoreboard immediately rather than
-  // waiting for the daily scan; the hub filters paused obligations out, so
-  // disabling needs no scoreboard work.
-  if (enabled) await rematerialize(ctx, id)
-  revalidatePath('/compliance/obligations')
-  revalidatePath(`/compliance/obligations/${id}`)
+  try {
+    await ctx.db(async (tx) => {
+      if (enabled) {
+        const [snapshot] = await tx
+          .select()
+          .from(complianceObligations)
+          .where(
+            and(
+              eq(complianceObligations.tenantId, ctx.tenantId),
+              eq(complianceObligations.id, id),
+              isNull(complianceObligations.deletedAt),
+            ),
+          )
+          .limit(1)
+        if (!snapshot) expectedError('Obligation not found')
+        const audience = await tx
+          .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+          .from(complianceAudience)
+          .where(
+            and(
+              eq(complianceAudience.tenantId, ctx.tenantId),
+              eq(complianceAudience.obligationId, id),
+            ),
+          )
+        await lockComplianceTarget(tx, ctx.tenantId, snapshot.sourceModule, snapshot.targetRef)
+        await lockComplianceAudienceTargets(tx, ctx.tenantId, audience)
+        const existing = await lockObligation(tx, ctx.tenantId, id)
+        if (existing.updatedAt.getTime() !== snapshot.updatedAt.getTime()) {
+          expectedError('The obligation changed while it was being enabled; try again')
+        }
+        await setEnabledInTransaction(tx, ctx, existing, id, true)
+        return
+      }
+      const existing = await lockObligation(tx, ctx.tenantId, id)
+      await setEnabledInTransaction(tx, ctx, existing, id, false)
+    })
+  } catch (err) {
+    return { ok: false, error: publicMutationError(err, 'Failed to update obligation') }
+  }
+  revalidateObligationPaths(id)
   return { ok: true }
 }
 
@@ -331,22 +492,40 @@ export async function deleteObligation(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.manage')
-  await ctx.db(async (tx) => {
-    await tx
-      .update(complianceObligations)
-      .set({ deletedAt: new Date(), status: 'archived' })
-      .where(eq(complianceObligations.id, id))
-    // The obligation row is kept (soft delete / audit trail) but its scoreboard
-    // rows are dead weight — purge them.
-    await tx.delete(complianceStatus).where(eq(complianceStatus.obligationId, id))
-  })
-  await recordAudit(ctx, {
-    entityType: 'compliance_obligation',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted compliance obligation',
-  })
-  revalidatePath('/compliance/obligations')
-  revalidatePath(`/compliance/obligations/${id}`)
+  try {
+    await ctx.db(async (tx) => {
+      const existing = await lockObligation(tx, ctx.tenantId, id)
+
+      const deletedAt = new Date()
+      const [deleted] = await tx
+        .update(complianceObligations)
+        .set({ deletedAt, status: 'archived' })
+        .where(
+          and(
+            eq(complianceObligations.tenantId, ctx.tenantId),
+            eq(complianceObligations.id, id),
+            isNull(complianceObligations.deletedAt),
+          ),
+        )
+        .returning({ status: complianceObligations.status })
+      if (!deleted) expectedError('Obligation not found')
+
+      // The obligation row is kept for its audit trail, but its materialized
+      // status rows must disappear in the same transaction.
+      await purgeMaterializedStatus(tx, ctx.tenantId, id)
+      await skipQueuedComplianceDispatches(tx, ctx.tenantId, id)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'compliance_obligation',
+        entityId: id,
+        action: 'delete',
+        summary: 'Deleted compliance obligation',
+        before: { status: existing.status, deletedAt: null },
+        after: { status: deleted.status, deletedAt: deletedAt.toISOString() },
+      })
+    })
+  } catch (err) {
+    return { ok: false, error: publicMutationError(err, 'Failed to delete obligation') }
+  }
+  revalidateObligationPaths(id)
   return { ok: true }
 }

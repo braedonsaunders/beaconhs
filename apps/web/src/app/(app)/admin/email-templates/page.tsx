@@ -136,6 +136,7 @@ export default async function EmailTemplatesPage() {
                       id="name"
                       name="name"
                       required
+                      maxLength={200}
                       placeholder="e.g. Incident notification"
                     />
                   </div>

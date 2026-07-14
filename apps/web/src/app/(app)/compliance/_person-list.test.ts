@@ -11,6 +11,7 @@ const rows: PersonStatusRow[] = [
     dueOn: '2026-07-01',
     completedOn: null,
     targetRef: null,
+    subjectRef: null,
   },
   {
     kind: 'document',
@@ -20,6 +21,7 @@ const rows: PersonStatusRow[] = [
     dueOn: '2026-07-20',
     completedOn: '2026-07-10',
     targetRef: null,
+    subjectRef: null,
   },
   {
     kind: 'form',
@@ -29,6 +31,7 @@ const rows: PersonStatusRow[] = [
     dueOn: '2026-07-15',
     completedOn: null,
     targetRef: null,
+    subjectRef: null,
   },
 ]
 

@@ -3,7 +3,7 @@
 // question). Used by the proctor "New attempt" flow and the LMS lesson-quiz
 // launcher so the attempt shape can never drift between the two paths.
 
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   trainingAssessmentResults,
@@ -11,6 +11,10 @@ import {
   trainingAssessmentTypes,
   trainingAssessments,
 } from '@beaconhs/db/schema'
+import {
+  assessmentAttemptRecordCourseId,
+  type AssessmentAttemptSource,
+} from './assessment-attempt-policy'
 
 /**
  * Create an in-progress attempt with per-question result shells. Soft-deleted
@@ -25,8 +29,15 @@ import {
  */
 export async function createAssessmentAttempt(
   tx: Database,
-  args: { tenantId: string; typeId: string; personId: string; requireActive?: boolean },
-): Promise<typeof trainingAssessments.$inferSelect> {
+  args: {
+    tenantId: string
+    typeId: string
+    personId: string
+    complianceObligationId?: string | null
+    requireActive?: boolean
+    source?: AssessmentAttemptSource
+  },
+): Promise<{ attempt: typeof trainingAssessments.$inferSelect; created: boolean }> {
   const [type] = await tx
     .select()
     .from(trainingAssessmentTypes)
@@ -36,6 +47,24 @@ export async function createAssessmentAttempt(
     .limit(1)
   if (!type) throw new Error('Assessment type not found')
   if (args.requireActive && !type.active) throw new Error('This assessment type is inactive.')
+
+  if (args.complianceObligationId) {
+    const [existing] = await tx
+      .select()
+      .from(trainingAssessments)
+      .where(
+        and(
+          eq(trainingAssessments.tenantId, args.tenantId),
+          eq(trainingAssessments.complianceObligationId, args.complianceObligationId),
+          eq(trainingAssessments.personId, args.personId),
+          eq(trainingAssessments.typeId, args.typeId),
+          eq(trainingAssessments.status, 'in_progress'),
+          isNull(trainingAssessments.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (existing) return { attempt: existing, created: false }
+  }
 
   const questions = await tx
     .select()
@@ -53,13 +82,40 @@ export async function createAssessmentAttempt(
       tenantId: args.tenantId,
       typeId: type.id,
       personId: args.personId,
-      courseId: type.courseId,
+      courseId: assessmentAttemptRecordCourseId(type.courseId, args.source ?? 'standalone'),
+      complianceObligationId: args.complianceObligationId ?? null,
       passingScore: type.passingScore,
       pointsPossible,
       status: 'in_progress',
     })
+    .onConflictDoNothing({
+      target: [
+        trainingAssessments.tenantId,
+        trainingAssessments.complianceObligationId,
+        trainingAssessments.personId,
+      ],
+      where: sql`${trainingAssessments.complianceObligationId} is not null and ${trainingAssessments.status} = 'in_progress' and ${trainingAssessments.deletedAt} is null`,
+    })
     .returning()
-  if (!attempt) throw new Error('Failed to create assessment attempt')
+  if (!attempt) {
+    if (!args.complianceObligationId) throw new Error('Failed to create assessment attempt')
+    const [concurrent] = await tx
+      .select()
+      .from(trainingAssessments)
+      .where(
+        and(
+          eq(trainingAssessments.tenantId, args.tenantId),
+          eq(trainingAssessments.complianceObligationId, args.complianceObligationId),
+          eq(trainingAssessments.personId, args.personId),
+          eq(trainingAssessments.typeId, args.typeId),
+          eq(trainingAssessments.status, 'in_progress'),
+          isNull(trainingAssessments.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!concurrent) throw new Error('The active assigned assessment attempt is inconsistent')
+    return { attempt: concurrent, created: false }
+  }
 
   if (questions.length > 0) {
     await tx.insert(trainingAssessmentResults).values(
@@ -74,5 +130,5 @@ export async function createAssessmentAttempt(
       })),
     )
   }
-  return attempt
+  return { attempt, created: true }
 }

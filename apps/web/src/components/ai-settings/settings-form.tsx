@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { Button, Input, Label, SearchSelect, type SelectOption } from '@beaconhs/ui'
 import { listAiModels } from '@/lib/ai-settings-actions'
@@ -68,41 +68,63 @@ export function AiSettingsForm({
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [manual, setManual] = useState(false)
   const [loading, startLoad] = useTransition()
+  const modelRequestId = useRef(0)
+
+  const requestModels = useCallback(
+    (requestedProvider: string, key: string, requestedBaseUrl: string) => {
+      const requestId = ++modelRequestId.current
+      startLoad(async () => {
+        const result = await listAiModels({
+          scope,
+          provider: requestedProvider,
+          baseUrl: requestedBaseUrl,
+          apiKey: key,
+        })
+        if (requestId !== modelRequestId.current) return
+
+        if (result.ok) {
+          setModels(result.models)
+          setModelsError(null)
+        } else {
+          setModels([])
+          setModelsError(result.message ?? 'Could not load models.')
+        }
+      })
+      return requestId
+    },
+    [scope],
+  )
 
   // Auto-load the saved provider's models on first render (a key is on file).
   // Must run before any early return so the hook order stays stable.
   useEffect(() => {
-    if (initial.hasKey && initial.provider === provider) loadModels()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (!initial.hasKey) return
+
+    const requestId = requestModels(initial.provider, '', initial.baseUrl)
+    return () => {
+      if (modelRequestId.current === requestId) modelRequestId.current += 1
+    }
+  }, [initial.baseUrl, initial.hasKey, initial.provider, requestModels])
 
   const spec = specs.find((s) => s.value === provider) ?? specs[0]
   if (!spec) return null
   const showBaseUrl = spec.requiresBaseUrl || spec.baseUrl !== null
   const savedProvider = provider === initial.provider
 
-  function loadModels(p = provider, key = apiKey, base = baseUrl) {
-    startLoad(async () => {
-      const r = await listAiModels({ scope, provider: p, baseUrl: base, apiKey: key })
-      if (r.ok) {
-        setModels(r.models)
-        setModelsError(null)
-      } else {
-        setModels([])
-        setModelsError(r.message ?? 'Could not load models.')
-      }
-    })
+  function invalidateModels() {
+    modelRequestId.current += 1
+    setModels([])
+    setModelsError(null)
   }
 
   function onProviderChange(next: string) {
+    invalidateModels()
     setProvider(next)
     // Carry saved values only when switching back to the saved provider.
     const isSaved = next === initial.provider
     setModelFast(isSaved ? initial.modelFast : '')
     setModelSmart(isSaved ? initial.modelSmart : '')
     setBaseUrl(isSaved ? initial.baseUrl : '')
-    setModels([])
-    setModelsError(null)
     setManual(false)
   }
 
@@ -220,7 +242,10 @@ export function AiSettingsForm({
           <Input
             name="baseUrl"
             value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
+            onChange={(e) => {
+              invalidateModels()
+              setBaseUrl(e.target.value)
+            }}
             autoComplete="off"
             spellCheck={false}
             placeholder={spec.baseUrl ?? 'https://your-endpoint/v1'}
@@ -229,7 +254,12 @@ export function AiSettingsForm({
             <p className="text-xs text-slate-400 dark:text-slate-500">
               Leave blank to use {spec.baseUrl}
             </p>
-          ) : null}
+          ) : (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              Use a public HTTPS endpoint with a valid certificate. Private and local network
+              addresses are blocked.
+            </p>
+          )}
         </div>
       ) : (
         <input type="hidden" name="baseUrl" value="" />
@@ -241,7 +271,10 @@ export function AiSettingsForm({
           type="password"
           name="apiKey"
           value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
+          onChange={(e) => {
+            invalidateModels()
+            setApiKey(e.target.value)
+          }}
           autoComplete="off"
           placeholder={keyPlaceholder}
         />
@@ -265,7 +298,7 @@ export function AiSettingsForm({
             </button>
             <button
               type="button"
-              onClick={() => loadModels()}
+              onClick={() => requestModels(provider, apiKey, baseUrl)}
               disabled={loading}
               className="inline-flex items-center gap-1 font-medium text-teal-600 hover:text-teal-700 disabled:opacity-50"
             >

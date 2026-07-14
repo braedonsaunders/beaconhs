@@ -10,7 +10,8 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Trash2, Archive, ArchiveRestore } from 'lucide-react'
-import { asc, eq, count, inArray, sql } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import {
   Badge,
   Button,
@@ -27,8 +28,12 @@ import { incidentClassifications, incidents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { mergeHref, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { IncidentsSubNav } from '../_sub-nav'
 import { ClassificationDrawer, type ClassificationEditing } from './_drawers'
 
@@ -36,6 +41,7 @@ export const metadata = { title: 'Incident classifications' }
 export const dynamic = 'force-dynamic'
 
 const BASE = '/incidents/classifications'
+const SORTS = ['taxonomy'] as const
 
 type ClassificationRow = {
   id: string
@@ -46,6 +52,13 @@ type ClassificationRow = {
   isRecordable: number
   isActive: number
   sortOrder: number | null
+}
+
+function classificationWriteError(error: unknown): string {
+  const code = (error as { code?: unknown })?.code
+  if (code === '23505') return 'A classification with that name already exists at this level.'
+  if (code === '23503') return 'The selected parent classification no longer exists.'
+  return 'Could not save the classification. Please try again.'
 }
 
 async function saveClassification(input: {
@@ -59,29 +72,45 @@ async function saveClassification(input: {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'incidents')
-  const name = input.name.trim()
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (!name) return { ok: false, error: 'Name is required.' }
-  const isRecordable = input.isRecordable ? 1 : 0
+  if (name.length > 200) return { ok: false, error: 'Name must be 200 characters or fewer.' }
+  const code = typeof input.code === 'string' ? input.code.trim() || null : null
+  if (code && code.length > 6) return { ok: false, error: 'Code must be 6 characters or fewer.' }
+  const description =
+    typeof input.description === 'string' ? input.description.trim() || null : null
+  if (description && description.length > 10_000) {
+    return { ok: false, error: 'Description must be 10,000 characters or fewer.' }
+  }
+  const isRecordable = input.isRecordable === true ? 1 : 0
 
   if (input.id) {
-    const before = await ctx.db(async (tx) => {
-      const [row] = await tx
-        .select()
-        .from(incidentClassifications)
-        .where(eq(incidentClassifications.id, input.id!))
-        .limit(1)
-      return row ?? null
-    })
+    if (!isUuid(input.id)) return { ok: false, error: 'Classification not found.' }
+    const classificationId = input.id
+    let before: typeof incidentClassifications.$inferSelect | null
+    try {
+      before = await ctx.db(async (tx) => {
+        const [existing] = await tx
+          .select()
+          .from(incidentClassifications)
+          .where(eq(incidentClassifications.id, classificationId))
+          .limit(1)
+          .for('update')
+        if (!existing) return null
+        const [updated] = await tx
+          .update(incidentClassifications)
+          .set({ name, description, code, isRecordable })
+          .where(eq(incidentClassifications.id, classificationId))
+          .returning({ id: incidentClassifications.id })
+        return updated ? existing : null
+      })
+    } catch (error) {
+      return { ok: false, error: classificationWriteError(error) }
+    }
     if (!before) return { ok: false, error: 'Classification not found.' }
-    await ctx.db((tx) =>
-      tx
-        .update(incidentClassifications)
-        .set({ name, description: input.description, code: input.code, isRecordable })
-        .where(eq(incidentClassifications.id, input.id!)),
-    )
     await recordAudit(ctx, {
       entityType: 'incident_classification',
-      entityId: input.id,
+      entityId: classificationId,
       action: 'update',
       summary: `Updated "${name}"`,
       before: {
@@ -92,8 +121,8 @@ async function saveClassification(input: {
       },
       after: {
         name,
-        description: input.description,
-        code: input.code,
+        description,
+        code,
         isRecordable: !!isRecordable,
       },
     })
@@ -101,42 +130,73 @@ async function saveClassification(input: {
     return { ok: true }
   }
 
-  const parentId = input.parentId || null
-  // Append at the end of the parent's children.
-  const sortOrder = await ctx.db(async (tx) => {
-    const [tail] = await tx
-      .select({ s: sql<number>`coalesce(max(${incidentClassifications.sortOrder}), 0)` })
-      .from(incidentClassifications)
-      .where(
-        parentId
-          ? eq(incidentClassifications.parentId, parentId)
-          : sql`${incidentClassifications.parentId} is null`,
-      )
-    return Number(tail?.s ?? 0) + 10
-  })
+  const parentId = typeof input.parentId === 'string' && input.parentId ? input.parentId : null
+  if (parentId && !isUuid(parentId)) {
+    return { ok: false, error: 'Choose a valid parent classification.' }
+  }
+  let created: {
+    row: typeof incidentClassifications.$inferSelect | null
+    invalidParent: boolean
+  }
+  try {
+    created = await ctx.db(async (tx) => {
+      if (parentId) {
+        const [parent] = await tx
+          .select({ id: incidentClassifications.id })
+          .from(incidentClassifications)
+          .where(
+            and(
+              eq(incidentClassifications.id, parentId),
+              isNull(incidentClassifications.parentId),
+              isNull(incidentClassifications.deletedAt),
+              eq(incidentClassifications.isActive, 1),
+            ),
+          )
+          .limit(1)
+        if (!parent) return { row: null, invalidParent: true }
+      }
 
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(incidentClassifications)
-      .values({
-        tenantId: ctx.tenantId,
-        parentId,
-        name,
-        description: input.description,
-        code: input.code,
-        isRecordable,
-        sortOrder,
-        createdByTenantUserId: ctx.membership?.id ?? null,
-      })
-      .returning(),
-  )
+      // Append at the end of the parent's children in the same transaction as
+      // the insert, so the validated parent cannot disappear between queries.
+      const [tail] = await tx
+        .select({ s: sql<number>`coalesce(max(${incidentClassifications.sortOrder}), 0)` })
+        .from(incidentClassifications)
+        .where(
+          parentId
+            ? eq(incidentClassifications.parentId, parentId)
+            : sql`${incidentClassifications.parentId} is null`,
+        )
+      const sortOrder = Number(tail?.s ?? 0) + 10
+      const [row] = await tx
+        .insert(incidentClassifications)
+        .values({
+          tenantId: ctx.tenantId,
+          parentId,
+          name,
+          description,
+          code,
+          isRecordable,
+          sortOrder,
+          createdByTenantUserId: ctx.membership?.id ?? null,
+        })
+        .returning()
+      return { row: row ?? null, invalidParent: false }
+    })
+  } catch (error) {
+    return { ok: false, error: classificationWriteError(error) }
+  }
+  if (created.invalidParent) {
+    return { ok: false, error: 'Parent must be an active top-level classification.' }
+  }
+  const row = created.row
+  if (!row) return { ok: false, error: 'Could not create the classification.' }
   if (row) {
     await recordAudit(ctx, {
       entityType: 'incident_classification',
       entityId: row.id,
       action: 'create',
       summary: `Created classification "${name}"${parentId ? ' (child)' : ''}`,
-      after: { name, parentId, code: input.code, isRecordable: !!isRecordable },
+      after: { name, parentId, code, isRecordable: !!isRecordable },
     })
   }
   revalidatePath(BASE)
@@ -229,11 +289,41 @@ export default async function ClassificationsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
+  const params = parseListParams(sp, {
+    sort: 'taxonomy',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const drawerParam = pickString(sp.drawer)
+  const statusParam = pickString(sp.status)
+  const statusFilter =
+    statusParam === 'active' || statusParam === 'archived' ? statusParam : undefined
   const ctx = await requireModuleManage('incidents')
 
-  const { rows, usageById } = await ctx.db(async (tx) => {
-    const all = await tx
+  const { rows, total, usageById, childCountById } = await ctx.db(async (tx) => {
+    const parent = alias(incidentClassifications, 'incident_classification_parent')
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(incidentClassifications.name, `%${params.q}%`),
+          ilike(incidentClassifications.code, `%${params.q}%`),
+          ilike(incidentClassifications.description, `%${params.q}%`),
+          ilike(parent.name, `%${params.q}%`),
+        )
+      : undefined
+    const status =
+      statusFilter === 'active'
+        ? eq(incidentClassifications.isActive, 1)
+        : statusFilter === 'archived'
+          ? eq(incidentClassifications.isActive, 0)
+          : undefined
+    const where = and(search, status)
+    const [totalRow] = await tx
+      .select({ c: count() })
+      .from(incidentClassifications)
+      .leftJoin(parent, eq(parent.id, incidentClassifications.parentId))
+      .where(where)
+    const data = await tx
       .select({
         id: incidentClassifications.id,
         parentId: incidentClassifications.parentId,
@@ -245,27 +335,45 @@ export default async function ClassificationsPage({
         sortOrder: incidentClassifications.sortOrder,
       })
       .from(incidentClassifications)
+      .leftJoin(parent, eq(parent.id, incidentClassifications.parentId))
+      .where(where)
       .orderBy(
-        asc(incidentClassifications.parentId),
+        asc(sql`coalesce(${incidentClassifications.parentId}, ${incidentClassifications.id})`),
+        asc(sql`case when ${incidentClassifications.parentId} is null then 0 else 1 end`),
         asc(incidentClassifications.sortOrder),
         asc(incidentClassifications.name),
       )
-    const usage = await tx
-      .select({ cId: incidents.classificationId, c: count() })
-      .from(incidents)
-      .where(sql`${incidents.classificationId} is not null`)
-      .groupBy(incidents.classificationId)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
+    const rowIds = data.map((row) => row.id)
+    const rootIds = data.filter((row) => row.parentId === null).map((row) => row.id)
+    const [usage, childCounts] = await Promise.all([
+      rowIds.length === 0
+        ? []
+        : tx
+            .select({ cId: incidents.classificationId, c: count() })
+            .from(incidents)
+            .where(inArray(incidents.classificationId, rowIds))
+            .groupBy(incidents.classificationId),
+      rootIds.length === 0
+        ? []
+        : tx
+            .select({ parentId: incidentClassifications.parentId, c: count() })
+            .from(incidentClassifications)
+            .where(inArray(incidentClassifications.parentId, rootIds))
+            .groupBy(incidentClassifications.parentId),
+    ])
     const usageMap: Record<string, number> = {}
     for (const u of usage) if (u.cId) usageMap[u.cId] = Number(u.c)
-    return { rows: all as ClassificationRow[], usageById: usageMap }
+    return {
+      rows: data as ClassificationRow[],
+      total: Number(totalRow?.c ?? 0),
+      usageById: usageMap,
+      childCountById: Object.fromEntries(
+        childCounts.flatMap((row) => (row.parentId ? [[row.parentId, Number(row.c)]] : [])),
+      ) as Record<string, number>,
+    }
   })
-
-  const roots = rows.filter((r) => r.parentId === null)
-  const childrenOf = (id: string) => rows.filter((r) => r.parentId === id)
-
-  const parentOptions = [{ id: '', label: '— top level —' }].concat(
-    roots.map((r) => ({ id: r.id, label: r.name })),
-  )
   const editingRow =
     drawerParam && drawerParam !== 'new' ? rows.find((r) => r.id === drawerParam) : undefined
   const editing: ClassificationEditing | null = editingRow
@@ -298,14 +406,35 @@ export default async function ClassificationsPage({
             }
           />
           <IncidentsSubNav active="classifications" />
+          <TableToolbar>
+            <SearchInput placeholder="Search name, code, or parent…" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+          </TableToolbar>
         </>
       }
     >
-      {roots.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={<Plus size={32} />}
-          title="No classifications"
-          description="Add a top-level classification. Child categories can be nested underneath."
+          title={
+            params.q || statusFilter
+              ? 'No classifications match your filters'
+              : 'No classifications'
+          }
+          description={
+            params.q || statusFilter
+              ? 'Clear the search or status filter to see other classifications.'
+              : 'Add a top-level classification. Child categories can be nested underneath.'
+          }
           action={
             <Link href={newHref as any} scroll={false}>
               <Button>New classification</Button>
@@ -325,12 +454,13 @@ export default async function ClassificationsPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {roots.map((root) => (
-              <ClassificationRows
-                key={root.id}
-                node={root}
-                childNodes={childrenOf(root.id)}
-                usageById={usageById}
+            {rows.map((node) => (
+              <ClassificationRow
+                key={node.id}
+                node={node}
+                depth={node.parentId ? 1 : 0}
+                usage={usageById[node.id] ?? 0}
+                childCount={childCountById[node.id] ?? 0}
                 sp={sp}
                 toggleArchive={toggleArchive}
                 deleteClassification={deleteClassification}
@@ -340,57 +470,22 @@ export default async function ClassificationsPage({
         </Table>
       )}
 
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={total}
+        page={params.page}
+        perPage={params.perPage}
+      />
+
       <ClassificationDrawer
         mode={mode}
         editing={editing}
-        parentOptions={parentOptions}
         defaultParentId={defaultParentId}
         closeHref={closeHref}
         saveAction={saveClassification}
       />
     </ListPageLayout>
-  )
-}
-
-function ClassificationRows({
-  node,
-  childNodes,
-  usageById,
-  sp,
-  toggleArchive,
-  deleteClassification,
-}: {
-  node: ClassificationRow
-  childNodes: ClassificationRow[]
-  usageById: Record<string, number>
-  sp: Record<string, string | string[] | undefined>
-  toggleArchive: (formData: FormData) => Promise<void>
-  deleteClassification: (formData: FormData) => Promise<void>
-}) {
-  return (
-    <>
-      <ClassificationRow
-        node={node}
-        depth={0}
-        usage={usageById[node.id] ?? 0}
-        childCount={childNodes.length}
-        sp={sp}
-        toggleArchive={toggleArchive}
-        deleteClassification={deleteClassification}
-      />
-      {childNodes.map((c) => (
-        <ClassificationRow
-          key={c.id}
-          node={c}
-          depth={1}
-          usage={usageById[c.id] ?? 0}
-          childCount={0}
-          sp={sp}
-          toggleArchive={toggleArchive}
-          deleteClassification={deleteClassification}
-        />
-      ))}
-    </>
   )
 }
 
@@ -471,7 +566,7 @@ function ClassificationRow({
           >
             Edit
           </Link>
-          {depth === 0 ? (
+          {depth === 0 && node.isActive ? (
             <Link
               href={childHref as any}
               scroll={false}

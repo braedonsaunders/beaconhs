@@ -4,7 +4,7 @@
 // sanitized HTML; quiz lessons hand off to the native assessment engine;
 // completing the last required lesson issues the certificate.
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -20,6 +20,7 @@ import {
   UserCheck,
 } from 'lucide-react'
 import { Badge, Button, Card, CardContent } from '@beaconhs/ui'
+import { RawImage } from '@/components/raw-image'
 import type { LessonBlock, PracticalCriterion } from '@beaconhs/db/schema'
 import { LessonBlocksView } from '../../_lib/blocks'
 import { CollaboraEmbed } from '@/components/collabora-embed'
@@ -28,9 +29,11 @@ import {
   completeOnlineCourse,
   enrollInCourse,
   markLessonComplete,
+  startLesson,
   startLessonQuiz,
 } from '../_actions'
 import { toast } from '@/lib/toast'
+import { SanitizedRichContent } from '@/components/sanitized-rich-content'
 
 type PlayerEvaluation = {
   evaluatorName: string | null
@@ -54,6 +57,7 @@ type PlayerLesson = {
   assessmentTypeId: string | null
   classTitle: string | null
   durationMinutes: number | null
+  minTimeSeconds: number | null
   status: 'not_started' | 'in_progress' | 'completed'
 }
 export type PlayerModule = { id: string; title: string; lessons: PlayerLesson[] }
@@ -103,6 +107,13 @@ export function CoursePlayer({
   const current = all.find((l) => l.id === currentId) ?? null
   const completedCount = all.filter((l) => l.status === 'completed').length
   const percent = all.length ? Math.round((completedCount / all.length) * 100) : 0
+
+  useEffect(() => {
+    if (!currentId || completed) return
+    void startLesson(enrollmentId, currentId).catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Could not start lesson')
+    })
+  }, [completed, currentId, enrollmentId])
 
   function complete(lessonId: string) {
     startTransition(async () => {
@@ -250,6 +261,11 @@ export function CoursePlayer({
                         <Clock size={12} /> {current.durationMinutes} min
                       </span>
                     ) : null}
+                    {current.completionRule === 'min_time' && current.minTimeSeconds ? (
+                      <span className="flex items-center gap-1">
+                        <Clock size={12} /> Minimum {Math.ceil(current.minTimeSeconds / 60)} min
+                      </span>
+                    ) : null}
                     {current.status === 'completed' ? (
                       <span className="flex items-center gap-1 text-emerald-600">
                         <Check size={12} /> Completed
@@ -269,9 +285,10 @@ export function CoursePlayer({
               ) : current.kind === 'practical' ? (
                 <div className="space-y-4">
                   {current.contentHtml ? (
-                    <div
+                    <SanitizedRichContent
+                      html={current.contentHtml}
                       className="lesson-prose"
-                      dangerouslySetInnerHTML={{ __html: current.contentHtml }}
+                      allowApplicationImages
                     />
                   ) : null}
                   {current.practicalCriteria.length > 0 ? (
@@ -318,10 +335,10 @@ export function CoursePlayer({
                         </p>
                       ) : null}
                       {current.evaluation.signatureDataUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <RawImage
                           src={current.evaluation.signatureDataUrl}
                           alt="Evaluator signature"
+                          optimizationReason="generated"
                           className="mt-2 h-14 rounded border border-emerald-200 bg-white px-2 dark:border-emerald-900"
                         />
                       ) : null}
@@ -354,9 +371,10 @@ export function CoursePlayer({
                   </p>
                 </div>
               ) : current.kind === 'rich' && current.contentHtml ? (
-                <div
+                <SanitizedRichContent
+                  html={current.contentHtml}
                   className="lesson-prose"
-                  dangerouslySetInnerHTML={{ __html: current.contentHtml }}
+                  allowApplicationImages
                 />
               ) : (
                 <LessonBlocksView blocks={asBlocks(current)} attachmentUrls={attachmentUrls} />
@@ -496,7 +514,11 @@ export function OnlineCoursePlayer({
         )}
 
         {instructionsHtml ? (
-          <div className="lesson-prose" dangerouslySetInnerHTML={{ __html: instructionsHtml }} />
+          <SanitizedRichContent
+            html={instructionsHtml}
+            className="lesson-prose"
+            allowApplicationImages
+          />
         ) : null}
 
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
@@ -514,10 +536,12 @@ export function EnrollGate({
   courseId,
   courseName,
   summary,
+  renewal = false,
 }: {
   courseId: string
   courseName: string
   summary: string | null
+  renewal?: boolean
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -534,19 +558,29 @@ export function EnrollGate({
               {summary}
             </p>
           ) : null}
+          {renewal ? (
+            <p className="mx-auto mt-2 max-w-md text-sm text-amber-700 dark:text-amber-300">
+              This training is due again. Starting the renewal resets course progress but keeps your
+              earlier certificate in your records.
+            </p>
+          ) : null}
         </div>
         <Button
           type="button"
           onClick={() =>
             startTransition(async () => {
-              await enrollInCourse(courseId)
-              router.refresh()
+              try {
+                await enrollInCourse(courseId)
+                router.refresh()
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Could not start the course')
+              }
             })
           }
           disabled={pending}
         >
           {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          Start course
+          {renewal ? 'Renew course' : 'Start course'}
         </Button>
       </CardContent>
     </Card>

@@ -10,16 +10,7 @@ import { inspectionBankCriteria, inspectionBanks } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-
-// 'rating' is withdrawn — it never had a fill-flow control. Unknown values
-// (including 'rating') fall back to pass_fail_na.
-const RESPONSE_TYPES = ['pass_fail_na', 'yes_no'] as const
-type ResponseType = (typeof RESPONSE_TYPES)[number]
-function parseResponseType(v: unknown): ResponseType {
-  return typeof v === 'string' && (RESPONSE_TYPES as readonly string[]).includes(v)
-    ? (v as ResponseType)
-    : 'pass_fail_na'
-}
+import { parseInspectionResponseConfig } from '@/lib/inspection-response-config'
 
 async function manageCtx() {
   const ctx = await requireRequestContext()
@@ -81,12 +72,14 @@ export async function addBankCriterion(input: {
   bankId: string
   text: string
   responseType?: string
+  choiceOptions?: string[]
   requiresPhoto?: boolean
   requiresComment?: boolean
 }) {
   const ctx = await manageCtx()
   const text = input.text.trim()
   if (!text) throw new Error('Question is required')
+  const response = parseInspectionResponseConfig(input.responseType, input.choiceOptions ?? [])
   const id = await ctx.db(async (tx) => {
     const [maxRow] = await tx
       .select({
@@ -101,7 +94,8 @@ export async function addBankCriterion(input: {
         bankId: input.bankId,
         sequence: Number(maxRow?.m ?? -1) + 1,
         text,
-        responseType: parseResponseType(input.responseType),
+        responseType: response.responseType,
+        choiceOptions: response.choiceOptions,
         requiresPhoto: Boolean(input.requiresPhoto),
         requiresComment: Boolean(input.requiresComment),
       })
@@ -123,20 +117,40 @@ export async function updateBankCriterion(input: {
   id: string
   text?: string
   responseType?: string
+  choiceOptions?: string[]
   requiresPhoto?: boolean
   requiresComment?: boolean
 }) {
   const ctx = await manageCtx()
-  const patch: Record<string, unknown> = {}
-  if (input.text !== undefined) patch.text = input.text.trim() || 'Criterion'
-  if (input.responseType !== undefined) patch.responseType = parseResponseType(input.responseType)
-  if (input.requiresPhoto !== undefined) patch.requiresPhoto = input.requiresPhoto
-  if (input.requiresComment !== undefined) patch.requiresComment = input.requiresComment
-  if (Object.keys(patch).length > 0) {
-    await ctx.db((tx) =>
-      tx.update(inspectionBankCriteria).set(patch).where(eq(inspectionBankCriteria.id, input.id)),
-    )
-  }
+  await ctx.db(async (tx) => {
+    const patch: Record<string, unknown> = {}
+    if (input.text !== undefined) patch.text = input.text.trim() || 'Criterion'
+    if (input.responseType !== undefined || input.choiceOptions !== undefined) {
+      const [current] = await tx
+        .select({
+          responseType: inspectionBankCriteria.responseType,
+          choiceOptions: inspectionBankCriteria.choiceOptions,
+        })
+        .from(inspectionBankCriteria)
+        .where(eq(inspectionBankCriteria.id, input.id))
+        .limit(1)
+      if (!current) throw new Error('Criterion not found')
+      const response = parseInspectionResponseConfig(
+        input.responseType ?? current.responseType,
+        input.choiceOptions ?? current.choiceOptions,
+      )
+      patch.responseType = response.responseType
+      patch.choiceOptions = response.choiceOptions
+    }
+    if (input.requiresPhoto !== undefined) patch.requiresPhoto = input.requiresPhoto
+    if (input.requiresComment !== undefined) patch.requiresComment = input.requiresComment
+    if (Object.keys(patch).length > 0) {
+      await tx
+        .update(inspectionBankCriteria)
+        .set(patch)
+        .where(eq(inspectionBankCriteria.id, input.id))
+    }
+  })
   revalidateBank(input.bankId)
 }
 

@@ -16,6 +16,7 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { issueTrainingCertificate } from '@/lib/training-certificate-issuance'
 import { pdfResponse, renderTrainingCredentialPdf } from '@/lib/training-credential-pdf'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,6 +26,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id: recordId } = await params
+  if (!isUuid(recordId)) {
+    return NextResponse.json({ error: 'Training record not found.' }, { status: 404 })
+  }
+
   const outputId = req.nextUrl.searchParams.get('output')
 
   const ctx = await requireRequestContext()

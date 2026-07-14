@@ -70,6 +70,15 @@ export const roleAssignments = pgTable(
     tenantIdx: index('role_assignments_tenant_idx').on(t.tenantId),
     userIdx: index('role_assignments_user_idx').on(t.tenantUserId),
     roleIdx: index('role_assignments_role_idx').on(t.roleId),
+    // Every admin action treats re-selecting a member's existing role as a
+    // scope update. Enforce that product contract in Postgres as well: two
+    // rows for the same member/role would union their scopes at authorization
+    // time and could accidentally broaden record visibility.
+    tenantUserRoleUx: uniqueIndex('role_assignments_tenant_user_role_ux').on(
+      t.tenantId,
+      t.tenantUserId,
+      t.roleId,
+    ),
     tenantUserFk: foreignKey({
       name: 'role_assignments_tenant_user_fk',
       columns: [t.tenantId, t.tenantUserId],

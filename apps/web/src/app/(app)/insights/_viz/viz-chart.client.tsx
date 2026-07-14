@@ -165,7 +165,14 @@ function buildOption(spec: VizChartSpec, donut: boolean): echarts.EChartsCoreOpt
         axisLabel: { color: AXIS_TEXT, fontSize: 11 },
         splitLine: { lineStyle: { color: SPLIT_LINE } },
       },
-      grid: { left: 4, right: 12, top: 12, bottom: 8, containLabel: true },
+      grid: {
+        left: 4,
+        right: 12,
+        top: 12,
+        bottom: 8,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
+      },
       series: spec.series.map((s) => ({
         name: s.name,
         type: 'scatter',
@@ -206,7 +213,8 @@ function buildOption(spec: VizChartSpec, donut: boolean): echarts.EChartsCoreOpt
       right: 12,
       top: 12,
       bottom: multi ? 32 : 8,
-      containLabel: true,
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
     },
     xAxis: horizontal ? valueAxis : categoryAxis,
     yAxis: horizontal

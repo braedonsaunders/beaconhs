@@ -3,7 +3,7 @@ import 'server-only'
 // Resolve the full field set + the pickable record types for email templates.
 // Native modules and Builder apps are treated the SAME — both are "subjects".
 
-import { desc, eq, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import { formTemplateVersions, formTemplates } from '@beaconhs/db/schema'
 import {
   SKIP_FIELD_TYPES,
@@ -21,6 +21,24 @@ type SubjectFieldOption = { key: string; label: string }
 type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
 /** A repeating child collection exposed for {{#each}} tables. */
 type SubjectCollection = { key: string; label: string; fields: SubjectFieldOption[] }
+
+/** Validate a persisted template/flow subject without accepting orphan identifiers. */
+export async function subjectExists(
+  ctx: RequestContext,
+  subjectType: string,
+  subjectKey: string,
+): Promise<boolean> {
+  if (subjectType === 'module') return Object.hasOwn(MODULE_FLOW_PROFILES, subjectKey)
+  if (subjectType !== 'form_template') return false
+  const [row] = await ctx.db((tx) =>
+    tx
+      .select({ id: formTemplates.id })
+      .from(formTemplates)
+      .where(and(eq(formTemplates.id, subjectKey), isNull(formTemplates.deletedAt)))
+      .limit(1),
+  )
+  return Boolean(row)
+}
 
 /** Latest schema version for a Builder app (palette source of truth). */
 async function loadLatestFormSchema(

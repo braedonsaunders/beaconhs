@@ -26,6 +26,7 @@ import { eq } from 'drizzle-orm'
 import { AppTypePicker } from './_app-type-picker'
 import { formCategoryLabel } from '../../_lib/category-label'
 import { slugify } from '../../_lib/slug'
+import { generatedTemplateKey } from '../../_lib/template-key.server'
 
 export const metadata = { title: 'New app' }
 
@@ -57,7 +58,7 @@ async function pickAvailableKey(
       attempt += 1
       candidate = `${base}_${attempt}`
     }
-    return `${base}_${Math.random().toString(36).slice(2, 8)}`
+    return generatedTemplateKey(base)
   })
 }
 
@@ -74,9 +75,7 @@ async function createTemplate(formData: FormData): Promise<void> {
   // run every candidate through the collision-safe picker. An all-symbols input
   // slugifies to '' and falls back to the name (then a generic base).
   const base = (customKey ? slugify(customKey) : '') || slugify(name) || 'app'
-  const key = customKey
-    ? await pickAvailableKey(ctx, base)
-    : `${base}_${Math.random().toString(36).slice(2, 6)}`
+  const key = customKey ? await pickAvailableKey(ctx, base) : generatedTemplateKey(base)
 
   const initialSchema: FormSchemaV1 = {
     schemaVersion: 1,

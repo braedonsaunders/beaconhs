@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input, Select, Textarea, cn } from '@beaconhs/ui'
 import {
+  CUSTOM_FIELD_LIMITS,
   CUSTOM_FIELD_TYPE_META,
   type CustomFieldConfig,
   type CustomFieldEntityKind,
@@ -169,7 +170,10 @@ function SelectControl({
   initialValue: unknown
   persist: (value: string) => void
 }) {
-  const [value, setValue] = useState(typeof initialValue === 'string' ? initialValue : '')
+  const allowed = new Set((def.config?.options ?? []).map((option) => option.value))
+  const [value, setValue] = useState(
+    typeof initialValue === 'string' && allowed.has(initialValue) ? initialValue : '',
+  )
   return (
     <Select
       value={value}
@@ -200,7 +204,12 @@ function MultiSelectControl({
   initialValue: unknown
   persist: (value: string) => void
 }) {
-  const initial = Array.isArray(initialValue) ? (initialValue as string[]) : []
+  const allowed = new Set((def.config?.options ?? []).map((option) => option.value))
+  const initial = Array.isArray(initialValue)
+    ? (initialValue as unknown[]).filter(
+        (value): value is string => typeof value === 'string' && allowed.has(value),
+      )
+    : []
   const [selected, setSelected] = useState<string[]>(initial)
   function toggle(v: string) {
     const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]
@@ -328,6 +337,7 @@ function TextLikeControl({
         value={value}
         disabled={disabled}
         placeholder={def.config?.placeholder ?? undefined}
+        maxLength={CUSTOM_FIELD_LIMITS.textarea}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => commit(value)}
       />
@@ -358,6 +368,17 @@ function TextLikeControl({
       min={meta.supportsRange ? (def.config?.min ?? undefined) : undefined}
       max={meta.supportsRange ? (def.config?.max ?? undefined) : undefined}
       step={meta.supportsRange ? (def.config?.step ?? undefined) : undefined}
+      maxLength={
+        def.fieldType === 'email'
+          ? CUSTOM_FIELD_LIMITS.email
+          : def.fieldType === 'url'
+            ? CUSTOM_FIELD_LIMITS.url
+            : def.fieldType === 'phone'
+              ? CUSTOM_FIELD_LIMITS.phone
+              : def.fieldType === 'text'
+                ? CUSTOM_FIELD_LIMITS.text
+                : undefined
+      }
       onChange={(e) => onChange(e.target.value)}
       onBlur={() => commit(value)}
     />

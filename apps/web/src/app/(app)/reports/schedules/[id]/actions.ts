@@ -7,32 +7,37 @@ import { assertCan } from '@beaconhs/tenant'
 import { reportSchedules } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
+import { claimReportRun } from '@beaconhs/reports'
 import { enqueueReportRun } from '@beaconhs/jobs'
-import { loadDefinitionById } from '../../_definitions'
-import { parseScheduleForm } from '../_parse'
+import { requireUuidInput } from '@/lib/mutation-input'
+import { prepareScheduleMutation } from '../_mutation'
 
 export async function setActive(scheduleId: string, active: boolean): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
   if (!ctx.membership) throw new Error('An active tenant membership is required to edit schedules')
+  if (typeof active !== 'boolean') throw new Error('Schedule state is invalid')
+  const normalizedScheduleId = requireUuidInput(scheduleId, 'Report schedule')
   const runAsTenantUserId = ctx.membership.id
-  await ctx.db(async (tx) => {
-    await tx
+  const updated = await ctx.db(async (tx) => {
+    const [row] = await tx
       .update(reportSchedules)
       .set({
         active,
         ...(active ? { runAsTenantUserId, runAsRoleId: ctx.activeRoleId ?? null } : {}),
       })
-      .where(eq(reportSchedules.id, scheduleId))
+      .where(eq(reportSchedules.id, normalizedScheduleId))
+      .returning({ id: reportSchedules.id })
+    return row ?? null
   })
+  if (!updated) throw new Error('Schedule not found')
   await recordAudit(ctx, {
     entityType: 'report_schedule',
-    entityId: scheduleId,
+    entityId: normalizedScheduleId,
     action: active ? 'publish' : 'archive',
     summary: active ? 'Activated report schedule' : 'Paused report schedule',
   })
-  revalidatePath(`/reports/schedules/${scheduleId}`)
+  revalidatePath(`/reports/schedules/${normalizedScheduleId}`)
   revalidatePath('/reports')
 }
 
@@ -40,46 +45,42 @@ export async function triggerNow(scheduleId: string): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
   if (!ctx.membership) throw new Error('An active tenant membership is required to run schedules')
+  const normalizedScheduleId = requireUuidInput(scheduleId, 'Report schedule')
   const runAsTenantUserId = ctx.membership.id
   const runId = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(reportSchedules)
-      .where(eq(reportSchedules.id, scheduleId))
-      .limit(1)
-    if (!row) throw new Error('Schedule not found')
-    await tx
+    const [updated] = await tx
       .update(reportSchedules)
       .set({ runAsTenantUserId, runAsRoleId: ctx.activeRoleId ?? null })
-      .where(eq(reportSchedules.id, scheduleId))
+      .where(eq(reportSchedules.id, normalizedScheduleId))
+      .returning({ id: reportSchedules.id })
+    if (!updated) throw new Error('Schedule not found')
     const run = await claimReportRun(tx, {
-      scheduleId,
+      scheduleId: normalizedScheduleId,
       scheduledFor: new Date(),
       trigger: 'manual',
     })
     return run.id
   })
-  await enqueueReportRun({ tenantId: ctx.tenantId, scheduleId, runId })
+  await enqueueReportRun({ tenantId: ctx.tenantId, scheduleId: normalizedScheduleId, runId })
   await recordAudit(ctx, {
     entityType: 'report_schedule',
-    entityId: scheduleId,
+    entityId: normalizedScheduleId,
     action: 'export',
     summary: 'Triggered ad-hoc report run',
     metadata: { runId },
   })
-  revalidatePath(`/reports/schedules/${scheduleId}`)
+  revalidatePath(`/reports/schedules/${normalizedScheduleId}`)
 }
 
 export async function updateSchedule(scheduleId: string, formData: FormData): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
   if (!ctx.membership) throw new Error('An active tenant membership is required to edit schedules')
+  const normalizedScheduleId = requireUuidInput(scheduleId, 'Report schedule')
   const runAsTenantUserId = ctx.membership.id
 
-  const definitionId = String(formData.get('definitionId') ?? '').trim()
-  if (!definitionId) throw new Error('Report definition is required')
-
   const {
+    definitionId,
     name,
     cadence,
     dayOfWeek,
@@ -90,23 +91,11 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
     recipientUserIds,
     recipientEmails,
     filters,
-  } = parseScheduleForm(formData)
+    nextRunAt,
+  } = await prepareScheduleMutation(ctx, formData)
 
-  // The definition must be visible to this tenant (built-in or owned).
-  const def = await loadDefinitionById(ctx.tenantId!, definitionId)
-  if (!def) throw new Error('Unknown report definition')
-
-  const nextRunAt = computeNextRunAt({
-    cadence,
-    dayOfWeek,
-    dayOfMonth,
-    hour,
-    minute,
-    timezone,
-  })
-
-  await ctx.db(async (tx) => {
-    await tx
+  const updated = await ctx.db(async (tx) => {
+    const [row] = await tx
       .update(reportSchedules)
       .set({
         definitionId,
@@ -124,12 +113,15 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
         runAsRoleId: ctx.activeRoleId ?? null,
         nextRunAt,
       })
-      .where(eq(reportSchedules.id, scheduleId))
+      .where(eq(reportSchedules.id, normalizedScheduleId))
+      .returning({ id: reportSchedules.id })
+    return row ?? null
   })
+  if (!updated) throw new Error('Schedule not found')
 
   await recordAudit(ctx, {
     entityType: 'report_schedule',
-    entityId: scheduleId,
+    entityId: normalizedScheduleId,
     action: 'update',
     summary: `Updated report schedule "${name}"`,
     after: {
@@ -146,20 +138,26 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
     },
   })
 
-  revalidatePath(`/reports/schedules/${scheduleId}`)
+  revalidatePath(`/reports/schedules/${normalizedScheduleId}`)
   revalidatePath('/reports')
 }
 
 export async function deleteSchedule(scheduleId: string): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
-  await ctx.db(async (tx) => {
+  const normalizedScheduleId = requireUuidInput(scheduleId, 'Report schedule')
+  const deleted = await ctx.db(async (tx) => {
     // Runs cascade-delete via FK.
-    await tx.delete(reportSchedules).where(eq(reportSchedules.id, scheduleId))
+    const [row] = await tx
+      .delete(reportSchedules)
+      .where(eq(reportSchedules.id, normalizedScheduleId))
+      .returning({ id: reportSchedules.id })
+    return row ?? null
   })
+  if (!deleted) throw new Error('Schedule not found')
   await recordAudit(ctx, {
     entityType: 'report_schedule',
-    entityId: scheduleId,
+    entityId: normalizedScheduleId,
     action: 'delete',
     summary: 'Deleted report schedule',
   })

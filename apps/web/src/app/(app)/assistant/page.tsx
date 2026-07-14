@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
-import { listConversations, listSharedConversations } from '@/lib/ai-conversations'
+import { listConversationPage, listSharedConversationPage } from '@/lib/ai-conversations'
 import { AssistantApp } from './_components/assistant-app'
 
 export const dynamic = 'force-dynamic'
@@ -18,8 +18,8 @@ export default async function AssistantPage({
   const { q } = await searchParams
 
   const [own, shared, ai, cookieStore] = await Promise.all([
-    listConversations('assistant'),
-    listSharedConversations('assistant'),
+    listConversationPage({ scope: 'assistant' }),
+    listSharedConversationPage({ scope: 'assistant' }),
     getTenantAiSettings(ctx),
     cookies(),
   ])
@@ -31,6 +31,7 @@ export default async function AssistantPage({
       sharedConversations={shared}
       activeId={null}
       initialMessages={[]}
+      initialOlderCursor={null}
       access="owner"
       canWrite={can(ctx, 'assistant.write')}
       aiEnabled={ai.enabled && ai.hasKey}

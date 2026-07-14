@@ -1,85 +1,185 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { equipmentStationSettings, orgUnits } from '@beaconhs/db/schema'
-import { hashKioskPin, normalizeKioskPin } from '@beaconhs/db'
+import { hashKioskPin } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
+import {
+  parseStationBaseLocationInput,
+  parseStationSettingsInput,
+  type StationSettingsInput,
+} from './_policy'
 
-export type StationSettingsInput = {
-  defaultCheckInOrgUnitId: string | null
-  stationPin: string | null
-  clearStationPin: boolean
-  scanMode: 'toggle' | 'explicit'
-  requireHolderOnCheckout: boolean
-  requireConditionOnCheckin: boolean
-  soundEnabled: boolean
-  baseLocationIds: string[]
+type Result = { ok: true } | { ok: false; error: string }
+
+class StationSettingsMutationError extends Error {}
+
+function inputError(error: unknown, fallback: string): Result {
+  return { ok: false, error: error instanceof Error ? error.message : fallback }
 }
 
-export async function saveStationSettings(
-  input: StationSettingsInput,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+function persistenceError(operation: string, error: unknown): Result {
+  if (error instanceof StationSettingsMutationError) return { ok: false, error: error.message }
+  console.error(`[equipment-station-settings] ${operation} failed`, error)
+  return { ok: false, error: `Could not ${operation}. Please try again.` }
+}
+
+export async function saveStationSettings(input: unknown): Promise<Result> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'equipment')
 
-  const scanMode: 'toggle' | 'explicit' = input.scanMode === 'explicit' ? 'explicit' : 'toggle'
-  const pin = input.stationPin?.trim() || null
-  const normalizedPin = pin ? normalizeKioskPin(pin) : null
-  if (pin && !normalizedPin) {
-    return { ok: false, error: 'Kiosk PIN must be 4–12 digits.' }
+  let parsed: StationSettingsInput
+  try {
+    parsed = parseStationSettingsInput(input)
+  } catch (error) {
+    return inputError(error, 'Station settings are invalid.')
   }
-  const nextPinHash = input.clearStationPin
-    ? null
-    : normalizedPin
-      ? await hashKioskPin(normalizedPin)
-      : undefined
-  const baseIds = Array.from(new Set(input.baseLocationIds.filter(Boolean)))
-  const home = input.defaultCheckInOrgUnitId || null
 
-  let kioskEnabled = false
-  await ctx.db(async (tx) => {
-    const [current] = await tx
-      .select({ stationPin: equipmentStationSettings.stationPin })
-      .from(equipmentStationSettings)
-      .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
-      .limit(1)
-    const stationPin = nextPinHash === undefined ? (current?.stationPin ?? null) : nextPinHash
-    kioskEnabled = Boolean(stationPin)
-    const values = {
-      defaultCheckInOrgUnitId: home,
-      stationPin,
-      scanMode,
-      requireHolderOnCheckout: input.requireHolderOnCheckout,
-      requireConditionOnCheckin: input.requireConditionOnCheckin,
-      soundEnabled: input.soundEnabled,
-    }
-    await tx
-      .insert(equipmentStationSettings)
-      .values({ tenantId: ctx.tenantId, ...values })
-      .onConflictDoUpdate({
-        target: equipmentStationSettings.tenantId,
-        set: { ...values, updatedAt: new Date() },
+  let nextPinHash: string | null | undefined
+  try {
+    nextPinHash = parsed.clearStationPin
+      ? null
+      : parsed.stationPin
+        ? await hashKioskPin(parsed.stationPin)
+        : undefined
+  } catch (error) {
+    return persistenceError('secure the kiosk PIN', error)
+  }
+
+  try {
+    await ctx.db(async (tx) => {
+      if (parsed.defaultCheckInOrgUnitId) {
+        const [home] = await tx
+          .select({ id: orgUnits.id })
+          .from(orgUnits)
+          .where(
+            and(
+              eq(orgUnits.tenantId, ctx.tenantId),
+              eq(orgUnits.id, parsed.defaultCheckInOrgUnitId),
+              isNull(orgUnits.deletedAt),
+            ),
+          )
+          .limit(1)
+          .for('share')
+        if (!home) {
+          throw new StationSettingsMutationError(
+            'The selected default check-in location is no longer available.',
+          )
+        }
+      }
+
+      const [current] = await tx
+        .select({
+          defaultCheckInOrgUnitId: equipmentStationSettings.defaultCheckInOrgUnitId,
+          stationPin: equipmentStationSettings.stationPin,
+          scanMode: equipmentStationSettings.scanMode,
+          requireHolderOnCheckout: equipmentStationSettings.requireHolderOnCheckout,
+          requireConditionOnCheckin: equipmentStationSettings.requireConditionOnCheckin,
+          soundEnabled: equipmentStationSettings.soundEnabled,
+        })
+        .from(equipmentStationSettings)
+        .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
+        .limit(1)
+        .for('update')
+      const stationPin = nextPinHash === undefined ? (current?.stationPin ?? null) : nextPinHash
+      const values = {
+        defaultCheckInOrgUnitId: parsed.defaultCheckInOrgUnitId,
+        stationPin,
+        scanMode: parsed.scanMode,
+        requireHolderOnCheckout: parsed.requireHolderOnCheckout,
+        requireConditionOnCheckin: parsed.requireConditionOnCheckin,
+        soundEnabled: parsed.soundEnabled,
+      }
+      await tx
+        .insert(equipmentStationSettings)
+        .values({ tenantId: ctx.tenantId, ...values })
+        .onConflictDoUpdate({
+          target: equipmentStationSettings.tenantId,
+          set: { ...values, updatedAt: new Date() },
+        })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment_station_settings',
+        action: 'update',
+        summary: 'Updated check-in/out station settings',
+        before: current
+          ? {
+              defaultCheckInOrgUnitId: current.defaultCheckInOrgUnitId,
+              scanMode: current.scanMode,
+              requireHolderOnCheckout: current.requireHolderOnCheckout,
+              requireConditionOnCheckin: current.requireConditionOnCheckin,
+              soundEnabled: current.soundEnabled,
+              kioskEnabled: Boolean(current.stationPin),
+            }
+          : null,
+        after: {
+          defaultCheckInOrgUnitId: parsed.defaultCheckInOrgUnitId,
+          scanMode: parsed.scanMode,
+          requireHolderOnCheckout: parsed.requireHolderOnCheckout,
+          requireConditionOnCheckin: parsed.requireConditionOnCheckin,
+          soundEnabled: parsed.soundEnabled,
+          kioskEnabled: Boolean(stationPin),
+        },
       })
+    })
+  } catch (error) {
+    return persistenceError('save station settings', error)
+  }
 
-    // Re-sync which org-units count as "at base / checked in".
-    await tx
-      .update(orgUnits)
-      .set({ isEquipmentBase: false })
-      .where(eq(orgUnits.isEquipmentBase, true))
-    if (baseIds.length > 0) {
-      await tx.update(orgUnits).set({ isEquipmentBase: true }).where(inArray(orgUnits.id, baseIds))
-    }
-  })
+  revalidatePath('/equipment/station')
+  revalidatePath('/equipment/station/settings')
+  return { ok: true }
+}
 
-  await recordAudit(ctx, {
-    entityType: 'equipment_station_settings',
-    action: 'update',
-    summary: 'Updated check-in/out station settings',
-    after: { home, scanMode, baseCount: baseIds.length, kioskEnabled },
-  })
+export async function setStationBaseLocation(input: unknown): Promise<Result> {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'equipment')
+
+  let parsed: ReturnType<typeof parseStationBaseLocationInput>
+  try {
+    parsed = parseStationBaseLocationInput(input)
+  } catch (error) {
+    return inputError(error, 'Base location update is invalid.')
+  }
+
+  try {
+    const found = await ctx.db(async (tx) => {
+      const [location] = await tx
+        .select({ id: orgUnits.id, name: orgUnits.name, isBase: orgUnits.isEquipmentBase })
+        .from(orgUnits)
+        .where(
+          and(
+            eq(orgUnits.tenantId, ctx.tenantId),
+            eq(orgUnits.id, parsed.id),
+            isNull(orgUnits.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for('update')
+      if (!location) return false
+      if (location.isBase === parsed.isBase) return true
+
+      await tx
+        .update(orgUnits)
+        .set({ isEquipmentBase: parsed.isBase })
+        .where(and(eq(orgUnits.tenantId, ctx.tenantId), eq(orgUnits.id, parsed.id)))
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'org_unit',
+        entityId: parsed.id,
+        action: 'update',
+        summary: `${parsed.isBase ? 'Marked' : 'Unmarked'} "${location.name}" as an equipment base`,
+        before: { isEquipmentBase: location.isBase },
+        after: { isEquipmentBase: parsed.isBase },
+      })
+      return true
+    })
+    if (!found) return { ok: false, error: 'Location not found.' }
+  } catch (error) {
+    return persistenceError('update the base location', error)
+  }
+
   revalidatePath('/equipment/station')
   revalidatePath('/equipment/station/settings')
   return { ok: true }

@@ -19,3 +19,4 @@ packages/db/drizzle/meta/
 private/
 docs/migration/*.json
 packages/db/src/scripts/dokploy-*.ts
+packages/etl/

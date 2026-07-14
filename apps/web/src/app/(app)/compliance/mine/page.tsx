@@ -181,7 +181,14 @@ export default async function MyCompliancePage({
                 </TableHeader>
                 <TableBody>
                   {rows.map((r, i) => {
-                    const link = resolveComplianceLink(r.kind, r.targetRef, { personId: person.id })
+                    const link = resolveComplianceLink(r.kind, r.targetRef, {
+                      personId: person.id,
+                      obligationId: r.obligationId,
+                      responseId:
+                        r.status === 'completed' && r.kind === 'form'
+                          ? (r.subjectRef?.responseId ?? null)
+                          : null,
+                    })
                     const done = r.status === 'completed'
                     return (
                       <TableRow key={`${r.obligationId}:${i}`}>

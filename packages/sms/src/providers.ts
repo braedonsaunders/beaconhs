@@ -135,7 +135,7 @@ const SPEC_BY_VALUE = Object.fromEntries(SMS_PROVIDER_SPECS.map((s) => [s.value,
 >
 
 export function isSmsProvider(value: unknown): value is SmsProvider {
-  return typeof value === 'string' && value in SPEC_BY_VALUE
+  return typeof value === 'string' && Object.hasOwn(SPEC_BY_VALUE, value)
 }
 
 export function smsProviderSpec(provider: SmsProvider): SmsProviderSpec {

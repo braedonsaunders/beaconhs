@@ -9,18 +9,18 @@
 // calls them imperatively inside a transition.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import {
   ppeCriteriaBankCriteria,
   ppeCriteriaBanks,
-  ppeItems,
   ppeTypeCriteriaGroups,
   ppeTypeInspectionCriteria,
   ppeTypes,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { deletePpeTypeInTransaction } from '@/lib/ppe-type-deletion'
 
 type Kind = 'pre_use' | 'annual'
 type Severity = 'low' | 'medium' | 'high' | 'critical'
@@ -95,18 +95,14 @@ export async function updateType(input: {
 
 export async function deleteType(input: { id: string }) {
   const ctx = await manageCtx()
-  const [tally] = await ctx.db((tx) =>
-    tx.select({ c: count() }).from(ppeItems).where(eq(ppeItems.typeId, input.id)),
-  )
-  if (Number(tally?.c ?? 0) > 0) {
-    throw new Error(`Cannot delete — ${tally?.c} item(s) reference this type`)
-  }
-  await ctx.db((tx) => tx.delete(ppeTypes).where(eq(ppeTypes.id, input.id)))
-  await recordAudit(ctx, {
-    entityType: 'ppe_type',
-    entityId: input.id,
-    action: 'delete',
-    summary: 'Deleted PPE type',
+  await ctx.db(async (tx) => {
+    await deletePpeTypeInTransaction(tx, ctx.tenantId, input.id)
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'ppe_type',
+      entityId: input.id,
+      action: 'delete',
+      summary: 'Deleted PPE type',
+    })
   })
   revalidatePath('/ppe/types')
 }

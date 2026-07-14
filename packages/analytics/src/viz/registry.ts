@@ -29,13 +29,7 @@ export type VizDataShape = 'scalar' | 'rows' | 'rows-series' | 'pivot-matrix'
 export type VizGroup = 'numbers' | 'tables' | 'comparison' | 'trend' | 'proportion' | 'relationship'
 
 export type VizSettingWidget =
-  | 'select'
-  | 'number'
-  | 'color'
-  | 'toggle'
-  | 'text'
-  | 'field'
-  | 'conditional-format'
+  'select' | 'number' | 'color' | 'toggle' | 'text' | 'field' | 'conditional-format'
 
 export type VizSettingContext = {
   shape: ResultShape

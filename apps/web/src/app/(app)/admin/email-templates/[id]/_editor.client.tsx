@@ -14,6 +14,7 @@ import type { Editor } from 'grapesjs'
 import { ArrowLeft, Mail, Save, Send } from 'lucide-react'
 import { Button, Input } from '@beaconhs/ui'
 import { saveEmailTemplateDesign, sendTestEmailTemplate } from '../_actions'
+import { serializeTemplateEditor } from '@/lib/template-builder-html'
 
 const EmailBuilder = dynamic(() => import('../_builder.client'), {
   ssr: false,
@@ -27,16 +28,6 @@ const EmailBuilder = dynamic(() => import('../_builder.client'), {
 type MergeField = { key: string; label?: string; sample?: string }
 type Collection = { key: string; label: string; fields: { key: string; label: string }[] }
 
-// GrapesJS keeps authored styles in getCss() (keyed by generated ids), NOT
-// inline on the elements getHtml() returns — so saving getHtml() alone loses
-// every style. Serialize the CSS block + the structure; the save action then
-// inlines the CSS (juice) so it survives email clients that strip <style>.
-function fullHtml(ed: Editor): string {
-  const css = ed.getCss?.() ?? ''
-  const html = ed.getHtml()
-  return css ? `<style>${css}</style>${html}` : html
-}
-
 export function EmailTemplateEditor({
   template,
 }: {
@@ -44,8 +35,7 @@ export function EmailTemplateEditor({
     id: string
     name: string
     subjectTemplate: string
-    design: Record<string, unknown>
-    mjmlSource?: string | null
+    sourceHtml?: string | null
     mergeFields: MergeField[]
     collections?: Collection[]
     subjectLabel?: string | null
@@ -62,8 +52,7 @@ export function EmailTemplateEditor({
     const ed = editorRef.current
     if (!ed) return null
     return {
-      design: ed.getProjectData() as Record<string, unknown>,
-      mjmlSource: fullHtml(ed),
+      sourceHtml: serializeTemplateEditor(ed),
     }
   }
 
@@ -79,16 +68,15 @@ export function EmailTemplateEditor({
         id: template.id,
         name,
         subjectTemplate: subject,
-        design: snap.design,
-        mjmlSource: snap.mjmlSource,
+        sourceHtml: snap.sourceHtml,
       })
       if (res.ok) {
-        toast.success(
-          res.warnings?.length ? `Saved · ${res.warnings.length} MJML notice(s)` : 'Saved',
-        )
+        toast.success('Saved')
       } else {
         toast.error(res.error ?? 'Save failed')
       }
+    } catch {
+      toast.error('Save failed')
     } finally {
       setBusy(null)
     }
@@ -103,17 +91,22 @@ export function EmailTemplateEditor({
     try {
       const snap = snapshot()
       if (snap) {
-        await saveEmailTemplateDesign({
+        const saved = await saveEmailTemplateDesign({
           id: template.id,
           name,
           subjectTemplate: subject,
-          design: snap.design,
-          mjmlSource: snap.mjmlSource,
+          sourceHtml: snap.sourceHtml,
         })
+        if (!saved.ok) {
+          toast.error(saved.error ?? 'Save failed')
+          return
+        }
       }
       const res = await sendTestEmailTemplate({ id: template.id, to: testTo })
       if (res.ok) toast.success('Test email queued')
       else toast.error(res.error ?? 'Failed to send test')
+    } catch {
+      toast.error('Failed to send test')
     } finally {
       setBusy(null)
     }
@@ -134,6 +127,7 @@ export function EmailTemplateEditor({
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
+          maxLength={200}
           className="h-9 w-64 font-semibold"
           aria-label="Template name"
         />
@@ -146,6 +140,8 @@ export function EmailTemplateEditor({
           <Input
             value={testTo}
             onChange={(e) => setTestTo(e.target.value)}
+            type="email"
+            maxLength={254}
             placeholder="you@email.com"
             className="h-9 w-44"
             aria-label="Send test to"
@@ -167,6 +163,7 @@ export function EmailTemplateEditor({
         <Input
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
+          maxLength={998}
           placeholder="e.g. New incident at {{site}}"
           className="h-8 flex-1 border-transparent bg-transparent px-1 shadow-none focus-visible:border-slate-200"
           aria-label="Subject line"
@@ -176,8 +173,7 @@ export function EmailTemplateEditor({
       {/* Builder — fills the rest; record fields + tables are in its left palette */}
       <div className="min-h-0 flex-1">
         <EmailBuilder
-          initialDesign={template.design}
-          initialMjml={template.mjmlSource ?? null}
+          initialHtml={template.sourceHtml ?? null}
           mergeFields={template.mergeFields}
           collections={collections}
           onReady={(ed) => {

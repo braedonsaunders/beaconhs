@@ -91,7 +91,7 @@ export function SignaturePad({
 
   const [hasInk, setHasInk] = useState<boolean>(!!value)
 
-  const getCtx = () => canvasRef.current?.getContext('2d') ?? null
+  const getCtx = useCallback(() => canvasRef.current?.getContext('2d') ?? null, [])
 
   // Load a data-url onto the canvas (used for initial value + resize preservation).
   const loadDataUrl = useCallback(
@@ -113,7 +113,7 @@ export function SignaturePad({
         img.onerror = () => resolve()
         img.src = dataUrl
       }),
-    [],
+    [getCtx],
   )
 
   // Resize the backing store to match the container width and DPR, preserving
@@ -197,8 +197,7 @@ export function SignaturePad({
     if (value === lastEmittedRef.current) return
     ctx.clearRect(0, 0, cssWidth, cssHeight)
     void loadDataUrl(value).then(() => setHasInk(true))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, loadDataUrl])
+  }, [getCtx, loadDataUrl, value])
 
   // Initialized to null (not `value`) so the external-value repaint effect
   // runs once on mount and actually paints an initial signature.
@@ -224,7 +223,7 @@ export function SignaturePad({
 
   // --- Drawing ---------------------------------------------------------------
 
-  const pointFromEvent = (e: PointerEvent): Point => {
+  const pointFromEvent = useCallback((e: PointerEvent): Point => {
     const canvas = canvasRef.current!
     const rect = canvas.getBoundingClientRect()
     return {
@@ -232,112 +231,121 @@ export function SignaturePad({
       y: e.clientY - rect.top,
       t: e.timeStamp,
     }
-  }
+  }, [])
 
   // Variable stroke width: slower pointer → thicker line. Velocity is smoothed
   // with a simple low-pass filter so quick jitter doesn't make the line pulse.
-  const computeWidth = (velocity: number) => {
+  const computeWidth = useCallback((velocity: number) => {
     const smoothed = VELOCITY_FILTER * velocity + (1 - VELOCITY_FILTER) * lastVelocityRef.current
     lastVelocityRef.current = smoothed
     // Map velocity to width: 0 px/ms → max, 1.5+ px/ms → min.
     const t = Math.min(1, smoothed / 1.5)
     return STROKE_MAX_WIDTH - (STROKE_MAX_WIDTH - STROKE_MIN_WIDTH) * t
-  }
+  }, [])
 
-  const onPointerDown = (e: PointerEvent) => {
-    if (disabled) return
-    const canvas = canvasRef.current
-    const ctx = getCtx()
-    if (!canvas || !ctx) return
-    // Ignore secondary pointers while one is already drawing.
-    if (activePointerRef.current !== null) return
+  const onPointerDown = useCallback(
+    (e: PointerEvent) => {
+      if (disabled) return
+      const canvas = canvasRef.current
+      const ctx = getCtx()
+      if (!canvas || !ctx) return
+      // Ignore secondary pointers while one is already drawing.
+      if (activePointerRef.current !== null) return
 
-    activePointerRef.current = e.pointerId
-    drawingRef.current = true
-    hasDrawnRef.current = true
-    try {
-      canvas.setPointerCapture(e.pointerId)
-    } catch {
-      // Some browsers throw if the pointer can't be captured — non-fatal.
-    }
-
-    const p = pointFromEvent(e)
-    lastPointRef.current = p
-    lastMidRef.current = { x: p.x, y: p.y }
-    lastVelocityRef.current = 0
-    lastWidthRef.current = STROKE_BASE_WIDTH
-
-    // Paint a dot at the starting point so taps produce visible ink.
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, STROKE_BASE_WIDTH / 2, 0, Math.PI * 2)
-    ctx.fill()
-
-    setHasInk(true)
-  }
-
-  const onPointerMove = (e: PointerEvent) => {
-    if (!drawingRef.current) return
-    if (e.pointerId !== activePointerRef.current) return
-    const ctx = getCtx()
-    const prev = lastPointRef.current
-    const prevMid = lastMidRef.current
-    if (!ctx || !prev || !prevMid) return
-
-    const p = pointFromEvent(e)
-    const dx = p.x - prev.x
-    const dy = p.y - prev.y
-    const dist = Math.hypot(dx, dy)
-    const dt = Math.max(1, p.t - prev.t)
-    const velocity = dist / dt // px per ms
-    const targetWidth = computeWidth(velocity)
-    // Smooth width changes between consecutive segments.
-    const width = (lastWidthRef.current + targetWidth) / 2
-
-    // Quadratic curve through the previous mid-point, using `prev` as the
-    // control point and the new mid-point as the destination.
-    const mid = { x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2 }
-    ctx.beginPath()
-    ctx.lineWidth = width
-    ctx.moveTo(prevMid.x, prevMid.y)
-    ctx.quadraticCurveTo(prev.x, prev.y, mid.x, mid.y)
-    ctx.stroke()
-
-    lastPointRef.current = p
-    lastMidRef.current = mid
-    lastWidthRef.current = width
-  }
-
-  const finishStroke = (e: PointerEvent) => {
-    if (e.pointerId !== activePointerRef.current) return
-    const canvas = canvasRef.current
-    const ctx = getCtx()
-    const prev = lastPointRef.current
-    const prevMid = lastMidRef.current
-
-    if (drawingRef.current && ctx && prev && prevMid) {
-      // Close out the curve to the final point so the last segment isn't lost.
-      ctx.beginPath()
-      ctx.lineWidth = lastWidthRef.current
-      ctx.moveTo(prevMid.x, prevMid.y)
-      ctx.lineTo(prev.x, prev.y)
-      ctx.stroke()
-    }
-
-    drawingRef.current = false
-    activePointerRef.current = null
-    lastPointRef.current = null
-    lastMidRef.current = null
-
-    if (canvas) {
+      activePointerRef.current = e.pointerId
+      drawingRef.current = true
+      hasDrawnRef.current = true
       try {
-        canvas.releasePointerCapture(e.pointerId)
+        canvas.setPointerCapture(e.pointerId)
       } catch {
-        // ignore
+        // Some browsers throw if the pointer can't be captured — non-fatal.
       }
-    }
 
-    scheduleEmit()
-  }
+      const p = pointFromEvent(e)
+      lastPointRef.current = p
+      lastMidRef.current = { x: p.x, y: p.y }
+      lastVelocityRef.current = 0
+      lastWidthRef.current = STROKE_BASE_WIDTH
+
+      // Paint a dot at the starting point so taps produce visible ink.
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, STROKE_BASE_WIDTH / 2, 0, Math.PI * 2)
+      ctx.fill()
+
+      setHasInk(true)
+    },
+    [disabled, getCtx, pointFromEvent],
+  )
+
+  const onPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!drawingRef.current) return
+      if (e.pointerId !== activePointerRef.current) return
+      const ctx = getCtx()
+      const prev = lastPointRef.current
+      const prevMid = lastMidRef.current
+      if (!ctx || !prev || !prevMid) return
+
+      const p = pointFromEvent(e)
+      const dx = p.x - prev.x
+      const dy = p.y - prev.y
+      const dist = Math.hypot(dx, dy)
+      const dt = Math.max(1, p.t - prev.t)
+      const velocity = dist / dt // px per ms
+      const targetWidth = computeWidth(velocity)
+      // Smooth width changes between consecutive segments.
+      const width = (lastWidthRef.current + targetWidth) / 2
+
+      // Quadratic curve through the previous mid-point, using `prev` as the
+      // control point and the new mid-point as the destination.
+      const mid = { x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2 }
+      ctx.beginPath()
+      ctx.lineWidth = width
+      ctx.moveTo(prevMid.x, prevMid.y)
+      ctx.quadraticCurveTo(prev.x, prev.y, mid.x, mid.y)
+      ctx.stroke()
+
+      lastPointRef.current = p
+      lastMidRef.current = mid
+      lastWidthRef.current = width
+    },
+    [computeWidth, getCtx, pointFromEvent],
+  )
+
+  const finishStroke = useCallback(
+    (e: PointerEvent) => {
+      if (e.pointerId !== activePointerRef.current) return
+      const canvas = canvasRef.current
+      const ctx = getCtx()
+      const prev = lastPointRef.current
+      const prevMid = lastMidRef.current
+
+      if (drawingRef.current && ctx && prev && prevMid) {
+        // Close out the curve to the final point so the last segment isn't lost.
+        ctx.beginPath()
+        ctx.lineWidth = lastWidthRef.current
+        ctx.moveTo(prevMid.x, prevMid.y)
+        ctx.lineTo(prev.x, prev.y)
+        ctx.stroke()
+      }
+
+      drawingRef.current = false
+      activePointerRef.current = null
+      lastPointRef.current = null
+      lastMidRef.current = null
+
+      if (canvas) {
+        try {
+          canvas.releasePointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
+      }
+
+      scheduleEmit()
+    },
+    [getCtx, scheduleEmit],
+  )
 
   // Attach pointer listeners imperatively so we get raw PointerEvent objects
   // and can use `{ passive: false }` where useful.
@@ -362,8 +370,7 @@ export function SignaturePad({
       canvas.removeEventListener('pointercancel', up)
       canvas.removeEventListener('pointerleave', up)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [disabled])
+  }, [disabled, finishStroke, onPointerDown, onPointerMove])
 
   // Clean up any pending debounce on unmount.
   useEffect(() => {
@@ -385,7 +392,7 @@ export function SignaturePad({
       debounceRef.current = null
     }
     emit(null)
-  }, [emit])
+  }, [emit, getCtx])
 
   return (
     <div ref={wrapRef} className={cn('w-full', className)}>
@@ -403,8 +410,8 @@ export function SignaturePad({
       >
         {disabled && value ? (
           // Static image render in disabled mode so the underlying canvas
-          // (and its pointer handlers) doesn't have to participate.
-          // eslint-disable-next-line @next/next/no-img-element
+          // (and its pointer handlers) doesn't have to participate. This is a
+          // generated data URL, which a server-side image optimizer cannot load.
           <img
             src={value}
             alt={ariaLabel}

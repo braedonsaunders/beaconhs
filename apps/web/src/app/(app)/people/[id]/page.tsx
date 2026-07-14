@@ -61,26 +61,32 @@ import {
   users,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { materializeIdentityAudienceObligations } from '@beaconhs/compliance'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity, recordAuditInTransaction } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
+import { RawImage } from '@/components/raw-image'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { LiveField, LivePersonSelect, LiveRichText, LiveSelect } from '@/components/live-field'
 import { LiveMultiSelect } from '@/components/live-multi-select'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { getPersonSyncOrigin, SYNC_OWNED_PERSON_FIELDS } from '@/lib/people-sync'
+import {
+  getPersonSyncOrigin,
+  SYNC_OWNED_PERSON_FIELDS,
+  SYNC_OWNED_PERSON_RELATIONSHIPS,
+} from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
 import { setPersonGroups } from '../_actions/groups'
-import { setPersonTitles } from '../_actions/titles'
+import { setPersonTitles, setPrimaryPersonTitle } from '../_actions/titles'
 import { deletePersonFile } from '../_actions/files'
 import { PersonFilesDrawers } from './_files-drawers'
 
@@ -115,6 +121,7 @@ const APP_OWNED_FIELDS = new Set([
 const SYNC_OWNED_FIELDS = new Set<string>(SYNC_OWNED_PERSON_FIELDS)
 const EDITABLE_FIELDS = new Set<string>([...APP_OWNED_FIELDS, ...SYNC_OWNED_FIELDS])
 const PERSON_STATUSES = ['active', 'inactive', 'terminated'] as const
+const COMPLIANCE_AUDIENCE_FIELDS = new Set(['status', 'departmentId', 'tradeId'])
 
 /**
  * Auto-save a single person field. Mirrors the incidents `updateTextField`
@@ -134,66 +141,71 @@ async function updatePersonField(formData: FormData) {
   if (!id || !field) throw new Error('Missing id/field')
   if (!EDITABLE_FIELDS.has(field)) throw new Error('Field not allowed')
 
-  const { before, synced } = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [row] = await tx
       .select()
       .from(people)
-      .where(and(eq(people.id, id), isNull(people.deletedAt)))
+      .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, id), isNull(people.deletedAt)))
       .limit(1)
+      .for('update')
+    if (!row) throw new Error('Person not found')
     const origin = row ? await getPersonSyncOrigin(tx, id) : null
-    return { before: row, synced: origin != null }
-  })
-  if (!before) throw new Error('Person not found')
 
-  // Server-side half of the sync lock: a synced person's identity fields are
-  // owned by the source — reject the write outright.
-  if (synced && SYNC_OWNED_FIELDS.has(field)) {
-    throw new Error('Field is managed by an external sync and is read-only')
-  }
-
-  // A person can never be their own manager.
-  if (field === 'managerPersonId' && rawValue === id) {
-    return
-  }
-
-  // Required identity fields must not be blanked (only reachable when not synced).
-  if ((field === 'firstName' || field === 'lastName') && !rawValue) {
-    throw new Error('First and last name are required')
-  }
-
-  let value: string | null = rawValue || null
-  if (field === 'firstName' || field === 'lastName') {
-    value = rawValue
-  } else if (field === 'notes') {
-    // Notes is a rich-text field — persist sanitized HTML (defense-in-depth
-    // alongside the render-side sanitize), or null when effectively blank.
-    value = rawValue ? sanitizeDocumentHtml(rawValue) : null
-  } else if (field === 'status') {
-    if (!(PERSON_STATUSES as readonly string[]).includes(rawValue)) {
-      throw new Error('Invalid status')
+    // Server-side half of the sync lock: a synced person's identity fields are
+    // owned by the source — reject the write outright.
+    if (origin && SYNC_OWNED_FIELDS.has(field)) {
+      throw new Error('Field is managed by an external sync and is read-only')
     }
-    value = rawValue
-  }
 
-  await ctx.db((tx) =>
-    tx
+    // A person can never be their own manager.
+    if (field === 'managerPersonId' && rawValue === id) return
+
+    // Required identity fields must not be blanked (only reachable when not synced).
+    if ((field === 'firstName' || field === 'lastName') && !rawValue) {
+      throw new Error('First and last name are required')
+    }
+
+    let value: string | null = rawValue || null
+    if (field === 'firstName' || field === 'lastName') {
+      value = rawValue
+    } else if (field === 'notes') {
+      // Notes is a rich-text field — persist sanitized HTML (defense-in-depth
+      // alongside the render-side sanitize), or null when effectively blank.
+      value = rawValue ? sanitizeDocumentHtml(rawValue) : null
+    } else if (field === 'status') {
+      if (!(PERSON_STATUSES as readonly string[]).includes(rawValue)) {
+        throw new Error('Invalid status')
+      }
+      value = rawValue
+    }
+
+    const beforeValue = (row as Record<string, unknown>)[field]
+    if (beforeValue === value) return
+    const [updated] = await tx
       .update(people)
       .set({ [field]: value } as Partial<typeof people.$inferInsert>)
-      .where(eq(people.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'person',
-    entityId: id,
-    action: 'update',
-    summary: `Person ${field} updated`,
-    before: { [field]: (before as Record<string, unknown>)[field] },
-    after: { [field]: value },
+      .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, id), isNull(people.deletedAt)))
+      .returning({ id: people.id })
+    if (!updated) throw new Error('Person no longer exists')
+    if (COMPLIANCE_AUDIENCE_FIELDS.has(field)) {
+      await materializeIdentityAudienceObligations(tx, ctx.tenantId, [id])
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'person',
+      entityId: id,
+      action: 'update',
+      summary: `Person ${field} updated`,
+      before: { [field]: beforeValue },
+      after: { [field]: value },
+    })
   })
   revalidatePath(`/people/${id}`)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   // Use the person's name as the document title so back links that land here
   // from elsewhere read "Back to Jamie Arsenault", not "Back to Person".
   try {
@@ -221,6 +233,8 @@ export default async function PersonDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
@@ -366,9 +380,13 @@ export default async function PersonDetailPage({
         .select({ assignment: personTitleAssignments, title: personTitles })
         .from(personTitleAssignments)
         .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
-        .where(eq(personTitleAssignments.personId, id))
+        .where(and(eq(personTitleAssignments.personId, id), isNull(personTitles.deletedAt)))
         .orderBy(desc(personTitleAssignments.isPrimary), asc(personTitles.name)),
-      tx.select().from(personTitles).orderBy(asc(personTitles.name)),
+      tx
+        .select()
+        .from(personTitles)
+        .where(isNull(personTitles.deletedAt))
+        .orderBy(asc(personTitles.name)),
       // Personal files (resumes, certs, ID copies) joined to their underlying
       // attachment row so we can render a download link inline.
       tx
@@ -384,7 +402,6 @@ export default async function PersonDetailPage({
               id: people.id,
               firstName: people.firstName,
               lastName: people.lastName,
-              jobTitle: people.jobTitle,
             })
             .from(people)
             .where(eq(people.id, row.person.managerPersonId))
@@ -483,6 +500,9 @@ export default async function PersonDetailPage({
   const openDrawer = typeof sp.drawer === 'string' ? sp.drawer : null
   const basePathForDrawer = `/people/${id}${active === 'overview' ? '' : `?tab=${active}`}`
   const synced = syncOrigin != null
+  const titlesManagedBySync =
+    synced && (SYNC_OWNED_PERSON_RELATIONSHIPS as readonly string[]).includes('titles')
+  const primaryTitle = personTitleRows.find((row) => row.assignment.isPrimary)?.title ?? null
   // Files and the saved signature are manage-or-self: a person may maintain
   // their own; everyone else needs the module permission (the server actions
   // re-assert this).
@@ -608,10 +628,10 @@ export default async function PersonDetailPage({
               <CardContent className="space-y-3 p-5 text-sm">
                 <div className="flex flex-col items-center gap-2 pb-3">
                   {photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <RawImage
                       src={photoUrl}
                       alt={`${person.firstName} ${person.lastName}`}
+                      optimizationReason="authenticated"
                       className="h-20 w-20 rounded-full object-cover"
                     />
                   ) : (
@@ -622,7 +642,7 @@ export default async function PersonDetailPage({
                   )}
                   <div className="text-center">
                     <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                      {person.jobTitle ?? '—'}
+                      {primaryTitle?.name ?? '—'}
                     </div>
                     {trade?.name ? (
                       <div className="text-xs text-slate-500">{trade.name}</div>
@@ -740,6 +760,15 @@ export default async function PersonDetailPage({
                     </AlertDescription>
                   </Alert>
                 ) : null}
+                {syncOrigin ? (
+                  <Alert variant="info">
+                    <AlertTitle>Managed by {syncOrigin.connectionName}</AlertTitle>
+                    <AlertDescription>
+                      Identity fields and job titles come from this active connection. Update them
+                      in the source system; app-owned fields remain editable here.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
 
                 <Section title="Personal" subtitle="Identification and contact info">
                   <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -765,14 +794,6 @@ export default async function PersonDetailPage({
                       label="Formal name"
                       initialValue={person.formalName}
                       disabled={fieldDisabled('formalName')}
-                      updateAction={updatePersonField}
-                    />
-                    <LiveField
-                      id={person.id}
-                      field="jobTitle"
-                      label="Job title"
-                      initialValue={person.jobTitle}
-                      disabled={fieldDisabled('jobTitle')}
                       updateAction={updatePersonField}
                     />
                     <LiveField
@@ -813,6 +834,19 @@ export default async function PersonDetailPage({
 
                 <Section title="Employment" subtitle="Trade, crew, department, and dates">
                   <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <LiveSelect
+                      id={person.id}
+                      field="primaryTitleId"
+                      label="Primary job title"
+                      initialValue={primaryTitle?.id ?? null}
+                      allowEmpty={personTitleRows.length === 0}
+                      options={allTitles.map((title) => ({
+                        value: title.id,
+                        label: title.name,
+                      }))}
+                      disabled={!canEdit || titlesManagedBySync}
+                      updateAction={setPrimaryPersonTitle}
+                    />
                     <LiveSelect
                       id={person.id}
                       field="status"
@@ -938,10 +972,10 @@ export default async function PersonDetailPage({
                     />
                     <LiveMultiSelect
                       id={person.id}
-                      label="Titles"
+                      label="Held titles"
                       initialValue={personTitleRows.map((r) => r.title.id)}
                       options={allTitles.map((t) => ({ value: t.id, label: t.name }))}
-                      disabled={!canEdit}
+                      disabled={!canEdit || titlesManagedBySync}
                       updateAction={setPersonTitles}
                       placeholder="Assign a title…"
                       sheetTitle="Assign title"

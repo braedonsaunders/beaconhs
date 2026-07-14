@@ -151,11 +151,44 @@ function categoryFor(table: string): string {
   return 'Other data'
 }
 
-/** Extract single-column foreign keys as relationships the builder/engine can
- *  follow. SECURITY: a relation is recorded ONLY when its target table is itself
- *  RLS-safe and not excluded — so you can never join your way into `tenants`,
- *  the global Better-Auth `users` table, or any non-tenant-isolated table. The
- *  caller post-filters to targets that ended up as discovered entities. */
+/** Reduce a physical FK to the one business-column pair analytics can follow.
+ *
+ * Tenant-owned relationships are deliberately modeled as
+ * `(tenant_id, local_id) -> (tenant_id, id)`. The query engine does not expose
+ * `tenant_id`, but both sides are FORCE-RLS scoped to the active tenant, so the
+ * non-tenant pair is the correct semantic relation. Multi-business-column keys
+ * cannot be represented by AnalyticsRelation and remain undiscoverable. */
+function analyticalColumnPair(
+  ref: ReturnType<ReturnType<typeof getTableConfig>['foreignKeys'][number]['reference']>,
+): { via: string; foreignColumn: string } | null {
+  if (ref.columns.length !== ref.foreignColumns.length) return null
+  const pairs = ref.columns.map((column, index) => ({
+    local: column.name,
+    foreign: ref.foreignColumns[index]!.name,
+  }))
+  if (pairs.length === 1) {
+    return { via: pairs[0]!.local, foreignColumn: pairs[0]!.foreign }
+  }
+
+  const tenantPairs = pairs.filter(
+    ({ local, foreign }) => local === 'tenant_id' && foreign === 'tenant_id',
+  )
+  if (tenantPairs.length !== 1) return null
+  const businessPairs = pairs.filter(
+    ({ local, foreign }) => local !== 'tenant_id' || foreign !== 'tenant_id',
+  )
+  if (businessPairs.length !== 1) return null
+  return {
+    via: businessPairs[0]!.local,
+    foreignColumn: businessPairs[0]!.foreign,
+  }
+}
+
+/** Extract analytics-compatible foreign keys as relationships the builder/engine
+ *  can follow. SECURITY: a relation is recorded ONLY when its target table is
+ *  itself RLS-safe and not excluded — so you can never join your way into
+ *  `tenants`, the global Better-Auth `users` table, or any non-tenant-isolated
+ *  table. The caller post-filters to discovered targets. */
 function relationsFor(value: PgTable, hide: Set<string>): AnalyticsRelation[] {
   const rels: AnalyticsRelation[] = []
   let foreignKeys: ReturnType<typeof getTableConfig>['foreignKeys']
@@ -167,9 +200,9 @@ function relationsFor(value: PgTable, hide: Set<string>): AnalyticsRelation[] {
   const seen = new Set<string>()
   for (const fk of foreignKeys) {
     const ref = fk.reference()
-    if (ref.columns.length !== 1 || ref.foreignColumns.length !== 1) continue // single-col FKs only
-    const via = ref.columns[0]!.name
-    const foreignColumn = ref.foreignColumns[0]!.name
+    const pair = analyticalColumnPair(ref)
+    if (!pair) continue
+    const { via, foreignColumn } = pair
     const target = getTableName(ref.foreignTable)
     if (hide.has(via) || seen.has(via)) continue
     if (!RLS_SAFE.has(target) || EXCLUDE_TABLES.has(target)) continue

@@ -1,3 +1,4 @@
+import type { Route } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -51,15 +52,16 @@ import {
   Textarea,
   UrlDrawer,
 } from '@beaconhs/ui'
-import { clamp, mergeHref, pickString } from '@/lib/list-params'
+import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import {
   LiveField,
-  LivePersonSelect,
+  LiveRemoteSelect,
   LiveRichText,
   LiveSelect,
   LiveToggle,
 } from '@/components/live-field'
+import { RawImage } from '@/components/raw-image'
 import {
   attachments,
   equipmentCategories,
@@ -75,35 +77,48 @@ import {
   equipmentWorkOrders,
   orgUnits,
   people,
-  tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
-import type { Database } from '@beaconhs/db'
-import { deleteObject } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { canSeeRecord } from '@/lib/visibility'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
-import { PersonSelectField } from '@/components/person-select-field'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { SearchInput } from '@/components/search-input'
 import { readCustomFieldValues } from '@beaconhs/forms-core'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { CustomFieldInput } from '@/components/custom-fields/custom-field-input'
 import { loadVisibleCustomFieldDefs, type CustomFieldDefRow } from '@/lib/custom-fields/queries'
 import { updateCustomFieldValueAction } from '@/lib/custom-fields/actions'
+import { EQUIPMENT_FIELD_GROUPS, resolveEnabledFieldGroups } from '@/lib/equipment/field-groups'
 import {
-  EQUIPMENT_FIELD_GROUPS,
-  resolveEnabledFieldGroups,
-  type EquipmentNativeField,
-} from '@/lib/equipment/field-groups'
+  EQUIPMENT_FILE_KINDS,
+  EQUIPMENT_LOG_KINDS,
+  EQUIPMENT_STATUSES,
+  mergeEquipmentFileMetadata,
+  parseEquipmentAutosaveInput,
+  WORK_ORDER_PRIORITIES,
+} from '@/lib/equipment/mutation-input'
+import {
+  optionalDateInput,
+  optionalTextInput,
+  optionalUuidInput,
+  requiredDateInput,
+  requiredTextInput,
+  requireEnumInput,
+  requireRecordInput,
+  requireUuidInput,
+} from '@/lib/mutation-input'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { upsertVehicleLogEntry } from '../vehicle-log/_service'
+import { normalizeVehicleLogEntryInput } from '../vehicle-log/_entry-input'
 import { checkInEquipment } from '../_actions'
 import { completeEquipmentReminder } from '../_maintenance-actions'
 import {
@@ -113,6 +128,11 @@ import {
   type ScheduleEditing,
 } from '../_maintenance-drawers'
 import { createEquipmentWorkOrder } from '../work-orders/_lib'
+import {
+  lockEquipmentCustodyRows,
+  openEquipmentCheckoutItemIds,
+  refreshEquipmentAvailability,
+} from '@/lib/equipment-custody'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,15 +147,6 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 
-const EQUIPMENT_STATUSES = ['in_service', 'out_of_service', 'in_repair', 'lost', 'retired'] as const
-
-// Field-group registry fields, keyed by column name — the autosave action
-// validates registry-driven inputs against this map so the Overview's
-// per-category sections and the server allowlist can never drift.
-const REGISTRY_FIELDS = new Map<string, EquipmentNativeField>(
-  EQUIPMENT_FIELD_GROUPS.flatMap((g) => g.fields.map((f) => [f.field, f] as const)),
-)
-
 // Sub-tables share one page; each gets prefixed search/pagination params
 // (e.g. ?wo_q=&wo_p=2) so filtering work orders never resets the log table.
 const SUB_PER_PAGE = 15
@@ -144,36 +155,6 @@ function subParams(sp: Record<string, string | string[] | undefined>, prefix: st
   const q = pickString(sp[`${prefix}_q`])?.trim() || undefined
   const page = clamp(Number(pickString(sp[`${prefix}_p`]) ?? '1'), 1, 10_000)
   return { q, page, offset: (page - 1) * SUB_PER_PAGE }
-}
-
-// Recompute the cached availability flag from its inputs (see the schema note
-// on equipment_items.is_available_for_checkout): available ⇔ no holder AND
-// in service AND not missing AND no open checkout. Every action here that can
-// change one of those inputs calls this so the register's availability filter
-// and the station's available count never drift.
-async function refreshAvailability(tx: Database, itemId: string) {
-  const [item] = await tx
-    .select({
-      status: equipmentItems.status,
-      holder: equipmentItems.currentHolderPersonId,
-      isMissing: equipmentItems.isMissing,
-    })
-    .from(equipmentItems)
-    .where(eq(equipmentItems.id, itemId))
-    .limit(1)
-  if (!item) return
-  const [open] = await tx
-    .select({ id: equipmentCheckouts.id })
-    .from(equipmentCheckouts)
-    .where(
-      and(eq(equipmentCheckouts.equipmentItemId, itemId), isNull(equipmentCheckouts.returnedAt)),
-    )
-    .limit(1)
-  const available = item.holder === null && item.status === 'in_service' && !item.isMissing && !open
-  await tx
-    .update(equipmentItems)
-    .set({ isAvailableForCheckout: available })
-    .where(eq(equipmentItems.id, itemId))
 }
 
 // ---------------- Server actions ----------------
@@ -186,79 +167,25 @@ async function updateEquipmentField(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '')
-  const field = String(formData.get('field') ?? '')
-  const raw = formData.get('value')
-  const value = typeof raw === 'string' ? raw : ''
-  if (!id || !field) throw new Error('Missing id/field')
-
-  const TEXT = new Set(['name', 'assetTag', 'serialNumber', 'description', 'notes'])
-  const TEXT_NOTNULL = new Set(['name', 'assetTag'])
-  const NULLABLE_IDS = new Set([
-    'typeId',
-    'categoryId',
-    'currentSiteOrgUnitId',
-    'currentHolderPersonId',
-    'preUseInspectionTypeId',
-  ])
-  const BOOLS = new Set(['requiresPreUseInspection'])
-  const ENUMS: Record<string, readonly string[]> = { status: EQUIPMENT_STATUSES }
-  const registryField = REGISTRY_FIELDS.get(field)
-
-  const allowed =
-    field in ENUMS ||
-    TEXT.has(field) ||
-    NULLABLE_IDS.has(field) ||
-    BOOLS.has(field) ||
-    registryField != null
-  if (!allowed) throw new Error('Field not allowed')
-
-  let val: unknown
-  if (field in ENUMS) {
-    if (!ENUMS[field]!.includes(value)) throw new Error('Invalid value')
-    val = value
-  } else if (NULLABLE_IDS.has(field)) {
-    val = value || null
-  } else if (BOOLS.has(field)) {
-    val = value === 'true' || value === 'on' || value === '1'
-  } else if (TEXT.has(field)) {
-    const trimmed = value.trim()
-    if (TEXT_NOTNULL.has(field) && trimmed === '') throw new Error('This field is required')
-    val = trimmed === '' ? null : trimmed
-  } else {
-    // Field-group registry field — coerce per its declared type.
-    const trimmed = value.trim()
-    if (registryField!.type === 'date') {
-      val = trimmed || null
-    } else if (registryField!.type === 'select') {
-      const options = registryField!.options ?? []
-      if (trimmed && !options.some((o) => o.value === trimmed)) throw new Error('Invalid value')
-      val = trimmed || null
-    } else if (registryField!.type === 'number') {
-      if (trimmed === '') {
-        val = null
-      } else if (registryField!.numeric === 'int') {
-        const n = Number(trimmed)
-        if (!Number.isFinite(n) || !Number.isInteger(n)) throw new Error('Enter a whole number')
-        val = Math.trunc(n)
-      } else {
-        // numeric column — persisted as a decimal string.
-        if (!/^-?\d{1,10}(\.\d{1,4})?$/.test(trimmed)) throw new Error('Enter a valid number')
-        val = trimmed
-      }
-    } else {
-      val = trimmed || null
-    }
-  }
+  const id = requireUuidInput(formData.get('id'), 'Equipment item')
+  const { field, value: val } = parseEquipmentAutosaveInput(
+    formData.get('field'),
+    formData.get('value'),
+  )
 
   await ctx.db(async (tx) => {
     const [prior] = await tx
-      .select({ isDraft: equipmentItems.isDraft, status: equipmentItems.status })
+      .select({
+        isDraft: equipmentItems.isDraft,
+        status: equipmentItems.status,
+        typeId: equipmentItems.typeId,
+      })
       .from(equipmentItems)
-      .where(eq(equipmentItems.id, id))
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
       .limit(1)
       .for('update')
-    await tx
+    if (!prior) throw new Error('Equipment item was not found.')
+    const [updated] = await tx
       .update(equipmentItems)
       .set({
         [field]: val,
@@ -268,20 +195,22 @@ async function updateEquipmentField(formData: FormData) {
         ...(field === 'currentHours' || field === 'currentOdometer'
           ? { metersUpdatedAt: new Date() }
           : {}),
-      } as any)
-      .where(eq(equipmentItems.id, id))
-    // Holder/status feed the cached availability flag.
-    if (field === 'currentHolderPersonId' || field === 'status') {
-      await refreshAvailability(tx, id)
+      } as Partial<typeof equipmentItems.$inferInsert>)
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+      .returning({ id: equipmentItems.id })
+    if (!updated) throw new Error('Equipment item was not updated.')
+    const nextTypeId = field === 'typeId' ? (val as string | null) : prior.typeId
+    if (field === 'status') {
+      await refreshEquipmentAvailability(tx, [id])
     }
-    if (prior?.isDraft) {
+    if (prior.isDraft) {
       await recordModuleFlowEvent(tx, ctx, {
         subjectId: id,
         moduleKey: 'equipment-assets',
         event: 'on_create',
         occurrenceKey: randomUUID(),
       })
-    } else if (field === 'status' && prior && prior.status !== val) {
+    } else if (field === 'status' && prior.status !== val) {
       await recordModuleFlowEvent(tx, ctx, {
         subjectId: id,
         moduleKey: 'equipment-assets',
@@ -290,13 +219,16 @@ async function updateEquipmentField(formData: FormData) {
         occurrenceKey: randomUUID(),
       })
     }
-  })
-  await recordAudit(ctx, {
-    entityType: 'equipment',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${field}`,
-    after: { [field]: val },
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${field}`,
+      after: { [field]: val },
+    })
+    if (prior.isDraft || field === 'status' || field === 'typeId') {
+      await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [prior.typeId, nextTypeId])
+    }
   })
   revalidatePath(`/equipment/${id}`)
   revalidatePath('/equipment')
@@ -306,14 +238,25 @@ async function reportMissing(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '')
-  const lastSeenDate = String(formData.get('lastSeenDate') ?? '').trim() || null
-  const lastSeenLocation = String(formData.get('lastSeenLocation') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  if (!id) return
+  const id = requireUuidInput(formData.get('id'), 'Equipment item')
+  const lastSeenDate = optionalDateInput(formData.get('lastSeenDate'), 'Last seen date')
+  const lastSeenLocation = optionalTextInput(
+    formData.get('lastSeenLocation'),
+    'Last seen location',
+    500,
+  )
+  const notes = optionalTextInput(formData.get('notes'), 'Missing report notes', 5_000)
   const now = new Date()
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const [item] = await tx
+      .select({ id: equipmentItems.id, isMissing: equipmentItems.isMissing })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+      .limit(1)
+      .for('update')
+    if (!item) throw new Error('Equipment item was not found.')
+    if (item.isMissing) throw new Error('This equipment item is already reported missing.')
+    const [updated] = await tx
       .update(equipmentItems)
       .set({
         isMissing: true,
@@ -330,8 +273,10 @@ async function reportMissing(formData: FormData) {
         // read it stay coherent.
         lastSeenAt: now,
       })
-      .where(eq(equipmentItems.id, id)),
-  )
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+      .returning({ id: equipmentItems.id })
+    if (!updated) throw new Error('Missing report was not saved.')
+  })
   await recordAudit(ctx, {
     entityType: 'equipment',
     entityId: id,
@@ -351,12 +296,19 @@ async function reportFound(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '')
-  const foundNotes = String(formData.get('foundNotes') ?? '').trim() || null
-  if (!id) return
+  const id = requireUuidInput(formData.get('id'), 'Equipment item')
+  const foundNotes = optionalTextInput(formData.get('foundNotes'), 'Found notes', 5_000)
   const now = new Date()
   await ctx.db(async (tx) => {
-    await tx
+    const [item] = await tx
+      .select({ id: equipmentItems.id, isMissing: equipmentItems.isMissing })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+      .limit(1)
+      .for('update')
+    if (!item) throw new Error('Equipment item was not found.')
+    if (!item.isMissing) throw new Error('This equipment item is not reported missing.')
+    const [updated] = await tx
       .update(equipmentItems)
       .set({
         isMissing: false,
@@ -368,8 +320,10 @@ async function reportFound(formData: FormData) {
           : equipmentItems.missingNotes,
         lastSeenAt: now,
       })
-      .where(eq(equipmentItems.id, id))
-    await refreshAvailability(tx, id)
+      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+      .returning({ id: equipmentItems.id })
+    if (!updated) throw new Error('Found report was not saved.')
+    await refreshEquipmentAvailability(tx, [id])
   })
   await recordAudit(ctx, {
     entityType: 'equipment',
@@ -386,13 +340,43 @@ async function transferLocation(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '')
-  const siteOrgUnitId = String(formData.get('siteOrgUnitId') ?? '').trim() || null
-  const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
-  const note = String(formData.get('note') ?? '').trim() || null
-  if (!siteOrgUnitId && !holderPersonId) return
+  const id = requireUuidInput(formData.get('id'), 'Equipment item')
+  const siteOrgUnitId = optionalUuidInput(formData.get('siteOrgUnitId'), 'Site')
+  const holderPersonId = optionalUuidInput(formData.get('holderPersonId'), 'Holder')
+  const note = optionalTextInput(formData.get('note'), 'Transfer note', 2_000)
 
   await ctx.db(async (tx) => {
+    const [item] = await lockEquipmentCustodyRows(tx, [id])
+    if (!item || item.deletedAt) throw new Error('Equipment item not found')
+    if (siteOrgUnitId) {
+      const [site] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(
+          and(
+            eq(orgUnits.id, siteOrgUnitId),
+            eq(orgUnits.level, 'site'),
+            isNull(orgUnits.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!site) throw new Error('Select an active site')
+    }
+    if (holderPersonId) {
+      const [person] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(eq(people.id, holderPersonId), eq(people.status, 'active'), isNull(people.deletedAt)),
+        )
+        .limit(1)
+      if (!person) throw new Error('Select an active holder')
+    }
+    const openIds = await openEquipmentCheckoutItemIds(tx, [id])
+    if (openIds.has(id)) {
+      throw new Error('Check this item in before recording a direct custody transfer')
+    }
+    const now = new Date()
     await tx
       .update(equipmentItems)
       .set({
@@ -400,8 +384,9 @@ async function transferLocation(formData: FormData) {
         currentHolderPersonId: holderPersonId,
         lastSeenSiteOrgUnitId: siteOrgUnitId,
         lastSeenHolderPersonId: holderPersonId,
-        lastSeenAt: new Date(),
+        lastSeenAt: now,
         isMissing: false,
+        missingFoundAt: item.isMissing ? now : undefined,
       })
       .where(eq(equipmentItems.id, id))
     await tx.insert(equipmentLocationHistory).values({
@@ -410,9 +395,10 @@ async function transferLocation(formData: FormData) {
       siteOrgUnitId,
       holderPersonId,
       recordedByTenantUserId: ctx.membership?.id,
+      recordedAt: now,
       note,
     })
-    await refreshAvailability(tx, id)
+    await refreshEquipmentAvailability(tx, [id])
   })
   await recordAudit(ctx, {
     entityType: 'equipment',
@@ -422,20 +408,28 @@ async function transferLocation(formData: FormData) {
     after: { siteOrgUnitId, holderPersonId, note },
   })
   revalidatePath(`/equipment/${id}`)
+  revalidatePath('/equipment')
+  revalidatePath('/equipment/station')
+  revalidatePath('/dashboard')
 }
 
 async function addLogEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const itemId = String(formData.get('itemId') ?? '').trim()
-  const entryDate = String(formData.get('entryDate') ?? '').trim()
-  const kind = String(formData.get('kind') ?? 'note').trim() || 'note'
-  const title = String(formData.get('title') ?? '').trim() || null
-  const details = String(formData.get('details') ?? '').trim()
-  if (!itemId || !entryDate || !details) return
+  const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
+  const entryDate = requiredDateInput(formData.get('entryDate'), 'Entry date')
+  const kind = requireEnumInput(formData.get('kind') ?? 'note', EQUIPMENT_LOG_KINDS, 'Log kind')
+  const title = optionalTextInput(formData.get('title'), 'Title', 240)
+  const details = requiredTextInput(formData.get('details'), 'Details', 10_000)
 
   const inserted = await ctx.db(async (tx) => {
+    const [item] = await tx
+      .select({ id: equipmentItems.id })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, itemId), isNull(equipmentItems.deletedAt)))
+      .limit(1)
+    if (!item) throw new Error('Equipment item was not found.')
     const [row] = await tx
       .insert(equipmentLogEntries)
       .values({
@@ -450,15 +444,14 @@ async function addLogEntry(formData: FormData) {
       .returning({ id: equipmentLogEntries.id })
     return row
   })
-  if (inserted?.id) {
-    await recordAudit(ctx, {
-      entityType: 'equipment_log_entry',
-      entityId: inserted.id,
-      action: 'create',
-      summary: `Logged ${kind} entry`,
-      after: { itemId, entryDate, kind, title, details: details.slice(0, 200) },
-    })
-  }
+  if (!inserted) throw new Error('Log entry was not saved.')
+  await recordAudit(ctx, {
+    entityType: 'equipment_log_entry',
+    entityId: inserted.id,
+    action: 'create',
+    summary: `Logged ${kind} entry`,
+    after: { itemId, entryDate, kind, title, details: details.slice(0, 200) },
+  })
   revalidatePath(`/equipment/${itemId}`)
   redirect(`/equipment/${itemId}?tab=log`)
 }
@@ -467,35 +460,57 @@ async function checkOutFromItem(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const itemId = String(formData.get('itemId') ?? '').trim()
-  const holderPersonId = String(formData.get('holderPersonId') ?? '').trim() || null
-  const destinationOrgUnitId = String(formData.get('destinationOrgUnitId') ?? '').trim() || null
-  const expectedReturnOn = String(formData.get('expectedReturnOn') ?? '').trim() || null
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  if (!itemId) return
+  const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
+  const holderPersonId = optionalUuidInput(formData.get('holderPersonId'), 'Holder')
+  const destinationOrgUnitId = requireUuidInput(
+    formData.get('destinationOrgUnitId'),
+    'Check-out destination',
+  )
+  const expectedReturnOn = optionalDateInput(
+    formData.get('expectedReturnOn'),
+    'Expected return date',
+  )
+  const notes = optionalTextInput(formData.get('notes'), 'Check-out notes', 2_000)
 
   const coId = await ctx.db(async (tx) => {
-    // Server-side guards mirroring the station core — the UI hides the button
-    // while a checkout is open, but a double submit / second tab must not
-    // create two open checkouts or check out an unserviceable asset.
-    const [item] = await tx
-      .select({ status: equipmentItems.status })
-      .from(equipmentItems)
-      .where(and(eq(equipmentItems.id, itemId), isNull(equipmentItems.deletedAt)))
-      .limit(1)
-    if (!item) throw new Error('Equipment item not found')
+    // Serialize every checkout decision on the equipment row. The database
+    // partial-unique index is the final backstop; this lock gives the operator
+    // a useful domain error instead of a constraint error under normal races.
+    const [item] = await lockEquipmentCustodyRows(tx, [itemId])
+    if (!item || item.deletedAt) throw new Error('Equipment item not found')
     if (item.status !== 'in_service') {
       throw new Error(`Cannot check out: item is ${item.status.replace(/_/g, ' ')}`)
     }
-    const [open] = await tx
-      .select({ id: equipmentCheckouts.id })
-      .from(equipmentCheckouts)
+    if (item.isMissing) throw new Error('Report this item found before checking it out')
+    if (item.currentHolderPersonId) {
+      throw new Error('Clear the current holder with a custody transfer before checking it out')
+    }
+    const [destination] = await tx
+      .select({ id: orgUnits.id })
+      .from(orgUnits)
       .where(
-        and(eq(equipmentCheckouts.equipmentItemId, itemId), isNull(equipmentCheckouts.returnedAt)),
+        and(
+          eq(orgUnits.id, destinationOrgUnitId),
+          eq(orgUnits.level, 'site'),
+          isNull(orgUnits.deletedAt),
+        ),
       )
       .limit(1)
-    if (open) throw new Error('This item is already checked out')
+    if (!destination) throw new Error('Select an active check-out destination')
+    if (holderPersonId) {
+      const [person] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(eq(people.id, holderPersonId), eq(people.status, 'active'), isNull(people.deletedAt)),
+        )
+        .limit(1)
+      if (!person) throw new Error('Select an active holder')
+    }
+    const openIds = await openEquipmentCheckoutItemIds(tx, [itemId])
+    if (openIds.has(itemId)) throw new Error('This item is already checked out')
 
+    const now = new Date()
     const [row] = await tx
       .insert(equipmentCheckouts)
       .values({
@@ -515,9 +530,8 @@ async function checkOutFromItem(formData: FormData) {
         currentSiteOrgUnitId: destinationOrgUnitId,
         lastSeenHolderPersonId: holderPersonId,
         lastSeenSiteOrgUnitId: destinationOrgUnitId,
-        lastSeenAt: new Date(),
+        lastSeenAt: now,
         isAvailableForCheckout: false,
-        isMissing: false,
       })
       .where(eq(equipmentItems.id, itemId))
     await tx.insert(equipmentLocationHistory).values({
@@ -526,6 +540,7 @@ async function checkOutFromItem(formData: FormData) {
       siteOrgUnitId: destinationOrgUnitId,
       holderPersonId,
       recordedByTenantUserId: ctx.membership?.id,
+      recordedAt: now,
       note: `Checked out${notes ? ` — ${notes}` : ''}`,
     })
     return row?.id
@@ -538,6 +553,9 @@ async function checkOutFromItem(formData: FormData) {
     after: { itemId, holderPersonId, destinationOrgUnitId, expectedReturnOn },
   })
   revalidatePath(`/equipment/${itemId}`)
+  revalidatePath('/equipment')
+  revalidatePath('/equipment/station')
+  revalidatePath('/dashboard')
   redirect(`/equipment/${itemId}?tab=location`)
 }
 
@@ -546,13 +564,22 @@ async function checkOutFromItem(formData: FormData) {
 // audits, and derives availability from the item's status.
 async function checkInFromItem(formData: FormData) {
   'use server'
-  const checkoutId = String(formData.get('checkoutId') ?? '').trim()
-  const itemId = String(formData.get('itemId') ?? '').trim()
-  if (!checkoutId || !itemId) return
+  const checkoutId = requireUuidInput(formData.get('checkoutId'), 'Check-out')
+  const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
   const fd = new FormData()
   fd.set('id', checkoutId)
-  fd.set('returnedCondition', String(formData.get('returnedCondition') ?? 'good'))
-  fd.set('returnedNotes', String(formData.get('returnedNotes') ?? ''))
+  fd.set(
+    'returnedCondition',
+    requireEnumInput(
+      formData.get('returnedCondition') ?? 'good',
+      ['good', 'fair', 'damaged', 'unusable'] as const,
+      'Return condition',
+    ),
+  )
+  fd.set(
+    'returnedNotes',
+    optionalTextInput(formData.get('returnedNotes'), 'Return notes', 2_000) ?? '',
+  )
   await checkInEquipment(fd)
   redirect(`/equipment/${itemId}?tab=location`)
 }
@@ -562,8 +589,6 @@ async function checkInFromItem(formData: FormData) {
 // Drawers `await` these and surface inline errors instead of throwing. Keep
 // the bodies thin — most of the work delegates to the existing helpers /
 // audit writer.
-
-const PRIORITIES = ['low', 'med', 'high'] as const
 
 async function createWorkOrderAction(input: {
   itemId: string
@@ -576,21 +601,41 @@ async function createWorkOrderAction(input: {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.workorder.create')
-  const { itemId, summary, description, priority, assignedToTenantUserId, reportedByPersonId } =
-    input
-  if (!itemId || !summary.trim()) return { ok: false, error: 'Summary is required.' }
-  if (!PRIORITIES.includes(priority)) return { ok: false, error: 'Invalid priority.' }
+  let parsed: {
+    itemId: string
+    summary: string
+    description: string | null
+    priority: (typeof WORK_ORDER_PRIORITIES)[number]
+    assignedToTenantUserId: string | null
+    reportedByPersonId: string | null
+  }
+  try {
+    const payload = requireRecordInput(input, 'Work order request')
+    parsed = {
+      itemId: requireUuidInput(payload.itemId, 'Equipment item'),
+      summary: requiredTextInput(payload.summary, 'Summary', 500),
+      description: optionalTextInput(payload.description, 'Description', 10_000),
+      priority: requireEnumInput(payload.priority, WORK_ORDER_PRIORITIES, 'Priority'),
+      assignedToTenantUserId: optionalUuidInput(payload.assignedToTenantUserId, 'Assignee'),
+      reportedByPersonId: optionalUuidInput(payload.reportedByPersonId, 'Reporter'),
+    }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid work order.' }
+  }
 
   // Shared creator: reference generation + audit + on_create module flows +
   // revalidation live in one place with the full-page /work-orders/new form.
-  const row = await createEquipmentWorkOrder(ctx, {
-    itemId,
-    summary: summary.trim(),
-    description,
-    priority,
-    assignedToTenantUserId,
-    reportedByPersonId,
-  })
+  let row: Awaited<ReturnType<typeof createEquipmentWorkOrder>>
+  try {
+    row = await createEquipmentWorkOrder(ctx, parsed)
+  } catch (error) {
+    console.error('[equipment] work-order creation failed', {
+      tenantId: ctx.tenantId,
+      itemId: parsed.itemId,
+      error,
+    })
+    return { ok: false, error: 'The work order could not be created.' }
+  }
   if (!row) return { ok: false, error: 'Failed to insert work order.' }
   return { ok: true }
 }
@@ -609,37 +654,26 @@ async function createTruckLogEntryAction(input: {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const {
-    equipmentItemId,
-    entryDate,
-    driverPersonId,
-    startOdometer,
-    endOdometer,
-    siteOrgUnitId,
-    hoursOnSite,
-    manpowerCount,
-    notes,
-  } = input
-  if (!equipmentItemId || !entryDate.trim())
-    return { ok: false, error: 'Vehicle and date are required.' }
-  if (!driverPersonId) return { ok: false, error: 'Driver is required.' }
+  let parsed: ReturnType<typeof normalizeVehicleLogEntryInput>
+  try {
+    const payload = requireRecordInput(input, 'Vehicle log request')
+    parsed = normalizeVehicleLogEntryInput({ ...payload, entryMode: 'odometer' })
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid vehicle log.' }
+  }
 
-  await upsertVehicleLogEntry(ctx, {
-    equipmentItemId,
-    entryDate,
-    driverPersonId,
-    entryMode: 'odometer',
-    startOdometer,
-    endOdometer,
-    siteOrgUnitId,
-    hoursOnSite,
-    manpowerCount,
-    notes,
-  })
+  try {
+    await upsertVehicleLogEntry(ctx, parsed)
+  } catch (error) {
+    console.error('[equipment] vehicle-log creation failed', {
+      tenantId: ctx.tenantId,
+      itemId: parsed.equipmentItemId,
+      error,
+    })
+    return { ok: false, error: 'The vehicle log entry could not be saved.' }
+  }
   return { ok: true }
 }
-
-const EQUIPMENT_FILE_KINDS = ['certificate', 'manual', 'photo', 'receipt', 'warranty', 'other']
 
 // Tag an already-uploaded attachment as a file for this asset. The file is
 // uploaded via the shared FileUploader (which inserts the `attachments` row);
@@ -654,38 +688,73 @@ async function attachEquipmentFile(input: {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const itemId = input.itemId.trim()
-  const attachmentId = input.attachmentId.trim()
-  if (!itemId || !attachmentId) return { ok: false, error: 'Missing file.' }
-  const kind = EQUIPMENT_FILE_KINDS.includes(input.kind) ? input.kind : 'other'
+  let parsed: {
+    itemId: string
+    attachmentId: string
+    kind: (typeof EQUIPMENT_FILE_KINDS)[number]
+    label: string | null
+  }
+  try {
+    const payload = requireRecordInput(input, 'Equipment file request')
+    parsed = {
+      itemId: requireUuidInput(payload.itemId, 'Equipment item'),
+      attachmentId: requireUuidInput(payload.attachmentId, 'Attachment'),
+      kind: requireEnumInput(payload.kind, EQUIPMENT_FILE_KINDS, 'File category'),
+      label: optionalTextInput(payload.label, 'File label', 240),
+    }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid file request.' }
+  }
 
-  const att = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select()
-      .from(attachments)
-      .where(eq(attachments.id, attachmentId))
-      .limit(1)
-    return row
-  })
-  if (!att) return { ok: false, error: 'Uploaded file not found.' }
+  let att: typeof attachments.$inferSelect
+  try {
+    att = await ctx.db(async (tx) => {
+      const [item] = await tx
+        .select({ id: equipmentItems.id })
+        .from(equipmentItems)
+        .where(and(eq(equipmentItems.id, parsed.itemId), isNull(equipmentItems.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!item) throw new Error('Equipment item was not found.')
 
-  const label = input.label?.trim() || null
-  await ctx.db((tx) =>
-    tx
-      .update(attachments)
-      .set({
-        exif: { ...(att.exif ?? {}), equipmentId: itemId, kind, ...(label ? { label } : {}) },
-      })
-      .where(eq(attachments.id, attachmentId)),
-  )
+      const [row] = await tx
+        .select()
+        .from(attachments)
+        .where(eq(attachments.id, parsed.attachmentId))
+        .limit(1)
+        .for('update')
+      if (!row) throw new Error('Uploaded file was not found.')
+      if (row.uploadedBy !== ctx.userId) {
+        throw new Error('Only the user who uploaded this file can attach it.')
+      }
+      const exif = mergeEquipmentFileMetadata(row.exif, parsed)
+      const [updated] = await tx
+        .update(attachments)
+        .set({ exif })
+        .where(eq(attachments.id, parsed.attachmentId))
+        .returning()
+      if (!updated) throw new Error('Uploaded file was not attached.')
+      return updated
+    })
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'The uploaded file could not be attached.',
+    }
+  }
   await recordAudit(ctx, {
     entityType: 'equipment',
-    entityId: itemId,
+    entityId: parsed.itemId,
     action: 'update',
-    summary: `Uploaded file ${label ?? att.filename}`,
-    after: { attachmentId, filename: att.filename, kind, label },
+    summary: `Uploaded file ${parsed.label ?? att.filename}`,
+    after: {
+      attachmentId: parsed.attachmentId,
+      filename: att.filename,
+      kind: parsed.kind,
+      label: parsed.label,
+    },
   })
-  revalidatePath(`/equipment/${itemId}`)
+  revalidatePath(`/equipment/${parsed.itemId}`)
   return { ok: true }
 }
 
@@ -693,34 +762,33 @@ async function deleteEquipmentFile(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const itemId = String(formData.get('itemId') ?? '').trim()
-  const attachmentId = String(formData.get('attachmentId') ?? '').trim()
-  if (!itemId || !attachmentId) return
+  const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
+  const attachmentId = requireUuidInput(formData.get('attachmentId'), 'Attachment')
 
-  const att = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [row] = await tx
       .select()
       .from(attachments)
       .where(eq(attachments.id, attachmentId))
       .limit(1)
-    return row
-  })
-  // Only delete a document actually tagged to this asset (defence in depth).
-  if (!att || (att.exif as Record<string, unknown> | null)?.equipmentId !== itemId) return
-
-  await ctx.db((tx) => tx.delete(attachments).where(eq(attachments.id, attachmentId)))
-  // Best-effort removal of the underlying object; the DB row is the record of truth.
-  try {
-    await deleteObject({ key: att.r2Key })
-  } catch {
-    // Orphaned object is harmless; the file no longer appears in the app.
-  }
-  await recordAudit(ctx, {
-    entityType: 'equipment',
-    entityId: itemId,
-    action: 'delete',
-    summary: `Removed file ${att.filename}`,
-    before: { attachmentId, filename: att.filename },
+      .for('update')
+    if (!row || row.exif?.equipmentId !== itemId) {
+      throw new Error('Equipment file was not found.')
+    }
+    const [deleted] = await tx
+      .delete(attachments)
+      .where(eq(attachments.id, attachmentId))
+      .returning()
+    if (!deleted) throw new Error('Equipment file was not removed.')
+    // Attachment deletion enqueues its durable storage-object cleanup in this
+    // transaction; the audit must commit with the same irreversible action.
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: itemId,
+      action: 'delete',
+      summary: `Removed file ${deleted.filename}`,
+      before: { attachmentId, filename: deleted.filename },
+    })
   })
   revalidatePath(`/equipment/${itemId}`)
 }
@@ -740,6 +808,7 @@ export default async function EquipmentDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
@@ -748,6 +817,8 @@ export default async function EquipmentDetailPage({
   const coP = subParams(sp, 'co')
   const lhP = subParams(sp, 'lh')
   const insP = subParams(sp, 'ins')
+  const schP = subParams(sp, 'sch')
+  const remP = subParams(sp, 'rem')
   const logP = subParams(sp, 'log')
   const fP = subParams(sp, 'f')
 
@@ -819,6 +890,7 @@ export default async function EquipmentDetailPage({
         : undefined,
     )
     const insWhere = and(
+      eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
       eq(equipmentInspectionRecords.equipmentItemId, id),
       isNull(equipmentInspectionRecords.deletedAt),
       insP.q
@@ -826,6 +898,29 @@ export default async function EquipmentDetailPage({
             ilike(equipmentInspectionRecords.reference, `%${insP.q}%`),
             ilike(equipmentInspectionTypes.name, `%${insP.q}%`),
             ilike(equipmentInspectionRecords.intervalLabel, `%${insP.q}%`),
+          )
+        : undefined,
+    )
+    const scheduleWhere = and(
+      eq(equipmentInspectionSchedules.equipmentItemId, id),
+      schP.q
+        ? or(
+            ilike(equipmentInspectionTypes.name, `%${schP.q}%`),
+            ilike(equipmentInspectionSchedules.label, `%${schP.q}%`),
+            ilike(equipmentInspectionSchedules.notes, `%${schP.q}%`),
+            ilike(equipmentInspectionSchedules.intervalUnit, `%${schP.q}%`),
+          )
+        : undefined,
+    )
+    const reminderWhere = and(
+      eq(equipmentReminders.equipmentItemId, id),
+      isNull(equipmentReminders.completedAt),
+      remP.q
+        ? or(
+            ilike(equipmentReminders.title, `%${remP.q}%`),
+            ilike(equipmentReminders.details, `%${remP.q}%`),
+            ilike(people.firstName, `%${remP.q}%`),
+            ilike(people.lastName, `%${remP.q}%`),
           )
         : undefined,
     )
@@ -857,9 +952,6 @@ export default async function EquipmentDetailPage({
       workOrders,
       workOrdersTotal,
       openWoCountRow,
-      sites,
-      holders,
-      assignees,
       certAttachments,
       certTotal,
       inspectionRecords,
@@ -870,10 +962,12 @@ export default async function EquipmentDetailPage({
       checkoutsTotal,
       openCheckoutRow,
       schedules,
+      schedulesTotal,
+      scheduleStats,
       openReminders,
-      itemInspectionTypes,
-      allTypes,
-      allCategories,
+      remindersTotal,
+      openReminderCount,
+      selectedPreUseTypes,
     ] = await Promise.all([
       tx
         .select({ history: equipmentLocationHistory, site: orgUnits, holder: people })
@@ -913,31 +1007,6 @@ export default async function EquipmentDetailPage({
           ),
         )
         .then((r) => Number(r[0]?.c ?? 0)),
-      tx
-        .select()
-        .from(orgUnits)
-        .where(isNull(orgUnits.deletedAt))
-        .orderBy(asc(orgUnits.name))
-        .limit(500),
-      tx
-        .select()
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(200),
-      // Active tenant members for the work-order assignee dropdown.
-      tx
-        .select({
-          id: tenantUsers.id,
-          displayName: tenantUsers.displayName,
-          userName: user.name,
-          email: user.email,
-        })
-        .from(tenantUsers)
-        .leftJoin(user, eq(user.id, tenantUsers.userId))
-        .where(eq(tenantUsers.status, 'active'))
-        .orderBy(asc(tenantUsers.displayName))
-        .limit(500),
       // "Certificates" — document-kind attachments linked to this equipment via metadata->>equipmentId
       tx
         .select()
@@ -956,7 +1025,10 @@ export default async function EquipmentDetailPage({
         .from(equipmentInspectionRecords)
         .leftJoin(
           equipmentInspectionTypes,
-          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+          and(
+            eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
+            eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+          ),
         )
         .where(insWhere)
         .orderBy(desc(equipmentInspectionRecords.occurredAt))
@@ -967,7 +1039,10 @@ export default async function EquipmentDetailPage({
         .from(equipmentInspectionRecords)
         .leftJoin(
           equipmentInspectionTypes,
-          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+          and(
+            eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
+            eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+          ),
         )
         .where(insWhere)
         .then((r) => Number(r[0]?.c ?? 0)),
@@ -1020,41 +1095,63 @@ export default async function EquipmentDetailPage({
           equipmentInspectionTypes,
           eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
         )
+        .where(scheduleWhere)
+        .orderBy(asc(equipmentInspectionSchedules.nextDueOn), asc(equipmentInspectionSchedules.id))
+        .limit(SUB_PER_PAGE)
+        .offset(schP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentInspectionSchedules)
+        .leftJoin(
+          equipmentInspectionTypes,
+          eq(equipmentInspectionTypes.id, equipmentInspectionSchedules.inspectionTypeId),
+        )
+        .where(scheduleWhere)
+        .then((rows) => Number(rows[0]?.c ?? 0)),
+      tx
+        .select({
+          active: sql<number>`count(*) filter (where ${equipmentInspectionSchedules.isActive})::int`,
+          nextDue: sql<
+            string | null
+          >`min(${equipmentInspectionSchedules.nextDueOn}) filter (where ${equipmentInspectionSchedules.isActive})`,
+        })
+        .from(equipmentInspectionSchedules)
         .where(eq(equipmentInspectionSchedules.equipmentItemId, id))
-        .orderBy(asc(equipmentInspectionSchedules.nextDueOn)),
+        .then((rows) => ({
+          active: Number(rows[0]?.active ?? 0),
+          nextDue: rows[0]?.nextDue ?? null,
+        })),
       // Open ad-hoc reminders for this unit.
       tx
         .select({ reminder: equipmentReminders, assignee: people })
         .from(equipmentReminders)
         .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
+        .where(reminderWhere)
+        .orderBy(asc(equipmentReminders.dueOn), asc(equipmentReminders.id))
+        .limit(SUB_PER_PAGE)
+        .offset(remP.offset),
+      tx
+        .select({ c: count() })
+        .from(equipmentReminders)
+        .leftJoin(people, eq(people.id, equipmentReminders.assignedToPersonId))
+        .where(reminderWhere)
+        .then((rows) => Number(rows[0]?.c ?? 0)),
+      tx
+        .select({ c: count() })
+        .from(equipmentReminders)
         .where(
           and(eq(equipmentReminders.equipmentItemId, id), isNull(equipmentReminders.completedAt)),
         )
-        .orderBy(asc(equipmentReminders.dueOn))
-        .limit(50),
-      // Active inspection types applicable to this item (schedule drawer picker).
-      tx
-        .select({
-          id: equipmentInspectionTypes.id,
-          name: equipmentInspectionTypes.name,
-          intervalValue: equipmentInspectionTypes.intervalValue,
-          intervalUnit: equipmentInspectionTypes.intervalUnit,
-          isPreUse: equipmentInspectionTypes.isPreUse,
-          appliesToTypeId: equipmentInspectionTypes.appliesToTypeId,
-        })
-        .from(equipmentInspectionTypes)
-        .where(eq(equipmentInspectionTypes.isActive, true))
-        .orderBy(asc(equipmentInspectionTypes.name)),
-      // Full type list for the Overview type picker.
-      tx
-        .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-        .from(equipmentTypes)
-        .orderBy(asc(equipmentTypes.name)),
-      // Category list for the Overview category picker.
-      tx
-        .select({ id: equipmentCategories.id, name: equipmentCategories.name })
-        .from(equipmentCategories)
-        .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name)),
+        .then((rows) => Number(rows[0]?.c ?? 0)),
+      // Hydrate only the saved pre-use template. Search results come from the
+      // bounded, permission-scoped picker endpoint when the field is opened.
+      row.item.preUseInspectionTypeId
+        ? tx
+            .select({ id: equipmentInspectionTypes.id, name: equipmentInspectionTypes.name })
+            .from(equipmentInspectionTypes)
+            .where(eq(equipmentInspectionTypes.id, row.item.preUseInspectionTypeId))
+            .limit(1)
+        : Promise.resolve([]),
     ])
 
     return {
@@ -1065,9 +1162,6 @@ export default async function EquipmentDetailPage({
       workOrders,
       workOrdersTotal,
       openWoCount: openWoCountRow,
-      sites,
-      holders,
-      assignees,
       certAttachments,
       certTotal,
       inspectionRecords,
@@ -1078,10 +1172,12 @@ export default async function EquipmentDetailPage({
       checkoutsTotal,
       openCheckout: openCheckoutRow,
       schedules,
+      schedulesTotal,
+      scheduleStats,
       openReminders,
-      itemInspectionTypes,
-      allTypes,
-      allCategories,
+      remindersTotal,
+      openReminderCount,
+      selectedPreUseType: selectedPreUseTypes[0] ?? null,
     }
   })
 
@@ -1099,9 +1195,6 @@ export default async function EquipmentDetailPage({
     workOrders,
     workOrdersTotal,
     openWoCount,
-    sites,
-    holders,
-    assignees,
     certAttachments,
     certTotal,
     inspectionRecords,
@@ -1112,15 +1205,31 @@ export default async function EquipmentDetailPage({
     checkoutsTotal,
     openCheckout,
     schedules,
+    schedulesTotal,
+    scheduleStats,
     openReminders,
-    itemInspectionTypes,
-    allTypes,
-    allCategories,
+    remindersTotal,
+    openReminderCount,
+    selectedPreUseType,
   } = data
 
   // Read-only unless the viewer can manage equipment. The autosave action
   // re-asserts the permission server-side; this only gates the inputs.
-  const locked = !can(ctx, 'equipment.manage')
+  const canManageEquipment = can(ctx, 'equipment.manage')
+  const canCreateWorkOrder = can(ctx, 'equipment.workorder.create')
+  const locked = !canManageEquipment
+  const canCheckIn = Boolean(
+    openCheckout &&
+    (canManageEquipment ||
+      (ctx.personId !== null && openCheckout.co.holderPersonId === ctx.personId)),
+  )
+  const canTransferCustody = canManageEquipment && !openCheckout
+  const canCheckOut =
+    canManageEquipment &&
+    !openCheckout &&
+    item.status === 'in_service' &&
+    !item.isMissing &&
+    item.currentHolderPersonId === null
 
   // Category-driven field groups + tenant custom fields. Custom fields that
   // target an enabled native group render inside it; the rest render in their
@@ -1145,41 +1254,13 @@ export default async function EquipmentDetailPage({
   const dueSoonCutoffIso = new Date(Date.parse(todayIso) + 30 * 86_400_000)
     .toISOString()
     .slice(0, 10)
-  const activeSchedules = schedules.filter((s) => s.schedule.isActive)
-  const nextInspectionDue = activeSchedules[0]?.schedule.nextDueOn ?? null
-
-  // Schedule-drawer type options, scoped to templates that apply to this item.
-  const scheduleTypeOptions = itemInspectionTypes
-    .filter((t) => !t.appliesToTypeId || t.appliesToTypeId === item.typeId)
-    .map((t) => ({
-      value: t.id,
-      label: `${t.name} — ${formatInterval(t.intervalValue, t.intervalUnit, { preUse: t.isPreUse })}`,
-      // Picking a type seeds the schedule's repeat interval from its default.
-      intervalValue: t.intervalValue,
-      intervalUnit: t.intervalUnit,
-    }))
-  // Pre-use checklist picker: pre-use templates that apply to this item.
-  const preUseTypeOptions = itemInspectionTypes
-    .filter((t) => t.isPreUse && (!t.appliesToTypeId || t.appliesToTypeId === item.typeId))
-    .map((t) => ({ value: t.id, label: t.name }))
-
-  // Live* option lists.
-  const siteOptions = sites
-    .filter((s) => s.level === 'site')
-    .map((s) => ({ value: s.id, label: s.name }))
-  const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
-  const categoryOptions = allCategories.map((c) => ({ value: c.id, label: c.name }))
-  const personOptions = holders.map((p) => ({
-    value: p.id,
-    label: `${p.lastName}, ${p.firstName}`,
-    hint: p.employeeNo ?? undefined,
-  }))
+  const nextInspectionDue = scheduleStats.nextDue
 
   const basePath = `/equipment/${id}`
   // Drawer state is URL-driven; the active tab is preserved in the close URL
   // so that closing the drawer doesn't kick you back to the Overview tab.
   const drawerKey = pickString(sp.drawer)
-  const closeHref = `${basePath}?tab=${active}`
+  const closeHref = mergeHref(basePath, sp, { tab: active, drawer: undefined })
 
   // Schedule / reminder edit drawers address their row by id in the drawer key.
   const editingScheduleRow =
@@ -1190,6 +1271,18 @@ export default async function EquipmentDetailPage({
     ? {
         id: editingScheduleRow.schedule.id,
         inspectionTypeId: editingScheduleRow.schedule.inspectionTypeId,
+        inspectionTypeOption:
+          editingScheduleRow.schedule.inspectionTypeId && editingScheduleRow.type
+            ? {
+                value: editingScheduleRow.type.id,
+                label: editingScheduleRow.type.name,
+                hint: formatInterval(
+                  editingScheduleRow.type.intervalValue,
+                  editingScheduleRow.type.intervalUnit,
+                  { preUse: editingScheduleRow.type.isPreUse },
+                ),
+              }
+            : undefined,
         label: editingScheduleRow.schedule.label,
         intervalValue: editingScheduleRow.schedule.intervalValue,
         intervalUnit: editingScheduleRow.schedule.intervalUnit,
@@ -1212,6 +1305,13 @@ export default async function EquipmentDetailPage({
         repeatIntervalValue: editingReminderRow.reminder.repeatIntervalValue,
         repeatIntervalUnit: editingReminderRow.reminder.repeatIntervalUnit,
         assignedToPersonId: editingReminderRow.reminder.assignedToPersonId,
+        assignedToOption: editingReminderRow.assignee
+          ? {
+              value: editingReminderRow.assignee.id,
+              label: `${editingReminderRow.assignee.lastName}, ${editingReminderRow.assignee.firstName}`,
+              hint: editingReminderRow.assignee.employeeNo ?? undefined,
+            }
+          : undefined,
       }
     : null
 
@@ -1236,18 +1336,22 @@ export default async function EquipmentDetailPage({
           }
           actions={
             <>
-              <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
-                <Button variant="outline">
-                  <Wrench size={14} />
-                  New work order
-                </Button>
-              </Link>
-              <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as any}>
-                <Button variant="outline">
-                  <Truck size={14} />
-                  Log entry
-                </Button>
-              </Link>
+              {canCreateWorkOrder ? (
+                <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
+                  <Button variant="outline">
+                    <Wrench size={14} />
+                    New work order
+                  </Button>
+                </Link>
+              ) : null}
+              {canManageEquipment ? (
+                <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as Route}>
+                  <Button variant="outline">
+                    <Truck size={14} />
+                    Log entry
+                  </Button>
+                </Link>
+              ) : null}
               <Link href={`/equipment/${id}/qr`}>
                 <Button variant="outline">
                   <QrCode size={14} />
@@ -1255,14 +1359,14 @@ export default async function EquipmentDetailPage({
                 </Button>
               </Link>
               {item.isMissing ? (
-                <Link href={`${basePath}?drawer=report-found` as any}>
+                <Link href={`${basePath}?drawer=report-found` as Route}>
                   <Button variant="outline">
                     <Search size={14} />
                     Mark as found
                   </Button>
                 </Link>
               ) : (
-                <Link href={`${basePath}?drawer=report-missing` as any}>
+                <Link href={`${basePath}?drawer=report-missing` as Route}>
                   <Button variant="outline">
                     <Search size={14} />
                     Report missing
@@ -1327,10 +1431,10 @@ export default async function EquipmentDetailPage({
                     {/* object-contain + a capped height shows portrait and
                         landscape photos in full without cropping; the neutral
                         backdrop fills the letterbox gap. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <RawImage
                       src={photoUrl}
                       alt={item.name}
+                      optimizationReason="authenticated"
                       className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
                     />
                   </a>
@@ -1385,7 +1489,7 @@ export default async function EquipmentDetailPage({
                 {
                   key: 'inspections',
                   label: 'Inspections',
-                  count: activeSchedules.length + openReminders.length,
+                  count: scheduleStats.active + openReminderCount,
                 },
                 { key: 'work_orders', label: 'Work orders', count: openWoCount },
                 { key: 'log', label: 'Log', count: logTotal },
@@ -1409,6 +1513,7 @@ export default async function EquipmentDetailPage({
                         field="name"
                         label="Name"
                         initialValue={item.name}
+                        maxLength={240}
                         disabled={locked}
                         updateAction={updateEquipmentField}
                       />
@@ -1417,6 +1522,7 @@ export default async function EquipmentDetailPage({
                         field="assetTag"
                         label="Asset tag"
                         initialValue={item.assetTag}
+                        maxLength={120}
                         disabled={locked}
                         updateAction={updateEquipmentField}
                       />
@@ -1425,24 +1531,29 @@ export default async function EquipmentDetailPage({
                         field="serialNumber"
                         label="Serial #"
                         initialValue={item.serialNumber}
+                        maxLength={240}
                         disabled={locked}
                         updateAction={updateEquipmentField}
                       />
-                      <LiveSelect
+                      <LiveRemoteSelect
                         id={id}
                         field="typeId"
                         label="Type"
                         initialValue={item.typeId}
-                        options={typeOptions}
+                        initialOption={type ? { value: type.id, label: type.name } : undefined}
+                        lookup="equipment-edit-types"
                         disabled={locked}
                         updateAction={updateEquipmentField}
                       />
-                      <LiveSelect
+                      <LiveRemoteSelect
                         id={id}
                         field="categoryId"
                         label="Category"
                         initialValue={item.categoryId}
-                        options={categoryOptions}
+                        initialOption={
+                          category ? { value: category.id, label: category.name } : undefined
+                        }
+                        lookup="equipment-edit-categories"
                         emptyLabel="— No category —"
                         disabled={locked}
                         updateAction={updateEquipmentField}
@@ -1467,6 +1578,7 @@ export default async function EquipmentDetailPage({
                           label="Description"
                           initialValue={item.description}
                           multiline
+                          maxLength={5000}
                           disabled={locked}
                           updateAction={updateEquipmentField}
                         />
@@ -1524,6 +1636,7 @@ export default async function EquipmentDetailPage({
                               }
                               type={f.type}
                               placeholder={f.placeholder}
+                              maxLength={f.type === 'text' ? 500 : undefined}
                               initialValue={
                                 (item as unknown as Record<string, unknown>)[f.field] == null
                                   ? null
@@ -1573,11 +1686,13 @@ export default async function EquipmentDetailPage({
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                       <CardTitle>Work orders ({workOrdersTotal})</CardTitle>
-                      <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
-                        <Button size="sm">
-                          <Wrench size={14} /> New work order
-                        </Button>
-                      </Link>
+                      {canCreateWorkOrder ? (
+                        <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
+                          <Button size="sm">
+                            <Wrench size={14} /> New work order
+                          </Button>
+                        </Link>
+                      ) : null}
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <SearchInput
@@ -1591,11 +1706,15 @@ export default async function EquipmentDetailPage({
                           title={woP.q ? 'No work orders match your search' : 'No work orders'}
                           description="Open a work order to track repairs or scheduled service."
                           action={
-                            <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as any}>
-                              <Button size="sm" variant="outline">
-                                <Wrench size={14} /> New work order
-                              </Button>
-                            </Link>
+                            canCreateWorkOrder ? (
+                              <Link
+                                href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}
+                              >
+                                <Button size="sm" variant="outline">
+                                  <Wrench size={14} /> New work order
+                                </Button>
+                              </Link>
+                            ) : undefined
                           }
                         />
                       ) : (
@@ -1658,24 +1777,26 @@ export default async function EquipmentDetailPage({
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                       <CardTitle>Current custody</CardTitle>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Link href={`${basePath}?tab=location&drawer=transfer` as any}>
-                          <Button size="sm" variant="outline">
-                            <ArrowLeftRight size={14} /> Transfer
-                          </Button>
-                        </Link>
-                        {openCheckout ? (
-                          <Link href={`${basePath}?tab=location&drawer=check-in` as any}>
+                        {canTransferCustody ? (
+                          <Link href={`${basePath}?tab=location&drawer=transfer` as Route}>
+                            <Button size="sm" variant="outline">
+                              <ArrowLeftRight size={14} /> Transfer
+                            </Button>
+                          </Link>
+                        ) : null}
+                        {openCheckout && canCheckIn ? (
+                          <Link href={`${basePath}?tab=location&drawer=check-in` as Route}>
                             <Button size="sm">
                               <LogIn size={14} /> Check in
                             </Button>
                           </Link>
-                        ) : (
-                          <Link href={`${basePath}?tab=location&drawer=check-out` as any}>
+                        ) : canCheckOut ? (
+                          <Link href={`${basePath}?tab=location&drawer=check-out` as Route}>
                             <Button size="sm">
                               <LogOut size={14} /> Check out
                             </Button>
                           </Link>
-                        )}
+                        ) : null}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
@@ -1705,30 +1826,6 @@ export default async function EquipmentDetailPage({
                           </div>
                         ) : null}
                       </div>
-                      {/* Assignment editors — site + holder live here with the
-                          rest of the custody picture (moved off the Overview). */}
-                      <div className="grid grid-cols-1 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-slate-800">
-                        <LiveSelect
-                          id={id}
-                          field="currentSiteOrgUnitId"
-                          label="Current site"
-                          initialValue={item.currentSiteOrgUnitId}
-                          options={siteOptions}
-                          emptyLabel="— Unassigned —"
-                          disabled={locked}
-                          updateAction={updateEquipmentField}
-                        />
-                        <LivePersonSelect
-                          id={id}
-                          field="currentHolderPersonId"
-                          label="Current holder"
-                          initialValue={item.currentHolderPersonId}
-                          options={personOptions}
-                          placeholder="Select a holder…"
-                          disabled={locked}
-                          updateAction={updateEquipmentField}
-                        />
-                      </div>
                     </CardContent>
                   </Card>
 
@@ -1748,11 +1845,13 @@ export default async function EquipmentDetailPage({
                           title="No checkout history"
                           description="This item has never been checked out. Use Check out to issue it to a person or site."
                           action={
-                            <Link href={`${basePath}?tab=location&drawer=check-out` as any}>
-                              <Button size="sm" variant="outline">
-                                <LogOut size={14} /> Check out
-                              </Button>
-                            </Link>
+                            canCheckOut ? (
+                              <Link href={`${basePath}?tab=location&drawer=check-out` as Route}>
+                                <Button size="sm" variant="outline">
+                                  <LogOut size={14} /> Check out
+                                </Button>
+                              </Link>
+                            ) : undefined
                           }
                         />
                       ) : (
@@ -1887,7 +1986,7 @@ export default async function EquipmentDetailPage({
                   <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                     <CardTitle>Files ({certTotal})</CardTitle>
                     {locked ? null : (
-                      <Link href={`${basePath}?tab=files&drawer=upload-file` as any}>
+                      <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
                         <Button size="sm">
                           <Plus size={14} /> Upload file
                         </Button>
@@ -1907,7 +2006,7 @@ export default async function EquipmentDetailPage({
                         description="Upload certificates, manuals, photos, receipts, and other documents tagged to this asset."
                         action={
                           locked ? undefined : (
-                            <Link href={`${basePath}?tab=files&drawer=upload-file` as any}>
+                            <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
                               <Button size="sm" variant="outline">
                                 <Plus size={14} /> Upload file
                               </Button>
@@ -2007,9 +2106,9 @@ export default async function EquipmentDetailPage({
                    */}
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Inspection schedules ({activeSchedules.length})</CardTitle>
+                      <CardTitle>Inspection schedules ({scheduleStats.active})</CardTitle>
                       {locked ? null : (
-                        <Link href={`${basePath}?tab=inspections&drawer=schedule-new` as any}>
+                        <Link href={`${basePath}?tab=inspections&drawer=schedule-new` as Route}>
                           <Button size="sm">
                             <CalendarClock size={14} /> Add schedule
                           </Button>
@@ -2017,14 +2116,27 @@ export default async function EquipmentDetailPage({
                       )}
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <SearchInput
+                        paramKey="sch_q"
+                        pageParamKey="sch_p"
+                        placeholder="Search inspection, interval, notes…"
+                      />
                       {schedules.length === 0 ? (
                         <EmptyState
                           icon={<CalendarClock size={24} />}
-                          title="No recurring inspections"
-                          description="Add a schedule to track when this unit's next inspection is due — daily, monthly, every 3 months, annual, 5-year, or any other cadence."
+                          title={
+                            schP.q ? 'No schedules match your search' : 'No recurring inspections'
+                          }
+                          description={
+                            schP.q
+                              ? 'Try a different inspection name, interval, or note.'
+                              : "Add a schedule to track when this unit's next inspection is due — daily, monthly, every 3 months, annual, 5-year, or any other cadence."
+                          }
                           action={
-                            locked ? undefined : (
-                              <Link href={`${basePath}?tab=inspections&drawer=schedule-new` as any}>
+                            locked || schP.q ? undefined : (
+                              <Link
+                                href={`${basePath}?tab=inspections&drawer=schedule-new` as Route}
+                              >
                                 <Button size="sm" variant="outline">
                                   <CalendarClock size={14} /> Add schedule
                                 </Button>
@@ -2099,7 +2211,10 @@ export default async function EquipmentDetailPage({
                                       {locked ? null : (
                                         <Link
                                           href={
-                                            `${basePath}?tab=inspections&drawer=schedule-${schedule.id}` as any
+                                            mergeHref(basePath, sp, {
+                                              tab: 'inspections',
+                                              drawer: `schedule-${schedule.id}`,
+                                            }) as Route
                                           }
                                           className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                                         >
@@ -2114,6 +2229,13 @@ export default async function EquipmentDetailPage({
                           </TableBody>
                         </Table>
                       )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="sch"
+                        total={schedulesTotal}
+                        page={schP.page}
+                      />
                       <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
                         <LiveToggle
                           id={id}
@@ -2123,12 +2245,21 @@ export default async function EquipmentDetailPage({
                           disabled={locked}
                           updateAction={updateEquipmentField}
                         />
-                        <LiveSelect
+                        <LiveRemoteSelect
                           id={id}
                           field="preUseInspectionTypeId"
                           label="Pre-use checklist"
                           initialValue={item.preUseInspectionTypeId}
-                          options={preUseTypeOptions}
+                          initialOption={
+                            selectedPreUseType
+                              ? {
+                                  value: selectedPreUseType.id,
+                                  label: selectedPreUseType.name,
+                                }
+                              : undefined
+                          }
+                          lookup="equipment-item-pre-use-inspection-types"
+                          contextId={item.typeId ?? undefined}
                           emptyLabel="— No checklist —"
                           disabled={locked}
                           updateAction={updateEquipmentField}
@@ -2158,20 +2289,26 @@ export default async function EquipmentDetailPage({
                   {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Reminders ({openReminders.length})</CardTitle>
+                      <CardTitle>Reminders ({openReminderCount})</CardTitle>
                       {locked ? null : (
-                        <Link href={`${basePath}?tab=inspections&drawer=reminder-new` as any}>
+                        <Link href={`${basePath}?tab=inspections&drawer=reminder-new` as Route}>
                           <Button size="sm" variant="outline">
                             <BellRing size={14} /> Add reminder
                           </Button>
                         </Link>
                       )}
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-3">
+                      <SearchInput
+                        paramKey="rem_q"
+                        pageParamKey="rem_p"
+                        placeholder="Search reminder, assignee, details…"
+                      />
                       {openReminders.length === 0 ? (
                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                          No open reminders. Add one for ad-hoc maintenance — e.g. check the roof
-                          membrane in March.
+                          {remP.q
+                            ? 'No open reminders match your search.'
+                            : 'No open reminders. Add one for ad-hoc maintenance — e.g. check the roof membrane in March.'}
                         </p>
                       ) : (
                         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -2215,7 +2352,10 @@ export default async function EquipmentDetailPage({
                                   <div className="flex shrink-0 items-center gap-2">
                                     <Link
                                       href={
-                                        `${basePath}?tab=inspections&drawer=reminder-${reminder.id}` as any
+                                        mergeHref(basePath, sp, {
+                                          tab: 'inspections',
+                                          drawer: `reminder-${reminder.id}`,
+                                        }) as Route
                                       }
                                       className="text-xs text-teal-700 hover:underline dark:text-teal-400"
                                     >
@@ -2234,6 +2374,13 @@ export default async function EquipmentDetailPage({
                           })}
                         </ul>
                       )}
+                      <SubPagination
+                        basePath={basePath}
+                        sp={sp}
+                        prefix="rem"
+                        total={remindersTotal}
+                        page={remP.page}
+                      />
                     </CardContent>
                   </Card>
 
@@ -2356,7 +2503,7 @@ export default async function EquipmentDetailPage({
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                       <CardTitle>Log entries ({logTotal})</CardTitle>
-                      <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
+                      <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
                         <Button size="sm">
                           <Plus size={14} /> Add log entry
                         </Button>
@@ -2373,7 +2520,7 @@ export default async function EquipmentDetailPage({
                           title={logP.q ? 'No entries match your search' : 'No log entries'}
                           description="Capture observations, fuel-ups, modifications, and other notes against this asset."
                           action={
-                            <Link href={`${basePath}?tab=log&drawer=add-log` as any}>
+                            <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
                               <Button size="sm" variant="outline">
                                 <Plus size={14} /> Add the first entry
                               </Button>
@@ -2485,10 +2632,10 @@ export default async function EquipmentDetailPage({
             </Select>
           </Field>
           <Field label="Title" className="sm:col-span-2">
-            <Input name="title" placeholder="Short summary (optional)" />
+            <Input name="title" maxLength={240} placeholder="Short summary (optional)" />
           </Field>
           <Field label="Details" required className="sm:col-span-2">
-            <Textarea name="details" rows={5} required />
+            <Textarea name="details" rows={5} maxLength={10000} required />
           </Field>
         </form>
       </UrlDrawer>
@@ -2521,6 +2668,7 @@ export default async function EquipmentDetailPage({
           <Field label="Last seen location">
             <Input
               name="lastSeenLocation"
+              maxLength={500}
               placeholder={site?.name ?? 'e.g. North yard, Truck 12, Apex shop'}
             />
           </Field>
@@ -2528,6 +2676,7 @@ export default async function EquipmentDetailPage({
             <Textarea
               name="notes"
               rows={3}
+              maxLength={5000}
               placeholder="Anything to help the search — who had it last, suspected loss vs theft, etc."
             />
           </Field>
@@ -2556,6 +2705,7 @@ export default async function EquipmentDetailPage({
             <Textarea
               name="foundNotes"
               rows={3}
+              maxLength={5000}
               placeholder="Where was it recovered? Any damage to flag?"
             />
           </Field>
@@ -2567,7 +2717,7 @@ export default async function EquipmentDetailPage({
       </UrlDrawer>
 
       <UrlDrawer
-        open={drawerKey === 'check-out' && !openCheckout}
+        open={drawerKey === 'check-out' && canCheckOut}
         closeHref={closeHref}
         title="Check out"
         description="Hand this item to a person, pin it to a site, and optionally set an expected return date."
@@ -2585,40 +2735,44 @@ export default async function EquipmentDetailPage({
         >
           <input type="hidden" name="itemId" value={id} />
           <Field label="Hand to person">
-            <PersonSelectField
+            <RemoteSelectField
               name="holderPersonId"
               defaultValue=""
-              options={holders.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
+              lookup="equipment-custody-holders"
               placeholder="Select a person…"
+              searchPlaceholder="Search active people…"
+              sheetTitle="Select holder"
               clearable
               emptyLabel="— No specific holder —"
             />
           </Field>
-          <Field label="Destination site">
-            <Select name="destinationOrgUnitId" defaultValue="">
-              <option value="">— Unassigned —</option>
-              {siteOptions.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
+          <Field label="Destination site" required>
+            <RemoteSelectField
+              name="destinationOrgUnitId"
+              defaultValue=""
+              lookup="equipment-custody-sites"
+              placeholder="Select a site…"
+              searchPlaceholder="Search active sites…"
+              sheetTitle="Select destination site"
+              clearable={false}
+            />
           </Field>
           <Field label="Expected return on">
             <Input name="expectedReturnOn" type="date" />
           </Field>
           <Field label="Notes" className="sm:col-span-2">
-            <Textarea name="notes" rows={3} placeholder="Optional context for this checkout" />
+            <Textarea
+              name="notes"
+              rows={3}
+              maxLength={2000}
+              placeholder="Optional context for this checkout"
+            />
           </Field>
         </form>
       </UrlDrawer>
 
       <UrlDrawer
-        open={drawerKey === 'transfer'}
+        open={drawerKey === 'transfer' && canTransferCustody}
         closeHref={closeHref}
         title="Transfer"
         description="Move this asset to a new site or holder. The change is recorded in the location history."
@@ -2636,50 +2790,60 @@ export default async function EquipmentDetailPage({
         >
           <input type="hidden" name="id" value={id} />
           <Field label="Move to site">
-            <Select name="siteOrgUnitId" defaultValue={item.currentSiteOrgUnitId ?? ''}>
-              <option value="">— Unassigned —</option>
-              {siteOptions.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
+            <RemoteSelectField
+              name="siteOrgUnitId"
+              defaultValue={item.currentSiteOrgUnitId ?? ''}
+              lookup="equipment-custody-sites"
+              initialOption={
+                site
+                  ? { value: site.id, label: site.name, hint: site.code ?? undefined }
+                  : undefined
+              }
+              placeholder="Select a site…"
+              searchPlaceholder="Search active sites…"
+              sheetTitle="Select site"
+              clearable
+              emptyLabel="— Unassigned —"
+            />
           </Field>
           <Field label="Assign to person">
-            <PersonSelectField
+            <RemoteSelectField
               name="holderPersonId"
               defaultValue={item.currentHolderPersonId ?? ''}
-              options={holders.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
+              lookup="equipment-custody-holders"
+              initialOption={
+                holder
+                  ? {
+                      value: holder.id,
+                      label: `${holder.lastName}, ${holder.firstName}`,
+                      hint: holder.employeeNo ?? undefined,
+                    }
+                  : undefined
+              }
               placeholder="Select a person…"
+              searchPlaceholder="Search active people…"
+              sheetTitle="Select holder"
               clearable
               emptyLabel="— No holder —"
             />
           </Field>
           <Field label="Note" className="sm:col-span-2">
-            <Input name="note" placeholder="Optional context for the audit log" />
+            <Input name="note" maxLength={2000} placeholder="Optional context for the audit log" />
           </Field>
         </form>
       </UrlDrawer>
 
       <NewWorkOrderDrawer
-        open={drawerKey === 'new-work-order'}
+        open={drawerKey === 'new-work-order' && canCreateWorkOrder}
         closeHref={closeHref}
         itemId={id}
-        assignees={assignees}
-        reporters={holders}
         action={createWorkOrderAction}
       />
 
       <NewTruckLogEntryDrawer
-        open={drawerKey === 'new-truck-log-entry'}
+        open={drawerKey === 'new-truck-log-entry' && canManageEquipment}
         closeHref={closeHref}
         itemId={id}
-        drivers={holders}
-        sites={sites.filter((s) => s.level === 'customer')}
         defaultDate={new Date().toISOString().slice(0, 10)}
         action={createTruckLogEntryAction}
       />
@@ -2695,8 +2859,8 @@ export default async function EquipmentDetailPage({
         open={!locked && (drawerKey === 'schedule-new' || scheduleEditing != null)}
         closeHref={`${basePath}?tab=inspections`}
         itemId={id}
+        itemTypeId={item.typeId}
         editing={scheduleEditing}
-        typeOptions={scheduleTypeOptions}
       />
 
       <ReminderDrawer
@@ -2704,11 +2868,11 @@ export default async function EquipmentDetailPage({
         closeHref={`${basePath}?tab=inspections`}
         itemId={id}
         editing={reminderEditing}
-        people={personOptions}
+        peopleLookup="equipment-reminder-assignees"
       />
 
       <UrlDrawer
-        open={drawerKey === 'check-in' && !!openCheckout}
+        open={drawerKey === 'check-in' && canCheckIn}
         closeHref={closeHref}
         title="Check in (return)"
         description={
@@ -2749,6 +2913,7 @@ export default async function EquipmentDetailPage({
               <Textarea
                 name="returnedNotes"
                 rows={3}
+                maxLength={2000}
                 placeholder="Anything to note about this return"
               />
             </Field>
@@ -2800,7 +2965,7 @@ function SubPagination({
             <ChevronLeft size={14} /> Prev
           </span>
         ) : (
-          <Link href={prevHref as any} className={linkCls}>
+          <Link href={prevHref as Route} className={linkCls}>
             <ChevronLeft size={14} /> Prev
           </Link>
         )}
@@ -2812,7 +2977,7 @@ function SubPagination({
             Next <ChevronRight size={14} />
           </span>
         ) : (
-          <Link href={nextHref as any} className={linkCls}>
+          <Link href={nextHref as Route} className={linkCls}>
             Next <ChevronRight size={14} />
           </Link>
         )}

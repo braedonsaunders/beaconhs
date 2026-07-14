@@ -13,6 +13,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { loadDefinitionById } from '../../../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../../../_run'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.read')
   const definition = await loadDefinitionById(ctx.tenantId!, id)

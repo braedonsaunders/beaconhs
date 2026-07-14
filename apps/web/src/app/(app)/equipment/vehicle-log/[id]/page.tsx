@@ -1,140 +1,60 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq, isNull } from 'drizzle-orm'
-import {
-  Button,
-  Card,
-  CardContent,
-  DetailHeader,
-  Input,
-  Label,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
+import { eq } from 'drizzle-orm'
+import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { activityPageForEntity, recordAudit } from '@/lib/audit'
 import { DetailGrid } from '@/components/detail-grid'
-import { isUuid } from '@/lib/list-params'
+import { isUuid, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { Section } from '@/components/section'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { PersonSelectField } from '@/components/person-select-field'
-import { assertNonNegativeKm, computeTotalKm } from '../_service'
+import { RemoteSelectField } from '@/components/remote-search-select'
+import { updateVehicleLogEntry } from '../_service'
+import { normalizeVehicleLogEntryInput } from '../_entry-input'
+import { requireUuidInput } from '@/lib/mutation-input'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = ['overview', 'edit', 'activity'] as const
 type Tab = (typeof TABS)[number]
-
-function safeInt(raw: FormDataEntryValue | null): number | null {
-  if (raw === null || raw === undefined) return null
-  const s = String(raw).trim()
-  if (!s) return null
-  const n = Number(s)
-  return Number.isFinite(n) ? Math.trunc(n) : null
-}
-
-function safeStr(raw: FormDataEntryValue | null): string | null {
-  if (raw === null || raw === undefined) return null
-  const s = String(raw).trim()
-  return s || null
-}
+const ACTIVITY_SORTS = ['recent', 'oldest'] as const
 
 async function updateEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '').trim()
-  const entryDate = String(formData.get('entryDate') ?? '').trim()
-  const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
-  if (!id || !entryDate || !equipmentItemId) return
-  const driverPersonId = safeStr(formData.get('driverPersonId'))
-  if (!driverPersonId) throw new Error('Driver is required.')
-  const startOdometer = safeInt(formData.get('startOdometer'))
-  const endOdometer = safeInt(formData.get('endOdometer'))
-  const businessKm = safeInt(formData.get('businessKm'))
-  const personalKm = safeInt(formData.get('personalKm'))
-  const siteOrgUnitId = safeStr(formData.get('siteOrgUnitId'))
-  const hoursRaw = safeStr(formData.get('hoursOnSite'))
-  const manpowerCount = safeInt(formData.get('manpowerCount'))
-  const notes = safeStr(formData.get('notes'))
-  assertNonNegativeKm({
-    'Start odometer': startOdometer,
-    'End odometer': endOdometer,
-    'Business km': businessKm,
-    'Personal km': personalKm,
-    'Hours on site': hoursRaw,
-    'Crew count': manpowerCount,
+  const id = requireUuidInput(formData.get('id'), 'Vehicle log entry')
+  const input = normalizeVehicleLogEntryInput({
+    equipmentItemId: formData.get('equipmentItemId'),
+    entryDate: formData.get('entryDate'),
+    driverPersonId: formData.get('driverPersonId'),
+    entryMode: 'odometer',
+    startOdometer: formData.get('startOdometer'),
+    endOdometer: formData.get('endOdometer'),
+    businessKm: formData.get('businessKm'),
+    personalKm: formData.get('personalKm'),
+    siteOrgUnitId: formData.get('siteOrgUnitId'),
+    hoursOnSite: formData.get('hoursOnSite'),
+    manpowerCount: formData.get('manpowerCount'),
+    notes: formData.get('notes'),
   })
-
-  const kmDriven = await ctx.db(async (tx) => {
-    const [existing] = await tx
-      .select({ entryMode: truckLogEntries.entryMode })
-      .from(truckLogEntries)
-      .where(eq(truckLogEntries.id, id))
-      .limit(1)
-    if (!existing) throw new Error('Vehicle log entry not found.')
-    // Mode-aware save: only the fields for the entry's mode are written and
-    // the total is derived the same way the workspace grid derives it, so a
-    // destination-mode entry never has its kmDriven clobbered by empty
-    // odometer inputs.
-    const entryMode = existing.entryMode
-    const fields =
-      entryMode === 'odometer'
-        ? { startOdometer, endOdometer, businessKm: null, personalKm }
-        : { startOdometer: null, endOdometer: null, businessKm, personalKm }
-    const kmDriven = computeTotalKm({ entryMode, ...fields })
-    try {
-      await tx
-        .update(truckLogEntries)
-        .set({
-          equipmentItemId,
-          entryDate,
-          driverPersonId,
-          ...fields,
-          kmDriven,
-          siteOrgUnitId,
-          hoursOnSite: hoursRaw as any,
-          manpowerCount,
-          notes,
-        })
-        .where(eq(truckLogEntries.id, id))
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        (error as { code?: string }).code === '23505'
-      ) {
-        throw new Error(
-          'An entry already exists for that vehicle, driver, and date. Edit that entry instead.',
-        )
-      }
-      throw error
-    }
-    return kmDriven
-  })
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: id,
-    action: 'update',
-    summary: `Updated entry for ${entryDate}`,
-    after: { equipmentItemId, entryDate, kmDriven, manpowerCount, hoursOnSite: hoursRaw },
-  })
-  revalidatePath('/equipment/vehicle-log')
-  revalidatePath(`/equipment/vehicle-log/${id}`)
-  revalidatePath(`/equipment/${equipmentItemId}`)
+  await updateVehicleLogEntry(ctx, id, input)
 }
 
 async function deleteEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '').trim()
-  if (!id) return
+  const id = requireUuidInput(formData.get('id'), 'Vehicle log entry')
   const removed = await ctx.db(async (tx) => {
     const [existing] = await tx
       .select({
@@ -145,8 +65,11 @@ async function deleteEntry(formData: FormData) {
       .where(eq(truckLogEntries.id, id))
       .limit(1)
     if (!existing) return null
-    await tx.delete(truckLogEntries).where(eq(truckLogEntries.id, id))
-    return existing
+    const [deleted] = await tx
+      .delete(truckLogEntries)
+      .where(eq(truckLogEntries.id, id))
+      .returning({ id: truckLogEntries.id })
+    return deleted ? existing : null
   })
   if (!removed) redirect('/equipment/vehicle-log')
   await recordAudit(ctx, {
@@ -179,8 +102,16 @@ export default async function TruckLogDetailPage({
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const activityParams = parsePrefixedListParams(sp, 'activity', {
+    sort: 'recent',
+    perPage: 15,
+    allowedSorts: ACTIVITY_SORTS,
+  })
+  const activityAction = pickString(sp.activityAction)?.slice(0, 100) || undefined
 
   const ctx = await requireRequestContext()
+  const canManage = can(ctx, 'equipment.manage')
+  if (active === 'edit' && !canManage) redirect(`/equipment/vehicle-log/${id}`)
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -196,42 +127,21 @@ export default async function TruckLogDetailPage({
       .where(eq(truckLogEntries.id, id))
       .limit(1)
     if (!row) return null
-    const [trucks, sites, drivers] = await Promise.all([
-      tx
-        .select({
-          id: equipmentItems.id,
-          assetTag: equipmentItems.assetTag,
-          name: equipmentItems.name,
-        })
-        .from(equipmentItems)
-        .where(isNull(equipmentItems.deletedAt))
-        .orderBy(asc(equipmentItems.assetTag))
-        .limit(500),
-      tx
-        .select({ id: orgUnits.id, name: orgUnits.name })
-        .from(orgUnits)
-        .where(eq(orgUnits.level, 'customer'))
-        .orderBy(asc(orgUnits.name))
-        .limit(500),
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(500),
-    ])
-    return { ...row, trucks, sites, drivers }
+    return row
   })
 
   if (!data) notFound()
-  const { entry, truck, driver, site, trucks, sites, drivers } = data
-  const activity =
-    active === 'activity' ? await recentActivityForEntity(ctx, 'truck_log_entry', id, 50) : []
+  const { entry, truck, driver, site } = data
+  const activityData =
+    active === 'activity'
+      ? await activityPageForEntity(ctx, 'truck_log_entry', id, {
+          q: activityParams.q,
+          action: activityAction,
+          page: activityParams.page,
+          perPage: activityParams.perPage,
+          dir: activityParams.sort === 'oldest' ? 'asc' : 'desc',
+        })
+      : { rows: [], total: 0, filteredTotal: 0, actions: [] }
   const basePath = `/equipment/vehicle-log/${id}`
 
   return (
@@ -253,8 +163,8 @@ export default async function TruckLogDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'edit', label: 'Edit' },
-            { key: 'activity', label: 'Activity', count: activity.length },
+            ...(canManage ? ([{ key: 'edit', label: 'Edit' }] as const) : []),
+            { key: 'activity', label: 'Activity', count: activityData.total },
           ]}
         />
       }
@@ -307,14 +217,16 @@ export default async function TruckLogDetailPage({
                 <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">{entry.notes}</p>
               </div>
             ) : null}
-            <div className="mt-6 flex justify-end">
-              <form action={deleteEntry}>
-                <input type="hidden" name="id" value={id} />
-                <Button type="submit" variant="outline">
-                  Delete entry
-                </Button>
-              </form>
-            </div>
+            {canManage ? (
+              <div className="mt-6 flex justify-end">
+                <form action={deleteEntry}>
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit" variant="outline">
+                    Delete entry
+                  </Button>
+                </form>
+              </div>
+            ) : null}
           </Section>
         ) : null}
 
@@ -326,39 +238,63 @@ export default async function TruckLogDetailPage({
                   <input type="hidden" name="id" value={id} />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field label="Truck" required>
-                      <Select name="equipmentItemId" defaultValue={entry.equipmentItemId} required>
-                        {trucks.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.assetTag} · {t.name}
-                          </option>
-                        ))}
-                      </Select>
+                      <RemoteSelectField
+                        name="equipmentItemId"
+                        defaultValue={entry.equipmentItemId}
+                        lookup="vehicle-equipment"
+                        initialOption={
+                          truck
+                            ? {
+                                value: truck.id,
+                                label: `${truck.assetTag} · ${truck.name}`,
+                              }
+                            : undefined
+                        }
+                        placeholder="Select a vehicle…"
+                        searchPlaceholder="Search asset tag or vehicle…"
+                        sheetTitle="Select vehicle"
+                        clearable={false}
+                      />
                     </Field>
                     <Field label="Date" required>
                       <Input name="entryDate" type="date" required defaultValue={entry.entryDate} />
                     </Field>
                     <Field label="Driver" required>
-                      <PersonSelectField
+                      <RemoteSelectField
                         name="driverPersonId"
                         defaultValue={entry.driverPersonId}
-                        options={drivers.map((p) => ({
-                          value: p.id,
-                          label: `${p.lastName}, ${p.firstName}`,
-                          hint: p.employeeNo ?? undefined,
-                        }))}
+                        lookup="vehicle-drivers"
+                        initialOption={
+                          driver
+                            ? {
+                                value: driver.id,
+                                label: `${driver.lastName}, ${driver.firstName}`,
+                                hint: driver.employeeNo ?? undefined,
+                              }
+                            : undefined
+                        }
                         placeholder="Select a driver…"
+                        searchPlaceholder="Search active drivers…"
+                        sheetTitle="Select driver"
                         clearable={false}
                       />
                     </Field>
                     <Field label="Customer / site">
-                      <Select name="siteOrgUnitId" defaultValue={entry.siteOrgUnitId ?? ''}>
-                        <option value="">—</option>
-                        {sites.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </Select>
+                      <RemoteSelectField
+                        name="siteOrgUnitId"
+                        defaultValue={entry.siteOrgUnitId ?? ''}
+                        lookup="vehicle-customers"
+                        initialOption={
+                          site
+                            ? { value: site.id, label: site.name, hint: site.code ?? undefined }
+                            : undefined
+                        }
+                        placeholder="Select a customer…"
+                        searchPlaceholder="Search customers…"
+                        sheetTitle="Select customer"
+                        clearable
+                        emptyLabel="— None —"
+                      />
                     </Field>
                     {entry.entryMode === 'destination' ? (
                       <>
@@ -367,6 +303,7 @@ export default async function TruckLogDetailPage({
                             name="businessKm"
                             type="number"
                             min="0"
+                            max="2147483647"
                             step="1"
                             defaultValue={entry.businessKm ?? ''}
                           />
@@ -376,6 +313,7 @@ export default async function TruckLogDetailPage({
                             name="personalKm"
                             type="number"
                             min="0"
+                            max="2147483647"
                             step="1"
                             defaultValue={entry.personalKm ?? ''}
                           />
@@ -388,6 +326,7 @@ export default async function TruckLogDetailPage({
                             name="startOdometer"
                             type="number"
                             min="0"
+                            max="2147483647"
                             step="1"
                             defaultValue={entry.startOdometer ?? ''}
                           />
@@ -397,6 +336,7 @@ export default async function TruckLogDetailPage({
                             name="endOdometer"
                             type="number"
                             min="0"
+                            max="2147483647"
                             step="1"
                             defaultValue={entry.endOdometer ?? ''}
                           />
@@ -406,6 +346,7 @@ export default async function TruckLogDetailPage({
                             name="personalKm"
                             type="number"
                             min="0"
+                            max="2147483647"
                             step="1"
                             defaultValue={entry.personalKm ?? ''}
                           />
@@ -417,6 +358,7 @@ export default async function TruckLogDetailPage({
                         name="hoursOnSite"
                         type="number"
                         min="0"
+                        max="24"
                         step="0.25"
                         defaultValue={entry.hoursOnSite ?? ''}
                       />
@@ -426,13 +368,19 @@ export default async function TruckLogDetailPage({
                         name="manpowerCount"
                         type="number"
                         min="0"
+                        max="100000"
                         step="1"
                         defaultValue={entry.manpowerCount ?? ''}
                       />
                     </Field>
                   </div>
                   <Field label="Notes">
-                    <Textarea name="notes" rows={3} defaultValue={entry.notes ?? ''} />
+                    <Textarea
+                      name="notes"
+                      rows={3}
+                      maxLength={5000}
+                      defaultValue={entry.notes ?? ''}
+                    />
                   </Field>
                   <div className="flex justify-end">
                     <Button type="submit">Save changes</Button>
@@ -444,8 +392,50 @@ export default async function TruckLogDetailPage({
         ) : null}
 
         {active === 'activity' ? (
-          <Section title={`Activity (${activity.length})`}>
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+          <Section title={`Activity (${activityData.total})`}>
+            <TableToolbar className="mb-3">
+              <SearchInput
+                placeholder="Search activity…"
+                paramKey="activityQ"
+                pageParamKey="activityPage"
+              />
+              <FilterChips
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="activityAction"
+                pageParamKey="activityPage"
+                label="Action"
+                options={activityData.actions.map((row) => ({
+                  value: row.action,
+                  label: row.action
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, (character) => character.toUpperCase()),
+                  count: row.count,
+                }))}
+              />
+              <FilterChips
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="activitySort"
+                pageParamKey="activityPage"
+                label="Order"
+                defaultValue="recent"
+                hideAll
+                options={[
+                  { value: 'recent', label: 'Newest first' },
+                  { value: 'oldest', label: 'Oldest first' },
+                ]}
+              />
+            </TableToolbar>
+            <ActivityFeed entries={activityData.rows} timeZone={ctx.timezone} />
+            <Pagination
+              basePath={basePath}
+              currentParams={sp}
+              total={activityData.filteredTotal}
+              page={activityParams.page}
+              perPage={activityParams.perPage}
+              pageParamKey="activityPage"
+            />
           </Section>
         ) : null}
       </div>

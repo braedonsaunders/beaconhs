@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button, Input, Label, SearchSelect, Select, Textarea } from '@beaconhs/ui'
+import { REPORT_SCHEDULE_LIMITS } from '@beaconhs/reports/schedule-policy'
 
 export type ScheduleFormDefinition = {
   id: string
@@ -137,6 +138,7 @@ export function ScheduleForm({
         <Input
           name="name"
           required
+          maxLength={REPORT_SCHEDULE_LIMITS.nameChars}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={
@@ -217,6 +219,7 @@ export function ScheduleForm({
             <Input
               name="timezone"
               required
+              maxLength={REPORT_SCHEDULE_LIMITS.timezoneChars}
               defaultValue={initial?.timezone ?? 'America/Toronto'}
               list="report-tz-options"
             />
@@ -282,6 +285,7 @@ export function ScheduleForm({
           <Textarea
             name="recipientEmails"
             rows={2}
+            maxLength={REPORT_SCHEDULE_LIMITS.recipientEmailListChars}
             defaultValue={(initial?.recipientEmails ?? []).join(', ')}
             placeholder="hse@acme.com, manager@acme.com"
           />
@@ -316,6 +320,7 @@ export function ScheduleForm({
           </summary>
           <Textarea
             rows={3}
+            maxLength={REPORT_SCHEDULE_LIMITS.filtersChars}
             value={advanced}
             onChange={(e) => setAdvanced(e.target.value)}
             placeholder='{"departmentId": "…", "siteOrgUnitId": "…"}'

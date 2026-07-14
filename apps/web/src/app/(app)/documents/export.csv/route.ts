@@ -4,9 +4,14 @@ import { documentCategories, documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,8 +19,6 @@ const SORTS = ['title', 'category', 'status', 'next_review_on'] as const
 
 const STATUS_VALUES = ['draft', 'published', 'archived', 'under_review'] as const
 type DocumentStatus = (typeof STATUS_VALUES)[number]
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
@@ -33,9 +36,9 @@ export async function GET(req: NextRequest) {
     ? (statusRaw as DocumentStatus)
     : undefined
   const categoryRaw = pickString(sp.category)
-  const categoryFilter = categoryRaw && UUID_RE.test(categoryRaw) ? categoryRaw : undefined
+  const categoryFilter = categoryRaw && isUuid(categoryRaw) ? categoryRaw : undefined
   const typeRaw = pickString(sp.type)
-  const typeFilter = typeRaw && UUID_RE.test(typeRaw) ? typeRaw : undefined
+  const typeFilter = typeRaw && isUuid(typeRaw) ? typeRaw : undefined
   const ctx = await requireExportContext()
   assertCan(ctx, 'documents.manage')
 
@@ -68,8 +71,11 @@ export async function GET(req: NextRequest) {
       .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
       .where(whereClause)
       .orderBy(...orderBy)
-      .limit(10_000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
   })
+
+  const overflow = csvExportOverflowResponse(rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'document',

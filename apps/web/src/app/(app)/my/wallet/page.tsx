@@ -10,7 +10,7 @@
 //
 // Pivots on people.userId = ctx.userId, like every other /my view.
 
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { PageHeader } from '@beaconhs/ui'
 import {
@@ -35,6 +35,11 @@ import { requireRequestContext } from '@/lib/auth'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { ListPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { resolveCourseCredentialOutput, resolveCredentialOutput } from '@/lib/credential-designs'
 import { WorkspaceNoIdentity } from '../_no-identity'
 import { WalletStack, type WalletCard, type WalletDesign } from './_wallet-stack'
@@ -43,6 +48,23 @@ export const metadata = { title: 'My wallet' }
 export const dynamic = 'force-dynamic'
 
 const EXPIRING_DAYS = 60
+const SORTS = ['urgency'] as const
+const KIND_OPTIONS = [
+  { value: 'training', label: 'Training' },
+  { value: 'skill', label: 'Skills' },
+] as const
+const STATUS_OPTIONS = [
+  { value: 'valid', label: 'Valid' },
+  { value: 'expiring', label: 'Expiring' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'none', label: 'No expiry' },
+] as const
+
+type CredentialIndexRow = {
+  kind: 'training' | 'skill'
+  id: string
+  status: WalletCard['status']
+}
 
 function statusFor(expiresOn: string | null, todayStr: string): WalletCard['status'] {
   if (!expiresOn) return 'none'
@@ -53,8 +75,33 @@ function statusFor(expiresOn: string | null, todayStr: string): WalletCard['stat
   return 'valid'
 }
 
-export default async function MyWalletPage() {
+export default async function MyWalletPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const listParams = parseListParams(sp, {
+    sort: 'urgency',
+    dir: 'asc',
+    perPage: 12,
+    allowedSorts: SORTS,
+  })
+  const requestedKind = pickString(sp.kind)
+  const kind = requestedKind === 'training' || requestedKind === 'skill' ? requestedKind : undefined
+  const requestedStatus = pickString(sp.status)
+  const status =
+    requestedStatus === 'valid' ||
+    requestedStatus === 'expiring' ||
+    requestedStatus === 'expired' ||
+    requestedStatus === 'none'
+      ? requestedStatus
+      : undefined
   const ctx = await requireRequestContext()
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const expiringThrough = new Date()
+  expiringThrough.setDate(expiringThrough.getDate() + EXPIRING_DAYS)
+  const expiringThroughStr = expiringThrough.toISOString().slice(0, 10)
 
   const data = await ctx.db(async (tx) => {
     const [person] = await tx
@@ -76,51 +123,122 @@ export default async function MyWalletPage() {
       .where(eq(tenants.id, ctx.tenantId!))
       .limit(1)
 
-    const records = await tx
-      .select({
-        id: trainingRecords.id,
-        completedOn: trainingRecords.completedOn,
-        expiresOn: trainingRecords.expiresOn,
-        instructor: trainingRecords.instructor,
-        grade: trainingRecords.grade,
-        courseName: trainingCourses.name,
-        courseCode: trainingCourses.code,
-        courseMetadata: trainingCourses.metadata,
-      })
-      .from(trainingRecords)
-      .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      // The wallet is the person's CURRENT credentials: one card per course,
-      // from the latest record. Superseded records (retrained since) stay in
-      // /my/training history but never render an "expired" card here.
-      .where(
-        and(
-          eq(trainingRecords.personId, person.id),
-          isNull(trainingRecords.deletedAt),
-          latestTrainingRecordOnly(),
-        ),
-      )
-      .orderBy(desc(trainingRecords.completedOn))
+    const credentialSet = sql`
+      select 'training'::text as kind,
+        ${trainingRecords.id}::text as id,
+        coalesce(${trainingCourses.name}, 'Training credential')::text as title,
+        ${trainingCourses.code}::text as code,
+        null::text as authority_name,
+        ${trainingRecords.completedOn}::date as issued_on,
+        ${trainingRecords.expiresOn}::date as expires_on,
+        case
+          when ${trainingRecords.expiresOn} is null then 'none'
+          when ${trainingRecords.expiresOn} < ${todayStr}::date then 'expired'
+          when ${trainingRecords.expiresOn} <= ${expiringThroughStr}::date then 'expiring'
+          else 'valid'
+        end::text as status
+      from ${trainingRecords}
+      left join ${trainingCourses} on ${trainingCourses.id} = ${trainingRecords.courseId}
+      where ${trainingRecords.personId} = ${person.id}
+        and ${trainingRecords.deletedAt} is null
+        and ${latestTrainingRecordOnly()}
 
-    const skills = await tx
-      .select({
-        id: trainingSkillAssignments.id,
-        grantedOn: trainingSkillAssignments.grantedOn,
-        expiresOn: trainingSkillAssignments.expiresOn,
-        skillName: trainingSkillTypes.name,
-        skillCode: trainingSkillTypes.code,
-        authorityName: trainingSkillAuthorities.name,
-      })
-      .from(trainingSkillAssignments)
-      .innerJoin(
-        trainingSkillTypes,
-        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-      )
-      .leftJoin(
-        trainingSkillAuthorities,
-        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-      )
-      .where(eq(trainingSkillAssignments.personId, person.id))
-      .orderBy(desc(trainingSkillAssignments.grantedOn))
+      union all
+
+      select 'skill'::text as kind,
+        ${trainingSkillAssignments.id}::text as id,
+        ${trainingSkillTypes.name}::text as title,
+        ${trainingSkillTypes.code}::text as code,
+        ${trainingSkillAuthorities.name}::text as authority_name,
+        ${trainingSkillAssignments.grantedOn}::date as issued_on,
+        ${trainingSkillAssignments.expiresOn}::date as expires_on,
+        case
+          when ${trainingSkillAssignments.expiresOn} is null then 'none'
+          when ${trainingSkillAssignments.expiresOn} < ${todayStr}::date then 'expired'
+          when ${trainingSkillAssignments.expiresOn} <= ${expiringThroughStr}::date then 'expiring'
+          else 'valid'
+        end::text as status
+      from ${trainingSkillAssignments}
+      inner join ${trainingSkillTypes}
+        on ${trainingSkillTypes.id} = ${trainingSkillAssignments.skillTypeId}
+      left join ${trainingSkillAuthorities}
+        on ${trainingSkillAuthorities.id} = ${trainingSkillTypes.authorityId}
+      where ${trainingSkillAssignments.personId} = ${person.id}
+        and ${trainingSkillAssignments.deletedAt} is null
+    `
+    const filters: SQL[] = []
+    if (listParams.q) {
+      const term = `%${listParams.q}%`
+      filters.push(sql`(title ilike ${term} or code ilike ${term} or authority_name ilike ${term})`)
+    }
+    if (kind) filters.push(sql`kind = ${kind}`)
+    if (status) filters.push(sql`status = ${status}`)
+    const where = filters.length > 0 ? sql`where ${sql.join(filters, sql` and `)}` : sql``
+    const [indexResult, countResult] = await Promise.all([
+      tx.execute<CredentialIndexRow>(sql`
+        with credentials as (${credentialSet})
+        select kind, id, status from credentials
+        ${where}
+        order by case status
+          when 'expired' then 0
+          when 'expiring' then 1
+          when 'valid' then 2
+          else 3
+        end, kind asc, issued_on desc, title asc, id asc
+        limit ${listParams.perPage}
+        offset ${(listParams.page - 1) * listParams.perPage}
+      `),
+      tx.execute<{ total: number | string }>(sql`
+        with credentials as (${credentialSet})
+        select count(*)::int as total from credentials ${where}
+      `),
+    ])
+    const credentialIndex = indexResult as unknown as CredentialIndexRow[]
+    const credentialCountRows = countResult as unknown as Array<{ total: number | string }>
+    const recordIds = credentialIndex
+      .filter((item) => item.kind === 'training')
+      .map((item) => item.id)
+    const skillIds = credentialIndex.filter((item) => item.kind === 'skill').map((item) => item.id)
+
+    const [records, skills] = await Promise.all([
+      recordIds.length
+        ? tx
+            .select({
+              id: trainingRecords.id,
+              completedOn: trainingRecords.completedOn,
+              expiresOn: trainingRecords.expiresOn,
+              instructor: trainingRecords.instructor,
+              grade: trainingRecords.grade,
+              courseName: trainingCourses.name,
+              courseCode: trainingCourses.code,
+              courseMetadata: trainingCourses.metadata,
+            })
+            .from(trainingRecords)
+            .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+            .where(inArray(trainingRecords.id, recordIds))
+        : Promise.resolve([]),
+      skillIds.length
+        ? tx
+            .select({
+              id: trainingSkillAssignments.id,
+              grantedOn: trainingSkillAssignments.grantedOn,
+              expiresOn: trainingSkillAssignments.expiresOn,
+              skillName: trainingSkillTypes.name,
+              skillCode: trainingSkillTypes.code,
+              authorityName: trainingSkillAuthorities.name,
+            })
+            .from(trainingSkillAssignments)
+            .innerJoin(
+              trainingSkillTypes,
+              eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
+            )
+            .leftJoin(
+              trainingSkillAuthorities,
+              eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+            )
+            .where(inArray(trainingSkillAssignments.id, skillIds))
+        : Promise.resolve([]),
+    ])
 
     // Existing verification tokens (we never issue on render — the download
     // route lazily creates them). Cards with a token get a scan-to-verify QR.
@@ -169,7 +287,17 @@ export default async function MyWalletPage() {
       photoUrl = photo ? attachmentUrl(person.photoAttachmentId) : null
     }
 
-    return { person, tenant, records, skills, recordCerts, skillCerts, photoUrl } as const
+    return {
+      person,
+      tenant,
+      credentialIndex,
+      credentialTotal: Number(credentialCountRows[0]?.total ?? 0),
+      records,
+      skills,
+      recordCerts,
+      skillCerts,
+      photoUrl,
+    } as const
   })
 
   if (!data.person) {
@@ -191,7 +319,17 @@ export default async function MyWalletPage() {
     )
   }
 
-  const { person, tenant, records, skills, recordCerts, skillCerts, photoUrl } = data
+  const {
+    person,
+    tenant,
+    credentialIndex,
+    credentialTotal,
+    records,
+    skills,
+    recordCerts,
+    skillCerts,
+    photoUrl,
+  } = data
   // Tenant-default wallet design — used for skills and as the fallback. Training
   // records resolve their own design from the course's pinned selection below.
   const defaultOutput = resolveCredentialOutput(tenant?.settings, { format: 'wallet' })
@@ -200,7 +338,6 @@ export default async function MyWalletPage() {
   const widthIn = front?.width ?? 3.375
   const heightIn = front?.height ?? 2.125
 
-  const todayStr = new Date().toISOString().slice(0, 10)
   const base = appBaseUrl()
   const tenantName = tenant?.name ?? 'Credential'
   const tenantLogoUrl = tenant?.branding?.logoUrl ?? null
@@ -298,23 +435,68 @@ export default async function MyWalletPage() {
     }),
   )
 
-  // Most-urgent first (expired, then expiring), then training before skills.
-  const order = { expired: 0, expiring: 1, valid: 2, none: 3 }
-  const cards = [...trainingCards, ...skillCards].sort((a, b) => order[a.status] - order[b.status])
+  const cardByKey = new Map(
+    [...trainingCards, ...skillCards].map((card) => [`${card.kind}:${card.id.slice(2)}`, card]),
+  )
+  const cards = credentialIndex
+    .map((item) => cardByKey.get(`${item.kind}:${item.id}`))
+    .filter((card): card is WalletCard => Boolean(card))
 
   const design: WalletDesign = { widthIn, heightIn }
 
   return (
     <ListPageLayout
       header={
-        <PageHeader
-          back={{ href: '/my', label: 'Workspace' }}
-          title="My wallet"
-          description="Your certificates and credential cards. Tap a card to flip it, or download the print-ready pass."
-        />
+        <>
+          <PageHeader
+            back={{ href: '/my', label: 'Workspace' }}
+            title="My wallet"
+            description="Your certificates and credential cards. Tap a card to flip it, or download the print-ready pass."
+          />
+          <TableToolbar>
+            <SearchInput placeholder="Search credentials…" />
+            <FilterChips
+              basePath="/my/wallet"
+              currentParams={sp}
+              paramKey="kind"
+              label="Type"
+              options={[...KIND_OPTIONS]}
+            />
+            <FilterChips
+              basePath="/my/wallet"
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              options={[...STATUS_OPTIONS]}
+            />
+          </TableToolbar>
+        </>
       }
     >
-      <WalletStack cards={cards} design={design} />
+      <>
+        {cards.length === 0 ? (
+          <WalletStack
+            cards={cards}
+            design={design}
+            filtered={Boolean(listParams.q || kind || status)}
+          />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="p-4">
+              <WalletStack cards={cards} design={design} />
+            </div>
+          </div>
+        )}
+        {credentialTotal > 0 ? (
+          <Pagination
+            basePath="/my/wallet"
+            currentParams={sp}
+            total={credentialTotal}
+            page={listParams.page}
+            perPage={listParams.perPage}
+          />
+        ) : null}
+      </>
     </ListPageLayout>
   )
 }

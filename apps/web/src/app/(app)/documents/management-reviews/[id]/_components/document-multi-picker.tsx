@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
-import { Badge, Button, Select } from '@beaconhs/ui'
+import { Badge, Button } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { updateDocumentsReviewed, updateActionItems } from '../actions'
 
 type Option = { id: string; label: string; sub?: string }
@@ -26,6 +27,7 @@ export function DocumentMultiPicker({
   const [pending, start] = useTransition()
   const [selected, setSelected] = useState<string[]>(initial)
   const [pendingValue, setPendingValue] = useState('')
+  const [resolved, setResolved] = useState<Option[]>(available)
 
   function add() {
     if (!pendingValue || selected.includes(pendingValue)) return
@@ -42,7 +44,7 @@ export function DocumentMultiPicker({
     })
   }
 
-  const byId = new Map(available.map((o) => [o.id, o]))
+  const byId = new Map(resolved.map((o) => [o.id, o]))
 
   return (
     <div className="space-y-3 text-sm">
@@ -51,16 +53,24 @@ export function DocumentMultiPicker({
           <label className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
             Add document
           </label>
-          <Select value={pendingValue} onChange={(e) => setPendingValue(e.target.value)}>
-            <option value="">— pick —</option>
-            {available
-              .filter((o) => !selected.includes(o.id))
-              .map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-          </Select>
+          <RemoteSearchSelect
+            lookup="management-review-documents"
+            value={pendingValue}
+            onChange={setPendingValue}
+            onOptionChange={(option) => {
+              if (!option) return
+              setResolved((current) => [
+                ...current.filter((item) => item.id !== option.value),
+                { id: option.value, label: option.label, sub: option.hint },
+              ])
+            }}
+            excludedValues={selected}
+            placeholder="Select a document…"
+            searchPlaceholder="Search documents…"
+            sheetTitle="Add document"
+            clearable
+            emptyLabel="— pick —"
+          />
         </div>
         <Button type="button" variant="outline" onClick={add}>
           <Plus size={14} /> Add
@@ -115,6 +125,7 @@ export function ActionItemsPicker({
   const [pending, start] = useTransition()
   const [selected, setSelected] = useState<string[]>(initial)
   const [pendingValue, setPendingValue] = useState('')
+  const [resolved, setResolved] = useState<Option[]>(available)
 
   function add() {
     if (!pendingValue || selected.includes(pendingValue)) return
@@ -131,7 +142,7 @@ export function ActionItemsPicker({
     })
   }
 
-  const byId = new Map(available.map((o) => [o.id, o]))
+  const byId = new Map(resolved.map((o) => [o.id, o]))
 
   return (
     <div className="space-y-3 text-sm">
@@ -140,16 +151,24 @@ export function ActionItemsPicker({
           <label className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
             Link a corrective action
           </label>
-          <Select value={pendingValue} onChange={(e) => setPendingValue(e.target.value)}>
-            <option value="">— pick —</option>
-            {available
-              .filter((o) => !selected.includes(o.id))
-              .map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-          </Select>
+          <RemoteSearchSelect
+            lookup="management-review-actions"
+            value={pendingValue}
+            onChange={setPendingValue}
+            onOptionChange={(option) => {
+              if (!option) return
+              setResolved((current) => [
+                ...current.filter((item) => item.id !== option.value),
+                { id: option.value, label: option.label, sub: option.hint },
+              ])
+            }}
+            excludedValues={selected}
+            placeholder="Select a corrective action…"
+            searchPlaceholder="Search corrective actions…"
+            sheetTitle="Link corrective action"
+            clearable
+            emptyLabel="— pick —"
+          />
         </div>
         <Button type="button" variant="outline" onClick={add}>
           <Plus size={14} /> Add

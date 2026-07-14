@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation'
-import { asc, isNull } from 'drizzle-orm'
+import { and, inArray, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import { formTemplates } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { requireRequestContext } from '@/lib/auth'
+import { isUuid } from '@/lib/list-params'
 import { loadNavConfig } from '@/lib/nav/resolve'
 import { AdminBackLink } from '../_back-link'
 import { NavEditor } from './_editor'
@@ -19,18 +20,28 @@ export default async function NavigationAdminPage() {
 
   const { config, templates } = await ctx.db(async (tx) => {
     const config = await loadNavConfig(tx)
-    const templates = await tx
-      .select({
-        id: formTemplates.id,
-        name: formTemplates.name,
-        category: formTemplates.category,
-        iconKey: formTemplates.iconKey,
-        status: formTemplates.status,
-      })
-      .from(formTemplates)
-      .where(isNull(formTemplates.deletedAt))
-      .orderBy(asc(formTemplates.name))
-      .limit(300)
+    const templateIds = [
+      ...new Set(
+        config.groups
+          .flatMap((group) => group.items)
+          .filter((item) => item.kind === 'form')
+          .map((item) => item.templateId)
+          .filter(isUuid),
+      ),
+    ]
+    const templates =
+      templateIds.length > 0
+        ? await tx
+            .select({
+              id: formTemplates.id,
+              name: formTemplates.name,
+              category: formTemplates.category,
+              iconKey: formTemplates.iconKey,
+              status: formTemplates.status,
+            })
+            .from(formTemplates)
+            .where(and(inArray(formTemplates.id, templateIds), isNull(formTemplates.deletedAt)))
+        : []
     return { config, templates }
   })
 

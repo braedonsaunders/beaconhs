@@ -10,7 +10,13 @@
 import { eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
-import { isAiProvider, type AiConfig, type AiPolicyMode, type AiProvider } from '@beaconhs/ai'
+import {
+  isAiProvider,
+  validateAiBaseUrl,
+  type AiConfig,
+  type AiPolicyMode,
+  type AiProvider,
+} from '@beaconhs/ai'
 import type { RequestContext } from '@beaconhs/tenant'
 import { sealSecret, unsealSecret } from '@beaconhs/crypto'
 
@@ -66,6 +72,11 @@ export type AiSettingsInput = {
   baseUrl: string
   /** Sealed when provided; omit to keep the existing key. */
   apiKey?: string
+}
+
+async function validateAiSettingsInput<T extends AiSettingsInput>(input: T): Promise<T> {
+  const baseUrl = await validateAiBaseUrl(input.provider, input.baseUrl)
+  return { ...input, baseUrl: baseUrl ?? '' }
 }
 
 // Build a runtime AiConfig (decrypted key) from stored config, or null when the
@@ -171,6 +182,7 @@ export async function saveTenantAiSettings(
   ctx: RequestContext,
   input: AiSettingsInput & { autoJournalAi: boolean },
 ): Promise<void> {
+  const validatedInput = await validateAiSettingsInput(input)
   await withSuperAdmin(db, async (tx) => {
     const [t] = await tx
       .select({ settings: tenants.settings })
@@ -180,7 +192,9 @@ export async function saveTenantAiSettings(
       .for('update')
     const settings = (t?.settings as Record<string, unknown>) ?? {}
     const prev = (settings.ai && typeof settings.ai === 'object' ? settings.ai : {}) as RawAi
-    const next = mergeRaw(prev, input, { autoJournalAi: input.autoJournalAi })
+    const next = mergeRaw(prev, validatedInput, {
+      autoJournalAi: validatedInput.autoJournalAi,
+    })
     await tx
       .update(tenants)
       .set({ settings: { ...settings, ai: next } })
@@ -242,8 +256,9 @@ export async function getAiPolicyMode(): Promise<AiPolicyMode> {
 export async function savePlatformAiSettings(
   input: AiSettingsInput & { mode: AiPolicyMode },
 ): Promise<void> {
+  const validatedInput = await validateAiSettingsInput(input)
   const prev = await readPlatformAi()
-  const next = mergeRaw(prev, input, { mode: input.mode })
+  const next = mergeRaw(prev, validatedInput, { mode: validatedInput.mode })
   await withSuperAdmin(db, async (tx) => {
     await tx
       .insert(platformSettings)

@@ -12,7 +12,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, or } from 'drizzle-orm'
 import { getAuth } from '@beaconhs/auth'
 import { nextInviteGenerationDate } from '@beaconhs/auth/invites'
 import {
@@ -27,11 +27,17 @@ import {
   userPermissionOverrides,
   users,
 } from '@beaconhs/db/schema'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import { assertCan, assertNotImpersonating } from '@beaconhs/tenant'
+import {
+  materializeIdentityAudienceObligations,
+  materializeUserIdentityAudienceObligations,
+} from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { IMPERSONATION_TTL_MS } from '@/lib/impersonation'
 import { sendMembershipInviteEmail } from '@/lib/invite-email'
+import { upsertRoleAssignments } from '@/lib/role-assignment-upsert'
 import { parseRoleScope } from './_scope-data'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
@@ -179,14 +185,18 @@ export async function inviteUser(formData: FormData): Promise<void> {
         .where(eq(roles.id, roleId))
         .limit(1)
       if (role) {
-        await tx.insert(roleAssignments).values({
-          tenantId: ctx.tenantId,
-          tenantUserId: m.id,
-          roleId: role.id,
-          scope: scopeRaw ? parseRoleScope(scopeRaw) : { type: 'self' },
-        })
+        await upsertRoleAssignments(tx, [
+          {
+            tenantId: ctx.tenantId,
+            tenantUserId: m.id,
+            roleId: role.id,
+            scope: scopeRaw ? parseRoleScope(scopeRaw) : { type: 'self' },
+          },
+        ])
       }
     }
+
+    await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [userId])
 
     await tx.insert(auditLog).values({
       tenantId: ctx.tenantId,
@@ -376,6 +386,7 @@ export async function setMemberStatus(formData: FormData): Promise<void> {
       before: { status: member.membership.status },
       after: { status },
     })
+    await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [member.account.id])
     return { ok: true } as const
   })
   if ('error' in result && result.error) backToDetail(membershipId, result.error)
@@ -388,23 +399,38 @@ export async function removeMember(formData: FormData): Promise<void> {
   const membershipId = String(formData.get('membershipId') ?? '')
   if (!membershipId) return
 
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (member.membership.userId === ctx.userId) {
-    backToDetail(membershipId, "You can't remove your own membership.")
-  }
-  if (member.account.isSuperAdmin && !ctx.isSuperAdmin) {
-    backToDetail(membershipId, 'Only a super-admin can remove a super-admin account.')
-  }
+  const result = await ctx.db(async (tx) => {
+    const [member] = await tx
+      .select({ membership: tenantUsers, account: users })
+      .from(tenantUsers)
+      .innerJoin(users, eq(users.id, tenantUsers.userId))
+      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
+      .limit(1)
+      .for('update')
+    if (!member) return { error: 'Membership not found.' } as const
+    if (member.membership.userId === ctx.userId) {
+      return { error: "You can't remove your own membership." } as const
+    }
+    if (member.account.isSuperAdmin && !ctx.isSuperAdmin) {
+      return { error: 'Only a super-admin can remove a super-admin account.' } as const
+    }
 
-  // Cascade removes role assignments + permission overrides (FK onDelete cascade).
-  await ctx.db((tx) => tx.delete(tenantUsers).where(eq(tenantUsers.id, membershipId)))
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'delete',
-    summary: `Removed ${member.account.email} from tenant`,
+    // Cascade removes role assignments + permission overrides (FK onDelete cascade).
+    const [deleted] = await tx
+      .delete(tenantUsers)
+      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
+      .returning({ id: tenantUsers.id })
+    if (!deleted) return { error: 'Membership no longer exists.' } as const
+    await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [member.account.id])
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: 'delete',
+      summary: `Removed ${member.account.email} from tenant`,
+    })
+    return { ok: true } as const
   })
+  if ('error' in result && result.error) backToDetail(membershipId, result.error)
   revalidatePath('/admin/users')
   redirect('/admin/users')
 }
@@ -420,7 +446,7 @@ export async function assignRole(formData: FormData): Promise<void> {
 
   await ctx.db(async (tx) => {
     const [membership] = await tx
-      .select({ id: tenantUsers.id })
+      .select({ id: tenantUsers.id, userId: tenantUsers.userId })
       .from(tenantUsers)
       .where(eq(tenantUsers.id, membershipId))
       .limit(1)
@@ -431,31 +457,24 @@ export async function assignRole(formData: FormData): Promise<void> {
       .where(eq(roles.id, roleId))
       .limit(1)
     if (!role) return
-    // One assignment per (member, role): update the scope if it already exists.
-    const [existing] = await tx
-      .select({ id: roleAssignments.id })
-      .from(roleAssignments)
-      .where(
-        and(eq(roleAssignments.tenantUserId, membershipId), eq(roleAssignments.roleId, roleId)),
-      )
-      .limit(1)
-    if (existing) {
-      await tx.update(roleAssignments).set({ scope }).where(eq(roleAssignments.id, existing.id))
-    } else {
-      await tx.insert(roleAssignments).values({
+    const changedIds = await upsertRoleAssignments(tx, [
+      {
         tenantId: ctx.tenantId,
         tenantUserId: membershipId,
         roleId,
         scope,
+      },
+    ])
+    if (changedIds.length > 0) {
+      await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [membership.userId])
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'tenant_user',
+        entityId: membershipId,
+        action: 'update',
+        summary: `Set role "${role.name}" and its access scope`,
+        metadata: { roleId, scope, operation: 'upsert' },
       })
     }
-    await recordAudit(ctx, {
-      entityType: 'tenant_user',
-      entityId: membershipId,
-      action: 'update',
-      summary: `Assigned role "${role.name}"`,
-      metadata: { roleId, scope },
-    })
   })
   revalidatePath(detailPath(membershipId))
   revalidatePath('/admin/users')
@@ -465,21 +484,32 @@ export async function removeAssignment(formData: FormData): Promise<void> {
   const ctx = await requireUserAdmin('remove member roles')
   const membershipId = String(formData.get('membershipId') ?? '')
   const assignmentId = String(formData.get('assignmentId') ?? '')
-  if (!assignmentId) return
-  await ctx.db((tx) =>
-    tx
+  if (!membershipId || !assignmentId) return
+  const removed = await ctx.db(async (tx) => {
+    const [membership] = await tx
+      .select({ userId: tenantUsers.userId })
+      .from(tenantUsers)
+      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
+      .limit(1)
+    if (!membership) return false
+    const [assignment] = await tx
       .delete(roleAssignments)
       .where(
         and(eq(roleAssignments.id, assignmentId), eq(roleAssignments.tenantUserId, membershipId)),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'tenant_user',
-    entityId: membershipId,
-    action: 'update',
-    summary: 'Removed role',
-    metadata: { assignmentId },
+      )
+      .returning({ roleId: roleAssignments.roleId })
+    if (!assignment) return false
+    await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [membership.userId])
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'tenant_user',
+      entityId: membershipId,
+      action: 'update',
+      summary: 'Removed role assignment',
+      metadata: { assignmentId, roleId: assignment.roleId },
+    })
+    return true
   })
+  if (!removed) return
   revalidatePath(detailPath(membershipId))
   revalidatePath('/admin/users')
 }
@@ -571,7 +601,7 @@ export async function loadPersonLinkData(
         firstName: people.firstName,
         lastName: people.lastName,
         employeeNo: people.employeeNo,
-        jobTitle: people.jobTitle,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
         userId: people.userId,
       })
       .from(people)
@@ -604,13 +634,6 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
   const personId = String(formData.get('personId') ?? '').trim() || null
   if (!membershipId) return
 
-  const member = await loadMember(ctx, membershipId)
-  if (!member) return
-  if (!canActOn(ctx, member.account)) {
-    backToDetail(membershipId, 'Only a super-admin can change a super-admin account.')
-  }
-  const userId = member.account.id
-
   const result = await ctx.db(
     async (
       tx,
@@ -620,42 +643,102 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
       linkedId: string | null
       linkedName: string | null
       unlinkedId: string | null
+      userId: string | null
     }> => {
-      const [current] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.userId, userId), isNull(people.deletedAt)))
+      const [member] = await tx
+        .select({ membership: tenantUsers, account: users })
+        .from(tenantUsers)
+        .innerJoin(users, eq(users.id, tenantUsers.userId))
+        .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
         .limit(1)
-
-      if (!personId) {
-        if (!current) return { changed: false, linkedId: null, linkedName: null, unlinkedId: null }
-        await tx.update(people).set({ userId: null }).where(eq(people.id, current.id))
-        return { changed: true, linkedId: null, linkedName: null, unlinkedId: current.id }
+        .for('update')
+      if (!member) {
+        return {
+          error: 'Membership not found.',
+          changed: false,
+          linkedId: null,
+          linkedName: null,
+          unlinkedId: null,
+          userId: null,
+        }
       }
-
-      if (current?.id === personId) {
-        return { changed: false, linkedId: personId, linkedName: null, unlinkedId: null }
+      if (!canActOn(ctx, member.account)) {
+        return {
+          error: 'Only a super-admin can change a super-admin account.',
+          changed: false,
+          linkedId: null,
+          linkedName: null,
+          unlinkedId: null,
+          userId: member.account.id,
+        }
       }
-
-      const [target] = await tx
+      const userId = member.account.id
+      const candidatePredicate = personId
+        ? or(eq(people.userId, userId), eq(people.id, personId))
+        : eq(people.userId, userId)
+      const candidates = await tx
         .select({
           id: people.id,
           userId: people.userId,
           status: people.status,
-          deletedAt: people.deletedAt,
           firstName: people.firstName,
           lastName: people.lastName,
         })
         .from(people)
-        .where(eq(people.id, personId))
-        .limit(1)
-      if (!target || target.deletedAt) {
+        .where(and(eq(people.tenantId, ctx.tenantId), isNull(people.deletedAt), candidatePredicate))
+        .orderBy(people.id)
+        .for('update')
+      const currentLinked = candidates.find((candidate) => candidate.userId === userId)
+
+      if (!personId) {
+        if (!currentLinked) {
+          return {
+            changed: false,
+            linkedId: null,
+            linkedName: null,
+            unlinkedId: null,
+            userId,
+          }
+        }
+        await tx
+          .update(people)
+          .set({ userId: null })
+          .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, currentLinked.id)))
+        await materializeIdentityAudienceObligations(tx, ctx.tenantId, [currentLinked.id])
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'tenant_user',
+          entityId: membershipId,
+          action: 'update',
+          summary: 'Unlinked person record',
+          metadata: { userId, personId: null, unlinkedPersonId: currentLinked.id },
+        })
+        return {
+          changed: true,
+          linkedId: null,
+          linkedName: null,
+          unlinkedId: currentLinked.id,
+          userId,
+        }
+      }
+
+      const target = candidates.find((candidate) => candidate.id === personId)
+      if (currentLinked?.id === personId) {
+        return {
+          changed: false,
+          linkedId: personId,
+          linkedName: null,
+          unlinkedId: null,
+          userId,
+        }
+      }
+      if (!target) {
         return {
           error: 'That person record no longer exists.',
           changed: false,
           linkedId: null,
           linkedName: null,
           unlinkedId: null,
+          userId,
         }
       }
       if (target.status !== 'active') {
@@ -665,6 +748,7 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
           linkedId: null,
           linkedName: null,
           unlinkedId: null,
+          userId,
         }
       }
       if (target.userId && target.userId !== userId) {
@@ -674,20 +758,42 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
           linkedId: null,
           linkedName: null,
           unlinkedId: null,
+          userId,
         }
       }
 
       // Clear the account's previous person first so the partial unique index on
       // (tenant_id, user_id) is never momentarily violated, then link the chosen one.
-      if (current && current.id !== personId) {
-        await tx.update(people).set({ userId: null }).where(eq(people.id, current.id))
+      if (currentLinked && currentLinked.id !== personId) {
+        await tx
+          .update(people)
+          .set({ userId: null })
+          .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, currentLinked.id)))
       }
-      await tx.update(people).set({ userId }).where(eq(people.id, personId))
+      await tx
+        .update(people)
+        .set({ userId })
+        .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, personId)))
+      const affectedPersonIds = [personId, ...(currentLinked ? [currentLinked.id] : [])]
+      await materializeIdentityAudienceObligations(tx, ctx.tenantId, affectedPersonIds)
+      const linkedName = `${target.firstName} ${target.lastName}`.trim()
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'tenant_user',
+        entityId: membershipId,
+        action: 'update',
+        summary: `Linked person record${linkedName ? ` ${linkedName}` : ''}`,
+        metadata: {
+          userId,
+          personId,
+          unlinkedPersonId: currentLinked?.id ?? null,
+        },
+      })
       return {
         changed: true,
         linkedId: personId,
-        linkedName: `${target.firstName} ${target.lastName}`.trim(),
-        unlinkedId: current?.id ?? null,
+        linkedName,
+        unlinkedId: currentLinked?.id ?? null,
+        userId,
       }
     },
   )
@@ -695,15 +801,6 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
   if (result.error) backToDetail(membershipId, result.error)
 
   if (result.changed) {
-    await recordAudit(ctx, {
-      entityType: 'tenant_user',
-      entityId: membershipId,
-      action: 'update',
-      summary: result.linkedId
-        ? `Linked person record${result.linkedName ? ` ${result.linkedName}` : ''}`
-        : 'Unlinked person record',
-      metadata: { userId, personId: result.linkedId, unlinkedPersonId: result.unlinkedId },
-    })
     revalidatePath('/admin/users')
     revalidatePath('/people')
     if (result.linkedId) revalidatePath(`/people/${result.linkedId}`)

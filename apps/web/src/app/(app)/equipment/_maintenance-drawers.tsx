@@ -11,6 +11,8 @@ import { Loader2, Trash2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { PersonSelectField } from '@/components/person-select-field'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
+import type { PickerLookup } from '@/lib/picker-options'
 import { IntervalPicker, type IntervalValue } from '@/components/equipment/interval-picker'
 import type { EquipmentIntervalUnit } from '@/lib/equipment/intervals'
 import {
@@ -23,6 +25,7 @@ import {
 export type ScheduleEditing = {
   id: string
   inspectionTypeId: string | null
+  inspectionTypeOption?: { value: string; label: string; hint?: string }
   label: string | null
   intervalValue: number
   intervalUnit: EquipmentIntervalUnit
@@ -40,17 +43,11 @@ export type ReminderEditing = {
   repeatIntervalValue: number | null
   repeatIntervalUnit: EquipmentIntervalUnit | null
   assignedToPersonId: string | null
+  equipmentItemOption?: { value: string; label: string; hint?: string }
+  assignedToOption?: { value: string; label: string; hint?: string }
 }
 
 type PersonOption = { value: string; label: string; hint?: string }
-type TypeOption = {
-  value: string
-  label: string
-  hint?: string
-  /** The type's default cadence — inherited when the type is picked. */
-  intervalValue?: number | null
-  intervalUnit?: EquipmentIntervalUnit | null
-}
 type ItemOption = { value: string; label: string; hint?: string }
 
 function todayIso(): string {
@@ -61,14 +58,14 @@ export function ScheduleDrawer({
   open,
   closeHref,
   itemId,
+  itemTypeId,
   editing,
-  typeOptions,
 }: {
   open: boolean
   closeHref: string
   itemId: string
+  itemTypeId: string | null
   editing: ScheduleEditing | null
-  typeOptions: TypeOption[]
 }) {
   const router = useRouter()
   return (
@@ -82,8 +79,8 @@ export function ScheduleDrawer({
       <ScheduleForm
         key={editing?.id ?? 'new'}
         itemId={itemId}
+        itemTypeId={itemTypeId}
         editing={editing}
-        typeOptions={typeOptions}
         onDone={() => {
           router.push(closeHref as never)
           router.refresh()
@@ -95,13 +92,13 @@ export function ScheduleDrawer({
 
 function ScheduleForm({
   itemId,
+  itemTypeId,
   editing,
-  typeOptions,
   onDone,
 }: {
   itemId: string
+  itemTypeId: string | null
   editing: ScheduleEditing | null
-  typeOptions: TypeOption[]
   onDone: () => void
 }) {
   const [inspectionTypeId, setInspectionTypeId] = useState(editing?.inspectionTypeId ?? '')
@@ -162,31 +159,34 @@ function ScheduleForm({
     >
       <div className="space-y-1.5">
         <Label htmlFor="sched-type">Inspection type</Label>
-        <Select
+        <RemoteSearchSelect
           id="sched-type"
+          lookup="equipment-item-inspection-types"
+          contextId={itemTypeId ?? undefined}
           value={inspectionTypeId}
-          onChange={(e) => {
-            const next = e.currentTarget.value
-            setInspectionTypeId(next)
+          onChange={setInspectionTypeId}
+          onOptionChange={(picked) => {
             // Inherit the type's default cadence; on-demand/pre-use types
             // (no default) keep whatever interval is already entered.
-            const picked = typeOptions.find((t) => t.value === next)
-            if (picked?.intervalValue && picked.intervalUnit) {
+            if (
+              picked?.meta?.kind === 'equipment-inspection-type' &&
+              picked.meta.intervalValue &&
+              picked.meta.intervalUnit
+            ) {
               setInterval({
                 isPreUse: false,
-                intervalValue: picked.intervalValue,
-                intervalUnit: picked.intervalUnit,
+                intervalValue: picked.meta.intervalValue,
+                intervalUnit: picked.meta.intervalUnit,
               })
             }
           }}
-        >
-          <option value="">— Due-date tracking only —</option>
-          {typeOptions.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </Select>
+          initialOption={editing?.inspectionTypeOption}
+          placeholder="— Due-date tracking only —"
+          emptyLabel="— Due-date tracking only —"
+          searchPlaceholder="Search inspection types…"
+          sheetTitle="Select inspection type"
+          clearable
+        />
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Pick a checklist to perform, or leave empty to track a due date without one.
         </p>
@@ -266,16 +266,20 @@ export function ReminderDrawer({
   closeHref,
   itemId,
   itemOptions,
+  itemLookup,
   editing,
   people,
+  peopleLookup,
 }: {
   open: boolean
   closeHref: string
   /** Fixed asset (detail page). Omit and pass itemOptions on the cockpit. */
   itemId?: string
   itemOptions?: ItemOption[]
+  itemLookup?: PickerLookup
   editing: ReminderEditing | null
-  people: PersonOption[]
+  people?: PersonOption[]
+  peopleLookup?: PickerLookup
 }) {
   const router = useRouter()
   return (
@@ -290,8 +294,10 @@ export function ReminderDrawer({
         key={editing?.id ?? 'new'}
         itemId={itemId}
         itemOptions={itemOptions}
+        itemLookup={itemLookup}
         editing={editing}
         people={people}
+        peopleLookup={peopleLookup}
         onDone={() => {
           router.push(closeHref as never)
           router.refresh()
@@ -304,14 +310,18 @@ export function ReminderDrawer({
 function ReminderForm({
   itemId,
   itemOptions,
+  itemLookup,
   editing,
   people,
+  peopleLookup,
   onDone,
 }: {
   itemId?: string
   itemOptions?: ItemOption[]
+  itemLookup?: PickerLookup
   editing: ReminderEditing | null
-  people: PersonOption[]
+  people?: PersonOption[]
+  peopleLookup?: PickerLookup
   onDone: () => void
 }) {
   const [equipmentItemId, setEquipmentItemId] = useState(editing?.equipmentItemId ?? itemId ?? '')
@@ -374,22 +384,36 @@ function ReminderForm({
       }}
       className="space-y-4"
     >
-      {!itemId && itemOptions ? (
+      {!itemId && (itemLookup || itemOptions) ? (
         <div className="space-y-1.5">
           <Label htmlFor="rem-item">Unit *</Label>
-          <Select
-            id="rem-item"
-            value={equipmentItemId}
-            onChange={(e) => setEquipmentItemId(e.currentTarget.value)}
-            required
-          >
-            <option value="">— Select a unit —</option>
-            {itemOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
+          {itemLookup ? (
+            <RemoteSearchSelect
+              id="rem-item"
+              lookup={itemLookup}
+              value={equipmentItemId}
+              onChange={setEquipmentItemId}
+              initialOption={editing?.equipmentItemOption}
+              placeholder="Select a unit…"
+              searchPlaceholder="Search asset tag or unit…"
+              sheetTitle="Select unit"
+              clearable={false}
+            />
+          ) : (
+            <Select
+              id="rem-item"
+              value={equipmentItemId}
+              onChange={(e) => setEquipmentItemId(e.currentTarget.value)}
+              required
+            >
+              <option value="">— Select a unit —</option>
+              {(itemOptions ?? []).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
       ) : null}
       <div className="space-y-1.5">
@@ -397,6 +421,7 @@ function ReminderForm({
         <Input
           id="rem-title"
           value={title}
+          maxLength={500}
           onChange={(e) => setTitle(e.currentTarget.value)}
           placeholder="e.g. Check roof membrane"
           required
@@ -408,6 +433,7 @@ function ReminderForm({
         <Textarea
           id="rem-details"
           rows={3}
+          maxLength={10000}
           value={details}
           onChange={(e) => setDetails(e.currentTarget.value)}
         />
@@ -424,16 +450,31 @@ function ReminderForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Assign to</Label>
-          <PersonSelectField
-            name="assignedToPersonId"
-            defaultValue={assignedToPersonId}
-            options={people}
-            placeholder="Select a person…"
-            clearable
-            emptyLabel="— Unassigned —"
-            onValueChange={setAssignedToPersonId}
-          />
+          <Label htmlFor="rem-assignee">Assign to</Label>
+          {peopleLookup ? (
+            <RemoteSearchSelect
+              id="rem-assignee"
+              lookup={peopleLookup}
+              value={assignedToPersonId}
+              onChange={setAssignedToPersonId}
+              initialOption={editing?.assignedToOption}
+              placeholder="Select a person…"
+              searchPlaceholder="Search active people…"
+              sheetTitle="Assign reminder"
+              clearable
+              emptyLabel="— Unassigned —"
+            />
+          ) : (
+            <PersonSelectField
+              name="assignedToPersonId"
+              defaultValue={assignedToPersonId}
+              options={people ?? []}
+              placeholder="Select a person…"
+              clearable
+              emptyLabel="— Unassigned —"
+              onValueChange={setAssignedToPersonId}
+            />
+          )}
         </div>
       </div>
       <IntervalPicker

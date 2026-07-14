@@ -6,21 +6,21 @@
 // + mobile sheet) instead of a 2000-option native <select>.
 
 import { useRouter } from 'next/navigation'
-import { SearchSelect, type SelectOption } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
-export function PersonPicker({ people, selected }: { people: SelectOption[]; selected: string }) {
+export function PersonPicker({ selected }: { selected: string }) {
   const router = useRouter()
   return (
     <div className="w-full sm:max-w-md">
       <label className="mb-1 block text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
         Person
       </label>
-      <SearchSelect
+      <RemoteSearchSelect
+        lookup="compliance-by-person"
         value={selected}
         onChange={(id) =>
           router.push(id ? `/compliance/by-person?person=${id}` : '/compliance/by-person')
         }
-        options={people}
         placeholder="Select a person…"
         searchPlaceholder="Search people…"
         sheetTitle="Select person"

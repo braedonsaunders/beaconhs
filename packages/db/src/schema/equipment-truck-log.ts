@@ -4,6 +4,7 @@
 import { relations } from 'drizzle-orm'
 import {
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -30,32 +31,26 @@ export const truckLogEntries = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    equipmentItemId: uuid('equipment_item_id')
-      .notNull()
-      .references(() => equipmentItems.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull(),
     entryDate: date('entry_date').notNull(),
-    driverPersonId: uuid('driver_person_id')
-      .notNull()
-      .references(() => people.id),
+    driverPersonId: uuid('driver_person_id').notNull(),
     entryMode: text('entry_mode').$type<TruckLogEntryMode>().default('destination').notNull(),
     startOdometer: integer('start_odometer'),
     endOdometer: integer('end_odometer'),
     kmDriven: integer('km_driven'),
     businessKm: integer('business_km'),
     personalKm: integer('personal_km'),
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
+    siteOrgUnitId: uuid('site_org_unit_id'),
     otherDestination: text('other_destination'),
     hoursOnSite: numeric('hours_on_site', { precision: 6, scale: 2 }),
     manpowerCount: integer('manpower_count'),
     notes: text('notes'),
-    sourceConnectionId: uuid('source_connection_id').references(() => syncConnections.id, {
-      onDelete: 'set null',
-    }),
+    sourceConnectionId: uuid('source_connection_id'),
     sourceExternalId: text('source_external_id'),
     importStatus: text('import_status').$type<TruckLogImportStatus>().default('manual').notNull(),
     importedAt: timestamp('imported_at', { withTimezone: true }),
     importMeta: jsonb('import_meta').$type<Record<string, unknown>>().default({}).notNull(),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
   },
   (t) => ({
@@ -67,10 +62,31 @@ export const truckLogEntries = pgTable(
       t.entryDate,
     ),
     dateIdx: index('truck_log_date_idx').on(t.tenantId, t.entryDate),
-    truckIdx: index('truck_log_truck_idx').on(t.equipmentItemId, t.entryDate),
+    truckIdx: index('truck_log_truck_idx').on(t.tenantId, t.equipmentItemId, t.entryDate),
     driverDateIdx: index('truck_log_driver_date_idx').on(t.tenantId, t.driverPersonId, t.entryDate),
     siteIdx: index('truck_log_site_idx').on(t.tenantId, t.siteOrgUnitId),
     importIdx: index('truck_log_import_idx').on(t.tenantId, t.sourceConnectionId, t.importStatus),
+    createdByIdx: index('truck_log_created_by_idx').on(t.tenantId, t.createdByTenantUserId),
+    itemFk: foreignKey({
+      name: 'truck_log_entries_tenant_item_fk',
+      columns: [t.tenantId, t.equipmentItemId],
+      foreignColumns: [equipmentItems.tenantId, equipmentItems.id],
+    }).onDelete('cascade'),
+    driverFk: foreignKey({
+      name: 'truck_log_entries_tenant_driver_fk',
+      columns: [t.tenantId, t.driverPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+    siteFk: foreignKey({
+      name: 'truck_log_entries_tenant_site_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    createdByFk: foreignKey({
+      name: 'truck_log_entries_tenant_created_by_fk',
+      columns: [t.tenantId, t.createdByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -100,15 +116,15 @@ export const vehicleLogSettings = pgTable(
 export const truckLogEntriesRelations = relations(truckLogEntries, ({ one }) => ({
   tenant: one(tenants, { fields: [truckLogEntries.tenantId], references: [tenants.id] }),
   truck: one(equipmentItems, {
-    fields: [truckLogEntries.equipmentItemId],
-    references: [equipmentItems.id],
+    fields: [truckLogEntries.tenantId, truckLogEntries.equipmentItemId],
+    references: [equipmentItems.tenantId, equipmentItems.id],
   }),
   driver: one(people, {
-    fields: [truckLogEntries.driverPersonId],
-    references: [people.id],
+    fields: [truckLogEntries.tenantId, truckLogEntries.driverPersonId],
+    references: [people.tenantId, people.id],
   }),
   site: one(orgUnits, {
-    fields: [truckLogEntries.siteOrgUnitId],
-    references: [orgUnits.id],
+    fields: [truckLogEntries.tenantId, truckLogEntries.siteOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
   }),
 }))

@@ -6,7 +6,7 @@
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, or } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -57,12 +57,29 @@ import {
 import { formatCadence, CategoryBadge, KindBadge, StatusBadge } from '../../_format'
 import { formatDateTime } from '@/lib/datetime'
 import { ReportPagedPreview } from '../../_components/report-paged-preview.client'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { runOnceFromDefinition, deleteDefinition } from './actions'
 
 export const metadata = { title: 'Report' }
 export const dynamic = 'force-dynamic'
 
 const TABS = ['document', 'activity'] as const
+const ACTIVITY_SORTS = ['created'] as const
+const RUN_SORTS = ['started'] as const
+const SCHEDULE_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'paused', label: 'Paused' },
+] as const
+const RUN_STATUS_OPTIONS = [
+  { value: 'queued', label: 'Queued' },
+  { value: 'running', label: 'Running' },
+  { value: 'succeeded', label: 'Succeeded' },
+  { value: 'failed', label: 'Failed' },
+] as const
 
 export default async function ReportViewerPage({
   params,
@@ -72,6 +89,8 @@ export default async function ReportViewerPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const ctx = await requireRequestContext()
 
@@ -80,28 +99,114 @@ export default async function ReportViewerPage({
 
   const tab = pickActiveTab(sp, TABS, 'document')
   const daysParam = typeof sp.days === 'string' ? Number(sp.days) : null
+  const scheduleParams = parseListParams(
+    {
+      q: sp.scheduleQ,
+      sort: sp.scheduleSort,
+      dir: sp.scheduleDir,
+      page: sp.schedulePage,
+      perPage: sp.schedulePerPage,
+    },
+    { sort: 'created', dir: 'desc', perPage: 15, allowedSorts: ACTIVITY_SORTS },
+  )
+  const runParams = parseListParams(
+    {
+      q: sp.runQ,
+      sort: sp.runSort,
+      dir: sp.runDir,
+      page: sp.runPage,
+      perPage: sp.runPerPage,
+    },
+    { sort: 'started', dir: 'desc', perPage: 15, allowedSorts: RUN_SORTS },
+  )
+  const requestedScheduleStatus = pickString(sp.scheduleStatus)
+  const scheduleStatus =
+    requestedScheduleStatus === 'active' || requestedScheduleStatus === 'paused'
+      ? requestedScheduleStatus
+      : undefined
+  const requestedRunStatus = pickString(sp.runStatus)
+  const runStatus =
+    requestedRunStatus === 'queued' ||
+    requestedRunStatus === 'running' ||
+    requestedRunStatus === 'succeeded' ||
+    requestedRunStatus === 'failed'
+      ? requestedRunStatus
+      : undefined
 
-  // Schedules pointing at this definition + their recent runs (tab count +
-  // the activity tab body).
-  const [scheduleRows, runRows] = await ctx.db(async (tx) => {
-    const s = await tx
-      .select()
-      .from(reportSchedules)
-      .where(eq(reportSchedules.definitionId, id))
-      .orderBy(desc(reportSchedules.createdAt))
-    if (s.length === 0) return [s, []] as const
-    const r = await tx
-      .select()
-      .from(reportRuns)
-      .where(
-        inArray(
-          reportRuns.scheduleId,
-          s.map((row) => row.id),
-        ),
-      )
-      .orderBy(desc(reportRuns.startedAt))
-      .limit(10)
-    return [s, r] as const
+  // Counts stay available for the tab badge; table bodies are queried only
+  // for the active tab and are bounded independently.
+  const activityData = await ctx.db(async (tx) => {
+    const scheduleBase = eq(reportSchedules.definitionId, id)
+    const scheduleSearch = scheduleParams.q
+      ? ilike(reportSchedules.name, `%${scheduleParams.q}%`)
+      : undefined
+    const scheduleWhere = and(
+      scheduleBase,
+      scheduleSearch,
+      scheduleStatus ? eq(reportSchedules.active, scheduleStatus === 'active') : undefined,
+    )
+    const runSearch = runParams.q
+      ? or(
+          ilike(reportSchedules.name, `%${runParams.q}%`),
+          ilike(reportRuns.error, `%${runParams.q}%`),
+        )
+      : undefined
+    const runWhere = and(
+      scheduleBase,
+      runSearch,
+      runStatus ? eq(reportRuns.status, runStatus) : undefined,
+    )
+
+    const [scheduleTotalRows, runTotalRows] = await Promise.all([
+      tx.select({ c: count() }).from(reportSchedules).where(scheduleBase),
+      tx
+        .select({ c: count() })
+        .from(reportRuns)
+        .innerJoin(reportSchedules, eq(reportSchedules.id, reportRuns.scheduleId))
+        .where(scheduleBase),
+    ])
+    if (tab !== 'activity') {
+      return {
+        scheduleRows: [],
+        scheduleTotal: Number(scheduleTotalRows[0]?.c ?? 0),
+        filteredScheduleTotal: 0,
+        runRows: [],
+        runTotal: Number(runTotalRows[0]?.c ?? 0),
+        filteredRunTotal: 0,
+      }
+    }
+
+    const [filteredScheduleRows, scheduleRows, filteredRunRows, runRows] = await Promise.all([
+      tx.select({ c: count() }).from(reportSchedules).where(scheduleWhere),
+      tx
+        .select()
+        .from(reportSchedules)
+        .where(scheduleWhere)
+        .orderBy(desc(reportSchedules.createdAt))
+        .limit(scheduleParams.perPage)
+        .offset((scheduleParams.page - 1) * scheduleParams.perPage),
+      tx
+        .select({ c: count() })
+        .from(reportRuns)
+        .innerJoin(reportSchedules, eq(reportSchedules.id, reportRuns.scheduleId))
+        .where(runWhere),
+      tx
+        .select({ run: reportRuns, scheduleName: reportSchedules.name })
+        .from(reportRuns)
+        .innerJoin(reportSchedules, eq(reportSchedules.id, reportRuns.scheduleId))
+        .where(runWhere)
+        .orderBy(desc(reportRuns.startedAt))
+        .limit(runParams.perPage)
+        .offset((runParams.page - 1) * runParams.perPage),
+    ])
+    return {
+      scheduleRows,
+      scheduleTotal: Number(scheduleTotalRows[0]?.c ?? 0),
+      filteredScheduleTotal: Number(filteredScheduleRows[0]?.c ?? 0),
+      runRows,
+      runTotal: Number(runTotalRows[0]?.c ?? 0),
+      filteredRunTotal: Number(filteredRunRows[0]?.c ?? 0),
+    }
   })
 
   const canSchedule = can(ctx, 'reports.schedule')
@@ -165,7 +270,11 @@ export default async function ReportViewerPage({
             className="mt-2.5 sm:mt-4"
             tabs={[
               { key: 'document', label: 'Document' },
-              { key: 'activity', label: 'Schedules & activity', count: scheduleRows.length },
+              {
+                key: 'activity',
+                label: 'Schedules & activity',
+                count: activityData.scheduleTotal,
+              },
             ]}
           />
         </FadeInHeader>
@@ -176,8 +285,10 @@ export default async function ReportViewerPage({
       ) : (
         <ActivityTab
           definition={definition}
-          scheduleRows={scheduleRows}
-          runRows={runRows}
+          activityData={activityData}
+          scheduleParams={scheduleParams}
+          runParams={runParams}
+          currentParams={sp}
           canSchedule={canSchedule}
           canBuild={canBuild}
           isCustom={isCustom}
@@ -315,8 +426,10 @@ async function DocumentTab({
 
 function ActivityTab({
   definition,
-  scheduleRows,
-  runRows,
+  activityData,
+  scheduleParams,
+  runParams,
+  currentParams,
   canSchedule,
   canBuild,
   isCustom,
@@ -325,8 +438,29 @@ function ActivityTab({
   timeZone,
 }: {
   definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
-  scheduleRows: readonly (typeof reportSchedules.$inferSelect)[]
-  runRows: readonly (typeof reportRuns.$inferSelect)[]
+  activityData: {
+    scheduleRows: (typeof reportSchedules.$inferSelect)[]
+    scheduleTotal: number
+    filteredScheduleTotal: number
+    runRows: { run: typeof reportRuns.$inferSelect; scheduleName: string }[]
+    runTotal: number
+    filteredRunTotal: number
+  }
+  scheduleParams: {
+    q: string | undefined
+    sort: (typeof ACTIVITY_SORTS)[number]
+    dir: 'asc' | 'desc'
+    page: number
+    perPage: number
+  }
+  runParams: {
+    q: string | undefined
+    sort: (typeof RUN_SORTS)[number]
+    dir: 'asc' | 'desc'
+    page: number
+    perPage: number
+  }
+  currentParams: Record<string, string | string[] | undefined>
   canSchedule: boolean
   canBuild: boolean
   isCustom: boolean
@@ -334,129 +468,214 @@ function ActivityTab({
   deleteBound: () => Promise<void>
   timeZone: string
 }) {
+  const {
+    scheduleRows,
+    scheduleTotal,
+    filteredScheduleTotal,
+    runRows,
+    runTotal,
+    filteredRunTotal,
+  } = activityData
+  const basePath = `/reports/definitions/${definition.id}`
   return (
     <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-screen-2xl space-y-4 p-3 sm:p-6">
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Subscriptions ({scheduleRows.length})</CardTitle>
+              <CardTitle className="text-sm">Subscriptions ({scheduleTotal})</CardTitle>
             </CardHeader>
             <CardContent>
+              <TableToolbar className="mb-3">
+                <SearchInput
+                  placeholder="Search schedules…"
+                  paramKey="scheduleQ"
+                  pageParamKey="schedulePage"
+                />
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={currentParams}
+                  paramKey="scheduleStatus"
+                  pageParamKey="schedulePage"
+                  label="Status"
+                  options={[...SCHEDULE_STATUS_OPTIONS]}
+                />
+              </TableToolbar>
               {scheduleRows.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  No schedules for this report.
-                  {canSchedule ? (
-                    <>
-                      {' '}
-                      <Link
-                        href={`/reports/schedules/new?definitionId=${definition.id}`}
-                        className="text-teal-700 hover:underline dark:text-teal-300"
-                      >
-                        Create schedule
-                      </Link>
-                    </>
+                <div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {scheduleParams.q || scheduleStatusFromParams(currentParams)
+                      ? 'No schedules match these filters.'
+                      : 'No schedules for this report.'}
+                    {canSchedule ? (
+                      <>
+                        {' '}
+                        <Link
+                          href={`/reports/schedules/new?definitionId=${definition.id}`}
+                          className="text-teal-700 hover:underline dark:text-teal-300"
+                        >
+                          Create schedule
+                        </Link>
+                      </>
+                    ) : null}
+                  </p>
+                  {filteredScheduleTotal > 0 ? (
+                    <Pagination
+                      basePath={basePath}
+                      currentParams={currentParams}
+                      total={filteredScheduleTotal}
+                      page={scheduleParams.page}
+                      perPage={scheduleParams.perPage}
+                      pageParamKey="schedulePage"
+                    />
                   ) : null}
-                </p>
+                </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Schedule</TableHead>
-                      <TableHead>Cadence</TableHead>
-                      <TableHead>Next run</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {scheduleRows.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell>
-                          <Link
-                            href={`/reports/schedules/${s.id}`}
-                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                          >
-                            {s.name}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-300">
-                          {formatCadence(
-                            s.cadence,
-                            s.dayOfWeek,
-                            s.dayOfMonth,
-                            s.hour,
-                            s.minute,
-                            s.timezone,
-                          )}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-300">
-                          {s.nextRunAt ? formatDateTime(new Date(s.nextRunAt), timeZone) : '—'}
-                        </TableCell>
-                        <TableCell>
-                          {s.active ? (
-                            <Badge variant="success">active</Badge>
-                          ) : (
-                            <Badge variant="secondary">paused</Badge>
-                          )}
-                        </TableCell>
+                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Schedule</TableHead>
+                        <TableHead>Cadence</TableHead>
+                        <TableHead>Next run</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {scheduleRows.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell>
+                            <Link
+                              href={`/reports/schedules/${s.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              {s.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            {formatCadence(
+                              s.cadence,
+                              s.dayOfWeek,
+                              s.dayOfMonth,
+                              s.hour,
+                              s.minute,
+                              s.timezone,
+                            )}
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            {s.nextRunAt ? formatDateTime(new Date(s.nextRunAt), timeZone) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {s.active ? (
+                              <Badge variant="success">active</Badge>
+                            ) : (
+                              <Badge variant="secondary">paused</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={currentParams}
+                    total={filteredScheduleTotal}
+                    page={scheduleParams.page}
+                    perPage={scheduleParams.perPage}
+                    pageParamKey="schedulePage"
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Recent runs</CardTitle>
+              <CardTitle className="text-sm">Runs ({runTotal})</CardTitle>
             </CardHeader>
             <CardContent>
+              <TableToolbar className="mb-3">
+                <SearchInput placeholder="Search runs…" paramKey="runQ" pageParamKey="runPage" />
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={currentParams}
+                  paramKey="runStatus"
+                  pageParamKey="runPage"
+                  label="Status"
+                  options={[...RUN_STATUS_OPTIONS]}
+                />
+              </TableToolbar>
               {runRows.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">No runs yet.</p>
+                <div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {runParams.q || pickString(currentParams.runStatus)
+                      ? 'No runs match these filters.'
+                      : 'No runs yet.'}
+                  </p>
+                  {filteredRunTotal > 0 ? (
+                    <Pagination
+                      basePath={basePath}
+                      currentParams={currentParams}
+                      total={filteredRunTotal}
+                      page={runParams.page}
+                      perPage={runParams.perPage}
+                      pageParamKey="runPage"
+                    />
+                  ) : null}
+                </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Started</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Rows</TableHead>
-                      <TableHead>PDF</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {runRows.map((r) => (
-                      <TableRow key={r.id}>
-                        <TableCell>
-                          <Link
-                            href={`/reports/schedules/${r.scheduleId}/runs/${r.id}`}
-                            className="text-slate-700 hover:underline dark:text-slate-200"
-                          >
-                            {formatDateTime(new Date(r.startedAt), timeZone)}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={r.status} />
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-300">
-                          {r.rowCount ?? '—'}
-                        </TableCell>
-                        <TableCell>
-                          {r.pdfAttachmentId ? (
-                            <a
-                              href={`/reports/schedules/${r.scheduleId}/runs/${r.id}/pdf`}
-                              className="text-teal-700 hover:underline dark:text-teal-300"
-                            >
-                              Download
-                            </a>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-600">—</span>
-                          )}
-                        </TableCell>
+                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Started</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Rows</TableHead>
+                        <TableHead>PDF</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {runRows.map(({ run: r }) => (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <Link
+                              href={`/reports/schedules/${r.scheduleId}/runs/${r.id}`}
+                              className="text-slate-700 hover:underline dark:text-slate-200"
+                            >
+                              {formatDateTime(new Date(r.startedAt), timeZone)}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={r.status} />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            {r.rowCount ?? '—'}
+                          </TableCell>
+                          <TableCell>
+                            {r.pdfAttachmentId ? (
+                              <a
+                                href={`/reports/schedules/${r.scheduleId}/runs/${r.id}/pdf`}
+                                className="text-teal-700 hover:underline dark:text-teal-300"
+                              >
+                                Download
+                              </a>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-600">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={currentParams}
+                    total={filteredRunTotal}
+                    page={runParams.page}
+                    perPage={runParams.perPage}
+                    pageParamKey="runPage"
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -510,6 +729,13 @@ function ActivityTab({
       </div>
     </div>
   )
+}
+
+function scheduleStatusFromParams(
+  params: Record<string, string | string[] | undefined>,
+): 'active' | 'paused' | undefined {
+  const value = pickString(params.scheduleStatus)
+  return value === 'active' || value === 'paused' ? value : undefined
 }
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {

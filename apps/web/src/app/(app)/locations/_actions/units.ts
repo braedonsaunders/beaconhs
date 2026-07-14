@@ -71,7 +71,7 @@ export async function deleteOrgUnit(formData: FormData): Promise<void> {
     revalidatePath(BASE)
     redirect(
       `${BASE}?error=${encodeURIComponent(
-        `"${before.name}" is synced from an external system and can't be archived here. Disable its data-sync connection first.`,
+        `"${before.name}" is synced from an external system and can't be archived here. Delete its data-sync connection first.`,
       )}`,
     )
   }

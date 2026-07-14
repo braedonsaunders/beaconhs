@@ -29,6 +29,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
             <RawImage
               src={p.url}
               alt={p.caption ?? p.filename}
+              optimizationReason="authenticated"
               className="h-full w-full object-cover transition-transform group-hover:scale-105"
             />
             {p.caption ? (
@@ -54,6 +55,7 @@ export function PhotoGallery({ photos }: { photos: GalleryPhoto[] }) {
           <RawImage
             src={lightbox.url}
             alt={lightbox.caption ?? lightbox.filename}
+            optimizationReason="authenticated"
             className="max-h-full max-w-full rounded-md object-contain"
             onClick={(e) => e.stopPropagation()}
           />

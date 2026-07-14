@@ -16,6 +16,7 @@ import {
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { keyHasPermission } from '@/lib/api/permissions'
 import { runIdempotentMutation } from '@/lib/api/idempotency'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -25,13 +26,15 @@ export async function GET(
   { params }: { params: Promise<{ templateKey: string; id: string }> },
 ): Promise<NextResponse> {
   try {
+    const { templateKey, id } = await params
+    if (!isUuid(id)) throw ApiError.invalid('Response id must be a uuid')
+
     const { ctx, key } = await authenticateApiKey(req)
     if (!keyHasPermission(key.permissions, BUILDER_APP_READ_PERMISSION)) {
       throw ApiError.forbidden(
         `This key cannot read Builder app responses — grant permission ${BUILDER_APP_READ_PERMISSION}.`,
       )
     }
-    const { templateKey, id } = await params
     const app = await resolveBuilderApp(ctx, templateKey, key.builderTemplateIds)
     const response = await getBuilderAppResponse(ctx, app, id)
     if (!response) throw ApiError.notFound(`No response with id ${id}`)
@@ -52,6 +55,9 @@ export async function PATCH(
   { params }: { params: Promise<{ templateKey: string; id: string }> },
 ): Promise<NextResponse> {
   try {
+    const { templateKey, id } = await params
+    if (!isUuid(id)) throw ApiError.invalid('Response id must be a uuid')
+
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
     if (!keyHasPermission(key.permissions, BUILDER_APP_UPDATE_PERMISSION)) {
@@ -59,7 +65,6 @@ export async function PATCH(
         `This key cannot update Builder app responses — grant permission ${BUILDER_APP_UPDATE_PERMISSION}.`,
       )
     }
-    const { templateKey, id } = await params
     const app = await resolveBuilderApp(ctx, templateKey, key.builderTemplateIds)
     const body = await readApiJsonBody(req)
     const result = await runIdempotentMutation(auth, req, body, async () => ({
@@ -85,6 +90,9 @@ export async function DELETE(
   { params }: { params: Promise<{ templateKey: string; id: string }> },
 ): Promise<NextResponse> {
   try {
+    const { templateKey, id } = await params
+    if (!isUuid(id)) throw ApiError.invalid('Response id must be a uuid')
+
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
     if (!keyHasPermission(key.permissions, BUILDER_APP_DELETE_PERMISSION)) {
@@ -92,7 +100,6 @@ export async function DELETE(
         `This key cannot delete Builder app responses — grant permission ${BUILDER_APP_DELETE_PERMISSION}.`,
       )
     }
-    const { templateKey, id } = await params
     const app = await resolveBuilderApp(ctx, templateKey, key.builderTemplateIds)
     const result = await runIdempotentMutation(auth, req, null, async () => ({
       body: { app: app.key, data: await deleteBuilderAppResponse(ctx, app, id) },

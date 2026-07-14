@@ -32,6 +32,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 
 export const metadata = { title: 'Work orders' }
 
@@ -100,179 +101,153 @@ export default async function WorkOrdersPage({
   const openedToRaw = pickString(sp.openedTo)
   const ctx = await requireRequestContext()
 
-  const { rows, total, statusCounts, priorityCounts, assigneeOptions, typeOptions } = await ctx.db(
-    async (tx) => {
-      // Read-tier scope: all → every WO; site → WOs on assets at the caller's
-      // sites (plus their own); self → WOs they opened / are assigned / report.
-      const scope = await moduleScopeWhere(ctx, tx, {
-        prefix: 'equipment',
-        ownerCols: [
-          equipmentWorkOrders.openedByTenantUserId,
-          equipmentWorkOrders.assignedToTenantUserId,
-        ],
-        siteCol: equipmentItems.currentSiteOrgUnitId,
-        personCol: equipmentWorkOrders.reportedByPersonId,
-      })
-      const filters: SQL<unknown>[] = scope ? [scope] : []
-      if (params.q) {
-        const term = `%${params.q}%`
-        const cond = or(
-          ilike(equipmentWorkOrders.reference, term),
-          ilike(equipmentWorkOrders.summary, term),
-          ilike(equipmentWorkOrders.description, term),
-          ilike(equipmentItems.assetTag, term),
-          ilike(equipmentItems.name, term),
-        )
-        if (cond) filters.push(cond)
+  const { rows, total, statusCounts, priorityCounts } = await ctx.db(async (tx) => {
+    // Read-tier scope: all → every WO; site → WOs on assets at the caller's
+    // sites (plus their own); self → WOs they opened / are assigned / report.
+    const scope = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      ownerCols: [
+        equipmentWorkOrders.openedByTenantUserId,
+        equipmentWorkOrders.assignedToTenantUserId,
+      ],
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentWorkOrders.reportedByPersonId,
+    })
+    const filters: SQL<unknown>[] = scope ? [scope] : []
+    if (params.q) {
+      const term = `%${params.q}%`
+      const cond = or(
+        ilike(equipmentWorkOrders.reference, term),
+        ilike(equipmentWorkOrders.summary, term),
+        ilike(equipmentWorkOrders.description, term),
+        ilike(equipmentItems.assetTag, term),
+        ilike(equipmentItems.name, term),
+      )
+      if (cond) filters.push(cond)
+    }
+    if (statusFilter) filters.push(eq(equipmentWorkOrders.status, statusFilter as any))
+    if (priorityFilter) filters.push(eq(equipmentWorkOrders.priority, priorityFilter as any))
+    if (assigneeFilter) filters.push(eq(equipmentWorkOrders.assignedToTenantUserId, assigneeFilter))
+    if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
+    if (openedFromRaw) {
+      const from = new Date(openedFromRaw)
+      if (!Number.isNaN(from.getTime())) filters.push(gte(equipmentWorkOrders.openedAt, from))
+    }
+    if (openedToRaw) {
+      // Inclusive To date: bound strictly below the start of the next day so
+      // work orders opened any time on the selected day are included.
+      const to = new Date(openedToRaw)
+      if (!Number.isNaN(to.getTime())) {
+        const nextDay = new Date(to.getTime() + 86_400_000)
+        filters.push(lt(equipmentWorkOrders.openedAt, nextDay))
       }
-      if (statusFilter) filters.push(eq(equipmentWorkOrders.status, statusFilter as any))
-      if (priorityFilter) filters.push(eq(equipmentWorkOrders.priority, priorityFilter as any))
-      if (assigneeFilter)
-        filters.push(eq(equipmentWorkOrders.assignedToTenantUserId, assigneeFilter))
-      if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
-      if (openedFromRaw) {
-        const from = new Date(openedFromRaw)
-        if (!Number.isNaN(from.getTime())) filters.push(gte(equipmentWorkOrders.openedAt, from))
-      }
-      if (openedToRaw) {
-        // Inclusive To date: bound strictly below the start of the next day so
-        // work orders opened any time on the selected day are included.
-        const to = new Date(openedToRaw)
-        if (!Number.isNaN(to.getTime())) {
-          const nextDay = new Date(to.getTime() + 86_400_000)
-          filters.push(lt(equipmentWorkOrders.openedAt, nextDay))
-        }
-      }
-      if (ageBucketFilter === 'open7') {
-        filters.push(isNull(equipmentWorkOrders.closedAt))
-        filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
-      } else if (ageBucketFilter === 'open30') {
-        filters.push(isNull(equipmentWorkOrders.closedAt))
-        filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '30 days')`)
-      } else if (ageBucketFilter === 'overdue30') {
-        filters.push(isNull(equipmentWorkOrders.closedAt))
-        filters.push(eq(equipmentWorkOrders.priority, 'high'))
-        filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
-      }
-      const whereClause = filters.length > 0 ? and(...filters) : undefined
+    }
+    if (ageBucketFilter === 'open7') {
+      filters.push(isNull(equipmentWorkOrders.closedAt))
+      filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
+    } else if (ageBucketFilter === 'open30') {
+      filters.push(isNull(equipmentWorkOrders.closedAt))
+      filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '30 days')`)
+    } else if (ageBucketFilter === 'overdue30') {
+      filters.push(isNull(equipmentWorkOrders.closedAt))
+      filters.push(eq(equipmentWorkOrders.priority, 'high'))
+      filters.push(sql`${equipmentWorkOrders.openedAt} < (now() - interval '7 days')`)
+    }
+    const whereClause = filters.length > 0 ? and(...filters) : undefined
 
-      const orderBy =
-        params.sort === 'reference'
+    const orderBy =
+      params.sort === 'reference'
+        ? [
+            params.dir === 'asc'
+              ? asc(equipmentWorkOrders.reference)
+              : desc(equipmentWorkOrders.reference),
+          ]
+        : params.sort === 'summary'
           ? [
               params.dir === 'asc'
-                ? asc(equipmentWorkOrders.reference)
-                : desc(equipmentWorkOrders.reference),
+                ? asc(equipmentWorkOrders.summary)
+                : desc(equipmentWorkOrders.summary),
             ]
-          : params.sort === 'summary'
+          : params.sort === 'status'
             ? [
                 params.dir === 'asc'
-                  ? asc(equipmentWorkOrders.summary)
-                  : desc(equipmentWorkOrders.summary),
+                  ? asc(equipmentWorkOrders.status)
+                  : desc(equipmentWorkOrders.status),
               ]
-            : params.sort === 'status'
+            : params.sort === 'priority'
               ? [
                   params.dir === 'asc'
-                    ? asc(equipmentWorkOrders.status)
-                    : desc(equipmentWorkOrders.status),
+                    ? asc(equipmentWorkOrders.priority)
+                    : desc(equipmentWorkOrders.priority),
                 ]
-              : params.sort === 'priority'
+              : params.sort === 'closed_at'
                 ? [
                     params.dir === 'asc'
-                      ? asc(equipmentWorkOrders.priority)
-                      : desc(equipmentWorkOrders.priority),
+                      ? asc(equipmentWorkOrders.closedAt)
+                      : desc(equipmentWorkOrders.closedAt),
                   ]
-                : params.sort === 'closed_at'
+                : params.sort === 'cost'
                   ? [
                       params.dir === 'asc'
-                        ? asc(equipmentWorkOrders.closedAt)
-                        : desc(equipmentWorkOrders.closedAt),
+                        ? asc(equipmentWorkOrders.cost)
+                        : desc(equipmentWorkOrders.cost),
                     ]
-                  : params.sort === 'cost'
+                  : params.sort === 'aging'
                     ? [
                         params.dir === 'asc'
-                          ? asc(equipmentWorkOrders.cost)
-                          : desc(equipmentWorkOrders.cost),
+                          ? asc(equipmentWorkOrders.openedAt)
+                          : desc(equipmentWorkOrders.openedAt),
                       ]
-                    : params.sort === 'aging'
-                      ? [
-                          params.dir === 'asc'
-                            ? asc(equipmentWorkOrders.openedAt)
-                            : desc(equipmentWorkOrders.openedAt),
-                        ]
-                      : [
-                          params.dir === 'asc'
-                            ? asc(equipmentWorkOrders.openedAt)
-                            : desc(equipmentWorkOrders.openedAt),
-                        ]
+                    : [
+                        params.dir === 'asc'
+                          ? asc(equipmentWorkOrders.openedAt)
+                          : desc(equipmentWorkOrders.openedAt),
+                      ]
 
-      const [tot] = await tx
-        .select({ c: count() })
-        .from(equipmentWorkOrders)
-        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-        .where(whereClause)
+    const [tot] = await tx
+      .select({ c: count() })
+      .from(equipmentWorkOrders)
+      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+      .where(whereClause)
 
-      const data = await tx
-        .select({
-          wo: equipmentWorkOrders,
-          item: equipmentItems,
-          type: equipmentTypes,
-          assignee: tenantUsers,
-          assigneeUser: user,
-        })
-        .from(equipmentWorkOrders)
-        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-        .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-        .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
-        .leftJoin(user, eq(user.id, tenantUsers.userId))
-        .where(whereClause)
-        .orderBy(...orderBy)
-        .limit(params.perPage)
-        .offset((params.page - 1) * params.perPage)
+    const data = await tx
+      .select({
+        wo: equipmentWorkOrders,
+        item: equipmentItems,
+        type: equipmentTypes,
+        assignee: tenantUsers,
+        assigneeUser: user,
+      })
+      .from(equipmentWorkOrders)
+      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
+      .leftJoin(user, eq(user.id, tenantUsers.userId))
+      .where(whereClause)
+      .orderBy(...orderBy)
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
 
-      const ss = await tx
-        .select({ s: equipmentWorkOrders.status, c: count() })
-        .from(equipmentWorkOrders)
-        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-        .where(scope)
-        .groupBy(equipmentWorkOrders.status)
-      const ps = await tx
-        .select({ p: equipmentWorkOrders.priority, c: count() })
-        .from(equipmentWorkOrders)
-        .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-        .where(scope)
-        .groupBy(equipmentWorkOrders.priority)
+    const ss = await tx
+      .select({ s: equipmentWorkOrders.status, c: count() })
+      .from(equipmentWorkOrders)
+      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+      .where(scope)
+      .groupBy(equipmentWorkOrders.status)
+    const ps = await tx
+      .select({ p: equipmentWorkOrders.priority, c: count() })
+      .from(equipmentWorkOrders)
+      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
+      .where(scope)
+      .groupBy(equipmentWorkOrders.priority)
 
-      const aOpts = await tx
-        .select({
-          id: tenantUsers.id,
-          displayName: tenantUsers.displayName,
-          c: count(),
-        })
-        .from(tenantUsers)
-        .innerJoin(
-          equipmentWorkOrders,
-          eq(equipmentWorkOrders.assignedToTenantUserId, tenantUsers.id),
-        )
-        .groupBy(tenantUsers.id, tenantUsers.displayName)
-        .orderBy(desc(count()))
-        .limit(20)
-
-      const tOpts = await tx
-        .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-        .from(equipmentTypes)
-        .orderBy(asc(equipmentTypes.name))
-        .limit(50)
-
-      return {
-        rows: data,
-        total: Number(tot?.c ?? 0),
-        statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
-        priorityCounts: Object.fromEntries(ps.map((x) => [x.p, Number(x.c)])),
-        assigneeOptions: aOpts,
-        typeOptions: tOpts,
-      }
-    },
-  )
+    return {
+      rows: data,
+      total: Number(tot?.c ?? 0),
+      statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
+      priorityCounts: Object.fromEntries(ps.map((x) => [x.p, Number(x.c)])),
+    }
+  })
 
   const sortProps = { basePath: '/equipment/work-orders', currentParams: sp, dir: params.dir }
 
@@ -353,31 +328,24 @@ export default async function WorkOrdersPage({
                 { value: 'overdue30', label: 'High prio · 7d+' },
               ]}
             />
-            {assigneeOptions.length > 0 ? (
-              <FilterChips
-                basePath="/equipment/work-orders"
-                currentParams={sp}
-                paramKey="assignee"
-                label="Assignee"
-                options={assigneeOptions.slice(0, 12).map((a) => ({
-                  value: a.id,
-                  label: a.displayName ?? '—',
-                  count: Number(a.c ?? 0),
-                }))}
-              />
-            ) : null}
-            {typeOptions.length > 0 ? (
-              <FilterChips
-                basePath="/equipment/work-orders"
-                currentParams={sp}
-                paramKey="type"
-                label="Equipment type"
-                options={typeOptions.slice(0, 12).map((t) => ({
-                  value: t.id,
-                  label: t.name,
-                }))}
-              />
-            ) : null}
+            <RemoteSearchFilter
+              lookup="equipment-work-order-filter-assignees"
+              basePath="/equipment/work-orders"
+              currentParams={sp}
+              paramKey="assignee"
+              placeholder="All assignees"
+              allLabel="All assignees"
+              searchPlaceholder="Search visible assignees…"
+            />
+            <RemoteSearchFilter
+              lookup="equipment-work-order-filter-types"
+              basePath="/equipment/work-orders"
+              currentParams={sp}
+              paramKey="type"
+              placeholder="All equipment types"
+              allLabel="All equipment types"
+              searchPlaceholder="Search visible equipment types…"
+            />
           </TableToolbar>
         </>
       }
@@ -386,7 +354,14 @@ export default async function WorkOrdersPage({
         <EmptyState
           icon={<Wrench size={32} />}
           title={
-            params.q || statusFilter || priorityFilter
+            params.q ||
+            statusFilter ||
+            priorityFilter ||
+            assigneeFilter ||
+            typeFilter ||
+            ageBucketFilter ||
+            openedFromRaw ||
+            openedToRaw
               ? 'No work orders match these filters'
               : 'No work orders'
           }

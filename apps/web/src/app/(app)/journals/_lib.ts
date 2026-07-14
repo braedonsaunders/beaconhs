@@ -161,12 +161,3 @@ export function snippetOf(text: string, max = 160): string {
   const clean = text.replace(/\s+/g, ' ').trim()
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean
 }
-
-/**
- * True when `s` is a canonical UUID. Used to reject non-id path params so the
- * dynamic `/journals/[id]` route 404s cleanly instead of crashing Postgres on a
- * malformed uuid (e.g. a stray `/journals/<typo>`).
- */
-export function isUuid(s: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
-}

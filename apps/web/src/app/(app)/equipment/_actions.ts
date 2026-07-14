@@ -12,31 +12,41 @@
 // summary entry, all sharing a batchId in metadata.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   equipmentCheckouts,
   equipmentItems,
   equipmentLocationHistory,
+  equipmentStationSettings,
   equipmentTypes,
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireExportContext, requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
+import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { csvRow } from '@/lib/csv'
+import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
+import {
+  lockEquipmentCustodyRows,
+  lockOpenEquipmentCheckout,
+  openCheckoutConflictMessage,
+  openEquipmentCheckoutItemIds,
+  refreshEquipmentAvailability,
+} from '@/lib/equipment-custody'
 
 type BulkActionResult =
-  | { ok: true; updated: number; skipped: number }
-  | { ok: false; error: string }
+  { ok: true; updated: number; skipped: number } | { ok: false; error: string }
 
 type BulkCsvResult = { ok: true; filename: string; content: string } | { ok: false; error: string }
 
-const MAX_BULK = 500
-
-function makeBatchId(): string {
-  return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+function revalidateEquipmentCustody(): void {
+  revalidatePath('/equipment')
+  revalidatePath('/equipment/station')
+  revalidatePath('/dashboard')
 }
 
 export async function bulkTransferEquipmentToSite(args: {
@@ -45,47 +55,85 @@ export async function bulkTransferEquipmentToSite(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
-  if (!args.siteOrgUnitId) return { ok: false, error: 'Pick a site.' }
-  const ids = args.equipmentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.equipmentIds, {
+    singular: 'equipment item',
+    plural: 'equipment items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.siteOrgUnitId)) return { ok: false, error: 'Pick a site.' }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
-  // Confirm the site is a real site-level orgUnit for this tenant.
-  const siteRow = await ctx.db(async (tx) => {
+  const result = await ctx.db(async (tx) => {
+    // Validate the destination and lock every target in the same transaction;
+    // otherwise either row could change between validation and mutation.
     const [s] = await tx
       .select({ id: orgUnits.id, level: orgUnits.level, name: orgUnits.name })
       .from(orgUnits)
       .where(and(eq(orgUnits.id, args.siteOrgUnitId), isNull(orgUnits.deletedAt)))
       .limit(1)
-    return s ?? null
-  })
-  if (!siteRow) return { ok: false, error: 'Site not found.' }
-  if (siteRow.level !== 'site') {
-    return { ok: false, error: 'Org-unit is not a site.' }
-  }
+    if (!s) return { ok: false as const, error: 'Site not found.' }
+    if (s.level !== 'site') return { ok: false as const, error: 'Org-unit is not a site.' }
 
-  const result = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ id: equipmentItems.id, deletedAt: equipmentItems.deletedAt })
-      .from(equipmentItems)
-      .where(inArray(equipmentItems.id, ids))
-    const editable = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
-    const skipped = rows.length - editable.length
-    if (editable.length === 0) return { updated: 0, skipped }
+    const rows = await lockEquipmentCustodyRows(tx, ids)
+    const editableRows = rows.filter(({ deletedAt }) => deletedAt === null)
+    const editable = editableRows.map(({ id }) => id)
+    const skipped = ids.length - editable.length
+    if (editable.length === 0) {
+      return { ok: true as const, updated: 0, skipped, editable, site: s }
+    }
+    const openIds = await openEquipmentCheckoutItemIds(tx, editable)
+    const conflicts = editableRows.filter(({ id }) => openIds.has(id))
+    if (conflicts.length > 0) {
+      return { ok: false as const, error: openCheckoutConflictMessage(conflicts) }
+    }
+    const now = new Date()
     await tx
       .update(equipmentItems)
-      .set({ currentSiteOrgUnitId: args.siteOrgUnitId })
+      .set({
+        currentSiteOrgUnitId: args.siteOrgUnitId,
+        lastSeenSiteOrgUnitId: args.siteOrgUnitId,
+        lastSeenHolderPersonId: sql`${equipmentItems.currentHolderPersonId}`,
+        lastSeenAt: now,
+        isMissing: false,
+      })
       .where(inArray(equipmentItems.id, editable))
-    return { updated: editable.length, skipped, editable }
+    const foundIds = editableRows.filter(({ isMissing }) => isMissing).map(({ id }) => id)
+    if (foundIds.length > 0) {
+      await tx
+        .update(equipmentItems)
+        .set({ missingFoundAt: now })
+        .where(inArray(equipmentItems.id, foundIds))
+    }
+    await tx.insert(equipmentLocationHistory).values(
+      editableRows.map((row) => ({
+        tenantId: ctx.tenantId,
+        itemId: row.id,
+        siteOrgUnitId: args.siteOrgUnitId,
+        holderPersonId: row.currentHolderPersonId,
+        recordedByTenantUserId: ctx.membership?.id,
+        recordedAt: now,
+        note: `Bulk transfer to ${s.name}`,
+      })),
+    )
+    await refreshEquipmentAvailability(tx, editable)
+    return {
+      ok: true as const,
+      updated: editable.length,
+      skipped,
+      editable,
+      site: s,
+    }
   })
+  if (!result.ok) return result
 
-  if ('editable' in result && result.editable) {
+  if (result.editable.length > 0) {
     for (const id of result.editable) {
       await recordAudit(ctx, {
         entityType: 'equipment',
         entityId: id,
         action: 'update',
-        summary: `Bulk action: transferred to site "${siteRow.name}"`,
+        summary: `Bulk action: transferred to site "${result.site.name}"`,
         after: { currentSiteOrgUnitId: args.siteOrgUnitId },
         metadata: { batchId },
       })
@@ -93,7 +141,7 @@ export async function bulkTransferEquipmentToSite(args: {
     await recordAudit(ctx, {
       entityType: 'equipment',
       action: 'update',
-      summary: `Bulk transferred ${result.editable.length} item${result.editable.length === 1 ? '' : 's'} to ${siteRow.name}`,
+      summary: `Bulk transferred ${result.editable.length} item${result.editable.length === 1 ? '' : 's'} to ${result.site.name}`,
       metadata: {
         batchId,
         siteOrgUnitId: args.siteOrgUnitId,
@@ -103,7 +151,7 @@ export async function bulkTransferEquipmentToSite(args: {
     })
   }
 
-  revalidatePath('/equipment')
+  revalidateEquipmentCustody()
   return { ok: true, updated: result.updated, skipped: result.skipped }
 }
 
@@ -113,12 +161,16 @@ export async function bulkAssignEquipmentToHolder(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
-  if (!args.personId) return { ok: false, error: 'Pick a holder.' }
-  const ids = args.equipmentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.equipmentIds, {
+    singular: 'equipment item',
+    plural: 'equipment items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.personId)) return { ok: false, error: 'Pick a holder.' }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
-  const person = await ctx.db(async (tx) => {
+  const result = await ctx.db(async (tx) => {
     const [p] = await tx
       .select({
         id: people.id,
@@ -126,37 +178,71 @@ export async function bulkAssignEquipmentToHolder(args: {
         lastName: people.lastName,
       })
       .from(people)
-      .where(and(eq(people.id, args.personId), isNull(people.deletedAt)))
+      .where(
+        and(eq(people.id, args.personId), eq(people.status, 'active'), isNull(people.deletedAt)),
+      )
       .limit(1)
-    return p ?? null
-  })
-  if (!person) return { ok: false, error: 'Holder not found.' }
+    if (!p) return { ok: false as const, error: 'Active holder not found.' }
 
-  const result = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ id: equipmentItems.id, deletedAt: equipmentItems.deletedAt })
-      .from(equipmentItems)
-      .where(inArray(equipmentItems.id, ids))
-    const editable = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
-    const skipped = rows.length - editable.length
-    if (editable.length === 0) return { updated: 0, skipped }
+    const rows = await lockEquipmentCustodyRows(tx, ids)
+    const editableRows = rows.filter(({ deletedAt }) => deletedAt === null)
+    const editable = editableRows.map(({ id }) => id)
+    const skipped = ids.length - editable.length
+    if (editable.length === 0) {
+      return { ok: true as const, updated: 0, skipped, editable, person: p }
+    }
+    const openIds = await openEquipmentCheckoutItemIds(tx, editable)
+    const conflicts = editableRows.filter(({ id }) => openIds.has(id))
+    if (conflicts.length > 0) {
+      return { ok: false as const, error: openCheckoutConflictMessage(conflicts) }
+    }
+    const now = new Date()
     await tx
       .update(equipmentItems)
       .set({
         currentHolderPersonId: args.personId,
+        lastSeenSiteOrgUnitId: sql`${equipmentItems.currentSiteOrgUnitId}`,
+        lastSeenHolderPersonId: args.personId,
+        lastSeenAt: now,
+        isMissing: false,
         isAvailableForCheckout: false,
       })
       .where(inArray(equipmentItems.id, editable))
-    return { updated: editable.length, skipped, editable }
+    const foundIds = editableRows.filter(({ isMissing }) => isMissing).map(({ id }) => id)
+    if (foundIds.length > 0) {
+      await tx
+        .update(equipmentItems)
+        .set({ missingFoundAt: now })
+        .where(inArray(equipmentItems.id, foundIds))
+    }
+    await tx.insert(equipmentLocationHistory).values(
+      editableRows.map((row) => ({
+        tenantId: ctx.tenantId,
+        itemId: row.id,
+        siteOrgUnitId: row.currentSiteOrgUnitId,
+        holderPersonId: args.personId,
+        recordedByTenantUserId: ctx.membership?.id,
+        recordedAt: now,
+        note: `Bulk assignment to ${p.firstName} ${p.lastName}`,
+      })),
+    )
+    return {
+      ok: true as const,
+      updated: editable.length,
+      skipped,
+      editable,
+      person: p,
+    }
   })
+  if (!result.ok) return result
 
-  if ('editable' in result && result.editable) {
+  if (result.editable.length > 0) {
     for (const id of result.editable) {
       await recordAudit(ctx, {
         entityType: 'equipment',
         entityId: id,
         action: 'update',
-        summary: `Bulk action: assigned to ${person.firstName} ${person.lastName}`,
+        summary: `Bulk action: assigned to ${result.person.firstName} ${result.person.lastName}`,
         after: { currentHolderPersonId: args.personId },
         metadata: { batchId },
       })
@@ -164,7 +250,7 @@ export async function bulkAssignEquipmentToHolder(args: {
     await recordAudit(ctx, {
       entityType: 'equipment',
       action: 'update',
-      summary: `Bulk assigned ${result.editable.length} item${result.editable.length === 1 ? '' : 's'} to ${person.firstName} ${person.lastName}`,
+      summary: `Bulk assigned ${result.editable.length} item${result.editable.length === 1 ? '' : 's'} to ${result.person.firstName} ${result.person.lastName}`,
       metadata: {
         batchId,
         personId: args.personId,
@@ -174,7 +260,7 @@ export async function bulkAssignEquipmentToHolder(args: {
     })
   }
 
-  revalidatePath('/equipment')
+  revalidateEquipmentCustody()
   return { ok: true, updated: result.updated, skipped: result.skipped }
 }
 
@@ -194,29 +280,41 @@ export async function bulkSetEquipmentStatus(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
-  if (!EQUIPMENT_STATUSES.includes(args.status)) {
+  const parsedIds = parseBulkActionIds(args?.equipmentIds, {
+    singular: 'equipment item',
+    plural: 'equipment items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const status = args?.status
+  if (!status || !EQUIPMENT_STATUSES.includes(status)) {
     return { ok: false, error: 'Invalid status.' }
   }
-  const ids = args.equipmentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ id: equipmentItems.id, deletedAt: equipmentItems.deletedAt })
-      .from(equipmentItems)
-      .where(inArray(equipmentItems.id, ids))
-    const editable = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
-    const skipped = rows.length - editable.length
+    const rows = await lockEquipmentCustodyRows(tx, ids)
+    const editableRows = rows.filter((r) => r.deletedAt === null)
+    const editable = editableRows.map((r) => r.id)
+    const skipped = ids.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
-    await tx
-      .update(equipmentItems)
-      .set({
-        status: args.status,
-        // when status flips to non-service we definitely aren't available
-        isAvailableForCheckout: args.status === 'in_service' ? undefined : false,
+    await tx.update(equipmentItems).set({ status }).where(inArray(equipmentItems.id, editable))
+    await refreshEquipmentAvailability(tx, editable)
+    for (const row of editableRows) {
+      if (row.status === status) continue
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: row.id,
+        moduleKey: 'equipment-assets',
+        event: 'status_change',
+        toStatus: status,
+        occurrenceKey: `${batchId}:${row.id}`,
       })
-      .where(inArray(equipmentItems.id, editable))
+    }
+    await materializeEquipmentTypeEvidence(
+      tx,
+      ctx.tenantId,
+      editableRows.map((row) => row.typeId),
+    )
     return { updated: editable.length, skipped, editable }
   })
 
@@ -226,25 +324,25 @@ export async function bulkSetEquipmentStatus(args: {
         entityType: 'equipment',
         entityId: id,
         action: 'update',
-        summary: `Bulk action: set status ${args.status}`,
-        after: { status: args.status },
+        summary: `Bulk action: set status ${status}`,
+        after: { status },
         metadata: { batchId },
       })
     }
     await recordAudit(ctx, {
       entityType: 'equipment',
       action: 'update',
-      summary: `Bulk set status to ${args.status} on ${result.editable.length} item${result.editable.length === 1 ? '' : 's'}`,
+      summary: `Bulk set status to ${status} on ${result.editable.length} item${result.editable.length === 1 ? '' : 's'}`,
       metadata: {
         batchId,
-        status: args.status,
+        status,
         equipmentIds: result.editable,
         skipped: result.skipped,
       },
     })
   }
 
-  revalidatePath('/equipment')
+  revalidateEquipmentCustody()
   return { ok: true, updated: result.updated, skipped: result.skipped }
 }
 
@@ -255,9 +353,13 @@ export async function bulkExportEquipmentCsv(args: {
   // impersonation guard) plus the equipment read tier, scope-bounded below.
   const ctx = await requireExportContext()
   assertCan(ctx, 'equipment.read.site')
-  if (args.equipmentIds.length === 0) return { ok: false, error: 'No equipment selected.' }
-  const ids = args.equipmentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.equipmentIds, {
+    singular: 'equipment item',
+    plural: 'equipment items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const rows = await ctx.db(async (tx) => {
     const scope = await moduleScopeWhere(ctx, tx, {
@@ -334,44 +436,6 @@ export async function bulkExportEquipmentCsv(args: {
   return { ok: true, filename, content }
 }
 
-// ---------- Lookups (used by bulk-bar dropdowns) ----------------------------
-
-export async function listSiteOrgUnits(): Promise<{ id: string; name: string }[]> {
-  const ctx = await requireRequestContext()
-  return ctx.db(async (tx) =>
-    tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
-      .orderBy(asc(orgUnits.name)),
-  )
-}
-
-export async function listPeopleForBulkHolder(): Promise<
-  { id: string; name: string; employeeNo: string | null }[]
-> {
-  const ctx = await requireRequestContext()
-  return ctx.db(async (tx) => {
-    const rows = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-        status: people.status,
-      })
-      .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(1000)
-    return rows.map((r) => ({
-      id: r.id,
-      name: `${r.lastName}, ${r.firstName}`,
-      employeeNo: r.employeeNo,
-    }))
-  })
-}
-
 // ---------- Check-in (sign in) ----------------------------------------------
 // Shared by the /equipment/station page, the item-detail check-in drawer, and
 // the dashboard "My equipment" widget's one-tap check-in. Returns the item to
@@ -391,40 +455,56 @@ export async function checkInEquipment(formData: FormData) {
   const canManage = ctx.isSuperAdmin || can(ctx, 'equipment.manage')
   const id = String(formData.get('id') ?? '').trim()
   const rawCondition = String(formData.get('returnedCondition') ?? 'good').trim()
-  const condition: ReturnCondition = (RETURN_CONDITIONS as readonly string[]).includes(rawCondition)
-    ? (rawCondition as ReturnCondition)
-    : 'good'
+  if (!(RETURN_CONDITIONS as readonly string[]).includes(rawCondition)) {
+    throw new Error('Invalid return condition')
+  }
+  const condition = rawCondition as ReturnCondition
   const returnedNotes = String(formData.get('returnedNotes') ?? '').trim() || null
   if (!id) return
+  if (returnedNotes && returnedNotes.length > 2_000) {
+    throw new Error('Return notes must be 2,000 characters or less')
+  }
 
-  const itemId = await ctx.db(async (tx) => {
-    const [co] = await tx
-      .select()
+  const checkedIn = await ctx.db(async (tx) => {
+    // Read only enough to discover the item, then acquire locks in the global
+    // equipment-row -> checkout-row order used by every custody writer.
+    const [candidate] = await tx
+      .select({ itemId: equipmentCheckouts.equipmentItemId })
       .from(equipmentCheckouts)
       .where(eq(equipmentCheckouts.id, id))
       .limit(1)
+    if (!candidate) return null
+    const [item] = await lockEquipmentCustodyRows(tx, [candidate.itemId])
+    if (!item || item.deletedAt) return null
+    const co = await lockOpenEquipmentCheckout(tx, id)
     // Already returned (or unknown) — nothing to do; keeps the action idempotent.
-    if (!co || co.returnedAt) return null
+    if (!co || co.equipmentItemId !== item.id) return null
     if (!canManage) {
-      // Self-service: only the person the item is checked out to may return it.
-      const [me] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(eq(people.userId, ctx.userId))
-        .limit(1)
-      if (!me || co.holderPersonId !== me.id) {
+      // RequestContext owns the canonical login -> person mapping.
+      if (!ctx.personId || co.holderPersonId !== ctx.personId) {
         throw new Error('Forbidden: you can only check in equipment issued to you')
       }
     }
-    const [item] = await tx
-      .select({ status: equipmentItems.status })
-      .from(equipmentItems)
-      .where(eq(equipmentItems.id, co.equipmentItemId))
+    const [settings] = await tx
+      .select({ homeOrgUnitId: equipmentStationSettings.defaultCheckInOrgUnitId })
+      .from(equipmentStationSettings)
+      .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
       .limit(1)
+    const returnSiteOrgUnitId = settings?.homeOrgUnitId ?? null
+    if (!returnSiteOrgUnitId) {
+      throw new Error('Set a default check-in location before checking equipment in')
+    }
+    const [home] = await tx
+      .select({ id: orgUnits.id })
+      .from(orgUnits)
+      .where(and(eq(orgUnits.id, returnSiteOrgUnitId), isNull(orgUnits.deletedAt)))
+      .limit(1)
+    if (!home) throw new Error('The configured default check-in location is unavailable')
+    const now = new Date()
     await tx
       .update(equipmentCheckouts)
       .set({
-        returnedAt: new Date(),
+        returnedAt: now,
         returnedCondition: condition,
         returnedNotes,
         checkedInByTenantUserId: ctx.membership?.id,
@@ -434,31 +514,35 @@ export async function checkInEquipment(formData: FormData) {
       .update(equipmentItems)
       .set({
         currentHolderPersonId: null,
-        isAvailableForCheckout: item?.status === 'in_service',
-        lastSeenAt: new Date(),
+        currentSiteOrgUnitId: returnSiteOrgUnitId,
+        lastSeenSiteOrgUnitId: returnSiteOrgUnitId,
+        lastSeenAt: now,
+        isMissing: false,
+        missingFoundAt: item.isMissing ? now : undefined,
       })
       .where(eq(equipmentItems.id, co.equipmentItemId))
+    await refreshEquipmentAvailability(tx, [co.equipmentItemId])
     await tx.insert(equipmentLocationHistory).values({
       tenantId: ctx.tenantId,
       itemId: co.equipmentItemId,
-      siteOrgUnitId: null,
+      siteOrgUnitId: returnSiteOrgUnitId,
       holderPersonId: null,
       recordedByTenantUserId: ctx.membership?.id,
+      recordedAt: now,
       note: `Checked in (${condition})${returnedNotes ? ` — ${returnedNotes}` : ''}`,
     })
-    return co.equipmentItemId
+    return { itemId: co.equipmentItemId, returnSiteOrgUnitId }
   })
 
-  if (itemId) {
+  if (checkedIn) {
     await recordAudit(ctx, {
       entityType: 'equipment_checkout',
       entityId: id,
       action: 'update',
       summary: 'Checked equipment in',
-      after: { condition, returnedNotes },
+      after: { condition, returnedNotes, returnSiteOrgUnitId: checkedIn.returnSiteOrgUnitId },
     })
   }
-  revalidatePath('/equipment/station')
-  revalidatePath('/dashboard')
-  if (itemId) revalidatePath(`/equipment/${itemId}`)
+  revalidateEquipmentCustody()
+  if (checkedIn) revalidatePath(`/equipment/${checkedIn.itemId}`)
 }

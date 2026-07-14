@@ -42,8 +42,8 @@ const schema = validateFormSchema({
           label: { en: 'Rigging gear' },
           config: {
             columns: [
-              { key: 'item', label: 'Item' },
-              { key: 'wll', label: 'WLL' },
+              { key: 'item', label: 'Item', type: 'text' },
+              { key: 'wll', label: 'WLL', type: 'text' },
             ],
           },
         },

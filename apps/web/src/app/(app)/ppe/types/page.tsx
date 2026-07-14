@@ -9,7 +9,7 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Pencil, ShieldCheck, Trash2 } from 'lucide-react'
-import { asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -22,10 +22,16 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { ppeItems, ppeTypeInspectionCriteria, ppeTypes } from '@beaconhs/db/schema'
+import {
+  customFieldDefinitions,
+  ppeItems,
+  ppeTypeInspectionCriteria,
+  ppeTypes,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
+import { deletePpeTypeInTransaction } from '@/lib/ppe-type-deletion'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
@@ -46,12 +52,14 @@ async function deleteType(formData: FormData) {
   assertCanManageModule(ctx, 'ppe')
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return
-  await ctx.db((tx) => tx.delete(ppeTypes).where(eq(ppeTypes.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'ppe_type',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted PPE type',
+  await ctx.db(async (tx) => {
+    await deletePpeTypeInTransaction(tx, ctx.tenantId, id)
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'ppe_type',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted PPE type',
+    })
   })
   revalidatePath(BASE)
 }
@@ -79,6 +87,7 @@ export default async function PpeTypesPage({
     const criteriaCount = sql<number>`count(distinct ${ppeTypeInspectionCriteria.id})`.mapWith(
       Number,
     )
+    const fieldCount = sql<number>`count(distinct ${customFieldDefinitions.id})`.mapWith(Number)
 
     const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
@@ -93,10 +102,18 @@ export default async function PpeTypesPage({
     const [tot] = await tx.select({ c: count() }).from(ppeTypes).where(search)
 
     const data = await tx
-      .select({ type: ppeTypes, itemCount, criteriaCount })
+      .select({ type: ppeTypes, itemCount, criteriaCount, fieldCount })
       .from(ppeTypes)
       .leftJoin(ppeItems, eq(ppeItems.typeId, ppeTypes.id))
       .leftJoin(ppeTypeInspectionCriteria, eq(ppeTypeInspectionCriteria.ppeTypeId, ppeTypes.id))
+      .leftJoin(
+        customFieldDefinitions,
+        and(
+          eq(customFieldDefinitions.entityKind, 'ppe'),
+          eq(customFieldDefinitions.subtypeId, ppeTypes.id),
+          isNull(customFieldDefinitions.deletedAt),
+        ),
+      )
       .where(search)
       .groupBy(ppeTypes.id)
       .orderBy(...orderBy)
@@ -168,11 +185,12 @@ export default async function PpeTypesPage({
                   >
                     Items
                   </SortableTh>
+                  <TableHead className="text-right">Custom fields</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map(({ type: t, itemCount, criteriaCount }) => (
+                {rows.map(({ type: t, itemCount, criteriaCount, fieldCount }) => (
                   <TableRow key={t.id}>
                     <TableCell>
                       <Link
@@ -200,6 +218,9 @@ export default async function PpeTypesPage({
                     <TableCell className="text-right">
                       <Badge variant="secondary">{itemCount}</Badge>
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="secondary">{fieldCount}</Badge>
+                    </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Link href={`/ppe/types/${t.id}`}>
@@ -213,10 +234,15 @@ export default async function PpeTypesPage({
                             type="submit"
                             size="sm"
                             variant="outline"
-                            disabled={itemCount > 0}
+                            disabled={itemCount > 0 || fieldCount > 0}
                             title={
-                              itemCount > 0
-                                ? `Cannot delete — ${itemCount} item(s) reference this type`
+                              itemCount > 0 || fieldCount > 0
+                                ? `Cannot delete — ${[
+                                    itemCount > 0 ? `${itemCount} item(s)` : null,
+                                    fieldCount > 0 ? `${fieldCount} scoped custom field(s)` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' and ')} reference this type`
                                 : 'Delete type'
                             }
                           >

@@ -14,6 +14,7 @@ import { recentActivityForEntity } from '@/lib/audit'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
+import { isUuid } from '@/lib/list-params'
 import { EquipmentInspectionTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
@@ -29,6 +30,7 @@ export default async function EquipmentInspectionTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const ctx = await requireModuleManage('equipment')
 
   const data = await ctx.db(async (tx) => {

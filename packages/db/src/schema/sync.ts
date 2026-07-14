@@ -31,13 +31,7 @@ export type SyncConnectionStatus = 'draft' | 'connected' | 'error' | 'disabled'
 export type SyncRunTrigger = 'scheduled' | 'manual' | 'preview'
 export type SyncRunStatus = 'running' | 'success' | 'partial' | 'error'
 export type SyncRecordAction =
-  | 'created'
-  | 'updated'
-  | 'unchanged'
-  | 'skipped'
-  | 'failed'
-  | 'archived'
-  | 'conflict'
+  'created' | 'updated' | 'unchanged' | 'skipped' | 'failed' | 'archived' | 'conflict'
 export type SyncRecordDiff = Record<string, { before: unknown; after: unknown }>
 
 // Per-entity counters recorded on every run.
@@ -116,7 +110,14 @@ export const syncCrosswalk = pgTable(
   },
   (t) => ({
     uniq: uniqueIndex('sync_crosswalk_uniq').on(t.tenantId, t.connectionId, t.entity, t.externalId),
-    canonicalIdx: index('sync_crosswalk_canonical_idx').on(t.tenantId, t.entity, t.canonicalId),
+    // A canonical row has one authoritative inbound owner. Without this,
+    // natural-key matching lets two connections alternately overwrite the
+    // same person/equipment/location while each believes it owns the row.
+    canonicalOwner: uniqueIndex('sync_crosswalk_tenant_entity_canonical_owner_ux').on(
+      t.tenantId,
+      t.entity,
+      t.canonicalId,
+    ),
     connectionFk: foreignKey({
       name: 'sync_crosswalk_tenant_connection_fk',
       columns: [t.tenantId, t.connectionId],

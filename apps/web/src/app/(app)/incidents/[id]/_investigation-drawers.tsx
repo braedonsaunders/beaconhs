@@ -12,7 +12,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 // ---- Event timeline --------------------------------------------------------
 
@@ -396,8 +397,6 @@ type PrevStepInput = {
 
 type PrevStepAction = (input: PrevStepInput) => Promise<{ ok: boolean; error?: string }>
 
-type Person = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
-
 export function PrevStepDrawer({
   open,
   closeHref,
@@ -405,7 +404,6 @@ export function PrevStepDrawer({
   defaults,
   action,
   mode,
-  people,
 }: {
   open: boolean
   closeHref: string
@@ -419,7 +417,6 @@ export function PrevStepDrawer({
   }
   action: PrevStepAction
   mode: 'create' | 'edit'
-  people: Person[]
 }) {
   const router = useRouter()
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -493,14 +490,10 @@ export function PrevStepDrawer({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ps-owner">Owner</Label>
-            <SearchSelect
+            <RemoteSearchSelect
+              lookup="incident-people"
               value={ownerPersonId}
               onChange={(val) => setOwnerPersonId(val)}
-              options={people.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
               placeholder="Select a person…"
               searchPlaceholder="Search people…"
               sheetTitle="Select a person"

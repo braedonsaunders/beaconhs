@@ -32,6 +32,12 @@ export default async function NewAssessmentAttemptPage({
       : Array.isArray(sp.personId)
         ? sp.personId[0]
         : undefined
+  const complianceObligationId =
+    typeof sp.obligationId === 'string'
+      ? sp.obligationId
+      : Array.isArray(sp.obligationId)
+        ? sp.obligationId[0]
+        : undefined
 
   const ctx = await requireRequestContext()
   const [types, peopleRows] = await ctx.db(async (tx) => {
@@ -63,6 +69,9 @@ export default async function NewAssessmentAttemptPage({
           </CardHeader>
           <CardContent>
             <form action={startAssessmentAttempt} className="space-y-4">
+              {complianceObligationId ? (
+                <input type="hidden" name="complianceObligationId" value={complianceObligationId} />
+              ) : null}
               <div className="space-y-1.5">
                 <Label>
                   Person <span className="text-red-600 dark:text-red-400">*</span>

@@ -39,6 +39,7 @@ import {
   SearchSelect,
 } from '@beaconhs/ui'
 import type { NavItemConfig, TenantNavConfig } from '@beaconhs/db/schema'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { ICON_KEYS, NavIcon } from '@/components/sidebar-nav'
 import { NAV_MODULES, PINNED_FORM_DEFAULT_ICON, moduleByKey } from '@/lib/nav/registry'
 import { toast } from '@/lib/toast'
@@ -58,10 +59,8 @@ type TemplateLite = {
 type EItem = NavItemConfig & { uid: string }
 type EGroup = { id: string; label: string; items: EItem[] }
 
-let _seq = 0
 function uid(prefix = 'i'): string {
-  _seq += 1
-  return `${prefix}-${_seq}-${Math.random().toString(36).slice(2, 7)}`
+  return `${prefix}-${globalThis.crypto.randomUUID()}`
 }
 
 function toEditor(config: TenantNavConfig): EGroup[] {
@@ -135,8 +134,12 @@ export function NavEditor({
   const [dirty, setDirty] = useState(false)
   const [pending, start] = useTransition()
   const [addTarget, setAddTarget] = useState<string | null>(null)
+  const [resolvedTemplates, setResolvedTemplates] = useState(templates)
 
-  const templatesById = useMemo(() => new Map(templates.map((t) => [t.id, t])), [templates])
+  const templatesById = useMemo(
+    () => new Map(resolvedTemplates.map((template) => [template.id, template])),
+    [resolvedTemplates],
+  )
 
   function mutate(next: EGroup[]) {
     setGroups(next)
@@ -300,7 +303,13 @@ export function NavEditor({
         open={addTarget != null}
         onClose={() => setAddTarget(null)}
         availableModules={availableModules}
-        templates={templates}
+        onTemplateResolved={(template) =>
+          setResolvedTemplates((current) =>
+            current.some((candidate) => candidate.id === template.id)
+              ? current
+              : [...current, template],
+          )
+        }
         onAdd={(item) => addTarget && addItem(addTarget, item)}
       />
     </div>
@@ -541,13 +550,13 @@ function AddDrawer({
   open,
   onClose,
   availableModules,
-  templates,
+  onTemplateResolved,
   onAdd,
 }: {
   open: boolean
   onClose: () => void
   availableModules: typeof NAV_MODULES
-  templates: TemplateLite[]
+  onTemplateResolved: (template: TemplateLite) => void
   onAdd: (item: NavItemConfig) => void
 }) {
   const [linkLabel, setLinkLabel] = useState('')
@@ -566,19 +575,27 @@ function AddDrawer({
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Surface any form template as a sidebar item — it behaves like a native module.
           </p>
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="admin-navigation-form-templates"
             value=""
             onChange={(v) => {
               if (v) onAdd({ kind: 'form', templateId: v })
             }}
-            options={templates.map((t) => ({
-              value: t.id,
-              label: t.name,
-              hint: t.category ?? undefined,
-            }))}
-            placeholder={templates.length ? 'Choose a form…' : 'No form templates'}
+            onOptionChange={(option) => {
+              if (!option?.meta || option.meta.kind !== 'admin-navigation-template') return
+              onTemplateResolved({
+                id: option.value,
+                name: option.label,
+                category: option.meta.category,
+                iconKey: option.meta.iconKey,
+                status: option.meta.status,
+              })
+            }}
+            placeholder="Choose a form…"
             searchPlaceholder="Search forms…"
             sheetTitle="Pin a form"
+            ariaLabel="Pin a form"
+            clearable={false}
           />
         </section>
 

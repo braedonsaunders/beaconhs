@@ -46,7 +46,10 @@ services:
       retries: 5
       start_period: 30s
     deploy:
-      replicas: 1
+      # The deploy workflow first persists WRITER_REPLICAS=0 as a control-plane
+      # fence. A concurrent Dokploy deploy therefore cannot revive old database
+      # writers during migration; the final exact-SHA deploy restores this to 1.
+      replicas: ${WRITER_REPLICAS}
       placement:
         constraints: [node.hostname==dokploy-mgr]
       restart_policy:
@@ -90,7 +93,7 @@ services:
       retries: 3
       start_period: 30s
     deploy:
-      replicas: 1
+      replicas: ${WRITER_REPLICAS}
       placement:
         constraints: [node.hostname==dokploy-mgr]
       restart_policy:
@@ -98,7 +101,8 @@ services:
         delay: 5s
 
   # One-shot storage security bootstrap. It removes anonymous MinIO/S3 bucket
-  # policies, installs pending-upload expiry, and proves anonymous reads fail.
+  # policies, installs pending-upload and transient-artifact expiry, and proves
+  # anonymous reads fail.
   # Cloudflare R2 additionally requires the explicit private-bucket
   # confirmation after public development/custom domains have been disabled.
   storage-init:
@@ -132,7 +136,7 @@ services:
       REDIS_URL: ${REDIS_URL}
     networks: [infra-net]
     deploy:
-      replicas: 1
+      replicas: ${WRITER_REPLICAS}
       placement:
         constraints: [node.hostname==dokploy-mgr]
       # One-shot: register BullMQ repeatable jobs, then exit.
@@ -147,7 +151,7 @@ services:
   collabora:
     # Pin both the tested CODE release and linux/amd64 digest. `latest` can
     # otherwise change independently of BeaconHS CI and silently break WOPI.
-    image: collabora/code:26.04.2.1.1@sha256:df33af88c59e26b7335ea98d91e65f1edf13f33369ce6115941b8d59d3409cb5
+    image: ${COLLABORA_IMAGE}
     environment:
       aliasgroup1: ${APP_URL}
       server_name: ${COLLABORA_SERVER_NAME}

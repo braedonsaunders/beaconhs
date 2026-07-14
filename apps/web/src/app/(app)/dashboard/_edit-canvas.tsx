@@ -8,7 +8,7 @@ import { CardCell } from '../insights/_viz/card-cell.client'
 import { loadDashboardMetrics } from './_metrics'
 import { WIDGETS, WIDGET_CARD_KEY } from './_widget-registry'
 import { WidgetCard } from './_widget-views'
-import { UUID_RE } from './_layout-input'
+import { isUuid } from '@/lib/list-params'
 
 export async function loadDashboardEditCanvas(
   ctx: RequestContext,
@@ -74,7 +74,7 @@ export async function loadDashboardEditCanvas(
 
   const cardById = new Map(visiblePaletteCards.map((c) => [c.id, c]))
   const placedCards = layout.widgets
-    .filter((w) => !(w.id in WIDGETS) && UUID_RE.test(w.id))
+    .filter((w) => !(w.id in WIDGETS) && isUuid(w.id))
     .map((w) => cardById.get(w.id))
     .filter((c) => c != null)
 

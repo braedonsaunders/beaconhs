@@ -20,6 +20,7 @@ import {
 } from '@beaconhs/reports'
 import { ApiError } from './errors'
 import { recordIdColumn } from './records'
+import { documentReadFilter } from '../assistant/doc-access'
 
 export const DEFAULT_LIMIT = 50
 export const MAX_LIMIT = 1000
@@ -121,6 +122,14 @@ function notDeletedSql(entity: ReportEntity): SQL | null {
     : null
 }
 
+/** Entity-specific visibility that is stricter than tenant RLS. Document read
+ * keys see the same published library as human readers; only a key carrying
+ * documents.manage may inspect draft or archived document metadata. */
+function entityVisibilitySql(ctx: RequestContext, entity: ReportEntity): SQL | null {
+  if (entity.key !== 'documents') return null
+  return documentReadFilter(ctx) ?? null
+}
+
 /** JSON-friendly value: timestamps → ISO, numerics → number, else as-is. */
 function formatValue(value: unknown, kind: ReportColumnKind | undefined): unknown {
   if (value === null || typeof value === 'undefined') return null
@@ -165,7 +174,9 @@ export async function readEntityRows(
 
   // Soft-deleted rows are never exposed through the public API; the filters
   // from compileRuleGroup are AND-joined so composing here is safe.
-  const conditions = [notDeletedSql(entity), filterSql].filter((c): c is SQL => c !== null)
+  const conditions = [notDeletedSql(entity), entityVisibilitySql(ctx, entity), filterSql].filter(
+    (c): c is SQL => c !== null,
+  )
   const whereSql = conditions.length
     ? sql.join([sql.raw('WHERE'), sql.join(conditions, sql.raw(' AND '))], sql.raw(' '))
     : sql.raw('')
@@ -202,10 +213,13 @@ export async function readEntityRows(
 
   const kinds = KIND_BY_KEY(entity)
   const data = rows.map((row) => {
-    const out: Record<string, unknown> = {}
-    if (idCol) out.id = row.id ?? null
-    for (const key of fields) out[key] = formatValue(row[key], kinds.get(key))
-    return out
+    // The selected keys come from the entity registry, but custom-field keys
+    // are still tenant-authored. fromEntries creates own data properties and
+    // cannot trigger Object.prototype setters such as "__proto__".
+    return Object.fromEntries([
+      ...(idCol ? ([['id', row.id ?? null]] as Array<[string, unknown]>) : []),
+      ...fields.map((key): [string, unknown] => [key, formatValue(row[key], kinds.get(key))]),
+    ])
   })
 
   return {
@@ -234,14 +248,16 @@ export async function getEntityRecord(
       ...fields.map((c) => `${columnRef(entity, c)} AS "${c}"`),
     ].join(', '),
   )
-  const notDeleted = notDeletedSql(entity)
+  const fixedConditions = [notDeletedSql(entity), entityVisibilitySql(ctx, entity)].filter(
+    (condition): condition is SQL => condition !== null,
+  )
   const query = sql.join(
     [
       sql.raw('SELECT'),
       selectList,
       sql.raw(`FROM "${entity.table}" WHERE "${entity.table}"."${idCol}" =`),
       sql`${id}`,
-      ...(notDeleted ? [sql.raw('AND'), notDeleted] : []),
+      ...fixedConditions.flatMap((condition) => [sql.raw('AND'), condition]),
       sql.raw('LIMIT 1'),
     ],
     sql.raw(' '),

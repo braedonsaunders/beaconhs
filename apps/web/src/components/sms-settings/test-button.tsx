@@ -24,6 +24,7 @@ export function SmsTestButton({
             type="tel"
             value={to}
             onChange={(e) => setTo(e.target.value)}
+            maxLength={16}
             placeholder="+15551234567"
             aria-label="Test recipient phone number"
           />

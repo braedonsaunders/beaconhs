@@ -8,12 +8,14 @@ import { loadEquipmentLabelData } from '@/lib/equipment-label-data'
 import { normalizeEquipmentLabelDesign } from '@/lib/equipment-label-design'
 import { pdfBufferResponse } from '@/lib/pdf-route'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
 /** One equipment QR label as a print-ready PDF at the tenant's label size. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const ctx = await requireRequestContext()
 
   const result = await ctx.db(async (tx) => {
@@ -50,7 +52,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     { title: 'Equipment QR label' },
   )
   await recordAudit(ctx, {
-    entityType: 'equipment_item',
+    entityType: 'equipment',
     entityId: id,
     action: 'export',
     summary: 'Downloaded the equipment QR label PDF',

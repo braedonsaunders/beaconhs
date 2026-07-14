@@ -1,26 +1,32 @@
 // Training-module add-ons:
 //
-//   • training_course_files   — attachments tied to a course (study material,
-//                                handouts, PDFs, videos).  Distinct from the
-//                                `material_attachment_ids` JSON column on
-//                                training_courses, which the new platform may
-//                                drop later — this table is the persistent
-//                                home for course assets.
-//   • training_extra_fields   — polymorphic key/value pairs attached to a
-//                                training_skill, training_skill_type, or
-//                                training_skill_authority.  Replaces the
-//                                three legacy `*_additional` tables.
-//
-// Polymorphic ownership is modelled with an enum + uuid pair.  We do NOT add a
-// real FK on owner_id since the referenced table varies — application code is
-// responsible for cascading on delete (or accepting the orphaned row).
+//   • training_course_files   — canonical attachments tied to a course (study
+//                                material, handouts, PDFs, and videos).
+//   • training_extra_fields   — key/value pairs attached to exactly one skill
+//                                assignment, skill type, or authority. Separate
+//                                nullable tenant-aware foreign keys preserve
+//                                physical ownership and cascade cleanup.
 
-import { relations } from 'drizzle-orm'
-import { index, integer, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
+import {
+  check,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants } from './core'
 import { trainingCourses } from './training'
+import {
+  trainingSkillAssignments,
+  trainingSkillAuthorities,
+  trainingSkillTypes,
+} from './training-skills'
 
 // ---------------------------------------------------------------------------
 // training_course_files
@@ -33,9 +39,7 @@ export const trainingCourseFiles = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    courseId: uuid('course_id')
-      .notNull()
-      .references(() => trainingCourses.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id').notNull(),
     attachmentId: uuid('attachment_id'),
     label: text('label'),
     sortOrder: integer('sort_order').default(0).notNull(),
@@ -43,7 +47,12 @@ export const trainingCourseFiles = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_course_files_tenant_idx').on(t.tenantId),
-    courseIdx: index('training_course_files_course_idx').on(t.courseId),
+    courseIdx: index('training_course_files_course_idx').on(t.tenantId, t.courseId),
+    courseFk: foreignKey({
+      name: 'training_course_files_tenant_course_fk',
+      columns: [t.tenantId, t.courseId],
+      foreignColumns: [trainingCourses.tenantId, trainingCourses.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -66,14 +75,6 @@ export const trainingCourseFilesRelations = relations(trainingCourseFiles, ({ on
 // training_extra_fields
 // ---------------------------------------------------------------------------
 
-export const trainingExtraFieldOwnerType = pgEnum('training_extra_field_owner_type', [
-  'skill',
-  'skill_type',
-  'authority',
-])
-
-export type TrainingExtraFieldOwnerType = (typeof trainingExtraFieldOwnerType.enumValues)[number]
-
 export const trainingExtraFields = pgTable(
   'training_extra_fields',
   {
@@ -81,8 +82,9 @@ export const trainingExtraFields = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    ownerType: trainingExtraFieldOwnerType('owner_type').notNull(),
-    ownerId: uuid('owner_id').notNull(),
+    skillAssignmentId: uuid('skill_assignment_id'),
+    skillTypeId: uuid('skill_type_id'),
+    authorityId: uuid('authority_id'),
     fieldKey: text('field_key').notNull(),
     fieldValue: text('field_value'),
     sortOrder: integer('sort_order').default(0).notNull(),
@@ -90,7 +92,40 @@ export const trainingExtraFields = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_extra_fields_tenant_idx').on(t.tenantId),
-    ownerIdx: index('training_extra_fields_owner_idx').on(t.ownerType, t.ownerId),
+    skillAssignmentIdx: index('training_extra_fields_skill_assignment_idx').on(
+      t.tenantId,
+      t.skillAssignmentId,
+    ),
+    skillTypeIdx: index('training_extra_fields_skill_type_idx').on(t.tenantId, t.skillTypeId),
+    authorityIdx: index('training_extra_fields_authority_idx').on(t.tenantId, t.authorityId),
+    skillAssignmentKeyUx: uniqueIndex('training_extra_fields_skill_assignment_key_ux')
+      .on(t.tenantId, t.skillAssignmentId, sql`lower(${t.fieldKey})`)
+      .where(sql`${t.skillAssignmentId} IS NOT NULL`),
+    skillTypeKeyUx: uniqueIndex('training_extra_fields_skill_type_key_ux')
+      .on(t.tenantId, t.skillTypeId, sql`lower(${t.fieldKey})`)
+      .where(sql`${t.skillTypeId} IS NOT NULL`),
+    authorityKeyUx: uniqueIndex('training_extra_fields_authority_key_ux')
+      .on(t.tenantId, t.authorityId, sql`lower(${t.fieldKey})`)
+      .where(sql`${t.authorityId} IS NOT NULL`),
+    skillAssignmentFk: foreignKey({
+      name: 'training_extra_fields_tenant_skill_assignment_fk',
+      columns: [t.tenantId, t.skillAssignmentId],
+      foreignColumns: [trainingSkillAssignments.tenantId, trainingSkillAssignments.id],
+    }).onDelete('cascade'),
+    skillTypeFk: foreignKey({
+      name: 'training_extra_fields_tenant_skill_type_fk',
+      columns: [t.tenantId, t.skillTypeId],
+      foreignColumns: [trainingSkillTypes.tenantId, trainingSkillTypes.id],
+    }).onDelete('cascade'),
+    authorityFk: foreignKey({
+      name: 'training_extra_fields_tenant_authority_fk',
+      columns: [t.tenantId, t.authorityId],
+      foreignColumns: [trainingSkillAuthorities.tenantId, trainingSkillAuthorities.id],
+    }).onDelete('cascade'),
+    exactlyOneOwnerCk: check(
+      'training_extra_fields_exactly_one_owner_ck',
+      sql`num_nonnulls(${t.skillAssignmentId}, ${t.skillTypeId}, ${t.authorityId}) = 1`,
+    ),
   }),
 )
 
@@ -98,5 +133,17 @@ export const trainingExtraFieldsRelations = relations(trainingExtraFields, ({ on
   tenant: one(tenants, {
     fields: [trainingExtraFields.tenantId],
     references: [tenants.id],
+  }),
+  skillAssignment: one(trainingSkillAssignments, {
+    fields: [trainingExtraFields.skillAssignmentId],
+    references: [trainingSkillAssignments.id],
+  }),
+  skillType: one(trainingSkillTypes, {
+    fields: [trainingExtraFields.skillTypeId],
+    references: [trainingSkillTypes.id],
+  }),
+  authority: one(trainingSkillAuthorities, {
+    fields: [trainingExtraFields.authorityId],
+    references: [trainingSkillAuthorities.id],
   }),
 }))

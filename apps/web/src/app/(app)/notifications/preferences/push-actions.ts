@@ -7,8 +7,13 @@
 
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import webpush from 'web-push'
 import { webpushSubscriptions } from '@beaconhs/db/schema'
+import {
+  sendWebPushNotification,
+  validateWebPushEndpoint,
+  validateWebPushSubscription,
+  validateWebPushSubscriptionForPersistence,
+} from '@beaconhs/jobs/web-push'
 import { requireRequestContext } from '@/lib/auth'
 
 const SaveSchema = z.object({
@@ -24,7 +29,17 @@ export async function savePushSubscription(input: unknown) {
   if (!parsed.success) {
     return { ok: false as const, error: 'Invalid subscription payload.' }
   }
-  const { endpoint, p256dh, auth, userAgent } = parsed.data
+  const { userAgent } = parsed.data
+  let subscription: Awaited<ReturnType<typeof validateWebPushSubscriptionForPersistence>>
+  try {
+    subscription = await validateWebPushSubscriptionForPersistence({
+      endpoint: parsed.data.endpoint,
+      keys: { p256dh: parsed.data.p256dh, auth: parsed.data.auth },
+    })
+  } catch {
+    return { ok: false as const, error: 'Invalid subscription payload.' }
+  }
+  const { endpoint, keys } = subscription
 
   // The push endpoint is unique per browser (per VAPID key) and carries a
   // global unique index. Re-subscribing on the same device updates the keys
@@ -34,14 +49,21 @@ export async function savePushSubscription(input: unknown) {
     await ctx.db((tx) =>
       tx
         .insert(webpushSubscriptions)
-        .values({ tenantId: ctx.tenantId, userId: ctx.userId, endpoint, p256dh, auth, userAgent })
+        .values({
+          tenantId: ctx.tenantId,
+          userId: ctx.userId,
+          endpoint,
+          p256dh: keys.p256dh,
+          auth: keys.auth,
+          userAgent,
+        })
         .onConflictDoUpdate({
           target: webpushSubscriptions.endpoint,
           set: {
             tenantId: ctx.tenantId,
             userId: ctx.userId,
-            p256dh,
-            auth,
+            p256dh: keys.p256dh,
+            auth: keys.auth,
             userAgent,
             updatedAt: new Date(),
           },
@@ -63,12 +85,19 @@ export async function removePushSubscription(input: unknown) {
   if (!parsed.success) {
     return { ok: false as const, error: 'Invalid endpoint.' }
   }
+  let endpoint: string
+  try {
+    // Do not require a live DNS lookup to remove an old/dead subscription.
+    endpoint = validateWebPushEndpoint(parsed.data.endpoint)
+  } catch {
+    return { ok: false as const, error: 'Invalid endpoint.' }
+  }
   await ctx.db((tx) =>
     tx
       .delete(webpushSubscriptions)
       .where(
         and(
-          eq(webpushSubscriptions.endpoint, parsed.data.endpoint),
+          eq(webpushSubscriptions.endpoint, endpoint),
           eq(webpushSubscriptions.userId, ctx.userId),
         ),
       ),
@@ -76,21 +105,15 @@ export async function removePushSubscription(input: unknown) {
   return { ok: true as const }
 }
 
-// web-push keeps VAPID details in module-global state; configure once per process.
-let vapidReady = false
-function configureVapid(): boolean {
+function vapidDetails() {
   const publicKey = process.env.VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
-  if (!publicKey || !privateKey) return false
-  if (!vapidReady) {
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT ?? 'mailto:ops@beaconhs.app',
-      publicKey,
-      privateKey,
-    )
-    vapidReady = true
+  if (!publicKey || !privateKey) return null
+  return {
+    subject: process.env.VAPID_SUBJECT ?? 'mailto:ops@beaconhs.app',
+    publicKey,
+    privateKey,
   }
-  return true
 }
 
 /**
@@ -101,7 +124,8 @@ function configureVapid(): boolean {
  */
 export async function sendTestPush() {
   const ctx = await requireRequestContext()
-  if (!configureVapid()) {
+  const vapid = vapidDetails()
+  if (!vapid) {
     return { ok: false as const, error: 'Push is not configured on this server.' }
   }
 
@@ -112,20 +136,34 @@ export async function sendTestPush() {
     return { ok: false as const, error: 'No subscribed devices found. Enable push first.' }
   }
 
-  const payload = JSON.stringify({
+  const payload = {
     title: 'BeaconHS test',
     body: 'Push notifications are working on this device.',
     linkPath: '/notifications/preferences',
-  })
+  }
 
   let sent = 0
   let removed = 0
   for (const sub of subs) {
+    let subscription
     try {
-      await webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        payload,
+      subscription = validateWebPushSubscription({
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.p256dh, auth: sub.auth },
+      })
+    } catch {
+      await ctx.db((tx) =>
+        tx.delete(webpushSubscriptions).where(eq(webpushSubscriptions.id, sub.id)),
       )
+      removed++
+      continue
+    }
+    try {
+      await sendWebPushNotification({
+        subscription,
+        payload,
+        vapid,
+      })
       sent++
     } catch (err) {
       const statusCode = (err as { statusCode?: number }).statusCode

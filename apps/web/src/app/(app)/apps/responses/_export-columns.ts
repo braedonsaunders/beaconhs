@@ -1,4 +1,10 @@
-import type { FieldType, FormField, FormSchemaV1, FormSection } from '@beaconhs/forms-core'
+import {
+  storesResponseValue,
+  type FieldType,
+  type FormField,
+  type FormSchemaV1,
+  type FormSection,
+} from '@beaconhs/forms-core'
 import type { ExportColumn } from '@/lib/export-columns'
 
 export type ResponseExportColumn = ExportColumn & {
@@ -37,8 +43,6 @@ type ResponseExportContext = {
   submittedByName: string | null
   values: Record<string, unknown>
 }
-
-const DISPLAY_ONLY_FIELD_TYPES = new Set<FieldType>(['heading', 'paragraph', 'image', 'divider'])
 
 const RESPONSE_EXPORT_BASE_COLUMNS: ResponseExportColumn[] = [
   { key: 'response_id', label: 'Response ID', source: 'response' },
@@ -163,7 +167,7 @@ export function valueForResponseExportColumn(
 }
 
 function isDataField(field: FormField): boolean {
-  return !DISPLAY_ONLY_FIELD_TYPES.has(field.type)
+  return storesResponseValue(field)
 }
 
 function fieldLabel(field: FormField): string {

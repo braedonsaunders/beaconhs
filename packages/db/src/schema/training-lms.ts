@@ -4,8 +4,8 @@
 // TOP of the existing native training spine (training_courses / training_classes
 // / training_assessment_types / training_records / training_certificates). It is
 // DELIBERATELY native: no Forms/Builder or Documents-editor coupling. Rich lesson
-// content uses ProseMirror JSON plus sanitized HTML; quizzes reuse the existing
-// training assessment engine; in-person lessons point at a class.
+// content uses sanitized HTML; quizzes reuse the existing training assessment
+// engine; in-person lessons point at a class.
 //
 //   training_courses (existing spine)
 //     └─ training_course_modules (ordered sections)            ← new
@@ -21,6 +21,7 @@ import { relations } from 'drizzle-orm'
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -37,10 +38,7 @@ import { people } from './org'
 import { trainingClasses, trainingCourses, trainingRecords } from './training'
 import { trainingAssessmentTypes, trainingAssessments } from './training-assessments'
 
-// --- Structured-slide region compatibility model --------------------------
-//
-// Only pre-canvas slide regions use this block shape. Rich lessons and library
-// items use ProseMirror JSON plus sanitized HTML.
+// Content blocks used by the native video/file/embed lesson renderer.
 export type LessonBlock =
   | { id: string; type: 'heading'; level: 1 | 2 | 3; text: string }
   | { id: string; type: 'text'; md: string } // bespoke markdown-lite (escaped-first on render)
@@ -50,234 +48,6 @@ export type LessonBlock =
   | { id: string; type: 'embed'; url: string; caption?: string }
   | { id: string; type: 'callout'; tone: 'info' | 'warning' | 'success' | 'danger'; md: string }
   | { id: string; type: 'divider' }
-
-// Rich text authored in the training TipTap editor: ProseMirror JSON (source
-// of truth for editing) + sanitized HTML (render in player / slide regions).
-export type RichDoc = { html: string; json?: unknown }
-
-// One slide in a slideshow lesson / library deck.
-//
-// `canvas` slides are the current model: a freeform PowerPoint-style stage of
-// SlideElement[] authored in the Fabric editor (@beaconhs/design-studio engine)
-// on a virtual 960×540 (16:9) coordinate space, scaled to the rendered size.
-// The structured layouts (title / two-col / …) and their RichDoc/LessonBlock
-// regions are the legacy model — still rendered everywhere, converted to
-// canvas the first time a deck is edited. `pptx` slides are pixel-perfect page
-// images produced by the PowerPoint import pipeline (soffice → pdf → png);
-// new imports arrive as canvas slides with a locked full-bleed image.
-export type SlideRegion = RichDoc | LessonBlock[]
-
-export const SLIDE_STAGE = { width: 960, height: 540 } as const
-
-// A styled run of text within one line of a text element. Properties override
-// the element-level defaults for that span only.
-export type SlideTextRun = {
-  text: string
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  color?: string
-}
-
-type SlideElementBase = {
-  id: string
-  x: number
-  y: number
-  w: number
-  h: number
-  rotation?: number // degrees, around the top-left corner (Fabric left/top origin)
-  opacity?: number // 0..1
-  locked?: boolean // not selectable in the editor (pptx page renders)
-}
-
-export type SlideTextElement = SlideElementBase & {
-  kind: 'text'
-  text: string // plain text, \n-separated lines (always kept in sync with runs)
-  runs?: SlideTextRun[][] // optional per-line styled runs; omit when uniformly styled
-  fontSize: number // stage units (px at 960-wide)
-  fontFamily?: 'sans' | 'serif' | 'mono'
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  color?: string
-  align?: 'left' | 'center' | 'right'
-  lineHeight?: number
-  list?: 'bullet' | 'number' // lines carry literal "• " / "1. " prefixes
-}
-
-export type SlideImageElement = SlideElementBase & {
-  kind: 'image'
-  attachmentId?: string // tenant attachment (URL resolved at render)
-  url?: string // direct https URL (e.g. images pasted into legacy regions)
-  fit?: 'stretch' | 'cover' | 'contain' // player object-fit; editor shows the box
-  radius?: number // corner radius, stage units
-}
-
-export type SlideShapeElement = SlideElementBase & {
-  kind: 'shape'
-  shape: 'rect' | 'ellipse' | 'line'
-  fill?: string
-  stroke?: string
-  strokeWidth?: number // stage units
-  radius?: number // rect corner radius, stage units
-}
-
-export type SlideElement = SlideTextElement | SlideImageElement | SlideShapeElement
-
-export type Slide = {
-  id: string
-  layout: 'canvas' | 'title' | 'title-content' | 'two-col' | 'image-text' | 'image-full' | 'pptx'
-  // canvas slides
-  elements?: SlideElement[]
-  bgColor?: string // hex stage background
-  // legacy structured slides
-  title?: string
-  subtitle?: string
-  body?: SlideRegion // title-content + image-text text region
-  left?: SlideRegion // two-col
-  right?: SlideRegion // two-col
-  imageAttachmentId?: string // image-text / image-full / pptx page render
-  bg?: 'white' | 'slate' | 'teal' | 'dark' // background preset
-  notes?: string // speaker / learner notes
-}
-
-export function isRichRegion(r: SlideRegion | null | undefined): r is RichDoc {
-  return !!r && !Array.isArray(r) && typeof (r as RichDoc).html === 'string'
-}
-
-// --- Canvas slide sanitisation (server-side, before persisting) -------------
-
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
-const clampN = (v: unknown, min: number, max: number, fb: number) =>
-  typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fb
-const hexOr = (v: unknown, fb: string | undefined) =>
-  typeof v === 'string' && HEX_COLOR.test(v) ? v : fb
-const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
-
-function sanitizeRuns(runs: unknown): SlideTextRun[][] | undefined {
-  if (!Array.isArray(runs)) return undefined
-  const lines = runs.slice(0, 400).map((line) =>
-    (Array.isArray(line) ? line : []).slice(0, 80).map(
-      (r): SlideTextRun => ({
-        text: str((r as SlideTextRun)?.text, 2000),
-        ...((r as SlideTextRun)?.bold ? { bold: true } : {}),
-        ...((r as SlideTextRun)?.italic ? { italic: true } : {}),
-        ...((r as SlideTextRun)?.underline ? { underline: true } : {}),
-        ...(hexOr((r as SlideTextRun)?.color, undefined)
-          ? { color: hexOr((r as SlideTextRun)?.color, undefined) }
-          : {}),
-      }),
-    ),
-  )
-  return lines
-}
-
-function sanitizeElement(input: unknown): SlideElement | null {
-  const el = input as Partial<SlideElement> | null
-  if (!el || typeof el !== 'object' || typeof el.id !== 'string') return null
-  const base = {
-    id: el.id.slice(0, 64),
-    x: clampN(el.x, -SLIDE_STAGE.width, SLIDE_STAGE.width * 2, 0),
-    y: clampN(el.y, -SLIDE_STAGE.height, SLIDE_STAGE.height * 2, 0),
-    w: clampN(el.w, 1, SLIDE_STAGE.width * 3, 100),
-    h: clampN(el.h, 0, SLIDE_STAGE.height * 3, 40),
-    ...(el.rotation ? { rotation: clampN(el.rotation, -360, 360, 0) } : {}),
-    ...(el.opacity != null && el.opacity !== 1 ? { opacity: clampN(el.opacity, 0, 1, 1) } : {}),
-    ...(el.locked === true ? { locked: true } : {}),
-  }
-  if (el.kind === 'text') {
-    const t = el as Partial<SlideTextElement>
-    return {
-      ...base,
-      kind: 'text',
-      text: str(t.text, 20_000),
-      ...(t.runs ? { runs: sanitizeRuns(t.runs) } : {}),
-      fontSize: clampN(t.fontSize, 4, 400, 20),
-      ...(t.fontFamily && ['sans', 'serif', 'mono'].includes(t.fontFamily)
-        ? { fontFamily: t.fontFamily }
-        : {}),
-      ...(t.bold ? { bold: true } : {}),
-      ...(t.italic ? { italic: true } : {}),
-      ...(t.underline ? { underline: true } : {}),
-      ...(hexOr(t.color, undefined) ? { color: hexOr(t.color, undefined) } : {}),
-      ...(t.align && ['left', 'center', 'right'].includes(t.align) ? { align: t.align } : {}),
-      ...(t.lineHeight ? { lineHeight: clampN(t.lineHeight, 0.6, 3, 1.2) } : {}),
-      ...(t.list && ['bullet', 'number'].includes(t.list) ? { list: t.list } : {}),
-    }
-  }
-  if (el.kind === 'image') {
-    const i = el as Partial<SlideImageElement>
-    const url = typeof i.url === 'string' && /^https?:\/\//.test(i.url) ? i.url.slice(0, 2000) : ''
-    return {
-      ...base,
-      kind: 'image',
-      ...(typeof i.attachmentId === 'string' && i.attachmentId
-        ? { attachmentId: i.attachmentId.slice(0, 64) }
-        : {}),
-      ...(url ? { url } : {}),
-      ...(i.fit && ['stretch', 'cover', 'contain'].includes(i.fit) ? { fit: i.fit } : {}),
-      ...(i.radius ? { radius: clampN(i.radius, 0, 200, 0) } : {}),
-    }
-  }
-  if (el.kind === 'shape') {
-    const s = el as Partial<SlideShapeElement>
-    return {
-      ...base,
-      kind: 'shape',
-      shape: s.shape && ['rect', 'ellipse', 'line'].includes(s.shape) ? s.shape : 'rect',
-      ...(hexOr(s.fill, undefined) ? { fill: hexOr(s.fill, undefined) } : {}),
-      ...(hexOr(s.stroke, undefined) ? { stroke: hexOr(s.stroke, undefined) } : {}),
-      ...(s.strokeWidth != null ? { strokeWidth: clampN(s.strokeWidth, 0, 60, 1) } : {}),
-      ...(s.radius ? { radius: clampN(s.radius, 0, 200, 0) } : {}),
-    }
-  }
-  return null
-}
-
-/** Normalize a canvas slide's elements/background before persisting (caps,
- * numeric clamps, hex-only colors, https-only image URLs). Non-canvas slides
- * pass through untouched — their RichDoc regions are sanitized separately. */
-export function sanitizeCanvasSlide(slide: Slide): Slide {
-  if (slide.layout !== 'canvas') return slide
-  const elements = (Array.isArray(slide.elements) ? slide.elements : [])
-    .slice(0, 120)
-    .map(sanitizeElement)
-    .filter((e): e is SlideElement => !!e)
-  return {
-    id: String(slide.id).slice(0, 64),
-    layout: 'canvas',
-    elements,
-    ...(hexOr(slide.bgColor, undefined) ? { bgColor: hexOr(slide.bgColor, undefined) } : {}),
-    ...(slide.notes ? { notes: str(slide.notes, 8000) } : {}),
-  }
-}
-
-/**
- * Attachment ids of the locked full-bleed page renders the slides-import
- * worker produces — one per slide, created solely by the renderer and never
- * referenced elsewhere. Used to garbage-collect superseded renders (worker)
- * and to purge a deck's files when its lesson / library item is deleted (web).
- */
-export function renderedPageAttachmentIds(slides: Slide[]): string[] {
-  const ids: string[] = []
-  for (const slide of slides) {
-    if (slide.layout !== 'canvas') continue
-    for (const el of slide.elements ?? []) {
-      if (
-        el.kind === 'image' &&
-        el.locked === true &&
-        el.attachmentId &&
-        el.x === 0 &&
-        el.y === 0 &&
-        el.w === 960 &&
-        el.h === 540
-      ) {
-        ids.push(el.attachmentId)
-      }
-    }
-  }
-  return ids
-}
 
 // Per-criteria checklist on a practical (hands-on) lesson, signed off by an
 // evaluator with training manage permission.
@@ -291,9 +61,7 @@ export const trainingCourseModules = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    courseId: uuid('course_id')
-      .notNull()
-      .references(() => trainingCourses.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id').notNull(),
     title: text('title').notNull(),
     description: text('description'),
     sortOrder: integer('sort_order').default(0).notNull(),
@@ -302,18 +70,24 @@ export const trainingCourseModules = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_course_modules_tenant_idx').on(t.tenantId),
-    courseIdx: index('training_course_modules_course_idx').on(t.courseId, t.sortOrder),
+    tenantIdIdUx: uniqueIndex('training_course_modules_tenant_id_id_ux').on(t.tenantId, t.id),
+    courseIdx: index('training_course_modules_course_idx').on(t.tenantId, t.courseId, t.sortOrder),
+    courseFk: foreignKey({
+      name: 'training_course_modules_tenant_course_fk',
+      columns: [t.tenantId, t.courseId],
+      foreignColumns: [trainingCourses.tenantId, trainingCourses.id],
+    }).onDelete('cascade'),
   }),
 )
 
 export const trainingLessonKind = pgEnum('training_lesson_kind', [
-  'rich', // bespoke content blocks
+  'rich', // sanitized rich HTML
   'video', // attachment or external url
   'file', // downloadable attachment
   'embed', // iframe url
   'quiz', // → training_assessment_types (existing engine)
   'session', // → training_classes (in-person / blended)
-  'slides', // structured slideshow (Slide[]) — native or PPTX-imported
+  'slides', // PPTX master edited and played by Collabora Impress
   'practical', // hands-on/physical test signed off by an evaluator
 ])
 
@@ -333,41 +107,26 @@ export const trainingLessons = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    courseId: uuid('course_id')
-      .notNull()
-      .references(() => trainingCourses.id, { onDelete: 'cascade' }),
-    moduleId: uuid('module_id')
-      .notNull()
-      .references(() => trainingCourseModules.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id').notNull(),
+    moduleId: uuid('module_id').notNull(),
     title: text('title').notNull(),
     kind: trainingLessonKind('kind').default('rich').notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
-    // kind = 'rich' (content) | 'practical' (instructions). ProseMirror JSON is
-    // the editing source of truth; HTML is sanitized server-side at save and
-    // rendered in the player.
-    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(),
+    // kind = 'rich' (content) | 'practical' (instructions). Sanitized HTML is
+    // the single editing/rendering source of truth.
     contentHtml: text('content_html'),
-    // kind = 'slides'
-    slides: jsonb('slides').$type<Slide[]>().default([]).notNull(),
     // kind = 'practical'
     practicalCriteria: jsonb('practical_criteria')
       .$type<PracticalCriterion[]>()
       .default([])
       .notNull(),
-    // PPTX import lifecycle (worker writes these)
-    importStatus: text('import_status'), // 'pending' | 'processing' | 'complete' | 'failed'
-    importError: text('import_error'),
-    // PPTX master copy: when set, the referenced attachment (the uploaded
-    // .pptx) is the deck's source of truth — slides[] is a derived render that
-    // the worker replaces after every import/edit, and the deck is edited in
-    // the PowerPoint editor (Collabora) instead of the canvas editor.
+    // PPTX master copy. Collabora Impress edits and plays this same file; no
+    // PDF or image derivative is created.
     sourceAttachmentId: uuid('source_attachment_id'),
     // kind = 'quiz' → existing native assessment engine
-    assessmentTypeId: uuid('assessment_type_id').references(() => trainingAssessmentTypes.id, {
-      onDelete: 'set null',
-    }),
+    assessmentTypeId: uuid('assessment_type_id'),
     // kind = 'session' → in-person class
-    classId: uuid('class_id').references(() => trainingClasses.id, { onDelete: 'set null' }),
+    classId: uuid('class_id'),
     // kind = 'video' | 'file'
     attachmentId: uuid('attachment_id'),
     // kind = 'embed' | external 'video'
@@ -383,8 +142,34 @@ export const trainingLessons = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_lessons_tenant_idx').on(t.tenantId),
-    courseIdx: index('training_lessons_course_idx').on(t.courseId),
-    moduleIdx: index('training_lessons_module_idx').on(t.moduleId, t.sortOrder),
+    tenantIdIdUx: uniqueIndex('training_lessons_tenant_id_id_ux').on(t.tenantId, t.id),
+    courseIdx: index('training_lessons_course_idx').on(t.tenantId, t.courseId),
+    moduleIdx: index('training_lessons_module_idx').on(t.tenantId, t.moduleId, t.sortOrder),
+    assessmentTypeIdx: index('training_lessons_assessment_type_idx').on(
+      t.tenantId,
+      t.assessmentTypeId,
+    ),
+    classIdx: index('training_lessons_class_idx').on(t.tenantId, t.classId),
+    courseFk: foreignKey({
+      name: 'training_lessons_tenant_course_fk',
+      columns: [t.tenantId, t.courseId],
+      foreignColumns: [trainingCourses.tenantId, trainingCourses.id],
+    }).onDelete('cascade'),
+    moduleFk: foreignKey({
+      name: 'training_lessons_tenant_module_fk',
+      columns: [t.tenantId, t.moduleId],
+      foreignColumns: [trainingCourseModules.tenantId, trainingCourseModules.id],
+    }).onDelete('cascade'),
+    assessmentTypeFk: foreignKey({
+      name: 'training_lessons_tenant_assessment_type_fk',
+      columns: [t.tenantId, t.assessmentTypeId],
+      foreignColumns: [trainingAssessmentTypes.tenantId, trainingAssessmentTypes.id],
+    }),
+    classFk: foreignKey({
+      name: 'training_lessons_tenant_class_fk',
+      columns: [t.tenantId, t.classId],
+      foreignColumns: [trainingClasses.tenantId, trainingClasses.id],
+    }),
   }),
 )
 
@@ -411,15 +196,11 @@ export const trainingEnrollments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    courseId: uuid('course_id')
-      .notNull()
-      .references(() => trainingCourses.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
+    courseId: uuid('course_id').notNull(),
+    personId: uuid('person_id').notNull(),
     status: trainingEnrollmentStatus('status').default('not_started').notNull(),
     source: trainingEnrollmentSource('source').default('self').notNull(),
-    assignedByTenantUserId: uuid('assigned_by_tenant_user_id').references(() => tenantUsers.id),
+    assignedByTenantUserId: uuid('assigned_by_tenant_user_id'),
     progressPercent: integer('progress_percent').default(0).notNull(),
     currentLessonId: uuid('current_lesson_id'),
     startedAt: timestamp('started_at', { withTimezone: true }),
@@ -427,15 +208,45 @@ export const trainingEnrollments = pgTable(
     dueOn: date('due_on'),
     expiresOn: date('expires_on'),
     // The training_record written when this enrollment completed (provenance).
-    recordId: uuid('record_id').references(() => trainingRecords.id, { onDelete: 'set null' }),
+    recordId: uuid('record_id'),
     ...timestamps,
     ...softDelete,
   },
   (t) => ({
     tenantIdx: index('training_enrollments_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('training_enrollments_tenant_id_id_ux').on(t.tenantId, t.id),
     personIdx: index('training_enrollments_person_idx').on(t.tenantId, t.personId),
     courseIdx: index('training_enrollments_course_idx').on(t.tenantId, t.courseId),
-    personCourseUx: uniqueIndex('training_enrollments_person_course_ux').on(t.courseId, t.personId),
+    assignedByIdx: index('training_enrollments_assigned_by_idx').on(
+      t.tenantId,
+      t.assignedByTenantUserId,
+    ),
+    recordIdx: index('training_enrollments_record_idx').on(t.tenantId, t.recordId),
+    personCourseUx: uniqueIndex('training_enrollments_person_course_ux').on(
+      t.tenantId,
+      t.courseId,
+      t.personId,
+    ),
+    courseFk: foreignKey({
+      name: 'training_enrollments_tenant_course_fk',
+      columns: [t.tenantId, t.courseId],
+      foreignColumns: [trainingCourses.tenantId, trainingCourses.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'training_enrollments_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
+    assignedByFk: foreignKey({
+      name: 'training_enrollments_tenant_assigned_by_fk',
+      columns: [t.tenantId, t.assignedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    recordFk: foreignKey({
+      name: 'training_enrollments_tenant_record_fk',
+      columns: [t.tenantId, t.recordId],
+      foreignColumns: [trainingRecords.tenantId, trainingRecords.id],
+    }),
   }),
 )
 
@@ -454,15 +265,9 @@ export const trainingLessonProgress = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    enrollmentId: uuid('enrollment_id')
-      .notNull()
-      .references(() => trainingEnrollments.id, { onDelete: 'cascade' }),
-    lessonId: uuid('lesson_id')
-      .notNull()
-      .references(() => trainingLessons.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
+    enrollmentId: uuid('enrollment_id').notNull(),
+    lessonId: uuid('lesson_id').notNull(),
+    personId: uuid('person_id').notNull(),
     status: trainingProgressStatus('status').default('not_started').notNull(),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -472,11 +277,9 @@ export const trainingLessonProgress = pgTable(
     // Resume payload: video seconds / scroll offset / (future) SCORM suspend_data.
     lastPosition: jsonb('last_position').$type<Record<string, unknown> | null>(),
     // quiz lessons: link to the concrete attempt in the existing engine.
-    assessmentId: uuid('assessment_id').references(() => trainingAssessments.id, {
-      onDelete: 'set null',
-    }),
+    assessmentId: uuid('assessment_id'),
     // practical lessons: evaluator sign-off
-    evaluatedByTenantUserId: uuid('evaluated_by_tenant_user_id').references(() => tenantUsers.id),
+    evaluatedByTenantUserId: uuid('evaluated_by_tenant_user_id'),
     evaluationNotes: text('evaluation_notes'),
     evaluationSignatureAttachmentId: uuid('evaluation_signature_attachment_id'),
     criteriaResults: jsonb('criteria_results').$type<Record<string, boolean> | null>(),
@@ -484,9 +287,44 @@ export const trainingLessonProgress = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_lesson_progress_tenant_idx').on(t.tenantId),
-    enrollmentIdx: index('training_lesson_progress_enrollment_idx').on(t.enrollmentId),
+    enrollmentIdx: index('training_lesson_progress_enrollment_idx').on(t.tenantId, t.enrollmentId),
+    lessonIdx: index('training_lesson_progress_lesson_idx').on(t.tenantId, t.lessonId),
     personIdx: index('training_lesson_progress_person_idx').on(t.tenantId, t.personId),
-    lessonUx: uniqueIndex('training_lesson_progress_lesson_ux').on(t.enrollmentId, t.lessonId),
+    assessmentIdx: index('training_lesson_progress_assessment_idx').on(t.tenantId, t.assessmentId),
+    evaluatedByIdx: index('training_lesson_progress_evaluated_by_idx').on(
+      t.tenantId,
+      t.evaluatedByTenantUserId,
+    ),
+    lessonUx: uniqueIndex('training_lesson_progress_lesson_ux').on(
+      t.tenantId,
+      t.enrollmentId,
+      t.lessonId,
+    ),
+    enrollmentFk: foreignKey({
+      name: 'training_lesson_progress_tenant_enrollment_fk',
+      columns: [t.tenantId, t.enrollmentId],
+      foreignColumns: [trainingEnrollments.tenantId, trainingEnrollments.id],
+    }).onDelete('cascade'),
+    lessonFk: foreignKey({
+      name: 'training_lesson_progress_tenant_lesson_fk',
+      columns: [t.tenantId, t.lessonId],
+      foreignColumns: [trainingLessons.tenantId, trainingLessons.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'training_lesson_progress_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
+    assessmentFk: foreignKey({
+      name: 'training_lesson_progress_tenant_assessment_fk',
+      columns: [t.tenantId, t.assessmentId],
+      foreignColumns: [trainingAssessments.tenantId, trainingAssessments.id],
+    }),
+    evaluatedByFk: foreignKey({
+      name: 'training_lesson_progress_tenant_evaluated_by_fk',
+      columns: [t.tenantId, t.evaluatedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -559,11 +397,7 @@ export const trainingContentItems = pgTable(
     title: text('title').notNull(),
     description: text('description'),
     kind: trainingContentItemKind('kind').default('rich').notNull(),
-    contentJson: jsonb('content_json').$type<Record<string, unknown> | null>(),
     contentHtml: text('content_html'),
-    slides: jsonb('slides').$type<Slide[]>().default([]).notNull(),
-    importStatus: text('import_status'),
-    importError: text('import_error'),
     // PPTX master copy (see trainingLessons.sourceAttachmentId).
     sourceAttachmentId: uuid('source_attachment_id'),
     attachmentId: uuid('attachment_id'),

@@ -458,6 +458,7 @@ export async function loadDashboardMetrics(
         .from(inspectionRecords)
         .where(
           and(
+            isNull(inspectionRecords.deletedAt),
             gte(inspectionRecords.occurredAt, startOfMonth),
             inArray(inspectionRecords.status, ['submitted', 'closed']),
           ),
@@ -594,10 +595,9 @@ export async function loadDashboardMetrics(
       .map((n, i) => rate(n, hours24[12 + i] ?? 0))
 
     // --- Training compliance % -------------------------------------------
-    // From the unified compliance engine's materialised scoreboard
-    // (compliance_status) filtered to training + cert obligations — NOT the
-    // decommissioned legacy assignment table (empty post-cutover). Matches the
-    // Insights "Training compliance" card.
+    // From the unified compliance engine's materialised scoreboard, filtered to
+    // training + certification obligations. Matches the Insights "Training
+    // compliance" card.
     const tcRows = await tx
       .select({ status: complianceStatus.status, c: count() })
       .from(complianceStatus)
@@ -980,61 +980,92 @@ export async function loadDashboardMetrics(
         }))
       : []
 
-    // My compliance — read the materialised scoreboard for active obligations.
-    const complianceRows = myPersonId
-      ? await tx
-          .select({
-            obligationId: complianceObligations.id,
-            kind: complianceObligations.sourceModule,
-            title: complianceObligations.title,
-            status: complianceStatus.status,
-            dueOn: complianceStatus.dueOn,
-            targetRef: complianceObligations.targetRef,
-          })
-          .from(complianceStatus)
-          .innerJoin(
-            complianceObligations,
-            eq(complianceObligations.id, complianceStatus.obligationId),
+    // My compliance — aggregate the complete materialised scoreboard in SQL,
+    // then fetch only the five rows the card can render.
+    const complianceData = myPersonId
+      ? await (async () => {
+          const baseWhere = and(
+            eq(complianceStatus.tenantId, ctx.tenantId),
+            eq(complianceStatus.personId, myPersonId),
+            isNull(complianceObligations.deletedAt),
+            eq(complianceObligations.status, 'active'),
           )
-          .where(
-            and(
-              eq(complianceStatus.tenantId, ctx.tenantId),
-              eq(complianceStatus.personId, myPersonId),
-              isNull(complianceObligations.deletedAt),
-              eq(complianceObligations.status, 'active'),
-            ),
-          )
-          .limit(1000)
-      : []
-    const cTotal = complianceRows.length
-    const cCompleted = complianceRows.filter((r) => r.status === 'completed').length
-    const cOverdue = complianceRows.filter((r) => r.status === 'overdue').length
-    const cDueSoon = complianceRows.filter((r) => r.status === 'expiring').length
-    const cPending = complianceRows.filter(
-      (r) => r.status === 'pending' || r.status === 'in_progress',
-    ).length
-    const outstandingRank = (s: string) =>
-      s === 'overdue' ? 0 : s === 'expiring' ? 1 : s === 'in_progress' ? 2 : 3
-    const cOutstanding = complianceRows
-      .filter((r) => ['overdue', 'expiring', 'pending', 'in_progress'].includes(r.status))
-      .sort(
-        (a, b) =>
-          outstandingRank(a.status) - outstandingRank(b.status) ||
-          (a.dueOn ?? '9999-12-31').localeCompare(b.dueOn ?? '9999-12-31'),
-      )
-      .slice(0, 5)
-      .map((r) => {
-        const link = resolveComplianceLink(r.kind, r.targetRef, { personId: myPersonId })
-        return {
-          obligationId: r.obligationId,
-          kind: r.kind as string,
-          title: r.title,
-          status: r.status,
-          dueOn: r.dueOn ? String(r.dueOn) : null,
-          href: link?.href ?? '/compliance/mine',
-          prefetch: link?.prefetch ?? true,
-        }
+          const [summaryRows, outstanding] = await Promise.all([
+            tx
+              .select({
+                total: count(),
+                completed: sql<number>`count(*) filter (where ${complianceStatus.status} = 'completed')::int`,
+                overdue: sql<number>`count(*) filter (where ${complianceStatus.status} = 'overdue')::int`,
+                dueSoon: sql<number>`count(*) filter (where ${complianceStatus.status} = 'expiring')::int`,
+                pending: sql<number>`count(*) filter (where ${complianceStatus.status} in ('pending','in_progress'))::int`,
+              })
+              .from(complianceStatus)
+              .innerJoin(
+                complianceObligations,
+                eq(complianceObligations.id, complianceStatus.obligationId),
+              )
+              .where(baseWhere),
+            tx
+              .select({
+                obligationId: complianceObligations.id,
+                kind: complianceObligations.sourceModule,
+                title: complianceObligations.title,
+                status: complianceStatus.status,
+                dueOn: complianceStatus.dueOn,
+                targetRef: complianceObligations.targetRef,
+              })
+              .from(complianceStatus)
+              .innerJoin(
+                complianceObligations,
+                eq(complianceObligations.id, complianceStatus.obligationId),
+              )
+              .where(
+                and(
+                  baseWhere,
+                  inArray(complianceStatus.status, [
+                    'overdue',
+                    'expiring',
+                    'in_progress',
+                    'pending',
+                  ]),
+                ),
+              )
+              .orderBy(
+                asc(sql`case ${complianceStatus.status}
+                  when 'overdue' then 0
+                  when 'expiring' then 1
+                  when 'in_progress' then 2
+                  else 3
+                end`),
+                asc(sql`coalesce(${complianceStatus.dueOn}, '9999-12-31'::date)`),
+                asc(complianceObligations.title),
+                asc(complianceObligations.id),
+              )
+              .limit(5),
+          ])
+          return { summary: summaryRows[0], outstanding }
+        })()
+      : { summary: null, outstanding: [] }
+    const cTotal = Number(complianceData.summary?.total ?? 0)
+    const cCompleted = Number(complianceData.summary?.completed ?? 0)
+    const cOverdue = Number(complianceData.summary?.overdue ?? 0)
+    const cDueSoon = Number(complianceData.summary?.dueSoon ?? 0)
+    const cPending = Number(complianceData.summary?.pending ?? 0)
+    const cOutstanding = complianceData.outstanding.map((r) => {
+      const link = resolveComplianceLink(r.kind, r.targetRef, {
+        personId: myPersonId,
+        obligationId: r.obligationId,
       })
+      return {
+        obligationId: r.obligationId,
+        kind: r.kind as string,
+        title: r.title,
+        status: r.status,
+        dueOn: r.dueOn ? String(r.dueOn) : null,
+        href: link?.href ?? '/compliance/mine',
+        prefetch: link?.prefetch ?? true,
+      }
+    })
     const myCompliance = {
       linked: myPersonId !== null,
       total: cTotal,

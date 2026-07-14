@@ -1,8 +1,9 @@
 // Sync provenance for org units (Locations / Projects / Sites — the shared
 // org_units table). An org unit created or maintained by a data-sync connection
-// has a `sync_crosswalk` row (entity `org_unit`) pointing at it. We treat the
-// unit as "actively synced" only while that connection is still ENABLED —
-// disabling or removing the connection hands the record back to manual editing.
+// has a `sync_crosswalk` row (entity `org_unit`) pointing at it. Schedule
+// enablement is deliberately irrelevant: a manual-only connection still owns
+// its records. Deleting the connection removes its crosswalk ownership and
+// hands the unit back to manual editing.
 //
 // Mirrors people-sync.ts so the org hierarchy admin can lock synced units the
 // same way the people directory locks synced people.
@@ -42,7 +43,6 @@ export async function getOrgUnitSyncOrigins(
       and(
         eq(syncCrosswalk.entity, 'org_unit'),
         inArray(syncCrosswalk.canonicalId, orgUnitIds),
-        eq(syncConnections.enabled, true),
         isNull(syncConnections.deletedAt),
       ),
     )

@@ -8,9 +8,11 @@
 // `trainingSkillEvaluations` already in `training.ts` — those model evaluator
 // sign-off of in-house competencies; this models externally-issued credentials.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
+  check,
   date,
+  foreignKey,
   index,
   integer,
   pgTable,
@@ -39,6 +41,7 @@ export const trainingSkillAuthorities = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_skill_authorities_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('training_skill_authorities_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantCodeIdx: index('training_skill_authorities_tenant_code_idx').on(t.tenantId, t.code),
   }),
 )
@@ -50,9 +53,7 @@ export const trainingSkillTypes = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    authorityId: uuid('authority_id')
-      .notNull()
-      .references(() => trainingSkillAuthorities.id, { onDelete: 'cascade' }),
+    authorityId: uuid('authority_id').notNull(),
     name: text('name').notNull(),
     code: text('code'),
     validForMonths: integer('valid_for_months'), // null = no expiry
@@ -61,7 +62,13 @@ export const trainingSkillTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_skill_types_tenant_idx').on(t.tenantId),
-    authorityIdx: index('training_skill_types_authority_idx').on(t.authorityId),
+    tenantIdIdUx: uniqueIndex('training_skill_types_tenant_id_id_ux').on(t.tenantId, t.id),
+    authorityIdx: index('training_skill_types_authority_idx').on(t.tenantId, t.authorityId),
+    authorityFk: foreignKey({
+      name: 'training_skill_types_tenant_authority_fk',
+      columns: [t.tenantId, t.authorityId],
+      foreignColumns: [trainingSkillAuthorities.tenantId, trainingSkillAuthorities.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -75,13 +82,11 @@ export const trainingSkillAssignments = pgTable(
     // Nullable so "New skill" can land on a genuinely blank draft (no defaulted
     // person/skill type that looks pre-existing). Lists filter out drafts where
     // either is still null. Mirrors the hazid draft model.
-    personId: uuid('person_id').references(() => people.id, { onDelete: 'cascade' }),
-    skillTypeId: uuid('skill_type_id').references(() => trainingSkillTypes.id, {
-      onDelete: 'cascade',
-    }),
+    personId: uuid('person_id'),
+    skillTypeId: uuid('skill_type_id'),
     grantedOn: date('granted_on').notNull(),
     expiresOn: date('expires_on'),
-    grantedByTenantUserId: uuid('granted_by_tenant_user_id').references(() => tenantUsers.id),
+    grantedByTenantUserId: uuid('granted_by_tenant_user_id'),
     evidenceAttachmentId: uuid('evidence_attachment_id'),
     notes: text('notes'),
     ...timestamps,
@@ -91,9 +96,29 @@ export const trainingSkillAssignments = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_skill_assignments_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('training_skill_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
     personIdx: index('training_skill_assignments_person_idx').on(t.tenantId, t.personId),
-    skillTypeIdx: index('training_skill_assignments_skill_type_idx').on(t.skillTypeId),
+    skillTypeIdx: index('training_skill_assignments_skill_type_idx').on(t.tenantId, t.skillTypeId),
+    grantedByIdx: index('training_skill_assignments_granted_by_idx').on(
+      t.tenantId,
+      t.grantedByTenantUserId,
+    ),
     expiresIdx: index('training_skill_assignments_expires_idx').on(t.tenantId, t.expiresOn),
+    personFk: foreignKey({
+      name: 'training_skill_assignments_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
+    skillTypeFk: foreignKey({
+      name: 'training_skill_assignments_tenant_skill_type_fk',
+      columns: [t.tenantId, t.skillTypeId],
+      foreignColumns: [trainingSkillTypes.tenantId, trainingSkillTypes.id],
+    }).onDelete('cascade'),
+    grantedByFk: foreignKey({
+      name: 'training_skill_assignments_tenant_granted_by_fk',
+      columns: [t.tenantId, t.grantedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -108,10 +133,7 @@ export const trainingSkillCertificates = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    skillAssignmentId: uuid('skill_assignment_id')
-      .notNull()
-      .references(() => trainingSkillAssignments.id, { onDelete: 'cascade' }),
-    pdfAttachmentId: uuid('pdf_attachment_id'),
+    skillAssignmentId: uuid('skill_assignment_id').notNull(),
     verifyToken: text('verify_token').notNull(), // public, opaque; resolves to assignment
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     revokedReason: text('revoked_reason'),
@@ -119,9 +141,15 @@ export const trainingSkillCertificates = pgTable(
   },
   (t) => ({
     assignmentIdx: uniqueIndex('training_skill_certificates_skill_assignment_id_ux').on(
+      t.tenantId,
       t.skillAssignmentId,
     ),
     tokenIdx: uniqueIndex('training_skill_certificates_verify_token_ux').on(t.verifyToken),
+    assignmentFk: foreignKey({
+      name: 'training_skill_certificates_tenant_assignment_fk',
+      columns: [t.tenantId, t.skillAssignmentId],
+      foreignColumns: [trainingSkillAssignments.tenantId, trainingSkillAssignments.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -137,9 +165,7 @@ export const trainingSkillAssignmentFiles = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    skillAssignmentId: uuid('skill_assignment_id')
-      .notNull()
-      .references(() => trainingSkillAssignments.id, { onDelete: 'cascade' }),
+    skillAssignmentId: uuid('skill_assignment_id').notNull(),
     attachmentId: uuid('attachment_id'),
     label: text('label').notNull(),
     kind: text('kind').notNull(), // 'certificate' | 'evidence' | 'photo' | 'other'
@@ -149,8 +175,20 @@ export const trainingSkillAssignmentFiles = pgTable(
   },
   (t) => ({
     tenantIdx: index('training_skill_assignment_files_tenant_idx').on(t.tenantId),
-    assignmentIdx: index('training_skill_assignment_files_assignment_idx').on(t.skillAssignmentId),
+    assignmentIdx: index('training_skill_assignment_files_assignment_idx').on(
+      t.tenantId,
+      t.skillAssignmentId,
+    ),
     kindIdx: index('training_skill_assignment_files_kind_idx').on(t.tenantId, t.kind),
+    assignmentFk: foreignKey({
+      name: 'training_skill_assignment_files_tenant_assignment_fk',
+      columns: [t.tenantId, t.skillAssignmentId],
+      foreignColumns: [trainingSkillAssignments.tenantId, trainingSkillAssignments.id],
+    }).onDelete('cascade'),
+    kindCheck: check(
+      'training_skill_assignment_files_kind_ck',
+      sql`${t.kind} IN ('certificate', 'evidence', 'photo', 'other')`,
+    ),
   }),
 )
 

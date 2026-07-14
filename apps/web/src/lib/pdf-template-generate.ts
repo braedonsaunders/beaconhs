@@ -15,7 +15,7 @@ import { formTemplateVersions, formTemplates, pdfTemplates } from '@beaconhs/db/
 import { generateFormPdfTemplate, type FormSchemaV1 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { compileBuilderHtml } from '@/lib/email-templates'
+import { compileBuilderHtml } from '@/lib/template-builder-compile'
 
 type EnsureFormPdfTemplateResult = {
   /** True when this call created the template. */

@@ -11,21 +11,16 @@
 import { unsealSecret } from '@beaconhs/crypto'
 import { resolvePublicHost } from '@beaconhs/sync/egress'
 import { isEmailProvider, type EmailProvider } from './providers'
+import {
+  isValidEmailAddress,
+  normalizeEmailDeliveryInput,
+  type EmailAttachmentPayload,
+  type EmailDeliveryInput,
+} from '@beaconhs/email-render/delivery-input'
 
-export type EmailAttachment = {
-  filename: string
-  /** base64-encoded file contents. */
-  content: string
-  contentType?: string
-}
+export type EmailAttachment = EmailAttachmentPayload
 
-export type SendEmailInput = {
-  to: string | string[]
-  subject: string
-  html: string
-  text: string
-  attachments?: EmailAttachment[]
-}
+export type SendEmailInput = EmailDeliveryInput
 
 // ---------------------------------------------------------------------------
 // Stored config (secret sealed)
@@ -74,45 +69,8 @@ type PlainEmailConfig = Omit<RawEmailConfig, 'keyCiphertext' | 'keyNonce'> & {
 const MAILGUN_DOMAIN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 const SMTP_HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/i
 const MAX_FROM_NAME_LENGTH = 128
-const MAX_EMAIL_ADDRESS_LENGTH = 254
 const MAX_SMTP_USERNAME_LENGTH = 320
 const MAX_SEALED_SECRET_LENGTH = 8_192
-
-/**
- * Provider-compatible ASCII mailbox validation for envelope/sender addresses.
- * Deliberately excludes quoted local parts and Unicode because not every
- * supported provider accepts them (SendGrid rejects Unicode From addresses).
- */
-export function isValidEmailAddress(value: string): boolean {
-  if (!value || value.length > MAX_EMAIL_ADDRESS_LENGTH || !/^[\x21-\x7e]+$/.test(value)) {
-    return false
-  }
-  const at = value.indexOf('@')
-  if (at < 1 || at !== value.lastIndexOf('@')) return false
-  const local = value.slice(0, at)
-  const domain = value.slice(at + 1)
-  if (
-    local.length > 64 ||
-    local.startsWith('.') ||
-    local.endsWith('.') ||
-    local.includes('..') ||
-    !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)
-  ) {
-    return false
-  }
-  if (domain.length > 253 || !domain.includes('.')) return false
-  const labels = domain.split('.')
-  if (
-    labels.some(
-      (label) =>
-        !label || label.length > 63 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
-    )
-  ) {
-    return false
-  }
-  const topLevel = labels.at(-1)!
-  return topLevel.length >= 2 && !/^\d+$/.test(topLevel)
-}
 
 function validateEmailConfigFields(
   raw: PlainEmailConfig | RawEmailConfig,
@@ -516,17 +474,18 @@ export async function sendVia(
 ): Promise<{ id: string }> {
   const from = transport.from
   const replyTo = transport.replyTo
+  const normalizedInput = normalizeEmailDeliveryInput(input, { requireSingleRecipient: true })
   switch (transport.provider) {
     case 'resend':
-      return sendResend(transport, input, from, replyTo)
+      return sendResend(transport, normalizedInput, from, replyTo)
     case 'sendgrid':
-      return sendSendgrid(transport, input, from, replyTo)
+      return sendSendgrid(transport, normalizedInput, from, replyTo)
     case 'mailgun':
-      return sendMailgun(transport, input, from, replyTo)
+      return sendMailgun(transport, normalizedInput, from, replyTo)
     case 'postmark':
-      return sendPostmark(transport, input, from, replyTo)
+      return sendPostmark(transport, normalizedInput, from, replyTo)
     case 'smtp':
-      return sendSmtp(transport, input, from, replyTo)
+      return sendSmtp(transport, normalizedInput, from, replyTo)
   }
 }
 

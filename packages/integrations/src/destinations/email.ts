@@ -4,7 +4,13 @@
 // slow SMTP send never blocks the originating save. A multi-item trigger is
 // combined into one email by default.
 
-import { resolveText } from '../resolve'
+import {
+  EMAIL_RENDER_LIMITS,
+  htmlToPlainText,
+  normalizeEmailSubject,
+  renderTemplate,
+  sanitizeTokenizedEmailFragment,
+} from '@beaconhs/email-render'
 import type {
   DeliverContext,
   DeliverResult,
@@ -15,19 +21,30 @@ import type {
 } from '../types'
 
 function recipients(raw: string, item: Item): string[] {
-  return resolveText(raw, item)
+  return renderTemplate(raw, item, { allowRawValues: false })
     .split(/[,;\s]+/)
     .map((s) => s.trim())
     .filter((s) => s.includes('@'))
 }
 
-function htmlToText(html: string): string {
-  return html
-    .replace(/<\s*br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .trim()
+/** Compile once, then escape every event value before it enters safe authored markup. */
+export function createIntegrationEmailBodyRenderer(bodyTemplate: string): (item: Item) => string {
+  const sanitized = sanitizeTokenizedEmailFragment(bodyTemplate)
+  if (!sanitized.trim()) throw new Error('The email body contained no safe content.')
+  return (item) =>
+    renderTemplate(sanitized, item, {
+      escapeHtml: true,
+      // Integration payload fields are record data. Triple braces must not turn
+      // them into authored HTML, even if an administrator typed them manually.
+      allowRawValues: false,
+    })
+}
+
+function renderedSubject(template: string, item: Item): string {
+  return (
+    normalizeEmailSubject(renderTemplate(template, item, { allowRawValues: false })) ||
+    'Notification from BeaconHS'
+  )
 }
 
 async function test(ctx: DestinationTestContext): Promise<IntegrationResult> {
@@ -60,22 +77,29 @@ async function deliver(ctx: DeliverContext): Promise<DeliverResult> {
       errors.push('no valid recipients')
       return
     }
-    await enqueueEmail({ to, subject, html, text: htmlToText(html), meta })
+    await enqueueEmail({ to, subject, html, text: htmlToPlainText(html), meta })
     sent++
   }
 
   try {
+    const renderBody = createIntegrationEmailBodyRenderer(bodyTpl)
     if (combine) {
       const first = ctx.items[0] as Item
-      const html = ctx.items.map((it) => resolveText(bodyTpl, it)).join('<hr/>')
-      await send(recipients(toTpl, first), resolveText(subjectTpl, first), html)
+      let html = ''
+      for (const item of ctx.items) {
+        const part = renderBody(item)
+        const separator = html ? '<hr/>' : ''
+        if (html.length > EMAIL_RENDER_LIMITS.renderOutputChars - separator.length - part.length) {
+          throw new Error(
+            `Rendered output exceeded ${EMAIL_RENDER_LIMITS.renderOutputChars} characters.`,
+          )
+        }
+        html += separator + part
+      }
+      await send(recipients(toTpl, first), renderedSubject(subjectTpl, first), html)
     } else {
       for (const item of ctx.items) {
-        await send(
-          recipients(toTpl, item),
-          resolveText(subjectTpl, item),
-          resolveText(bodyTpl, item),
-        )
+        await send(recipients(toTpl, item), renderedSubject(subjectTpl, item), renderBody(item))
       }
     }
   } catch (e) {

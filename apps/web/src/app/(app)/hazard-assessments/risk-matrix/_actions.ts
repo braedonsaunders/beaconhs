@@ -15,54 +15,9 @@ import type { RiskMatrixConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { RISK_AXIS_MAX } from '../_risk-scale'
+import { validateRiskMatrixConfig } from './_policy'
 
 type SaveResult = { ok: true } | { ok: false; error: string }
-
-const MAX_LABEL = 48
-const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
-
-function validate(
-  config: RiskMatrixConfig,
-): { ok: true; value: RiskMatrixConfig } | { ok: false; error: string } {
-  const sev = config?.axes?.severity?.values
-  const lik = config?.axes?.likelihood?.values
-  if (!Array.isArray(sev) || !Array.isArray(lik))
-    return { ok: false, error: 'Both axes need labels.' }
-  if (sev.length < 2 || lik.length < 2)
-    return { ok: false, error: 'Each axis needs at least two levels.' }
-  // Same ceiling as the editor's MAX_AXIS and the rating-field clamp — a
-  // larger matrix would have top cells no stored rating could reference.
-  if (sev.length > RISK_AXIS_MAX || lik.length > RISK_AXIS_MAX)
-    return { ok: false, error: `Each axis can have at most ${RISK_AXIS_MAX} levels.` }
-
-  const cells: RiskMatrixConfig['cells'] = {}
-  for (let s = 0; s < sev.length; s++) {
-    for (let l = 0; l < lik.length; l++) {
-      const c = config.cells?.[`${s}:${l}`]
-      if (!c || typeof c.score !== 'number' || typeof c.label !== 'string') {
-        return { ok: false, error: 'The matrix is missing one or more cells.' }
-      }
-      const color = HEX.test(c.color) ? c.color : '#94a3b8'
-      cells[`${s}:${l}`] = {
-        score: Math.round(c.score),
-        label: c.label.slice(0, MAX_LABEL),
-        color,
-      }
-    }
-  }
-
-  return {
-    ok: true,
-    value: {
-      axes: {
-        severity: { values: sev.map((v) => String(v).slice(0, MAX_LABEL)) },
-        likelihood: { values: lik.map((v) => String(v).slice(0, MAX_LABEL)) },
-      },
-      cells,
-    },
-  }
-}
 
 export async function saveRiskMatrix(config: RiskMatrixConfig): Promise<SaveResult> {
   const ctx = await requireRequestContext()
@@ -70,7 +25,7 @@ export async function saveRiskMatrix(config: RiskMatrixConfig): Promise<SaveResu
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant.' }
   const tenantId = ctx.tenantId
 
-  const parsed = validate(config)
+  const parsed = validateRiskMatrixConfig(config)
   if (!parsed.ok) return parsed
 
   const before = await withSuperAdmin(db, async (tx) => {

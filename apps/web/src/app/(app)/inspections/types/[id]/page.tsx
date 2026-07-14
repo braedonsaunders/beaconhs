@@ -13,6 +13,7 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
+import { isUuid } from '@/lib/list-params'
 import { InspectionTypeBuilder } from './_type-builder'
 import { startInspection } from '../../records/_actions'
 
@@ -29,6 +30,8 @@ export default async function InspectionTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('inspections')
 
   const data = await ctx.db(async (tx) => {
@@ -54,6 +57,7 @@ export default async function InspectionTypeDetailPage({
         sequence: inspectionTypeCriteria.sequence,
         text: inspectionTypeCriteria.text,
         responseType: inspectionTypeCriteria.responseType,
+        choiceOptions: inspectionTypeCriteria.choiceOptions,
         requiresPhoto: inspectionTypeCriteria.requiresPhoto,
         requiresComment: inspectionTypeCriteria.requiresComment,
       })

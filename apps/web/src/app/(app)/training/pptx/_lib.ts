@@ -4,7 +4,6 @@
 import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
-import { deleteObject } from '@beaconhs/storage'
 import type { WopiDeckTarget } from '@/lib/wopi'
 
 type DeckMaster = {
@@ -95,9 +94,9 @@ export async function purgeDeckAssets(
   }
   if (ids.size === 0) return 0
 
-  const rows = await db(async (tx) => {
+  return db(async (tx) => {
     const found = await tx
-      .select({ id: attachments.id, key: attachments.r2Key })
+      .select({ id: attachments.id })
       .from(attachments)
       .where(inArray(attachments.id, [...ids]))
     if (found.length > 0) {
@@ -108,10 +107,9 @@ export async function purgeDeckAssets(
         ),
       )
     }
-    return found
+    // The attachment-delete trigger records a durable object-deletion intent
+    // in this transaction. The worker retries the idempotent storage removal;
+    // no best-effort second path can silently strand a PowerPoint object.
+    return found.length
   })
-  // Objects go best-effort after the rows — a failed object delete leaves an
-  // unreferenced blob, never a broken reference.
-  await Promise.all(rows.map((r) => deleteObject({ key: r.key }).catch(() => {})))
-  return rows.length
 }

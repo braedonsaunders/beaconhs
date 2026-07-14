@@ -1,4 +1,4 @@
-import type { FieldType } from './schema'
+import type { FieldType, FormField } from './schema'
 
 export type FieldTypeMeta = {
   type: FieldType
@@ -22,8 +22,8 @@ export type FieldTypeMeta = {
     | 'number'
     | 'boolean'
     | 'string_array'
-    | 'attachment_id'
-    | 'attachment_id_array'
+    | 'attachment'
+    | 'attachment_array'
     | 'entity_ref'
     | 'entity_ref_array'
     | 'compound'
@@ -230,10 +230,10 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
   },
   matrix: {
     type: 'matrix',
-    category: 'scoring',
+    category: 'choice',
     label: 'Rating grid',
     description: 'Rate each row on a shared scale (Likert)',
-    scoring: true,
+    scoring: false,
     valueKind: 'compound',
   },
 
@@ -286,39 +286,6 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     scoring: false,
     valueKind: 'entity_ref',
   },
-  equipment_picker: {
-    type: 'equipment_picker',
-    category: 'picker',
-    label: 'Equipment',
-    description: 'Pick equipment / asset',
-    scoring: false,
-    valueKind: 'entity_ref',
-  },
-  ppe_picker: {
-    type: 'ppe_picker',
-    category: 'picker',
-    label: 'PPE',
-    description: 'Pick a PPE item',
-    scoring: false,
-    valueKind: 'entity_ref',
-  },
-  document_picker: {
-    type: 'document_picker',
-    category: 'picker',
-    label: 'Document',
-    description: 'Reference a document from the library',
-    scoring: false,
-    valueKind: 'entity_ref',
-  },
-  course_picker: {
-    type: 'course_picker',
-    category: 'picker',
-    label: 'Training course',
-    description: 'Reference a training course',
-    scoring: false,
-    valueKind: 'entity_ref',
-  },
-
   // media
   photo: {
     type: 'photo',
@@ -326,7 +293,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'Photo',
     description: 'Camera / gallery upload with annotation',
     scoring: false,
-    valueKind: 'attachment_id_array',
+    valueKind: 'attachment_array',
   },
   photo_upload: {
     type: 'photo_upload',
@@ -334,7 +301,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'Photo upload',
     description: 'Camera / gallery upload (alias of photo)',
     scoring: false,
-    valueKind: 'attachment_id_array',
+    valueKind: 'attachment_array',
   },
   photo_ai: {
     type: 'photo_ai',
@@ -358,7 +325,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'File',
     description: 'PDF / Word / Excel upload',
     scoring: false,
-    valueKind: 'attachment_id_array',
+    valueKind: 'attachment_array',
   },
   video: {
     type: 'video',
@@ -366,7 +333,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'Video',
     description: 'Short video upload',
     scoring: false,
-    valueKind: 'attachment_id_array',
+    valueKind: 'attachment_array',
   },
   audio: {
     type: 'audio',
@@ -374,7 +341,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'Audio note',
     description: 'Voice recording',
     scoring: false,
-    valueKind: 'attachment_id_array',
+    valueKind: 'attachment_array',
   },
   sketch: {
     type: 'sketch',
@@ -392,7 +359,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'Signature',
     description: 'Drawn signature on glass',
     scoring: false,
-    valueKind: 'attachment_id',
+    valueKind: 'compound',
   },
   typed_attestation: {
     type: 'typed_attestation',
@@ -410,7 +377,7 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     label: 'Formula',
     description: 'Computed from other fields',
     scoring: false,
-    valueKind: 'number',
+    valueKind: 'none',
   },
   risk_matrix: {
     type: 'risk_matrix',
@@ -464,14 +431,6 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
     scoring: false,
     valueKind: 'none',
   },
-  image: {
-    type: 'image',
-    category: 'display',
-    label: 'Image',
-    description: 'Display-only embedded image',
-    scoring: false,
-    valueKind: 'none',
-  },
   divider: {
     type: 'divider',
     category: 'display',
@@ -484,4 +443,16 @@ export const FIELD_TYPES: Record<FieldType, FieldTypeMeta> = {
 
 export function isScoringField(type: FieldType): boolean {
   return FIELD_TYPES[type].scoring
+}
+
+/** Whether a field owns a caller-supplied value in a persisted response. */
+export function isResponseValueField(type: FieldType): boolean {
+  return FIELD_TYPES[type].valueKind !== 'none'
+}
+
+/** Whether this configured field instance owns a persisted response value. */
+export function storesResponseValue(field: FormField): boolean {
+  if (!isResponseValueField(field.type)) return false
+  if (field.type !== 'data_table') return true
+  return field.binding?.selectable === 'single' || field.binding?.selectable === 'multi'
 }

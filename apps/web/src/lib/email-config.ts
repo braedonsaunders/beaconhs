@@ -196,6 +196,10 @@ export async function saveTenantEmailSettings(
   input: EmailSettingsInput,
 ): Promise<EmailConfigChange> {
   return withSuperAdmin(db, async (tx) => {
+    await tx
+      .insert(platformSettings)
+      .values({ id: PLATFORM_SETTINGS_ID })
+      .onConflictDoNothing({ target: platformSettings.id })
     const [platformRow] = await tx
       .select({ email: platformSettings.email })
       .from(platformSettings)
@@ -213,16 +217,19 @@ export async function saveTenantEmailSettings(
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
       .for('update')
-    const settings = (t?.settings as Record<string, unknown>) ?? {}
+    if (!t) throw new Error('The active tenant no longer exists.')
+    const settings = t.settings as Record<string, unknown>
     const prev = (
       settings.email && typeof settings.email === 'object' ? settings.email : {}
     ) as RawEmailConfig
     const next = mergeEmailConfig(prev, input)
     validateEmailConfigForSave(next, next.enabled === true)
-    await tx
+    const updated = await tx
       .update(tenants)
       .set({ settings: { ...settings, email: next } })
       .where(eq(tenants.id, ctx.tenantId))
+      .returning({ id: tenants.id })
+    if (updated.length !== 1) throw new Error('The active tenant no longer exists.')
     return describeEmailConfigChange(prev, next, Boolean(input.secret))
   })
 }
@@ -230,6 +237,10 @@ export async function saveTenantEmailSettings(
 /** Clear the stored secret and disable this tenant's now-incomplete provider. */
 export async function clearTenantEmailKey(ctx: RequestContext): Promise<EmailConfigChange> {
   return withSuperAdmin(db, async (tx) => {
+    await tx
+      .insert(platformSettings)
+      .values({ id: PLATFORM_SETTINGS_ID })
+      .onConflictDoNothing({ target: platformSettings.id })
     const [platformRow] = await tx
       .select({ email: platformSettings.email })
       .from(platformSettings)
@@ -247,7 +258,8 @@ export async function clearTenantEmailKey(ctx: RequestContext): Promise<EmailCon
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
       .for('update')
-    const settings = (t?.settings as Record<string, unknown>) ?? {}
+    if (!t) throw new Error('The active tenant no longer exists.')
+    const settings = t.settings as Record<string, unknown>
     const prev = (
       settings.email && typeof settings.email === 'object' ? settings.email : {}
     ) as RawEmailConfig
@@ -258,7 +270,7 @@ export async function clearTenantEmailKey(ctx: RequestContext): Promise<EmailCon
       keyNonce: undefined,
     }
     validateEmailConfigForSave(next, false)
-    await tx
+    const updated = await tx
       .update(tenants)
       .set({
         settings: {
@@ -267,6 +279,8 @@ export async function clearTenantEmailKey(ctx: RequestContext): Promise<EmailCon
         },
       })
       .where(eq(tenants.id, ctx.tenantId))
+      .returning({ id: tenants.id })
+    if (updated.length !== 1) throw new Error('The active tenant no longer exists.')
     return describeEmailConfigChange(prev, next, false)
   })
 }
@@ -310,12 +324,17 @@ export async function savePlatformEmailSettings(
   input: EmailSettingsInput & { mode: EmailPolicyMode },
 ): Promise<EmailConfigChange> {
   return withSuperAdmin(db, async (tx) => {
+    await tx
+      .insert(platformSettings)
+      .values({ id: PLATFORM_SETTINGS_ID })
+      .onConflictDoNothing({ target: platformSettings.id })
     const [row] = await tx
       .select({ email: platformSettings.email })
       .from(platformSettings)
       .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
       .limit(1)
       .for('update')
+    if (!row) throw new Error('Platform settings could not be initialized.')
     const raw = row?.email
     const prev = (raw && typeof raw === 'object' ? raw : {}) as PlatformEmailConfig
     const next: PlatformEmailConfig = { ...mergeEmailConfig(prev, input), mode: input.mode }
@@ -327,10 +346,12 @@ export async function savePlatformEmailSettings(
       throw new Error('Enable the platform default provider or select Disable all email.')
     }
     validateEmailConfigForSave(next, requireLive)
-    await tx
-      .insert(platformSettings)
-      .values({ id: PLATFORM_SETTINGS_ID, email: next })
-      .onConflictDoUpdate({ target: platformSettings.id, set: { email: next } })
+    const updated = await tx
+      .update(platformSettings)
+      .set({ email: next, updatedAt: new Date() })
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .returning({ id: platformSettings.id })
+    if (updated.length !== 1) throw new Error('Platform settings could not be updated.')
     return describeEmailConfigChange(prev, next, Boolean(input.secret))
   })
 }

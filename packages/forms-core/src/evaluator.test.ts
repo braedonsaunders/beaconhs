@@ -371,64 +371,19 @@ describe('evaluateFormulaTree', () => {
       ).toBe(null)
     })
 
-    it('coerces according to EntityAttrDef.valueType', () => {
-      // Booleans collapse to 0/1 so they compose with sum/product.
-      const boolCtx = makeCtx({
-        entities: {
-          crane: {
-            __entityKind: 'equipment',
-            isMissing: true,
-            isAvailableForCheckout: false,
-          },
-        },
-      })
-      expect(
-        evaluateFormulaTree(
-          { kind: 'entity_attr', pickerFieldKey: 'crane', attrKey: 'isMissing' },
-          boolCtx,
-        ),
-      ).toBe(1)
-      expect(
-        evaluateFormulaTree(
-          {
-            kind: 'entity_attr',
-            pickerFieldKey: 'crane',
-            attrKey: 'isAvailableForCheckout',
-          },
-          boolCtx,
-        ),
-      ).toBe(0)
-
-      // Dates round-trip through ISO strings.
+    it('normalizes allowlisted date attributes to ISO strings', () => {
       const fixed = new Date('2025-08-10T12:00:00Z')
       const dateCtx = makeCtx({
         entities: {
-          crane: { __entityKind: 'equipment', lastSeenAt: fixed },
+          supervisor: { __entityKind: 'person', hireDate: fixed },
         },
       })
       expect(
         evaluateFormulaTree(
-          { kind: 'entity_attr', pickerFieldKey: 'crane', attrKey: 'lastSeenAt' },
+          { kind: 'entity_attr', pickerFieldKey: 'supervisor', attrKey: 'hireDate' },
           dateCtx,
         ),
       ).toBe('2025-08-10T12:00:00.000Z')
-
-      // Numbers stay numeric.
-      const numCtx = makeCtx({
-        entities: {
-          course: { __entityKind: 'course', durationMinutes: 90 },
-        },
-      })
-      expect(
-        evaluateFormulaTree(
-          {
-            kind: 'entity_attr',
-            pickerFieldKey: 'course',
-            attrKey: 'durationMinutes',
-          },
-          numCtx,
-        ),
-      ).toBe(90)
     })
 
     it('composes supervisor job title via entity_attr (end-to-end shape)', () => {
@@ -542,6 +497,9 @@ describe('evaluateFormulaTree — scientific math', () => {
       3.14,
     )
     expect(evaluateFormulaTree({ kind: 'round', of: lit(123.456) }, makeCtx())).toBe(123)
+    expect(
+      evaluateFormulaTree({ kind: 'round', of: lit(123.456), places: 1_000_000 }, makeCtx()),
+    ).toBe(123)
   })
 
   it('floor + ceil round toward −∞ / +∞', () => {

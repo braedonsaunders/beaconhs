@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import { Award, ListChecks } from 'lucide-react'
 import {
   Badge,
@@ -32,18 +32,30 @@ import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { pickString } from '@/lib/list-params'
+import {
+  isUuid,
+  mergeHref,
+  parseListParams,
+  parsePrefixedListParams,
+  pickString,
+} from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ActivityFeed } from '@/components/activity-feed'
 import { ExtraFieldsSection } from '../../_components/extra-fields-section'
 import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
+import { loadTrainingExtraFieldPage } from '../../_lib/extra-field-query'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = ['overview', 'skill_types', 'extras', 'activity'] as const
 type Tab = (typeof TABS)[number]
+const SORTS = ['name'] as const
+const EXTRA_SORTS = ['order'] as const
 
 async function addSkillType(formData: FormData) {
   'use server'
@@ -90,8 +102,22 @@ export default async function AuthorityDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const listParams = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const extraListParams = parsePrefixedListParams(sp, 'extra', {
+    sort: 'order',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: EXTRA_SORTS,
+  })
 
   const ctx = await requireModuleManage('training')
   const data = await ctx.db(async (tx) => {
@@ -101,6 +127,21 @@ export default async function AuthorityDetailPage({
       .where(eq(trainingSkillAuthorities.id, id))
       .limit(1)
     if (!authority) return null
+    const search: SQL<unknown> | undefined = listParams.q
+      ? or(
+          ilike(trainingSkillTypes.name, `%${listParams.q}%`),
+          ilike(trainingSkillTypes.code, `%${listParams.q}%`),
+          ilike(trainingSkillTypes.description, `%${listParams.q}%`),
+        )
+      : undefined
+    const typeWhere = and(eq(trainingSkillTypes.authorityId, id), search)
+    const [[allTypeCount], [filteredTypeCount]] = await Promise.all([
+      tx
+        .select({ c: count() })
+        .from(trainingSkillTypes)
+        .where(eq(trainingSkillTypes.authorityId, id)),
+      tx.select({ c: count() }).from(trainingSkillTypes).where(typeWhere),
+    ])
     const skillTypes = await tx
       .select({
         type: trainingSkillTypes,
@@ -111,21 +152,27 @@ export default async function AuthorityDetailPage({
         trainingSkillAssignments,
         eq(trainingSkillAssignments.skillTypeId, trainingSkillTypes.id),
       )
-      .where(eq(trainingSkillTypes.authorityId, id))
+      .where(typeWhere)
       .groupBy(trainingSkillTypes.id)
       .orderBy(asc(trainingSkillTypes.name))
-    const extras = await tx
-      .select()
-      .from(trainingExtraFields)
-      .where(
-        and(eq(trainingExtraFields.ownerType, 'authority'), eq(trainingExtraFields.ownerId, id)),
-      )
-      .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
-    return { authority, skillTypes, extras }
+      .limit(listParams.perPage)
+      .offset((listParams.page - 1) * listParams.perPage)
+    const extras = await loadTrainingExtraFieldPage(
+      tx,
+      eq(trainingExtraFields.authorityId, id),
+      extraListParams,
+    )
+    return {
+      authority,
+      skillTypes,
+      skillTypeCount: Number(allTypeCount?.c ?? 0),
+      filteredSkillTypeCount: Number(filteredTypeCount?.c ?? 0),
+      extras,
+    }
   })
 
   if (!data) notFound()
-  const { authority, skillTypes, extras } = data
+  const { authority, skillTypes, skillTypeCount, filteredSkillTypeCount, extras } = data
   const activity =
     active === 'activity'
       ? await recentActivityForEntity(ctx, 'training_skill_authority', id, 50)
@@ -133,7 +180,7 @@ export default async function AuthorityDetailPage({
 
   const basePath = `/training/authorities/${id}`
   const drawer = pickString(sp.drawer)
-  const closeHref = `${basePath}${active === 'overview' ? '' : `?tab=${active}`}`
+  const closeHref = mergeHref(basePath, sp, { drawer: undefined })
 
   return (
     <DetailPageLayout
@@ -154,8 +201,8 @@ export default async function AuthorityDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'skill_types', label: 'Skill types', count: skillTypes.length },
-            { key: 'extras', label: 'Additional fields', count: extras.length },
+            { key: 'skill_types', label: 'Skill types', count: skillTypeCount },
+            { key: 'extras', label: 'Additional fields', count: extras.total },
             { key: 'activity', label: 'Activity' },
           ]}
         />
@@ -172,7 +219,7 @@ export default async function AuthorityDetailPage({
                 { label: 'Name', value: authority.name },
                 { label: 'Code', value: authority.code ?? '—' },
                 { label: 'Jurisdiction', value: authority.jurisdiction ?? '—' },
-                { label: 'Skill types', value: skillTypes.length },
+                { label: 'Skill types', value: skillTypeCount },
                 {
                   label: 'Created',
                   value: formatDateTime(new Date(authority.createdAt), ctx.timezone),
@@ -197,14 +244,27 @@ export default async function AuthorityDetailPage({
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Skill types ({skillTypes.length})</CardTitle>
+              <CardTitle>
+                Skill types (
+                {filteredSkillTypeCount === skillTypeCount
+                  ? skillTypeCount
+                  : `${filteredSkillTypeCount} of ${skillTypeCount}`}
+                )
+              </CardTitle>
             </CardHeader>
             <CardContent>
+              <TableToolbar className="mb-3">
+                <SearchInput placeholder="Search name, code, or description…" />
+              </TableToolbar>
               {skillTypes.length === 0 ? (
                 <EmptyState
                   icon={<Award size={24} />}
-                  title="No skill types"
-                  description="Add the first skill type below."
+                  title={listParams.q ? 'No skill types match your search' : 'No skill types'}
+                  description={
+                    listParams.q
+                      ? 'Clear the search to see other skill types.'
+                      : 'Add the first skill type below.'
+                  }
                 />
               ) : (
                 <Table>
@@ -241,6 +301,13 @@ export default async function AuthorityDetailPage({
                   </TableBody>
                 </Table>
               )}
+              <Pagination
+                basePath={basePath}
+                currentParams={sp}
+                total={filteredSkillTypeCount}
+                page={listParams.page}
+                perPage={listParams.perPage}
+              />
             </CardContent>
           </Card>
 
@@ -291,14 +358,21 @@ export default async function AuthorityDetailPage({
         <ExtraFieldsSection
           ownerType="authority"
           ownerId={id}
-          rows={extras.map((e) => ({
-            id: e.id,
-            fieldKey: e.fieldKey,
-            fieldValue: e.fieldValue,
-          }))}
+          rows={extras.rows}
+          list={{
+            basePath,
+            currentParams: sp,
+            total: extras.total,
+            filteredTotal: extras.filteredTotal,
+            query: extraListParams.q,
+            page: extraListParams.page,
+            perPage: extraListParams.perPage,
+            queryParamKey: 'extraQ',
+            pageParamKey: 'extraPage',
+          }}
           drawerOpen={drawer === 'add-extra-field'}
           drawerCloseHref={closeHref}
-          addHref={`${basePath}?tab=extras&drawer=add-extra-field`}
+          addHref={mergeHref(basePath, sp, { tab: 'extras', drawer: 'add-extra-field' })}
           addAction={addExtraField}
           deleteAction={deleteExtraField}
         />

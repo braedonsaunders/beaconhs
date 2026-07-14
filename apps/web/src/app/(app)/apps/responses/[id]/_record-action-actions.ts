@@ -151,7 +151,14 @@ export async function runRecordAction(input: {
         actionInputs[spec.id] = raw
       } else {
         if (typeof raw !== 'string') return { ok: false, error: `${spec.label} is invalid` }
-        const value = raw.trim().slice(0, spec.type === 'textarea' ? 10_000 : 2_000)
+        const value = raw.trim()
+        const maxLength = spec.type === 'textarea' ? 10_000 : 2_000
+        if (value.length > maxLength) {
+          return {
+            ok: false,
+            error: `${spec.label} must be ${maxLength.toLocaleString()} characters or fewer`,
+          }
+        }
         if (spec.required && !value) return { ok: false, error: `${spec.label} is required` }
         if (
           spec.type === 'select' &&

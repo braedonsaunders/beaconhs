@@ -44,8 +44,6 @@ const NAV_GROUP_ORDER = [
   'Administration',
 ] as const
 
-type NavGroupLabel = (typeof NAV_GROUP_ORDER)[number]
-
 // Stable, url-ish ids for the default groups (used as React keys / reorder ids).
 function defaultGroupId(label: string): string {
   return label
@@ -86,6 +84,7 @@ export const NAV_MODULES: NavModule[] = [
     label: 'Inspections',
     iconKey: 'clipboard',
     group: 'Frontline',
+    requiredPermission: 'inspections.read.self',
   },
   {
     key: 'hazid',
@@ -139,6 +138,7 @@ export const NAV_MODULES: NavModule[] = [
     href: '/equipment',
     label: 'Equipment',
     iconKey: 'wrench',
+    requiredPermission: 'equipment.read.self',
     group: 'Assets & people',
   },
   { key: 'ppe', href: '/ppe', label: 'PPE', iconKey: 'hard-hat', group: 'Assets & people' },

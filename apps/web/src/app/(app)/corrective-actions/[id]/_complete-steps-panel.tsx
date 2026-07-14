@@ -83,6 +83,7 @@ export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
                   <RawImage
                     src={s.signatureDataUrl}
                     alt="Signature"
+                    optimizationReason="generated"
                     className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
                   />
                 ) : null}

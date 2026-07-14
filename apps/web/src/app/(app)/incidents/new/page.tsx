@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -14,7 +13,7 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { incidents, orgUnits } from '@beaconhs/db/schema'
+import { incidents } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { incidentCreatedEvent } from '@beaconhs/integrations'
 import { requireRequestContext } from '@/lib/auth'
@@ -22,6 +21,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
 import { PageContainer } from '@/components/page-layout'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { OccurredAtField } from './_occurred-at-field'
 
 export const metadata = { title: 'Report incident' }
@@ -124,14 +124,7 @@ async function reportIncident(formData: FormData) {
 }
 
 export default async function NewIncidentPage() {
-  const ctx = await requireRequestContext()
-  const sites = await ctx.db((tx) =>
-    tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
-      .orderBy(asc(orgUnits.name)),
-  )
+  await requireRequestContext()
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
@@ -172,14 +165,14 @@ export default async function NewIncidentPage() {
                   <OccurredAtField name="occurredAt" />
                 </Field>
                 <Field label="Site">
-                  <Select name="siteOrgUnitId" defaultValue="">
-                    <option value="">—</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <RemoteSelectField
+                    lookup="incident-sites"
+                    name="siteOrgUnitId"
+                    placeholder="Select a site…"
+                    searchPlaceholder="Search sites…"
+                    sheetTitle="Select a site"
+                    emptyLabel="—"
+                  />
                 </Field>
                 <Field label="Title" required className="sm:col-span-2">
                   <Input

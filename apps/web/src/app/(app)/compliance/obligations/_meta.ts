@@ -146,22 +146,8 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
 // or ETL-only obligations) but still need a clean label when shown read-only.
 const SYSTEM_KIND_LABELS: Record<string, string> = {
   corrective_action: 'Corrective actions',
-  permit: 'Permits',
-  lone_worker: 'Lone worker',
-  custom: 'Custom',
 }
 
 export function kindLabel(kind: string): string {
   return (KIND_META as Record<string, KindMeta>)[kind]?.label ?? SYSTEM_KIND_LABELS[kind] ?? kind
-}
-
-/** ObligationKind → compliance recurrence.kind for the stored row. */
-export function recurrenceKindFor(kind: ObligationKind, oneTime: boolean): string {
-  const m = KIND_META[kind]
-  if (m.subjectKind === 'per_record') return 'expiry'
-  if (kind === 'cert_requirement') return 'expiry'
-  if (kind === 'job_title_signoff') return 'one_time'
-  if (kind === 'form') return 'cron'
-  if (oneTime) return 'one_time'
-  return 'frequency'
 }

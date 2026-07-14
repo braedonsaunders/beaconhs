@@ -1,65 +1,44 @@
 'use client'
 
-// Start-inspection form: pick an equipment item + an inspection type, then the
-// server action creates the record, materialises the criteria, and redirects to
-// the fill page. SearchSelects back hidden inputs so the plain server-action
-// form submits the ids. Type-restricted templates (appliesToTypeId) only show
-// for items of that equipment type — the server action enforces the same rule.
-
-import { useMemo, useState } from 'react'
-import { Button, Label, SearchSelect } from '@beaconhs/ui'
+import { useState } from 'react'
+import { Button, Label } from '@beaconhs/ui'
+import type { PickerOption } from '@/lib/picker-options'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { startEquipmentInspection } from '../_actions'
 
-type NewInspectionItemOption = {
-  value: string
-  label: string
-  hint?: string
-  typeId: string | null
-}
-
-type NewInspectionTypeOption = {
-  value: string
-  label: string
-  hint?: string
-  appliesToTypeId: string | null
-}
-
 export function NewInspectionForm({
-  itemOptions,
-  typeOptions,
-  defaultItemId,
-  defaultTypeId,
+  initialItem,
+  initialType,
 }: {
-  itemOptions: NewInspectionItemOption[]
-  typeOptions: NewInspectionTypeOption[]
-  defaultItemId: string
-  defaultTypeId: string
+  initialItem?: PickerOption
+  initialType?: PickerOption
 }) {
-  const [itemId, setItemId] = useState(defaultItemId)
-  const [typeId, setTypeId] = useState(defaultTypeId)
-
-  const selectedItem = itemOptions.find((i) => i.value === itemId) ?? null
-  const applicableTypes = useMemo(
-    () =>
-      typeOptions.filter(
-        (t) =>
-          !t.appliesToTypeId || (selectedItem != null && t.appliesToTypeId === selectedItem.typeId),
-      ),
-    [typeOptions, selectedItem],
-  )
-  // Clear a type that stops applying when the item changes.
-  const effectiveTypeId = applicableTypes.some((t) => t.value === typeId) ? typeId : ''
+  const [itemId, setItemId] = useState(initialItem?.value ?? '')
+  const [itemOption, setItemOption] = useState<PickerOption | undefined>(initialItem)
+  const [typeId, setTypeId] = useState(initialType?.value ?? '')
+  const [typeOption, setTypeOption] = useState<PickerOption | undefined>(initialType)
+  const equipmentTypeId =
+    itemOption?.meta?.kind === 'equipment-inspection-item'
+      ? (itemOption.meta.typeId ?? undefined)
+      : undefined
 
   return (
     <form action={startEquipmentInspection} className="max-w-lg space-y-4">
       <input type="hidden" name="equipmentItemId" value={itemId} />
-      <input type="hidden" name="typeId" value={effectiveTypeId} />
+      <input type="hidden" name="typeId" value={typeId} />
       <div className="space-y-1.5">
         <Label>Equipment item *</Label>
-        <SearchSelect
+        <RemoteSearchSelect
+          lookup="equipment-inspection-items"
           value={itemId}
-          onChange={setItemId}
-          options={itemOptions.map(({ value, label, hint }) => ({ value, label, hint }))}
+          initialOption={initialItem}
+          onChange={(next) => {
+            setItemId(next)
+            setTypeId('')
+            setTypeOption(undefined)
+            if (!next) setItemOption(undefined)
+          }}
+          onOptionChange={setItemOption}
           placeholder="Select equipment…"
           searchPlaceholder="Search by name or tag…"
           sheetTitle="Select equipment"
@@ -68,17 +47,21 @@ export function NewInspectionForm({
       </div>
       <div className="space-y-1.5">
         <Label>Inspection type *</Label>
-        <SearchSelect
-          value={effectiveTypeId}
+        <RemoteSearchSelect
+          lookup="equipment-item-inspection-types"
+          contextId={equipmentTypeId}
+          value={typeId}
+          initialOption={typeOption}
           onChange={setTypeId}
-          options={applicableTypes.map(({ value, label, hint }) => ({ value, label, hint }))}
+          onOptionChange={setTypeOption}
+          disabled={!itemId}
           placeholder="Select an inspection type…"
           searchPlaceholder="Search types…"
           sheetTitle="Select inspection type"
           ariaLabel="Inspection type"
         />
       </div>
-      <Button type="submit" disabled={!itemId || !effectiveTypeId}>
+      <Button type="submit" disabled={!itemId || !typeId}>
         Start inspection
       </Button>
     </form>

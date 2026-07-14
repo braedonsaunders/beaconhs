@@ -2,7 +2,7 @@
 // actions) — callers already hold a RequestContext and run inside its
 // RLS-scoped db executor.
 
-import { and, asc, eq, isNull, or } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { customFieldDefinitions, equipmentTypes, ppeTypes } from '@beaconhs/db/schema'
 import type {
   CustomFieldConfig,
@@ -82,21 +82,70 @@ export async function loadVisibleCustomFieldDefs(
   return rows.map(mapRow)
 }
 
-/** Every (non-deleted) definition for a kind — drives the designer table. */
-export async function loadAllCustomFieldDefs(
+/** One definition for the designer drawer, including rows outside the current page. */
+export async function loadCustomFieldDefById(
   ctx: Ctx,
   kind: CustomFieldEntityKind,
-): Promise<CustomFieldDefRow[]> {
-  const rows = await ctx.db((tx) =>
+  id: string,
+): Promise<CustomFieldDefRow | null> {
+  const [row] = await ctx.db((tx) =>
     tx
       .select()
       .from(customFieldDefinitions)
       .where(
-        and(eq(customFieldDefinitions.entityKind, kind), isNull(customFieldDefinitions.deletedAt)),
+        and(
+          eq(customFieldDefinitions.id, id),
+          eq(customFieldDefinitions.entityKind, kind),
+          isNull(customFieldDefinitions.deletedAt),
+        ),
       )
-      .orderBy(...orderCols),
+      .limit(1),
   )
-  return rows.map(mapRow)
+  return row ? mapRow(row) : null
+}
+
+/** Searchable, bounded designer-table page for one entity kind. */
+export async function loadCustomFieldDefPage(
+  ctx: Ctx,
+  kind: CustomFieldEntityKind,
+  options: {
+    q?: string
+    status?: 'active' | 'hidden'
+    page: number
+    perPage: number
+  },
+): Promise<{ rows: CustomFieldDefRow[]; total: number }> {
+  const conditions: SQL<unknown>[] = [
+    eq(customFieldDefinitions.entityKind, kind),
+    isNull(customFieldDefinitions.deletedAt),
+  ]
+  if (options.q) {
+    const term = `%${options.q}%`
+    const search = or(
+      ilike(customFieldDefinitions.label, term),
+      ilike(customFieldDefinitions.key, term),
+      ilike(customFieldDefinitions.helpText, term),
+      ilike(customFieldDefinitions.groupLabel, term),
+    )
+    if (search) conditions.push(search)
+  }
+  if (options.status) {
+    conditions.push(eq(customFieldDefinitions.isActive, options.status === 'active'))
+  }
+  const where = and(...conditions)
+  const [rows, [totalRow]] = await ctx.db((tx) =>
+    Promise.all([
+      tx
+        .select()
+        .from(customFieldDefinitions)
+        .where(where)
+        .orderBy(...orderCols)
+        .limit(options.perPage)
+        .offset((options.page - 1) * options.perPage),
+      tx.select({ c: count() }).from(customFieldDefinitions).where(where),
+    ]),
+  )
+  return { rows: rows.map(mapRow), total: Number(totalRow?.c ?? 0) }
 }
 
 /** Subtype options for the designer scope picker (equipment/ppe types). */

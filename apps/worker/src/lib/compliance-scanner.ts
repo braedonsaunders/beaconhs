@@ -10,9 +10,14 @@
 // no transition). Tenants without a policy row use the documented daily
 // 06:00-UTC default.
 
-import { and, asc, eq } from 'drizzle-orm'
-import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
-import { complianceDispatches, tenantNotificationPolicy, tenants } from '@beaconhs/db/schema'
+import { and, asc, eq, exists, inArray, isNull, notExists, sql } from 'drizzle-orm'
+import { db, withSuperAdmin, withTenant, type Database } from '@beaconhs/db'
+import {
+  complianceDispatches,
+  complianceObligations,
+  tenantNotificationPolicy,
+  tenants,
+} from '@beaconhs/db/schema'
 import { materializeTenant } from '@beaconhs/compliance'
 import { emitComplianceTransitions } from '@beaconhs/events'
 import {
@@ -20,6 +25,13 @@ import {
   scanTenantEquipmentMaintenance,
 } from './equipment-maintenance-scanner'
 import { cronOccursAt } from './cron'
+import { formComplianceBoundaryDue } from './form-compliance-schedule'
+import {
+  durablePublicationClaimPredicate,
+  durablePublicationError,
+  durablePublicationRetryAt,
+  DURABLE_PUBLICATION_BATCH_SIZE,
+} from './durable-publication-policy'
 
 const DEFAULT_CRON = '0 6 * * *'
 const DEFAULT_TZ = 'UTC'
@@ -35,11 +47,225 @@ type ComplianceScanResult = {
 }
 
 function cronDueNow(cron: string, tz: string, now: Date): boolean {
-  try {
-    return cronOccursAt(cron, now, tz || 'UTC')
-  } catch {
+  return cronOccursAt(cron, now, tz || 'UTC')
+}
+
+function complianceErrorMessage(error: unknown): string {
+  return durablePublicationError(error, 'Compliance scan failed')
+}
+
+function liveObligationForDispatch(tx: Database) {
+  return tx
+    .select({ id: complianceObligations.id })
+    .from(complianceObligations)
+    .where(
+      and(
+        eq(complianceObligations.tenantId, complianceDispatches.tenantId),
+        eq(complianceObligations.id, complianceDispatches.obligationId),
+        eq(complianceObligations.status, 'active'),
+        isNull(complianceObligations.deletedAt),
+      ),
+    )
+}
+
+/**
+ * A paused/deleted obligation invalidates every unpublished alert, including a
+ * lease abandoned by another worker. Clearing the lease makes the skipped row
+ * terminal and prevents a stale claimant from acknowledging it afterward.
+ */
+async function skipInactiveQueuedComplianceDispatches(tx: Database): Promise<void> {
+  await tx
+    .update(complianceDispatches)
+    .set({
+      status: 'skipped',
+      error: 'Compliance obligation is no longer active',
+      publishLeaseId: null,
+      publishClaimedAt: null,
+    })
+    .where(and(eq(complianceDispatches.status, 'queued'), notExists(liveObligationForDispatch(tx))))
+}
+
+async function claimQueuedComplianceDispatches(tx: Database, now: Date) {
+  await skipInactiveQueuedComplianceDispatches(tx)
+  const candidates = await tx
+    .select({ id: complianceDispatches.id })
+    .from(complianceDispatches)
+    .where(
+      and(
+        durablePublicationClaimPredicate(
+          {
+            status: complianceDispatches.status,
+            availableAt: complianceDispatches.publishAvailableAt,
+            leaseId: complianceDispatches.publishLeaseId,
+            claimedAt: complianceDispatches.publishClaimedAt,
+          },
+          now,
+        ),
+        exists(liveObligationForDispatch(tx)),
+      ),
+    )
+    .orderBy(
+      asc(complianceDispatches.publishAvailableAt),
+      asc(complianceDispatches.createdAt),
+      asc(complianceDispatches.id),
+    )
+    .limit(DURABLE_PUBLICATION_BATCH_SIZE)
+    .for('update', { skipLocked: true })
+  if (candidates.length === 0) return []
+
+  const claimed = await tx
+    .update(complianceDispatches)
+    .set({
+      publishLeaseId: sql`gen_random_uuid()`,
+      publishClaimedAt: now,
+      publishAttempts: sql`${complianceDispatches.publishAttempts} + 1`,
+      error: null,
+    })
+    .where(
+      and(
+        eq(complianceDispatches.status, 'queued'),
+        inArray(
+          complianceDispatches.id,
+          candidates.map(({ id }) => id),
+        ),
+      ),
+    )
+    .returning()
+  return claimed.map((dispatch) => {
+    if (!dispatch.publishLeaseId) {
+      throw new Error(`Compliance dispatch ${dispatch.id} was locked but could not be leased`)
+    }
+    return { ...dispatch, publishLeaseId: dispatch.publishLeaseId }
+  })
+}
+
+export async function confirmDispatchStillPublishable(
+  tx: Database,
+  dispatchId: string,
+  leaseId: string,
+  tenantId: string,
+  obligationId: string,
+): Promise<boolean> {
+  // Shared lock order is obligation first, dispatch second. Materialization
+  // uses the same order, avoiding the status/outbox ↔ obligation inversion
+  // that previously made a concurrent scan and pause susceptible to deadlock.
+  const [obligation] = await tx
+    .select({
+      id: complianceObligations.id,
+      status: complianceObligations.status,
+      deletedAt: complianceObligations.deletedAt,
+    })
+    .from(complianceObligations)
+    .where(
+      and(eq(complianceObligations.tenantId, tenantId), eq(complianceObligations.id, obligationId)),
+    )
+    .limit(1)
+    .for('key share')
+
+  if (!obligation || obligation.status !== 'active' || obligation.deletedAt) {
+    await tx
+      .update(complianceDispatches)
+      .set({
+        status: 'skipped',
+        error: 'Compliance obligation is no longer active',
+        publishLeaseId: null,
+        publishClaimedAt: null,
+      })
+      .where(
+        and(
+          eq(complianceDispatches.id, dispatchId),
+          eq(complianceDispatches.status, 'queued'),
+          eq(complianceDispatches.publishLeaseId, leaseId),
+        ),
+      )
     return false
   }
+
+  const [owned] = await tx
+    .update(complianceDispatches)
+    .set({ publishClaimedAt: new Date() })
+    .where(
+      and(
+        eq(complianceDispatches.id, dispatchId),
+        eq(complianceDispatches.status, 'queued'),
+        eq(complianceDispatches.publishLeaseId, leaseId),
+      ),
+    )
+    .returning({ id: complianceDispatches.id })
+  return Boolean(owned)
+}
+
+type ClaimedComplianceDispatch = Pick<
+  typeof complianceDispatches.$inferSelect,
+  'id' | 'tenantId' | 'obligationId' | 'alertPayload'
+> & { publishLeaseId: string }
+
+type CompliancePublicationOutcome = 'enqueued' | 'skipped' | 'failed'
+
+/**
+ * Publish while the caller's transaction retains the obligation and dispatch
+ * locks acquired by `confirmDispatchStillPublishable`. Queue job IDs are
+ * deterministic, so a transaction rollback after a partial Redis write is
+ * safely retried without duplicating a notification or email.
+ */
+export async function publishClaimedComplianceDispatch(
+  tx: Database,
+  dispatch: ClaimedComplianceDispatch,
+  emit: typeof emitComplianceTransitions = emitComplianceTransitions,
+): Promise<CompliancePublicationOutcome> {
+  const owned = await confirmDispatchStillPublishable(
+    tx,
+    dispatch.id,
+    dispatch.publishLeaseId,
+    dispatch.tenantId,
+    dispatch.obligationId,
+  )
+  if (!owned) return 'skipped'
+
+  const transitions = dispatch.alertPayload?.transitions
+  if (!transitions?.length) {
+    await tx
+      .update(complianceDispatches)
+      .set({
+        status: 'failed',
+        error: 'Queued compliance dispatch has no alert payload',
+        publishLeaseId: null,
+        publishClaimedAt: null,
+      })
+      .where(
+        and(
+          eq(complianceDispatches.id, dispatch.id),
+          eq(complianceDispatches.status, 'queued'),
+          eq(complianceDispatches.publishLeaseId, dispatch.publishLeaseId),
+        ),
+      )
+    return 'failed'
+  }
+
+  const emitted = await emit(
+    dispatch.tenantId,
+    dispatch.obligationId,
+    transitions,
+    dispatch.id,
+    dispatch.publishLeaseId,
+    tx,
+  )
+  await tx
+    .update(complianceDispatches)
+    .set({
+      status: emitted ? 'enqueued' : 'skipped',
+      error: emitted ? null : 'Compliance dispatch no longer applies to the active obligation',
+      publishLeaseId: null,
+      publishClaimedAt: null,
+    })
+    .where(
+      and(
+        eq(complianceDispatches.id, dispatch.id),
+        eq(complianceDispatches.status, 'queued'),
+        eq(complianceDispatches.publishLeaseId, dispatch.publishLeaseId),
+      ),
+    )
+  return emitted ? 'enqueued' : 'skipped'
 }
 
 // `scheduledFor` is the minute the tick was SCHEDULED to run (the caller passes
@@ -63,17 +289,38 @@ export async function scanCompliance(
   // One cross-tenant read of each tenant's detection schedule. Deployment runs
   // migrations before starting the worker, so a missing policy table is a hard
   // deployment error rather than a second, silently degraded execution mode.
-  const rows = await withSuperAdmin(db, (tx) =>
-    tx
+  const { tenantRows, formSchedules } = await withSuperAdmin(db, async (tx) => {
+    const tenantRows = await tx
       .select({
         id: tenants.id,
         cron: tenantNotificationPolicy.scanCron,
         tz: tenantNotificationPolicy.scanTimezone,
       })
       .from(tenants)
-      .leftJoin(tenantNotificationPolicy, eq(tenantNotificationPolicy.tenantId, tenants.id)),
-  )
-  const schedules = rows.map((r) => ({
+      .leftJoin(tenantNotificationPolicy, eq(tenantNotificationPolicy.tenantId, tenants.id))
+    const formSchedules = await tx
+      .select({
+        id: complianceObligations.id,
+        tenantId: complianceObligations.tenantId,
+        recurrence: complianceObligations.recurrence,
+      })
+      .from(complianceObligations)
+      .where(
+        and(
+          eq(complianceObligations.sourceModule, 'form'),
+          eq(complianceObligations.status, 'active'),
+          isNull(complianceObligations.deletedAt),
+        ),
+      )
+    return { tenantRows, formSchedules }
+  })
+  const formSchedulesByTenant = new Map<string, typeof formSchedules>()
+  for (const schedule of formSchedules) {
+    const list = formSchedulesByTenant.get(schedule.tenantId) ?? []
+    list.push(schedule)
+    formSchedulesByTenant.set(schedule.tenantId, list)
+  }
+  const schedules = tenantRows.map((r) => ({
     id: r.id,
     cron: r.cron ?? DEFAULT_CRON,
     tz: r.tz ?? DEFAULT_TZ,
@@ -81,52 +328,58 @@ export async function scanCompliance(
 
   for (const s of schedules) {
     result.tenants += 1
-    if (!cronDueNow(s.cron, s.tz, now)) continue
+    let tenantHeartbeatDue: boolean
+    try {
+      tenantHeartbeatDue = cronDueNow(s.cron, s.tz, now)
+    } catch (error) {
+      result.errors += 1
+      console.warn(
+        `[compliance_scan] tenant ${s.id} has an invalid scan schedule: ${complianceErrorMessage(error)}`,
+      )
+      continue
+    }
+    let formBoundaryDue = false
+    for (const schedule of formSchedulesByTenant.get(s.id) ?? []) {
+      try {
+        if (formComplianceBoundaryDue(schedule.recurrence, now, s.tz)) formBoundaryDue = true
+      } catch (error) {
+        // One damaged imported obligation must not suppress every other
+        // compliance status (or equipment maintenance) for this tenant.
+        result.errors += 1
+        console.warn(
+          `[compliance_scan] form obligation ${schedule.id} has an invalid schedule: ${complianceErrorMessage(error)}`,
+        )
+      }
+    }
+    if (!tenantHeartbeatDue && !formBoundaryDue) continue
     result.due += 1
 
     let materialized: Awaited<ReturnType<typeof materializeTenant>> = []
     try {
       // Per-tenant RLS context so reads + the compliance_status upsert are scoped.
       materialized = await withTenant(db, s.id, async (tx) => {
-        const rows = await materializeTenant(tx, s.id)
-        for (const { obligation, transitions } of rows) {
-          const actionable = transitions.filter((t) => t.to === 'overdue' || t.to === 'expiring')
-          if (actionable.length === 0) continue
-          const [claimed] = await tx
-            .insert(complianceDispatches)
-            .values({
-              tenantId: s.id,
-              obligationId: obligation.id,
-              occurredAt: new Date(Math.floor(now.getTime() / 60_000) * 60_000),
-              status: 'queued',
-              alertPayload: { transitions: actionable },
-            })
-            .onConflictDoNothing({
-              target: [complianceDispatches.obligationId, complianceDispatches.occurredAt],
-            })
-            .returning({ id: complianceDispatches.id })
-          if (claimed) result.reminders += 1
-        }
+        const rows = await materializeTenant(tx, s.id, { now, timezone: s.tz })
+        result.reminders += rows.filter((row) => row.dispatchId !== null).length
         return rows
       })
     } catch (err) {
       result.errors += 1
-      console.warn(
-        `[compliance_scan] tenant ${s.id} failed: ${err instanceof Error ? err.message : err}`,
-      )
+      console.warn(`[compliance_scan] tenant ${s.id} failed: ${complianceErrorMessage(err)}`)
       continue
     }
     result.obligations += materialized.length
     // Equipment maintenance rides the same per-tenant heartbeat — inspection
     // schedules + ad-hoc reminders whose due date arrived alert once per due
     // cycle (see the scanner's due_notified_for stamps).
-    try {
-      result.maintenance += await scanTenantEquipmentMaintenance(s.id)
-    } catch (err) {
-      result.errors += 1
-      console.warn(
-        `[compliance_scan] equipment maintenance for tenant ${s.id} failed: ${err instanceof Error ? err.message : err}`,
-      )
+    if (tenantHeartbeatDue) {
+      try {
+        result.maintenance += await scanTenantEquipmentMaintenance(s.id)
+      } catch (err) {
+        result.errors += 1
+        console.warn(
+          `[compliance_scan] equipment maintenance for tenant ${s.id} failed: ${complianceErrorMessage(err)}`,
+        )
+      }
     }
   }
   await publishQueuedComplianceDispatches(result)
@@ -136,51 +389,37 @@ export async function scanCompliance(
 }
 
 async function publishQueuedComplianceDispatches(result: ComplianceScanResult): Promise<void> {
-  const queued = await withSuperAdmin(db, (tx) =>
-    tx
-      .select()
-      .from(complianceDispatches)
-      .where(eq(complianceDispatches.status, 'queued'))
-      .orderBy(asc(complianceDispatches.createdAt))
-      .limit(500),
-  )
+  const queued = await withSuperAdmin(db, (tx) => claimQueuedComplianceDispatches(tx, new Date()))
   for (const dispatch of queued) {
-    const transitions = dispatch.alertPayload?.transitions
-    if (!transitions?.length) {
-      result.errors += 1
-      await withSuperAdmin(db, (tx) =>
-        tx
-          .update(complianceDispatches)
-          .set({ status: 'failed', error: 'Queued compliance dispatch has no alert payload' })
-          .where(eq(complianceDispatches.id, dispatch.id)),
-      )
-      continue
-    }
     try {
-      await emitComplianceTransitions(
-        dispatch.tenantId,
-        dispatch.obligationId,
-        transitions,
-        dispatch.id,
-      )
+      const outcome = await withSuperAdmin(db, async (tx) => {
+        // Keep the obligation KEY SHARE lock and the leased dispatch row lock
+        // acquired by the helper until every idempotent queue write and the
+        // terminal update complete. A concurrent evidence/semantic writer
+        // takes the obligation UPDATE lock first, so publication linearizes
+        // entirely before that new truth or entirely after it.
+        return publishClaimedComplianceDispatch(tx, dispatch)
+      })
+      if (outcome === 'failed') result.errors += 1
+    } catch (error) {
+      result.errors += 1
+      const failedAt = new Date()
       await withSuperAdmin(db, (tx) =>
         tx
           .update(complianceDispatches)
-          .set({ status: 'enqueued', error: null })
+          .set({
+            error: durablePublicationError(error, 'Compliance dispatch failed'),
+            publishAvailableAt: durablePublicationRetryAt(dispatch.publishAttempts, failedAt),
+            publishLeaseId: null,
+            publishClaimedAt: null,
+          })
           .where(
             and(
               eq(complianceDispatches.id, dispatch.id),
               eq(complianceDispatches.status, 'queued'),
+              eq(complianceDispatches.publishLeaseId, dispatch.publishLeaseId),
             ),
           ),
-      )
-    } catch (error) {
-      result.errors += 1
-      await withSuperAdmin(db, (tx) =>
-        tx
-          .update(complianceDispatches)
-          .set({ error: error instanceof Error ? error.message : String(error) })
-          .where(eq(complianceDispatches.id, dispatch.id)),
       )
     }
   }

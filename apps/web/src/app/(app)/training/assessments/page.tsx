@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ClipboardCheck } from 'lucide-react'
-import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -24,10 +24,12 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { SearchInput } from '@/components/search-input'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../_components/training-sub-nav'
 
@@ -36,8 +38,19 @@ export const dynamic = 'force-dynamic'
 
 const SORTS = ['completed', 'person', 'type', 'score'] as const
 
+function parseCalendarDate(value: string | undefined): string | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  // PostgreSQL has no year zero; keep malformed query-string dates out of
+  // typed `date` comparisons instead of allowing the request to fail.
+  if (value.startsWith('0000-')) return undefined
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== value) {
+    return undefined
+  }
+  return value
+}
+
 const STATUS_OPTIONS = [
-  { value: 'all', label: 'All' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'pass', label: 'Pass' },
   { value: 'fail', label: 'Fail' },
@@ -62,6 +75,8 @@ export default async function AssessmentsPage({
   const courseFilter = pickString(sp.course)
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
+  const dateFrom = parseCalendarDate(dateFromRaw)
+  const dateTo = parseCalendarDate(dateToRaw)
   const ctx = await requireRequestContext()
   // Attempts are person-scoped records: viewing them requires a training read
   // tier. Proctors (training.record.create / training.class.manage) run
@@ -77,7 +92,7 @@ export default async function AssessmentsPage({
   )
     notFound()
 
-  const { rows, total, types, statusCounts, peopleList, coursesList } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
     const vis = isProctor
       ? undefined
       : await moduleScopeWhere(ctx, tx, {
@@ -87,6 +102,18 @@ export default async function AssessmentsPage({
     const filters: SQL<unknown>[] = []
     filters.push(isNull(trainingAssessments.deletedAt))
     if (vis) filters.push(vis)
+    if (params.q) {
+      const term = `%${params.q}%`
+      const search = or(
+        ilike(people.firstName, term),
+        ilike(people.lastName, term),
+        ilike(people.employeeNo, term),
+        ilike(trainingAssessmentTypes.name, term),
+        ilike(trainingCourses.name, term),
+        ilike(trainingCourses.code, term),
+      )
+      if (search) filters.push(search)
+    }
     if (statusFilter === 'in_progress') {
       filters.push(eq(trainingAssessments.status, 'in_progress'))
     } else if (statusFilter === 'cancelled') {
@@ -98,17 +125,19 @@ export default async function AssessmentsPage({
       filters.push(eq(trainingAssessments.status, 'submitted'))
       filters.push(eq(trainingAssessments.passed, false))
     }
-    if (personFilter) filters.push(eq(trainingAssessments.personId, personFilter))
-    if (typeFilter) filters.push(eq(trainingAssessments.typeId, typeFilter))
-    if (courseFilter) filters.push(eq(trainingAssessments.courseId, courseFilter))
-    if (dateFromRaw) {
+    if (personFilter && isUuid(personFilter))
+      filters.push(eq(trainingAssessments.personId, personFilter))
+    if (typeFilter && isUuid(typeFilter)) filters.push(eq(trainingAssessments.typeId, typeFilter))
+    if (courseFilter && isUuid(courseFilter))
+      filters.push(eq(trainingAssessments.courseId, courseFilter))
+    if (dateFrom) {
       filters.push(
-        sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.startedAt})::date >= ${dateFromRaw}`,
+        sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.startedAt})::date >= ${dateFrom}`,
       )
     }
-    if (dateToRaw) {
+    if (dateTo) {
       filters.push(
-        sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.startedAt})::date <= ${dateToRaw}`,
+        sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.startedAt})::date <= ${dateTo}`,
       )
     }
     const whereClause = filters.length > 0 ? and(...filters) : undefined
@@ -134,7 +163,16 @@ export default async function AssessmentsPage({
                   : desc(trainingAssessments.completedAt),
               ]
 
-    const [tot] = await tx.select({ c: count() }).from(trainingAssessments).where(whereClause)
+    const [tot] = await tx
+      .select({ c: count() })
+      .from(trainingAssessments)
+      .innerJoin(
+        trainingAssessmentTypes,
+        eq(trainingAssessmentTypes.id, trainingAssessments.typeId),
+      )
+      .innerJoin(people, eq(people.id, trainingAssessments.personId))
+      .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAssessments.courseId))
+      .where(whereClause)
     const data = await tx
       .select({
         attempt: trainingAssessments,
@@ -150,34 +188,9 @@ export default async function AssessmentsPage({
       .innerJoin(people, eq(people.id, trainingAssessments.personId))
       .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAssessments.courseId))
       .where(whereClause)
-      .orderBy(...orderBy)
+      .orderBy(...orderBy, desc(trainingAssessments.id))
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
-
-    const typesAll = await tx
-      .select({ id: trainingAssessmentTypes.id, name: trainingAssessmentTypes.name })
-      .from(trainingAssessmentTypes)
-      .where(isNull(trainingAssessmentTypes.deletedAt))
-      .orderBy(asc(trainingAssessmentTypes.name))
-
-    // People filter options are scoped to the attempts the viewer can see —
-    // a self-only viewer must not get the whole directory as chips.
-    const peopleAll = await tx
-      .selectDistinct({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-      })
-      .from(trainingAssessments)
-      .innerJoin(people, eq(people.id, trainingAssessments.personId))
-      .where(and(isNull(trainingAssessments.deletedAt), vis))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-
-    const coursesAll = await tx
-      .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
-      .from(trainingCourses)
-      .where(isNull(trainingCourses.deletedAt))
-      .orderBy(asc(trainingCourses.name))
 
     const counts = await tx
       .select({
@@ -209,9 +222,6 @@ export default async function AssessmentsPage({
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
-      types: typesAll,
-      peopleList: peopleAll,
-      coursesList: coursesAll,
       statusCounts: sc,
     }
   })
@@ -241,11 +251,12 @@ export default async function AssessmentsPage({
           />
           <TrainingSubNav active="assessments" />
           <div className="flex flex-wrap items-center gap-3">
+            <SearchInput placeholder="Search person, assessment, or course…" />
             <form className="flex items-center gap-1 text-xs">
               {/* A GET form replaces the whole query string, so carry every
                   other active filter/sort through hidden inputs — applying a
                   date range must not clear them. */}
-              {(['status', 'person', 'type', 'course', 'sort', 'dir'] as const).map((key) => {
+              {(['q', 'status', 'person', 'type', 'course', 'sort', 'dir'] as const).map((key) => {
                 const value = pickString(sp[key])
                 return value ? <input key={key} type="hidden" name={key} value={value} /> : null
               })}
@@ -254,7 +265,7 @@ export default async function AssessmentsPage({
                 <input
                   type="date"
                   name="dateFrom"
-                  defaultValue={dateFromRaw ?? ''}
+                  defaultValue={dateFrom ?? ''}
                   className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700"
                 />
               </label>
@@ -263,7 +274,7 @@ export default async function AssessmentsPage({
                 <input
                   type="date"
                   name="dateTo"
-                  defaultValue={dateToRaw ?? ''}
+                  defaultValue={dateTo ?? ''}
                   className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700"
                 />
               </label>
@@ -284,51 +295,63 @@ export default async function AssessmentsPage({
                 count: statusCounts[o.value],
               }))}
             />
-            {peopleList.length > 0 ? (
-              <FilterChips
-                basePath="/training/assessments"
-                currentParams={sp}
-                paramKey="person"
-                label="Person"
-                options={peopleList.slice(0, 12).map((p) => ({
-                  value: p.id,
-                  label: `${p.firstName} ${p.lastName}`,
-                }))}
-              />
-            ) : null}
-            {types.length > 0 ? (
-              <FilterChips
-                basePath="/training/assessments"
-                currentParams={sp}
-                paramKey="type"
-                label="Assessment type"
-                options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
-              />
-            ) : null}
-            {coursesList.length > 0 ? (
-              <FilterChips
-                basePath="/training/assessments"
-                currentParams={sp}
-                paramKey="course"
-                label="Course"
-                options={coursesList.slice(0, 12).map((c) => ({ value: c.id, label: c.code }))}
-              />
-            ) : null}
+            <RemoteSearchFilter
+              lookup="training-assessment-people"
+              basePath="/training/assessments"
+              currentParams={sp}
+              paramKey="person"
+              placeholder="Person"
+              allLabel="All people"
+              searchPlaceholder="Search people…"
+            />
+            <RemoteSearchFilter
+              lookup="training-assessment-types"
+              basePath="/training/assessments"
+              currentParams={sp}
+              paramKey="type"
+              placeholder="Assessment type"
+              allLabel="All assessment types"
+              searchPlaceholder="Search assessment types…"
+            />
+            <RemoteSearchFilter
+              lookup="training-assessment-courses"
+              basePath="/training/assessments"
+              currentParams={sp}
+              paramKey="course"
+              placeholder="Course"
+              allLabel="All courses"
+              searchPlaceholder="Search courses…"
+            />
           </div>
         </>
       }
     >
       {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardCheck size={32} />}
-          title="No assessment attempts"
-          description="Start an attempt to grade a candidate against an assessment type."
-          action={
-            <Link href="/training/assessments/new">
-              <Button>Start an attempt</Button>
-            </Link>
-          }
-        />
+        <>
+          <EmptyState
+            icon={<ClipboardCheck size={32} />}
+            title={params.q ? 'No assessment attempts match your search' : 'No assessment attempts'}
+            description={
+              params.q
+                ? 'Clear the search to see other assessment attempts.'
+                : 'Start an attempt to grade a candidate against an assessment type.'
+            }
+            action={
+              <Link href="/training/assessments/new">
+                <Button>Start an attempt</Button>
+              </Link>
+            }
+          />
+          {total > 0 ? (
+            <Pagination
+              basePath="/training/assessments"
+              currentParams={sp}
+              total={total}
+              page={params.page}
+              perPage={params.perPage}
+            />
+          ) : null}
+        </>
       ) : (
         <>
           <Table>

@@ -2,7 +2,7 @@ import type { Job } from 'bullmq'
 import { db, withTenant } from '@beaconhs/db'
 import type { Database } from '@beaconhs/db'
 import { dispatchOne } from '@beaconhs/integrations'
-import type { OutboundDispatchJob } from '@beaconhs/jobs'
+import { assertOutboundDispatchJob, type OutboundDispatchJob } from '@beaconhs/jobs'
 
 // Outbound automation worker. One job = one automation × one event. We rebuild a
 // tenant-scoped ctx and run the shared dispatchOne (it delivers, reconciles the
@@ -12,6 +12,7 @@ import type { OutboundDispatchJob } from '@beaconhs/jobs'
 // re-post on retry; non-reversible ones with "only once per record" are guarded
 // by the ledger.
 export async function processOutboundDispatch(job: Job<OutboundDispatchJob>): Promise<void> {
+  assertOutboundDispatchJob(job.data)
   const { tenantId, automationId, event } = job.data
   const ctx = {
     tenantId,

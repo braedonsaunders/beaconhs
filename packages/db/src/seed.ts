@@ -13,8 +13,6 @@ import {
   documentVersions,
   documentTypes,
   documentCategories,
-  documentReferenceTypes,
-  documentReferenceCategories,
   customFieldDefinitions,
   equipmentCategories,
   equipmentInspectionCriteria,
@@ -27,13 +25,15 @@ import {
   equipmentTypes,
   equipmentWorkOrders,
   equipmentLocationHistory,
-  formAssignments,
+  complianceAudience,
+  complianceObligations,
   formResponses,
   formTemplates,
   formTemplateVersions,
   incidentClassifications,
   incidentHoursPeriods,
   incidentInjuries,
+  incidentInjuryTypeAssignments,
   incidentInjuryTypes,
   incidentLostTimeEvents,
   incidentPeople,
@@ -809,7 +809,6 @@ async function main() {
         firstName: 'John',
         lastName: 'Anderson',
         formalName: 'John D. Anderson',
-        jobTitle: 'Site Supervisor',
         employeeNo: 'E001',
         tradeId: supervisorTrade!.id,
         crewId: crewAlpha!.id,
@@ -824,7 +823,6 @@ async function main() {
         firstName: 'Sarah',
         lastName: 'Bell',
         formalName: 'Sarah J. Bell',
-        jobTitle: 'Lead Carpenter',
         employeeNo: 'E002',
         tradeId: carp!.id,
         crewId: crewAlpha!.id,
@@ -838,7 +836,6 @@ async function main() {
         firstName: 'Marcus',
         lastName: 'Chen',
         formalName: 'Marcus K. Chen',
-        jobTitle: 'Journeyman Electrician',
         employeeNo: 'E003',
         tradeId: elec!.id,
         crewId: crewAlpha!.id,
@@ -852,7 +849,6 @@ async function main() {
         firstName: 'Priya',
         lastName: 'Desai',
         formalName: 'Priya N. Desai',
-        jobTitle: 'Pipe Welder',
         employeeNo: 'E004',
         tradeId: weld!.id,
         crewId: crewAlpha!.id,
@@ -866,7 +862,6 @@ async function main() {
         firstName: 'Tom',
         lastName: 'Eaton',
         formalName: 'Thomas Eaton',
-        jobTitle: 'Site Supervisor',
         employeeNo: 'E005',
         tradeId: supervisorTrade!.id,
         crewId: crewBravo!.id,
@@ -879,7 +874,6 @@ async function main() {
       {
         firstName: 'Maya',
         lastName: 'Foster',
-        jobTitle: 'Apprentice Carpenter',
         employeeNo: 'E006',
         tradeId: carp!.id,
         crewId: crewBravo!.id,
@@ -888,7 +882,6 @@ async function main() {
       {
         firstName: 'Daniel',
         lastName: 'Gonzales',
-        jobTitle: 'Apprentice Electrician',
         employeeNo: 'E007',
         tradeId: elec!.id,
         crewId: crewBravo!.id,
@@ -897,7 +890,6 @@ async function main() {
       {
         firstName: 'Aisha',
         lastName: 'Hamid',
-        jobTitle: 'Welder',
         employeeNo: 'E008',
         tradeId: weld!.id,
         crewId: crewBravo!.id,
@@ -906,7 +898,6 @@ async function main() {
       {
         firstName: 'Linda',
         lastName: 'Iverson',
-        jobTitle: 'HSE Coordinator',
         employeeNo: 'E009',
         tradeId: null,
         crewId: null,
@@ -915,7 +906,6 @@ async function main() {
       {
         firstName: 'Robert',
         lastName: 'Jensen',
-        jobTitle: 'Project Manager',
         employeeNo: 'E010',
         tradeId: null,
         crewId: null,
@@ -932,7 +922,6 @@ async function main() {
             firstName: p.firstName,
             lastName: p.lastName,
             formalName: (p as any).formalName ?? null,
-            jobTitle: (p as any).jobTitle ?? null,
             employeeNo: p.employeeNo,
             departmentId: p.dept,
             tradeId: p.tradeId,
@@ -1350,14 +1339,25 @@ async function main() {
         changelog: 'Initial version',
       })
       .returning()
-    await tx.insert(formAssignments).values({
+    const [toolboxObligation] = await tx
+      .insert(complianceObligations)
+      .values({
+        tenantId: tenant.id,
+        sourceModule: 'form',
+        subjectKind: 'per_person',
+        title: 'Daily toolbox talk',
+        status: 'active',
+        targetRef: { formTemplateId: tmpl!.id },
+        recurrence: { kind: 'cron', cron: '0 7 * * 1-5' },
+        recurrenceKind: 'cron',
+        createdByTenantUserId: membership.id,
+      })
+      .returning({ id: complianceObligations.id })
+    await tx.insert(complianceAudience).values({
       tenantId: tenant.id,
-      templateId: tmpl!.id,
-      mode: 'scheduled',
-      cron: '0 7 * * 1-5',
-      targetRoleKeys: ['foreman'],
-      enabled: true,
-      createdBy: admin.id,
+      obligationId: toolboxObligation!.id,
+      kind: 'role',
+      entityKey: 'foreman',
     })
 
     // Sample form responses
@@ -1455,7 +1455,7 @@ async function main() {
       personId: sarah!.id,
       personName: 'Sarah Bell',
       bodyParts: ['Right hand', 'Thumb'],
-      injuryTypes: ['Laceration'],
+      injuryResult: 'First aid only; no lost time or modified duty.',
       treatment: 'Wound cleaned, butterfly bandage applied, advised follow-up if redness develops.',
       treatedAtFacility: 'On-site first aid station',
       workedHoursPriorTo: 4,
@@ -1518,7 +1518,7 @@ async function main() {
       personId: priya!.id,
       personName: 'Priya Desai',
       bodyParts: ['Lower back', 'Left wrist'],
-      injuryTypes: ['Strain', 'Bruise'],
+      injuryResult: 'X-rays clear; three days of modified duty assigned.',
       treatment: 'X-ray clear, anti-inflammatories prescribed, modified duty for 3 days.',
       treatedAtFacility: 'MedExpress Walk-In Clinic',
       workedHoursPriorTo: 5,
@@ -1713,6 +1713,7 @@ async function main() {
       await tx.insert(documentReviews).values({
         tenantId: tenant.id,
         documentId: doc!.id,
+        documentVersionId: v2!.id,
         reviewedByTenantUserId: membership.id,
         reviewedAt: new Date(today.getTime() - 30 * dayMs),
         outcome: 'updated',
@@ -1990,8 +1991,8 @@ async function main() {
   // them on demand from the /apps/templates/new gallery.
   await seedCanonicalTemplates(db)
 
-  // Documentation lookups — types + hierarchical categories + reference
-  // types + reference categories. Idempotent and scoped to the first tenant.
+  // Documentation lookups — types + hierarchical categories. Idempotent and
+  // scoped to the first tenant.
   await db.transaction(async (tx) => {
     const [first] = await tx
       .select({ id: tenants.id })
@@ -2019,8 +2020,8 @@ async function main() {
 }
 
 /**
- * Idempotently insert the standard set of document/reference types + categories
- * for the given tenant. Safe to re-run — uses ON CONFLICT for types
+ * Idempotently insert the standard set of document types + categories for the
+ * given tenant. Safe to re-run — uses ON CONFLICT for types
  * (unique on (tenant_id, key)), and name-existence checks for categories.
  */
 export async function seedDocumentTypesAndCategories(tx: any, tenantId: string): Promise<void> {
@@ -2122,67 +2123,8 @@ export async function seedDocumentTypesAndCategories(tx: any, tenantId: string):
     }
   }
 
-  // --- Reference Types (3) ---------------------------------------------
-  const refTypeRows = [
-    {
-      key: 'sds',
-      name: 'Safety Data Sheet',
-      description: 'SDS / MSDS pointer to vendor or governmental site.',
-    },
-    { key: 'manual', name: 'Equipment manual', description: 'Vendor manuals for owned equipment.' },
-    {
-      key: 'standard',
-      name: 'Standard / regulation',
-      description: 'External standards (CSA, ANSI, OHS) referenced.',
-    },
-  ]
-  let refTypesInserted = 0
-  for (const row of refTypeRows) {
-    const inserts = await tx
-      .insert(documentReferenceTypes)
-      .values({ tenantId, key: row.key, name: row.name, description: row.description })
-      .onConflictDoNothing({
-        target: [documentReferenceTypes.tenantId, documentReferenceTypes.key],
-      })
-      .returning({ id: documentReferenceTypes.id })
-    if (inserts.length > 0) refTypesInserted += 1
-  }
-
-  // --- Reference Categories (5, hierarchical) --------------------------
-  const refCategoryDefs: { name: string; parent?: string; description?: string }[] = [
-    { name: 'Chemicals', description: 'Hazardous chemical references.' },
-    { name: 'Solvents', parent: 'Chemicals' },
-    { name: 'Acids', parent: 'Chemicals' },
-    { name: 'Tooling', description: 'Power tools and shop equipment.' },
-    { name: 'Vehicles', description: 'Fleet vehicle manuals and recalls.' },
-  ]
-  const insertedRefCats = new Map<string, string>()
-  let refCatsInserted = 0
-  for (const def of refCategoryDefs) {
-    const parentId = def.parent ? (insertedRefCats.get(def.parent) ?? null) : null
-    const existing = await tx
-      .select({ id: documentReferenceCategories.id })
-      .from(documentReferenceCategories)
-      .where(
-        sql`${documentReferenceCategories.tenantId} = ${tenantId} AND ${documentReferenceCategories.name} = ${def.name}`,
-      )
-      .limit(1)
-    if (existing.length > 0) {
-      insertedRefCats.set(def.name, existing[0]!.id)
-      continue
-    }
-    const [row] = await tx
-      .insert(documentReferenceCategories)
-      .values({ tenantId, name: def.name, parentId, description: def.description ?? null })
-      .returning({ id: documentReferenceCategories.id })
-    if (row) {
-      insertedRefCats.set(def.name, row.id)
-      refCatsInserted += 1
-    }
-  }
-
   console.log(
-    `  · doc lookups: ${typesInserted}/${docTypeRows.length} types, ${catsInserted}/${categoryDefs.length} categories, ${refTypesInserted}/${refTypeRows.length} ref types, ${refCatsInserted}/${refCategoryDefs.length} ref categories`,
+    `  · doc lookups: ${typesInserted}/${docTypeRows.length} types, ${catsInserted}/${categoryDefs.length} categories`,
   )
 }
 
@@ -2410,6 +2352,7 @@ export async function seedInspectionTypes(tx: any, tenantId: string): Promise<vo
             sequence: j,
             text: c.text,
             responseType: c.responseType,
+            choiceOptions: c.choiceOptions,
             requiresPhoto: c.requiresPhoto,
             requiresComment: c.requiresComment,
             sourceBankId: bankId,
@@ -2426,8 +2369,8 @@ export async function seedInspectionTypes(tx: any, tenantId: string): Promise<vo
 }
 
 /**
- * Sample equipment categories, billing rates for 3 types, and 5 expense
- * entries spread across recent months. Idempotent — every insert uses
+ * Sample equipment categories and one recent log entry per seeded item.
+ * Idempotent — every insert uses
  * `onConflictDoNothing` or pre-checks for existing rows so re-running the
  * seed never duplicates.
  */
@@ -3447,15 +3390,52 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
     { name: 'Burn — thermal', oshaCode: 'BRN', description: 'Heat-source burn.' },
     { name: 'Chemical exposure', oshaCode: 'CHM', description: 'Skin or inhalation exposure.' },
   ]
+  const injuryTypeIdsByName = new Map<string, string>()
   for (let i = 0; i < injuryTypeSeed.length; i++) {
     const t = injuryTypeSeed[i]!
-    await tx.insert(incidentInjuryTypes).values({
-      tenantId,
-      name: t.name,
-      oshaCode: t.oshaCode,
-      description: t.description,
-      sortOrder: (i + 1) * 10,
-    })
+    const [row] = await tx
+      .insert(incidentInjuryTypes)
+      .values({
+        tenantId,
+        name: t.name,
+        oshaCode: t.oshaCode,
+        description: t.description,
+        sortOrder: (i + 1) * 10,
+      })
+      .returning({ id: incidentInjuryTypes.id })
+    if (row) injuryTypeIdsByName.set(t.name, row.id)
+  }
+
+  const seededInjuries = await tx
+    .select({ id: incidentInjuries.id, reference: incidents.reference })
+    .from(incidentInjuries)
+    .innerJoin(
+      incidents,
+      and(
+        eq(incidents.tenantId, incidentInjuries.tenantId),
+        eq(incidents.id, incidentInjuries.incidentId),
+      ),
+    )
+    .where(eq(incidentInjuries.tenantId, tenantId))
+  const typeNamesByReference: Record<string, string[]> = {
+    'INC-2026-0002': ['Laceration'],
+    'INC-2026-0003': ['Strain / sprain', 'Contusion / bruise'],
+  }
+  let injuryTypeAssignmentsSeeded = 0
+  for (const injury of seededInjuries) {
+    const typeNames = typeNamesByReference[injury.reference] ?? []
+    const injuryTypeIds = typeNames
+      .map((name) => injuryTypeIdsByName.get(name))
+      .filter((id): id is string => Boolean(id))
+    if (injuryTypeIds.length === 0) continue
+    await tx.insert(incidentInjuryTypeAssignments).values(
+      injuryTypeIds.map((injuryTypeId) => ({
+        tenantId,
+        injuryId: injury.id,
+        injuryTypeId,
+      })),
+    )
+    injuryTypeAssignmentsSeeded += injuryTypeIds.length
   }
 
   // Hours-worked windows — last 3 months (tenant-wide).  Numbers are
@@ -3500,7 +3480,7 @@ async function seedIncidentClassifications(tx: any, tenantId: string): Promise<v
   }
 
   console.log(
-    `  · incident taxonomy: ${classificationSeed.length} classifications, ${injuryTypeSeed.length} injury types, 3 hours-worked windows, ${seededIncidents.length} incidents back-filled`,
+    `  · incident taxonomy: ${classificationSeed.length} classifications, ${injuryTypeSeed.length} injury types, ${injuryTypeAssignmentsSeeded} injury-type assignments, 3 hours-worked windows, ${seededIncidents.length} incidents back-filled`,
   )
 }
 
@@ -3528,7 +3508,6 @@ export async function seedPeopleGroupsAndTitles(tx: any, tenantId: string): Prom
       id: people.id,
       firstName: people.firstName,
       lastName: people.lastName,
-      jobTitle: people.jobTitle,
     })
     .from(people)
     .where(eq(people.tenantId, tenantId))
@@ -4207,6 +4186,7 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
         id: inspectionTypeCriteria.id,
         text: inspectionTypeCriteria.text,
         responseType: inspectionTypeCriteria.responseType,
+        choiceOptions: inspectionTypeCriteria.choiceOptions,
         requiresPhoto: inspectionTypeCriteria.requiresPhoto,
         requiresComment: inspectionTypeCriteria.requiresComment,
         groupLabel: inspectionTypeGroups.label,
@@ -4217,18 +4197,30 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
       .orderBy(inspectionTypeGroups.sequence, inspectionTypeCriteria.sequence)
     if (criteria.length === 0) continue
     for (let j = 0; j < criteria.length; j++) {
-      const answer = j === 0 && i === 1 ? 'fail' : j % 5 === 4 ? 'n_a' : 'pass'
+      const criterion = criteria[j]!
+      const answer =
+        criterion.responseType === 'choice'
+          ? null
+          : j === 0 && i === 1
+            ? 'fail'
+            : j % 5 === 4
+              ? 'n_a'
+              : 'pass'
+      const choiceAnswer =
+        criterion.responseType === 'choice' ? (criterion.choiceOptions[0] ?? null) : null
       await tx.insert(inspectionRecordCriteria).values({
         tenantId,
         recordId: rec.id,
-        criterionId: criteria[j].id,
-        questionTextSnapshot: criteria[j].text,
-        groupLabelSnapshot: criteria[j].groupLabel ?? null,
-        responseType: criteria[j].responseType,
-        requiresPhoto: criteria[j].requiresPhoto,
-        requiresComment: criteria[j].requiresComment,
+        criterionId: criterion.id,
+        questionTextSnapshot: criterion.text,
+        groupLabelSnapshot: criterion.groupLabel ?? null,
+        responseType: criterion.responseType,
+        choiceOptionsSnapshot: criterion.choiceOptions,
+        requiresPhoto: criterion.requiresPhoto,
+        requiresComment: criterion.requiresComment,
         sequence: j + 1,
         answer,
+        choiceAnswer,
         severity: answer === 'fail' ? 'high' : null,
         nonComplianceDescription:
           answer === 'fail' ? 'Latch loose on east door; tagged out for follow-up.' : null,

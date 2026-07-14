@@ -6,24 +6,21 @@
 import { useState } from 'react'
 import { Briefcase, CalendarDays, MapPin, Tag, UserCog } from 'lucide-react'
 import { cn, SearchSelect } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { TagEditor } from './_tag-editor'
-import type { JournalDefinition, JournalEntryDetail, JournalOption, TagSuggestion } from './_types'
+import type { JournalDefinition, JournalEntryDetail, TagSuggestion } from './_types'
 
 const FIELD =
   'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:disabled:bg-slate-900'
 
 export function MetadataBar({
   entry,
-  sites,
-  people,
   tagSuggestions,
   editable,
   onPatch,
   onTagsChange,
 }: {
   entry: JournalEntryDetail
-  sites: JournalOption[]
-  people: JournalOption[]
   tagSuggestions: TagSuggestion[]
   editable: boolean
   onPatch: (patch: {
@@ -62,7 +59,8 @@ export function MetadataBar({
         </Field>
 
         <Field label="Location" icon={<MapPin size={13} />}>
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="journal-locations"
             value={entry.siteOrgUnitId ?? ''}
             disabled={!editable}
             clearable
@@ -72,12 +70,12 @@ export function MetadataBar({
             sheetTitle="Location"
             ariaLabel="Location"
             onChange={(v) => onPatch({ siteOrgUnitId: v || null })}
-            options={sites.map((s) => ({ value: s.id, label: s.name }))}
           />
         </Field>
 
         <Field label="Supervisor" icon={<UserCog size={13} />}>
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="journal-supervisors"
             value={entry.supervisorPersonId ?? ''}
             disabled={!editable}
             clearable
@@ -87,7 +85,6 @@ export function MetadataBar({
             sheetTitle="Supervisor"
             ariaLabel="Supervisor"
             onChange={(v) => onPatch({ supervisorPersonId: v || null })}
-            options={people.map((p) => ({ value: p.id, label: p.name, hint: p.hint }))}
           />
         </Field>
       </div>

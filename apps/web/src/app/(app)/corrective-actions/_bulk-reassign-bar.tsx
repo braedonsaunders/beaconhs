@@ -2,11 +2,10 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckSquare, Square, UserCog, X } from 'lucide-react'
-import { Button, SearchSelect } from '@beaconhs/ui'
+import { UserCog, X } from 'lucide-react'
+import { Button } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { bulkReassignCorrectiveActions } from './_actions'
-
-export type OwnerOption = { id: string; name: string; email: string | null }
 
 /**
  * Floating action bar on the CA list page. Once the user ticks at least one
@@ -19,11 +18,9 @@ export type OwnerOption = { id: string; name: string; email: string | null }
 export function BulkReassignBar({
   selectedIds,
   onClear,
-  owners,
 }: {
   selectedIds: string[]
   onClear: () => void
-  owners: OwnerOption[]
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -71,14 +68,10 @@ export function BulkReassignBar({
         <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
         <div className="flex items-center gap-2">
           <UserCog size={14} className="text-slate-500" />
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="corrective-action-owners"
             value={ownerId}
             onChange={(val) => setOwnerId(val)}
-            options={owners.map((o) => ({
-              value: o.id,
-              label: o.name,
-              hint: o.email ?? undefined,
-            }))}
             placeholder="Pick new owner…"
             searchPlaceholder="Search people…"
             sheetTitle="Select a person"
@@ -99,53 +92,3 @@ export function BulkReassignBar({
  * Row-level checkbox cell. Rendered next to each CA row so the user can
  * pick the rows that the BulkReassignBar then operates on.
  */
-export function SelectionCheckbox({
-  id,
-  selected,
-  onToggle,
-}: {
-  id: string
-  selected: boolean
-  onToggle: (id: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        onToggle(id)
-      }}
-      aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-    >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
-  )
-}
-
-export function HeaderSelectAll({
-  allSelected,
-  onToggleAll,
-}: {
-  allSelected: boolean
-  onToggleAll: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggleAll}
-      aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-    >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
-  )
-}

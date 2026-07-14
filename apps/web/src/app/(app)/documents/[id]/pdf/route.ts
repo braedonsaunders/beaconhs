@@ -10,6 +10,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -19,6 +20,8 @@ export async function GET(
   routeCtx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await routeCtx.params
+  if (!isUuid(id)) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
 

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { isUuid } from '@/lib/list-params'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
 import {
   loadSubjectCollections,
@@ -17,6 +18,8 @@ export default async function EmailTemplateEditorPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
@@ -38,8 +41,7 @@ export default async function EmailTemplateEditorPage({
         id: tpl.id,
         name: tpl.name,
         subjectTemplate: tpl.subjectTemplate,
-        design: tpl.design ?? {},
-        mjmlSource: tpl.mjmlSource,
+        sourceHtml: tpl.sourceHtml,
         mergeFields,
         collections,
         subjectLabel,

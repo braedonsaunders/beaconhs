@@ -3,7 +3,7 @@
 // queries, one source of truth, kept fresh by the worker scan. Replaces the old
 // per-module legacy breakdowns entirely.
 
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, sql } from 'drizzle-orm'
 import {
   type ComplianceTargetRef,
   complianceObligations,
@@ -32,36 +32,100 @@ type RollupRow = {
   percent: number
 }
 
-/** Per-obligation compliance aggregate for the Overview. */
-export async function obligationRollup(ctx: Ctx): Promise<RollupRow[]> {
-  const rows = await ctx.db((tx) =>
-    tx
+type ObligationOverview = {
+  rows: RollupRow[]
+  total: number
+  page: number
+  summary: {
+    obligations: number
+    subjects: number
+    completed: number
+    overdue: number
+  }
+}
+
+/** Searchable, server-paged obligation aggregates plus an uncapped org-wide summary. */
+export async function obligationOverview(
+  ctx: Ctx,
+  opts: { q?: string; page: number; perPage: number },
+): Promise<ObligationOverview> {
+  return ctx.db(async (tx) => {
+    const live = and(eq(complianceObligations.tenantId, ctx.tenantId), ...liveFilter())
+    const filtered = and(
+      eq(complianceObligations.tenantId, ctx.tenantId),
+      ...liveFilter(),
+      opts.q ? ilike(complianceObligations.title, `%${opts.q}%`) : undefined,
+    )
+    const [summaryRows, totalRows] = await Promise.all([
+      tx
+        .select({
+          obligations: sql<number>`count(distinct ${complianceObligations.id})::int`,
+          subjects: sql<number>`count(${complianceStatus.id})::int`,
+          completed: sql<number>`count(${complianceStatus.id}) filter (where ${complianceStatus.status} = 'completed')::int`,
+          overdue: sql<number>`count(${complianceStatus.id}) filter (where ${complianceStatus.status} in ('overdue','expiring'))::int`,
+        })
+        .from(complianceObligations)
+        .leftJoin(complianceStatus, eq(complianceStatus.obligationId, complianceObligations.id))
+        .where(live),
+      tx.select({ total: count() }).from(complianceObligations).where(filtered),
+    ])
+    const total = Number(totalRows[0]?.total ?? 0)
+    const pageCount = Math.max(1, Math.ceil(total / opts.perPage))
+    const page = Math.min(Math.max(1, opts.page), pageCount)
+    const totalSubjects = sql<number>`count(${complianceStatus.id})::int`
+    const completed = sql<number>`count(${complianceStatus.id}) filter (where ${complianceStatus.status} = 'completed')::int`
+    const overdue = sql<number>`count(${complianceStatus.id}) filter (where ${complianceStatus.status} in ('overdue','expiring'))::int`
+    const percent = sql<number>`case
+      when count(${complianceStatus.id}) = 0 then 0
+      else round(
+        count(${complianceStatus.id}) filter (where ${complianceStatus.status} = 'completed')::numeric
+        / count(${complianceStatus.id})::numeric * 100
+      )::int
+    end`
+    const rows = await tx
       .select({
         id: complianceObligations.id,
         kind: complianceObligations.sourceModule,
         title: complianceObligations.title,
-        total: sql<number>`count(${complianceStatus.id})::int`,
-        completed: sql<number>`count(*) filter (where ${complianceStatus.status} = 'completed')::int`,
-        overdue: sql<number>`count(*) filter (where ${complianceStatus.status} in ('overdue','expiring'))::int`,
+        total: totalSubjects,
+        completed,
+        overdue,
+        percent,
       })
       .from(complianceObligations)
       .leftJoin(complianceStatus, eq(complianceStatus.obligationId, complianceObligations.id))
-      .where(and(eq(complianceObligations.tenantId, ctx.tenantId), ...liveFilter()))
+      .where(filtered)
       .groupBy(complianceObligations.id)
-      .limit(1000),
-  )
-  return rows
-    .map((r) => ({
-      kind: r.kind as ObligationKind,
-      id: r.id,
-      title: r.title,
-      total: Number(r.total),
-      completed: Number(r.completed),
-      overdue: Number(r.overdue),
-      percent:
-        Number(r.total) === 0 ? 0 : Math.round((Number(r.completed) / Number(r.total)) * 100),
-    }))
-    .sort((a, b) => b.overdue - a.overdue || a.percent - b.percent)
+      .orderBy(
+        desc(overdue),
+        asc(percent),
+        asc(complianceObligations.title),
+        asc(complianceObligations.id),
+      )
+      .limit(opts.perPage)
+      .offset((page - 1) * opts.perPage)
+
+    const summary = summaryRows[0]
+    return {
+      rows: rows.map((row) => ({
+        kind: row.kind as ObligationKind,
+        id: row.id,
+        title: row.title,
+        total: Number(row.total),
+        completed: Number(row.completed),
+        overdue: Number(row.overdue),
+        percent: Number(row.percent),
+      })),
+      total,
+      page,
+      summary: {
+        obligations: Number(summary?.obligations ?? 0),
+        subjects: Number(summary?.subjects ?? 0),
+        completed: Number(summary?.completed ?? 0),
+        overdue: Number(summary?.overdue ?? 0),
+      },
+    }
+  })
 }
 
 export type PersonStatusRow = {
@@ -73,6 +137,8 @@ export type PersonStatusRow = {
   completedOn: string | null
   /** Module target (documentId / courseId / formTemplateId / …) for deep-linking. */
   targetRef: ComplianceTargetRef | null
+  /** Exact completion record when an evaluator can provide one. */
+  subjectRef: Record<string, string> | null
 }
 
 /** Everything one person owes, across every obligation kind. */
@@ -87,6 +153,7 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
         dueOn: complianceStatus.dueOn,
         completedOn: complianceStatus.completedOn,
         targetRef: complianceObligations.targetRef,
+        subjectRef: complianceStatus.subjectRef,
       })
       .from(complianceStatus)
       .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
@@ -109,6 +176,7 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
       dueOn: r.dueOn,
       completedOn: r.completedOn,
       targetRef: r.targetRef,
+      subjectRef: r.subjectRef,
     }))
     .sort((a, b) => rank(a.status) - rank(b.status) || a.title.localeCompare(b.title))
 }

@@ -3,13 +3,28 @@
 //                  formerly the standalone "My Learning")
 //   2. Records   — every training_record you've earned
 //   3. Expiring  — records expiring within 90 days
-//   4. Assigned  — audience-assigned items you haven't completed yet
+//   4. Assigned  — canonical compliance requirements you haven't completed yet
 //
 // All queries pivot on `people.userId = ctx.userId` -> `people.id`.
 
 import Link from 'next/link'
 import { GraduationCap } from 'lucide-react'
-import { and, asc, count, desc, eq, gte, isNull, lte, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -25,13 +40,15 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import {
+  complianceObligations,
+  complianceStatus,
   people,
-  trainingAudienceAssignmentRecords,
-  trainingAudienceAssignments,
+  trainingAssessmentTypes,
   trainingCourseModules,
   trainingCourses,
   trainingEnrollments,
   trainingRecords,
+  trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
@@ -39,8 +56,11 @@ import { deliveryLabel, deliveryMeta } from '@/app/(app)/training/_lib/delivery'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { parseListParams } from '@/lib/list-params'
 import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { resolveComplianceLink } from '@/app/(app)/compliance/_resolve-link'
 import { WorkspaceNoIdentity } from '../_no-identity'
 
 export const metadata = { title: 'My training' }
@@ -48,6 +68,37 @@ export const dynamic = 'force-dynamic'
 
 const TABS = ['courses', 'records', 'expiring', 'assigned'] as const
 type Tab = (typeof TABS)[number]
+
+const MY_TRAINING_LIST_KEYS = {
+  courses: {
+    q: 'courseQ',
+    sort: 'courseSort',
+    dir: 'courseDir',
+    page: 'coursePage',
+    perPage: 'coursePerPage',
+  },
+  records: {
+    q: 'recordQ',
+    sort: 'recordSort',
+    dir: 'recordDir',
+    page: 'recordPage',
+    perPage: 'recordPerPage',
+  },
+  expiring: {
+    q: 'expiringQ',
+    sort: 'expiringSort',
+    dir: 'expiringDir',
+    page: 'expiringPage',
+    perPage: 'expiringPerPage',
+  },
+  assigned: {
+    q: 'assignmentQ',
+    sort: 'assignmentSort',
+    dir: 'assignmentDir',
+    page: 'assignmentPage',
+    perPage: 'assignmentPerPage',
+  },
+} as const
 
 type CourseCard = {
   id: string
@@ -59,6 +110,26 @@ type CourseCard = {
   percent: number
 }
 
+type TrainingRecordRow = {
+  rec: typeof trainingRecords.$inferSelect
+  course: typeof trainingCourses.$inferSelect | null
+  isLatest: boolean
+}
+
+type ExpiringRecordRow = {
+  rec: typeof trainingRecords.$inferSelect
+  course: typeof trainingCourses.$inferSelect | null
+}
+
+type AssignmentRow = {
+  status: typeof complianceStatus.$inferSelect
+  obligation: typeof complianceObligations.$inferSelect
+  course: typeof trainingCourses.$inferSelect | null
+  assessmentType: typeof trainingAssessmentTypes.$inferSelect | null
+  skillType: typeof trainingSkillTypes.$inferSelect | null
+  enrollment: typeof trainingEnrollments.$inferSelect | null
+}
+
 export default async function MyTrainingPage({
   searchParams,
 }: {
@@ -66,12 +137,22 @@ export default async function MyTrainingPage({
 }) {
   const sp = await searchParams
   const tab: Tab = pickActiveTab(sp, TABS, 'courses')
-  const params = parseListParams(sp, {
-    sort: 'completedOn',
-    dir: 'desc',
-    perPage: 25,
-    allowedSorts: ['completedOn', 'expiresOn', 'course'] as const,
-  })
+  const listKeys = MY_TRAINING_LIST_KEYS[tab]
+  const params = parseListParams(
+    {
+      q: sp[listKeys.q],
+      sort: sp[listKeys.sort],
+      dir: sp[listKeys.dir],
+      page: sp[listKeys.page],
+      perPage: sp[listKeys.perPage],
+    },
+    {
+      sort: 'completedOn',
+      dir: 'desc',
+      perPage: 25,
+      allowedSorts: ['completedOn', 'expiresOn', 'course'] as const,
+    },
+  )
 
   const ctx = await requireRequestContext()
 
@@ -90,9 +171,9 @@ export default async function MyTrainingPage({
       expiringCount: 0,
       assignedCount: 0,
       courses: [] as CourseCard[],
-      records: [] as any[],
-      expiring: [] as any[],
-      assigned: [] as any[],
+      records: [] as TrainingRecordRow[],
+      expiring: [] as ExpiringRecordRow[],
+      assigned: [] as AssignmentRow[],
       total: 0,
     }
 
@@ -104,33 +185,46 @@ export default async function MyTrainingPage({
     // courses only once training staff has enrolled you (they are attended /
     // evaluated, not "started"); external certificates never — those are
     // records entered by the training team.
-    const modCourses = await tx
-      .select({ courseId: trainingCourseModules.courseId })
-      .from(trainingCourseModules)
-      .where(isNull(trainingCourseModules.deletedAt))
-      .groupBy(trainingCourseModules.courseId)
-    const withModules = new Set(modCourses.map((m) => m.courseId))
-    const courseTypes = await tx
-      .select({ id: trainingCourses.id, deliveryType: trainingCourses.deliveryType })
-      .from(trainingCourses)
-      .where(isNull(trainingCourses.deletedAt))
-    const enrollments = await tx
-      .select()
-      .from(trainingEnrollments)
-      .where(eq(trainingEnrollments.personId, personId))
-    const enrollBy = new Map(enrollments.map((e) => [e.courseId, e]))
-    const availableCourseIds = new Set(
-      courseTypes
-        .filter((c) => {
-          const meta = deliveryMeta(c.deliveryType)
-          if (meta.catalog === 'never') return false
-          if (meta.catalog === 'always') return true
-          if (!withModules.has(c.id)) return false
-          return meta.selfLaunch || enrollBy.has(c.id)
-        })
-        .map((c) => c.id),
+    const hasModule = exists(
+      tx
+        .select({ id: trainingCourseModules.id })
+        .from(trainingCourseModules)
+        .where(
+          and(
+            eq(trainingCourseModules.courseId, trainingCourses.id),
+            isNull(trainingCourseModules.deletedAt),
+          ),
+        ),
     )
-    const coursesCount = availableCourseIds.size
+    const hasEnrollment = exists(
+      tx
+        .select({ id: trainingEnrollments.id })
+        .from(trainingEnrollments)
+        .where(
+          and(
+            eq(trainingEnrollments.courseId, trainingCourses.id),
+            eq(trainingEnrollments.personId, personId),
+            isNull(trainingEnrollments.deletedAt),
+          ),
+        ),
+    )
+    const availableCourseWhere = and(
+      isNull(trainingCourses.deletedAt),
+      or(
+        eq(trainingCourses.deliveryType, 'online'),
+        and(eq(trainingCourses.deliveryType, 'self_paced'), hasModule),
+        and(
+          inArray(trainingCourses.deliveryType, ['classroom', 'on_the_job']),
+          hasModule,
+          hasEnrollment,
+        ),
+      ),
+    )
+    const [coursesCountRow] = await tx
+      .select({ c: count() })
+      .from(trainingCourses)
+      .where(availableCourseWhere)
+    const coursesCount = Number(coursesCountRow?.c ?? 0)
 
     const today = new Date()
     const todayStr = today.toISOString().slice(0, 10)
@@ -160,43 +254,83 @@ export default async function MyTrainingPage({
       )
     const expiringCount = Number(expCntRow?.c ?? 0)
 
-    const assignedScope = or(
-      eq(trainingAudienceAssignmentRecords.status, 'pending'),
-      eq(trainingAudienceAssignmentRecords.status, 'in_progress'),
-      eq(trainingAudienceAssignmentRecords.status, 'overdue'),
+    const assignedScope = and(
+      eq(complianceStatus.tenantId, ctx.tenantId),
+      eq(complianceStatus.personId, personId),
+      inArray(complianceStatus.status, ['pending', 'in_progress', 'overdue', 'expiring']),
+      inArray(complianceObligations.sourceModule, ['training', 'cert_requirement']),
+      eq(complianceObligations.status, 'active'),
+      isNull(complianceObligations.deletedAt),
     ) as SQL<unknown>
     const [assignedCntRow] = await tx
       .select({ c: count() })
-      .from(trainingAudienceAssignmentRecords)
-      .where(and(eq(trainingAudienceAssignmentRecords.personId, personId), assignedScope))
+      .from(complianceStatus)
+      .innerJoin(
+        complianceObligations,
+        and(
+          eq(complianceObligations.tenantId, complianceStatus.tenantId),
+          eq(complianceObligations.id, complianceStatus.obligationId),
+        ),
+      )
+      .where(assignedScope)
     const assignedCount = Number(assignedCntRow?.c ?? 0)
 
     const counts = { ...base, coursesCount, recordsCount, expiringCount, assignedCount }
 
     if (tab === 'courses') {
-      const all = await tx
-        .select()
-        .from(trainingCourses)
-        .where(isNull(trainingCourses.deletedAt))
-        .orderBy(asc(trainingCourses.name))
-      const courses: CourseCard[] = all
-        .filter((c) => availableCourseIds.has(c.id))
-        .map((c) => {
-          const e = enrollBy.get(c.id)
-          return {
-            id: c.id,
-            code: c.code,
-            name: c.name,
-            description: htmlToSnippet(c.description, 140) || null,
-            deliveryType: c.deliveryType,
-            status: e?.status ?? null,
-            percent: e?.progressPercent ?? 0,
-          }
-        })
-      return { ...counts, courses, total: courses.length }
+      const search = params.q
+        ? or(
+            ilike(trainingCourses.name, `%${params.q}%`),
+            ilike(trainingCourses.code, `%${params.q}%`),
+            ilike(trainingCourses.description, `%${params.q}%`),
+          )
+        : undefined
+      const courseWhere = and(availableCourseWhere, search)
+      const [[filteredCountRow], rows] = await Promise.all([
+        tx.select({ c: count() }).from(trainingCourses).where(courseWhere),
+        tx
+          .select({ course: trainingCourses, enrollment: trainingEnrollments })
+          .from(trainingCourses)
+          .leftJoin(
+            trainingEnrollments,
+            and(
+              eq(trainingEnrollments.courseId, trainingCourses.id),
+              eq(trainingEnrollments.personId, personId),
+              isNull(trainingEnrollments.deletedAt),
+            ),
+          )
+          .where(courseWhere)
+          .orderBy(asc(trainingCourses.name), asc(trainingCourses.id))
+          .limit(params.perPage)
+          .offset((params.page - 1) * params.perPage),
+      ])
+      const courses: CourseCard[] = rows.map(({ course, enrollment }) => ({
+        id: course.id,
+        code: course.code,
+        name: course.name,
+        description: htmlToSnippet(course.description, 140) || null,
+        deliveryType: course.deliveryType,
+        status: enrollment?.status ?? null,
+        percent: enrollment?.progressPercent ?? 0,
+      }))
+      return { ...counts, courses, total: Number(filteredCountRow?.c ?? 0) }
     }
 
     if (tab === 'records') {
+      const search = params.q
+        ? or(
+            ilike(trainingCourses.name, `%${params.q}%`),
+            ilike(trainingCourses.code, `%${params.q}%`),
+            ilike(trainingRecords.instructor, `%${params.q}%`),
+            ilike(trainingRecords.details, `%${params.q}%`),
+            ilike(trainingRecords.notes, `%${params.q}%`),
+          )
+        : undefined
+      const recordWhere = and(
+        eq(trainingRecords.personId, personId),
+        isNull(trainingRecords.deletedAt),
+        search,
+      )
       const order =
         params.sort === 'course'
           ? [params.dir === 'asc' ? asc(trainingCourses.name) : desc(trainingCourses.name)]
@@ -212,62 +346,183 @@ export default async function MyTrainingPage({
                   : desc(trainingRecords.completedOn),
               ]
 
-      const records = await tx
-        .select({
-          rec: trainingRecords,
-          course: trainingCourses,
-          // Full history stays visible, but rows replaced by a newer record for
-          // the same course are labelled "superseded" instead of "expired".
-          isLatest: latestTrainingRecordOnly().mapWith(Boolean),
-        })
-        .from(trainingRecords)
-        .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-        .where(and(eq(trainingRecords.personId, personId), isNull(trainingRecords.deletedAt)))
-        .orderBy(...order)
-        .limit(params.perPage)
-        .offset((params.page - 1) * params.perPage)
-      return { ...counts, records, total: recordsCount }
+      const [[filteredCountRow], records] = await Promise.all([
+        tx
+          .select({ c: count() })
+          .from(trainingRecords)
+          .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+          .where(recordWhere),
+        tx
+          .select({
+            rec: trainingRecords,
+            course: trainingCourses,
+            // Full history stays visible, but rows replaced by a newer record for
+            // the same course are labelled "superseded" instead of "expired".
+            isLatest: latestTrainingRecordOnly().mapWith(Boolean),
+          })
+          .from(trainingRecords)
+          .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+          .where(recordWhere)
+          .orderBy(...order, desc(trainingRecords.id))
+          .limit(params.perPage)
+          .offset((params.page - 1) * params.perPage),
+      ])
+      return { ...counts, records, total: Number(filteredCountRow?.c ?? 0) }
     }
     if (tab === 'expiring') {
-      const expiring = await tx
-        .select({ rec: trainingRecords, course: trainingCourses })
-        .from(trainingRecords)
-        .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-        .where(
-          and(
-            eq(trainingRecords.personId, personId),
-            isNull(trainingRecords.deletedAt),
-            gte(trainingRecords.expiresOn, todayStr),
-            lte(trainingRecords.expiresOn, ninetyDaysStr),
-            latestTrainingRecordOnly(),
-          ),
-        )
-        .orderBy(asc(trainingRecords.expiresOn))
-        .limit(params.perPage)
-        .offset((params.page - 1) * params.perPage)
-      return { ...counts, expiring, total: expiringCount }
+      const search = params.q
+        ? or(
+            ilike(trainingCourses.name, `%${params.q}%`),
+            ilike(trainingCourses.code, `%${params.q}%`),
+            ilike(trainingRecords.instructor, `%${params.q}%`),
+          )
+        : undefined
+      const expiringWhere = and(
+        eq(trainingRecords.personId, personId),
+        isNull(trainingRecords.deletedAt),
+        gte(trainingRecords.expiresOn, todayStr),
+        lte(trainingRecords.expiresOn, ninetyDaysStr),
+        latestTrainingRecordOnly(),
+        search,
+      )
+      const [[filteredCountRow], expiring] = await Promise.all([
+        tx
+          .select({ c: count() })
+          .from(trainingRecords)
+          .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+          .where(expiringWhere),
+        tx
+          .select({ rec: trainingRecords, course: trainingCourses })
+          .from(trainingRecords)
+          .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
+          .where(expiringWhere)
+          .orderBy(asc(trainingRecords.expiresOn), asc(trainingRecords.id))
+          .limit(params.perPage)
+          .offset((params.page - 1) * params.perPage),
+      ])
+      return { ...counts, expiring, total: Number(filteredCountRow?.c ?? 0) }
     }
     // tab === 'assigned'
-    const assigned = await tx
-      .select({
-        rec: trainingAudienceAssignmentRecords,
-        assignment: trainingAudienceAssignments,
-        course: trainingCourses,
-      })
-      .from(trainingAudienceAssignmentRecords)
-      .innerJoin(
-        trainingAudienceAssignments,
-        eq(trainingAudienceAssignments.id, trainingAudienceAssignmentRecords.assignmentId),
-      )
-      .leftJoin(trainingCourses, eq(trainingCourses.id, trainingAudienceAssignments.courseId))
-      .where(and(eq(trainingAudienceAssignmentRecords.personId, personId), assignedScope))
-      .orderBy(
-        asc(trainingAudienceAssignments.dueOn),
-        desc(trainingAudienceAssignmentRecords.lastEvaluatedAt),
-      )
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
-    return { ...counts, assigned, total: assignedCount }
+    const search = params.q
+      ? or(
+          ilike(complianceObligations.title, `%${params.q}%`),
+          ilike(complianceObligations.notes, `%${params.q}%`),
+          ilike(trainingCourses.name, `%${params.q}%`),
+          ilike(trainingCourses.code, `%${params.q}%`),
+          ilike(trainingAssessmentTypes.name, `%${params.q}%`),
+          ilike(trainingSkillTypes.name, `%${params.q}%`),
+        )
+      : undefined
+    const assignedWhere = and(assignedScope, search)
+    const [[filteredCountRow], assigned] = await Promise.all([
+      tx
+        .select({ c: count() })
+        .from(complianceStatus)
+        .innerJoin(
+          complianceObligations,
+          and(
+            eq(complianceObligations.tenantId, complianceStatus.tenantId),
+            eq(complianceObligations.id, complianceStatus.obligationId),
+          ),
+        )
+        .leftJoin(
+          trainingCourses,
+          and(
+            eq(trainingCourses.tenantId, complianceStatus.tenantId),
+            eq(trainingCourses.id, sql<string>`${complianceObligations.targetRef}->>'courseId'`),
+            isNull(trainingCourses.deletedAt),
+          ),
+        )
+        .leftJoin(
+          trainingAssessmentTypes,
+          and(
+            eq(trainingAssessmentTypes.tenantId, complianceStatus.tenantId),
+            eq(
+              trainingAssessmentTypes.id,
+              sql<string>`${complianceObligations.targetRef}->>'assessmentTypeId'`,
+            ),
+            isNull(trainingAssessmentTypes.deletedAt),
+          ),
+        )
+        .leftJoin(
+          trainingSkillTypes,
+          and(
+            eq(trainingSkillTypes.tenantId, complianceStatus.tenantId),
+            eq(
+              trainingSkillTypes.id,
+              sql<string>`${complianceObligations.targetRef}->>'skillTypeId'`,
+            ),
+          ),
+        )
+        .where(assignedWhere),
+      tx
+        .select({
+          status: complianceStatus,
+          obligation: complianceObligations,
+          course: trainingCourses,
+          assessmentType: trainingAssessmentTypes,
+          skillType: trainingSkillTypes,
+          enrollment: trainingEnrollments,
+        })
+        .from(complianceStatus)
+        .innerJoin(
+          complianceObligations,
+          and(
+            eq(complianceObligations.tenantId, complianceStatus.tenantId),
+            eq(complianceObligations.id, complianceStatus.obligationId),
+          ),
+        )
+        .leftJoin(
+          trainingCourses,
+          and(
+            eq(trainingCourses.tenantId, complianceStatus.tenantId),
+            eq(trainingCourses.id, sql<string>`${complianceObligations.targetRef}->>'courseId'`),
+            isNull(trainingCourses.deletedAt),
+          ),
+        )
+        .leftJoin(
+          trainingAssessmentTypes,
+          and(
+            eq(trainingAssessmentTypes.tenantId, complianceStatus.tenantId),
+            eq(
+              trainingAssessmentTypes.id,
+              sql<string>`${complianceObligations.targetRef}->>'assessmentTypeId'`,
+            ),
+            isNull(trainingAssessmentTypes.deletedAt),
+          ),
+        )
+        .leftJoin(
+          trainingSkillTypes,
+          and(
+            eq(trainingSkillTypes.tenantId, complianceStatus.tenantId),
+            eq(
+              trainingSkillTypes.id,
+              sql<string>`${complianceObligations.targetRef}->>'skillTypeId'`,
+            ),
+          ),
+        )
+        .leftJoin(
+          trainingEnrollments,
+          and(
+            eq(trainingEnrollments.tenantId, complianceStatus.tenantId),
+            eq(trainingEnrollments.personId, personId),
+            eq(
+              trainingEnrollments.courseId,
+              sql<string>`${complianceObligations.targetRef}->>'courseId'`,
+            ),
+            isNull(trainingEnrollments.deletedAt),
+          ),
+        )
+        .where(assignedWhere)
+        .orderBy(
+          asc(complianceStatus.dueOn),
+          desc(complianceStatus.computedAt),
+          asc(complianceStatus.id),
+        )
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage),
+    ])
+    return { ...counts, assigned, total: Number(filteredCountRow?.c ?? 0) }
   })
 
   if (!data.personId) {
@@ -295,6 +550,16 @@ export default async function MyTrainingPage({
   }
 
   const todayStr = new Date().toISOString().slice(0, 10)
+  const listPagination = (
+    <Pagination
+      basePath="/my/training"
+      currentParams={sp}
+      total={data.total}
+      page={params.page}
+      perPage={params.perPage}
+      pageParamKey={listKeys.page}
+    />
+  )
 
   return (
     <ListPageLayout
@@ -321,86 +586,118 @@ export default async function MyTrainingPage({
               { key: 'assigned', label: 'Assigned', count: data.assignedCount },
             ]}
           />
+          <TableToolbar>
+            <SearchInput
+              placeholder={
+                tab === 'courses'
+                  ? 'Search courses…'
+                  : tab === 'assigned'
+                    ? 'Search assignments…'
+                    : 'Search training records…'
+              }
+              paramKey={listKeys.q}
+              pageParamKey={listKeys.page}
+            />
+          </TableToolbar>
         </>
       }
     >
       {tab === 'courses' ? (
         data.courses.length === 0 ? (
-          <EmptyState
-            icon={<GraduationCap size={32} />}
-            title="No courses available"
-            description="Courses with published content appear here."
-          />
+          <>
+            <EmptyState
+              icon={<GraduationCap size={32} />}
+              title={params.q ? 'No courses match your search' : 'No courses available'}
+              description={
+                params.q
+                  ? 'Try a different course name or code.'
+                  : 'Courses with published content appear here.'
+              }
+            />
+            {data.total > 0 ? listPagination : null}
+          </>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {data.courses.map((c) => {
-              const selfLaunch = deliveryMeta(c.deliveryType).selfLaunch
-              const label =
-                c.status === 'completed'
-                  ? 'Review'
-                  : c.status
-                    ? `Continue · ${c.percent}%`
-                    : selfLaunch
-                      ? 'Start'
-                      : 'View course'
-              return (
-                <Card
-                  key={c.id}
-                  className="group flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <CardContent className="flex flex-1 flex-col gap-3 py-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <Badge variant="outline" className="font-normal">
-                        {deliveryLabel(c.deliveryType)}
-                      </Badge>
-                      {c.status === 'completed' ? (
-                        <Badge variant="success">Completed</Badge>
-                      ) : c.status ? (
-                        <Badge variant="secondary">In progress</Badge>
-                      ) : null}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="line-clamp-2 font-semibold text-slate-900 dark:text-slate-100">
-                        {c.name}
-                      </h3>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{c.code}</p>
-                    </div>
-                    <p className="line-clamp-2 min-h-[2.5rem] text-sm text-slate-600 dark:text-slate-400">
-                      {c.description ?? ''}
-                    </p>
-                    {c.status ? (
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div
-                          className="h-full rounded-full bg-teal-500"
-                          style={{ width: `${c.percent}%` }}
-                        />
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {data.courses.map((c) => {
+                const selfLaunch = deliveryMeta(c.deliveryType).selfLaunch
+                const label =
+                  c.status === 'completed'
+                    ? 'Review'
+                    : c.status
+                      ? `Continue · ${c.percent}%`
+                      : selfLaunch
+                        ? 'Start'
+                        : 'View course'
+                return (
+                  <Card
+                    key={c.id}
+                    className="group flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <CardContent className="flex flex-1 flex-col gap-3 py-5">
+                      <div className="flex items-start justify-between gap-2">
+                        <Badge variant="outline" className="font-normal">
+                          {deliveryLabel(c.deliveryType)}
+                        </Badge>
+                        {c.status === 'completed' ? (
+                          <Badge variant="success">Completed</Badge>
+                        ) : c.status ? (
+                          <Badge variant="secondary">In progress</Badge>
+                        ) : null}
                       </div>
-                    ) : null}
-                    <div className="mt-auto pt-1">
-                      <Link href={`/training/learn/${c.id}`}>
-                        <Button
-                          variant={c.status === 'completed' ? 'outline' : 'default'}
-                          className="w-full"
-                        >
-                          {label}
-                        </Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                      <div className="min-w-0">
+                        <h3 className="line-clamp-2 font-semibold text-slate-900 dark:text-slate-100">
+                          {c.name}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          {c.code}
+                        </p>
+                      </div>
+                      <p className="line-clamp-2 min-h-[2.5rem] text-sm text-slate-600 dark:text-slate-400">
+                        {c.description ?? ''}
+                      </p>
+                      {c.status ? (
+                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-teal-500"
+                            style={{ width: `${c.percent}%` }}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="mt-auto pt-1">
+                        <Link href={`/training/learn/${c.id}`}>
+                          <Button
+                            variant={c.status === 'completed' ? 'outline' : 'default'}
+                            className="w-full"
+                          >
+                            {label}
+                          </Button>
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+            {listPagination}
           </div>
         )
       ) : null}
 
       {tab === 'records' ? (
         data.records.length === 0 ? (
-          <EmptyState
-            icon={<GraduationCap size={32} />}
-            title="No training records"
-            description="Records appear here once an instructor or evaluator signs you off."
-          />
+          <>
+            <EmptyState
+              icon={<GraduationCap size={32} />}
+              title={params.q ? 'No records match your search' : 'No training records'}
+              description={
+                params.q
+                  ? 'Try a different course, instructor, or note.'
+                  : 'Records appear here once an instructor or evaluator signs you off.'
+              }
+            />
+            {data.total > 0 ? listPagination : null}
+          </>
         ) : (
           <>
             <Table>
@@ -414,7 +711,7 @@ export default async function MyTrainingPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.records.map(({ rec, course, isLatest }: any) => {
+                {data.records.map(({ rec, course, isLatest }) => {
                   const superseded = !isLatest
                   const expiringSoon =
                     !superseded &&
@@ -479,24 +776,29 @@ export default async function MyTrainingPage({
                 })}
               </TableBody>
             </Table>
-            <Pagination
-              basePath="/my/training"
-              currentParams={sp}
-              total={data.total}
-              page={params.page}
-              perPage={params.perPage}
-            />
+            {listPagination}
           </>
         )
       ) : null}
 
       {tab === 'expiring' ? (
         data.expiring.length === 0 ? (
-          <EmptyState
-            icon={<GraduationCap size={32} />}
-            title="Nothing expiring in the next 90 days"
-            description="All certifications are valid for at least the next 90 days."
-          />
+          <>
+            <EmptyState
+              icon={<GraduationCap size={32} />}
+              title={
+                params.q
+                  ? 'No expiring records match your search'
+                  : 'Nothing expiring in the next 90 days'
+              }
+              description={
+                params.q
+                  ? 'Try a different course or instructor.'
+                  : 'All certifications are valid for at least the next 90 days.'
+              }
+            />
+            {data.total > 0 ? listPagination : null}
+          </>
         ) : (
           <>
             <Table>
@@ -509,7 +811,7 @@ export default async function MyTrainingPage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.expiring.map(({ rec, course }: any) => {
+                {data.expiring.map(({ rec, course }) => {
                   const daysLeft = rec.expiresOn
                     ? Math.ceil(
                         (new Date(rec.expiresOn).getTime() - new Date().getTime()) /
@@ -543,24 +845,25 @@ export default async function MyTrainingPage({
                 })}
               </TableBody>
             </Table>
-            <Pagination
-              basePath="/my/training"
-              currentParams={sp}
-              total={data.total}
-              page={params.page}
-              perPage={params.perPage}
-            />
+            {listPagination}
           </>
         )
       ) : null}
 
       {tab === 'assigned' ? (
         data.assigned.length === 0 ? (
-          <EmptyState
-            icon={<GraduationCap size={32} />}
-            title="No outstanding assignments"
-            description="Assigned courses and assessments appear here until completed."
-          />
+          <>
+            <EmptyState
+              icon={<GraduationCap size={32} />}
+              title={params.q ? 'No assignments match your search' : 'No outstanding assignments'}
+              description={
+                params.q
+                  ? 'Try a different assignment or course name.'
+                  : 'Assigned courses and assessments appear here until completed.'
+              }
+            />
+            {data.total > 0 ? listPagination : null}
+          </>
         ) : (
           <>
             <Table>
@@ -570,54 +873,86 @@ export default async function MyTrainingPage({
                   <TableHead>Course / item</TableHead>
                   <TableHead>Due</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.assigned.map(({ rec, assignment, course }: any) => {
-                  const overdue =
-                    assignment.dueOn && assignment.dueOn < todayStr && rec.status !== 'completed'
-                  return (
-                    <TableRow key={rec.id}>
-                      <TableCell>
-                        <div className="font-medium">{assignment.name}</div>
-                        {assignment.notes ? (
-                          <div className="text-xs text-slate-500">{assignment.notes}</div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{course?.name ?? assignment.itemKind}</TableCell>
-                      <TableCell>
-                        <span
-                          className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}
-                        >
-                          {assignment.dueOn ?? '—'}
-                          {overdue ? ' (overdue)' : ''}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            rec.status === 'overdue'
-                              ? 'destructive'
-                              : rec.status === 'completed'
-                                ? 'success'
-                                : 'warning'
-                          }
-                        >
-                          {rec.status.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                {data.assigned.map(
+                  ({ status, obligation, course, assessmentType, skillType, enrollment }) => {
+                    const overdue = status.status === 'overdue'
+                    const link = resolveComplianceLink(
+                      obligation.sourceModule,
+                      obligation.targetRef,
+                      {
+                        personId: data.personId,
+                        obligationId: obligation.id,
+                      },
+                    )
+                    const itemName =
+                      course?.name ??
+                      assessmentType?.name ??
+                      skillType?.name ??
+                      (obligation.sourceModule === 'cert_requirement'
+                        ? 'Certification requirement'
+                        : 'Training requirement')
+                    return (
+                      <TableRow key={status.id}>
+                        <TableCell>
+                          <div className="font-medium">{obligation.title}</div>
+                          {obligation.notes ? (
+                            <div className="text-xs text-slate-500">{obligation.notes}</div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <div>{itemName}</div>
+                          {enrollment ? (
+                            <div className="text-xs text-slate-500">
+                              Course {enrollment.status.replace('_', ' ')}
+                              {enrollment.status === 'in_progress'
+                                ? ` · ${enrollment.progressPercent}%`
+                                : ''}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}
+                          >
+                            {status.dueOn ?? '—'}
+                            {overdue ? ' (overdue)' : ''}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              status.status === 'overdue'
+                                ? 'destructive'
+                                : status.status === 'completed'
+                                  ? 'success'
+                                  : 'warning'
+                            }
+                          >
+                            {status.status.replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {link ? (
+                            <Link href={link.href as never} prefetch={link.prefetch}>
+                              <Button size="sm" variant="outline">
+                                Open
+                              </Button>
+                            </Link>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  },
+                )}
               </TableBody>
             </Table>
-            <Pagination
-              basePath="/my/training"
-              currentParams={sp}
-              total={data.total}
-              page={params.page}
-              perPage={params.perPage}
-            />
+            {listPagination}
           </>
         )
       ) : null}

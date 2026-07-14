@@ -1,10 +1,10 @@
 import 'server-only'
 
-// Option lists for the notification-group member builder — one entry per
-// grouping primitive a group can target (person / role / department / site /
-// trade / crew / person-group). RLS-bound to the caller's tenant.
+// Immediate label hydration for existing notification-group members. Searchable
+// candidate catalogues are loaded through the purpose-scoped picker API; this
+// loader deliberately queries only keys already persisted on the page.
 
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { inArray } from 'drizzle-orm'
 import {
   crews,
   departments,
@@ -15,6 +15,7 @@ import {
   trades,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { isUuid } from '@/lib/list-params'
 
 export type AudienceOptions = {
   people: { id: string; name: string }[]
@@ -26,32 +27,75 @@ export type AudienceOptions = {
   personGroups: { id: string; name: string }[]
 }
 
-export async function loadAudienceOptions(ctx: RequestContext): Promise<AudienceOptions> {
+type AudienceReference = { kind: string; entityKey: string }
+
+function keysFor(references: readonly AudienceReference[], kind: string): string[] {
+  return [
+    ...new Set(
+      references
+        .filter((reference) => reference.kind === kind)
+        .map((reference) => reference.entityKey.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
+
+export async function loadAudienceOptions(
+  ctx: RequestContext,
+  references: readonly AudienceReference[],
+): Promise<AudienceOptions> {
+  const personIds = keysFor(references, 'person').filter(isUuid)
+  const roleKeys = keysFor(references, 'role')
+  const departmentIds = keysFor(references, 'department').filter(isUuid)
+  const orgUnitIds = keysFor(references, 'org_unit').filter(isUuid)
+  const tradeIds = keysFor(references, 'trade').filter(isUuid)
+  const crewIds = keysFor(references, 'crew').filter(isUuid)
+  const personGroupIds = keysFor(references, 'person_group').filter(isUuid)
+
   return ctx.db(async (tx) => {
     const [ppl, rls, depts, units, trd, crw, pgroups] = await Promise.all([
-      tx
-        .select({ id: people.id, first: people.firstName, last: people.lastName })
-        .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(2000),
-      tx.select({ key: roles.key, name: roles.name }).from(roles).orderBy(asc(roles.name)),
-      tx
-        .select({ id: departments.id, name: departments.name })
-        .from(departments)
-        .orderBy(asc(departments.name)),
-      tx
-        .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
-        .from(orgUnits)
-        .where(isNull(orgUnits.deletedAt))
-        .orderBy(asc(orgUnits.name)),
-      tx.select({ id: trades.id, name: trades.name }).from(trades).orderBy(asc(trades.name)),
-      tx.select({ id: crews.id, name: crews.name }).from(crews).orderBy(asc(crews.name)),
-      tx
-        .select({ id: personGroups.id, name: personGroups.name })
-        .from(personGroups)
-        .where(isNull(personGroups.deletedAt))
-        .orderBy(asc(personGroups.name)),
+      personIds.length > 0
+        ? tx
+            .select({ id: people.id, first: people.firstName, last: people.lastName })
+            .from(people)
+            .where(inArray(people.id, personIds))
+        : Promise.resolve([]),
+      roleKeys.length > 0
+        ? tx
+            .select({ key: roles.key, name: roles.name })
+            .from(roles)
+            .where(inArray(roles.key, roleKeys))
+        : Promise.resolve([]),
+      departmentIds.length > 0
+        ? tx
+            .select({ id: departments.id, name: departments.name })
+            .from(departments)
+            .where(inArray(departments.id, departmentIds))
+        : Promise.resolve([]),
+      orgUnitIds.length > 0
+        ? tx
+            .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
+            .from(orgUnits)
+            .where(inArray(orgUnits.id, orgUnitIds))
+        : Promise.resolve([]),
+      tradeIds.length > 0
+        ? tx
+            .select({ id: trades.id, name: trades.name })
+            .from(trades)
+            .where(inArray(trades.id, tradeIds))
+        : Promise.resolve([]),
+      crewIds.length > 0
+        ? tx
+            .select({ id: crews.id, name: crews.name })
+            .from(crews)
+            .where(inArray(crews.id, crewIds))
+        : Promise.resolve([]),
+      personGroupIds.length > 0
+        ? tx
+            .select({ id: personGroups.id, name: personGroups.name })
+            .from(personGroups)
+            .where(inArray(personGroups.id, personGroupIds))
+        : Promise.resolve([]),
     ])
     return {
       people: ppl.map((p) => ({ id: p.id, name: `${p.first} ${p.last}`.trim() })),

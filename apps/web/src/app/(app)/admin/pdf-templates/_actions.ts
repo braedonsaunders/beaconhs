@@ -8,15 +8,19 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import { pdfTemplates } from '@beaconhs/db/schema'
+import { sanitizeTokenizedEmailFragment } from '@beaconhs/email-render'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { compileBuilderHtml, slugifyTemplateKey } from '@/lib/email-templates'
-import { loadSubjectFields } from '@/lib/flows/subject-fields'
+import { slugifyTemplateKey } from '@/lib/email-templates'
+import { compileBuilderHtml } from '@/lib/template-builder-compile'
+import { loadSubjectFields, subjectExists } from '@/lib/flows/subject-fields'
 import { isModulePdfTarget } from '@/lib/module-pdf'
 import { ensureFormPdfTemplate } from '@/lib/pdf-template-generate'
 import { loadTenantPdfTemplate } from '@/lib/pdf-templates'
 import { buildFlowAdapter } from '@/lib/flows/registry'
 import { findSampleSubjectId } from '@/lib/flows/sample-record'
+import { isUuid } from '@/lib/list-params'
+import { isBoundedTemplateSubjectKey, normalizeTemplateName } from '@/lib/admin-template-input'
 
 async function requireManage() {
   const ctx = await requireRequestContext()
@@ -28,11 +32,13 @@ async function requireManage() {
 
 const SUBJECT_TYPES = new Set(['module', 'form_template'])
 function parseRecordSubject(raw: string): { type: string; key: string } | null {
+  if (raw.length > 250) return null
   const idx = raw.indexOf(':')
   if (idx < 0) return null
   const type = raw.slice(0, idx)
   const key = raw.slice(idx + 1)
-  if (!SUBJECT_TYPES.has(type) || !key) return null
+  if (!SUBJECT_TYPES.has(type) || !isBoundedTemplateSubjectKey(key)) return null
+  if (type === 'form_template' && !isUuid(key)) return null
   return { type, key }
 }
 
@@ -65,9 +71,12 @@ function clampMarginMm(raw: unknown): number {
 
 export async function createPdfTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
-  const name = String(formData.get('name') ?? '').trim()
+  const name = normalizeTemplateName(formData.get('name'))
   if (!name) return
-  const subject = parseRecordSubject(String(formData.get('recordSubject') ?? ''))
+  const rawSubject = String(formData.get('recordSubject') ?? '')
+  const subject = parseRecordSubject(rawSubject)
+  if (rawSubject && !subject) return
+  if (subject && !(await subjectExists(ctx, subject.type, subject.key))) return
   const paperSize = parsePaperSize(formData.get('paperSize'))
   const orientation = parseOrientation(formData.get('orientation'))
 
@@ -121,7 +130,6 @@ export async function createPdfTemplate(formData: FormData): Promise<void> {
 export async function savePdfTemplateDesign(input: {
   id: string
   name: string
-  design: Record<string, unknown>
   sourceHtml: string
   paperSize: 'letter' | 'a4' | 'legal'
   orientation: 'portrait' | 'landscape'
@@ -130,30 +138,50 @@ export async function savePdfTemplateDesign(input: {
   footerHtml: string
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireManage()
-  if (!input.id) return { ok: false, error: 'Missing template id.' }
+  if (!input || !isUuid(input.id)) return { ok: false, error: 'Invalid template id.' }
+  const name = normalizeTemplateName(input.name)
+  if (!name) return { ok: false, error: 'Enter a template name of 200 characters or fewer.' }
+  if (
+    typeof input.sourceHtml !== 'string' ||
+    typeof input.headerHtml !== 'string' ||
+    typeof input.footerHtml !== 'string'
+  ) {
+    return { ok: false, error: 'The PDF design is invalid.' }
+  }
   const compiled = compileBuilderHtml(input.sourceHtml)
-  await ctx.db((tx) =>
-    tx
+  if (compiled.errors.length > 0) return { ok: false, error: compiled.errors.join(' ') }
+  let headerHtml: string
+  let footerHtml: string
+  try {
+    headerHtml = sanitizeTokenizedEmailFragment(input.headerHtml)
+    footerHtml = sanitizeTokenizedEmailFragment(input.footerHtml)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid page header.' }
+  }
+  const updated = await ctx.db(async (tx) => {
+    const [row] = await tx
       .update(pdfTemplates)
       .set({
-        name: input.name.trim() || 'Untitled',
-        design: input.design,
-        sourceHtml: input.sourceHtml,
+        name,
+        sourceHtml: compiled.sanitizedSource,
         compiledHtml: compiled.html,
         paperSize: parsePaperSize(input.paperSize),
         orientation: parseOrientation(input.orientation),
         marginMm: clampMarginMm(input.marginMm),
-        headerHtml: input.headerHtml,
-        footerHtml: input.footerHtml,
+        headerHtml,
+        footerHtml,
         updatedAt: new Date(),
       })
-      .where(eq(pdfTemplates.id, input.id)),
-  )
+      .where(and(eq(pdfTemplates.id, input.id), isNull(pdfTemplates.deletedAt)))
+      .returning({ id: pdfTemplates.id })
+    return row ?? null
+  })
+  if (!updated) return { ok: false, error: 'Template not found.' }
   await recordAudit(ctx, {
     entityType: 'pdf_template',
     entityId: input.id,
     action: 'update',
-    summary: `Saved PDF template "${input.name}"`,
+    summary: `Saved PDF template "${name}"`,
   })
   revalidatePath(`/admin/pdf-templates/${input.id}`)
   revalidatePath('/admin/pdf-templates')
@@ -168,8 +196,15 @@ export async function loadPdfPreviewData(
   templateId: string,
 ): Promise<{ values: Record<string, unknown> | null; sampleRef: string | null }> {
   const ctx = await requireManage()
+  if (!isUuid(templateId)) return { values: null, sampleRef: null }
   const tpl = await loadTenantPdfTemplate(ctx, templateId)
-  if (!tpl?.recordSubjectType) return { values: null, sampleRef: null }
+  if (
+    !tpl?.recordSubjectType ||
+    !SUBJECT_TYPES.has(tpl.recordSubjectType) ||
+    !tpl.recordSubjectKey
+  ) {
+    return { values: null, sampleRef: null }
+  }
 
   const sampleId = await findSampleSubjectId(ctx, tpl.recordSubjectType, tpl.recordSubjectKey)
   if (!sampleId) return { values: null, sampleRef: null }
@@ -200,9 +235,28 @@ export async function setModuleDefaultTemplate(input: {
   templateId: string | null
 }): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireManage()
-  if (!isModulePdfTarget(input.moduleKey)) return { ok: false, error: 'Unknown module' }
+  if (!input || !isModulePdfTarget(input.moduleKey)) {
+    return { ok: false, error: 'Unknown module' }
+  }
+  if (input.templateId !== null && !isUuid(input.templateId)) {
+    return { ok: false, error: 'Invalid template id.' }
+  }
 
-  await ctx.db(async (tx) => {
+  const changed = await ctx.db(async (tx) => {
+    const candidates = await tx
+      .select({ id: pdfTemplates.id })
+      .from(pdfTemplates)
+      .where(
+        and(
+          eq(pdfTemplates.recordSubjectType, 'module'),
+          eq(pdfTemplates.recordSubjectKey, input.moduleKey),
+          isNull(pdfTemplates.deletedAt),
+        ),
+      )
+      .for('update')
+    if (input.templateId && !candidates.some((candidate) => candidate.id === input.templateId)) {
+      return false
+    }
     await tx
       .update(pdfTemplates)
       .set({ isModuleDefault: false })
@@ -211,6 +265,7 @@ export async function setModuleDefaultTemplate(input: {
           eq(pdfTemplates.recordSubjectType, 'module'),
           eq(pdfTemplates.recordSubjectKey, input.moduleKey),
           eq(pdfTemplates.isModuleDefault, true),
+          isNull(pdfTemplates.deletedAt),
         ),
       )
     if (input.templateId) {
@@ -226,7 +281,9 @@ export async function setModuleDefaultTemplate(input: {
           ),
         )
     }
+    return true
   })
+  if (!changed) return { ok: false, error: 'Template not found for this module.' }
 
   await recordAudit(ctx, {
     entityType: 'pdf_template',
@@ -247,6 +304,9 @@ export async function generateAppPdfTemplate(input: {
   formTemplateId: string
 }): Promise<{ ok: boolean; templateId?: string; error?: string }> {
   const ctx = await requireManage()
+  if (!input || !isUuid(input.formTemplateId)) {
+    return { ok: false, error: 'Invalid app id.' }
+  }
   const res = await ensureFormPdfTemplate(ctx, input.formTemplateId, { respectDeleted: false })
   if (!res.templateId) {
     return { ok: false, error: 'This app has no published version to generate from.' }
@@ -258,10 +318,16 @@ export async function generateAppPdfTemplate(input: {
 export async function deletePdfTemplate(formData: FormData): Promise<void> {
   const ctx = await requireManage()
   const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await ctx.db((tx) =>
-    tx.update(pdfTemplates).set({ deletedAt: new Date() }).where(eq(pdfTemplates.id, id)),
-  )
+  if (!isUuid(id)) return
+  const deleted = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .update(pdfTemplates)
+      .set({ deletedAt: new Date(), isModuleDefault: false })
+      .where(and(eq(pdfTemplates.id, id), isNull(pdfTemplates.deletedAt)))
+      .returning({ id: pdfTemplates.id })
+    return row ?? null
+  })
+  if (!deleted) return
   await recordAudit(ctx, {
     entityType: 'pdf_template',
     entityId: id,

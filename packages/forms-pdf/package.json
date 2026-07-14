@@ -9,16 +9,19 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@beaconhs/design-studio": "workspace:*",
     "@beaconhs/reports": "workspace:*",
-    "puppeteer-core": "^25.2.1"
+    "@beaconhs/sync": "workspace:*",
+    "puppeteer-core": "^25.3.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

@@ -1,14 +1,22 @@
 import 'server-only'
 
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { isFormResponseParentLockedError, lockFormResponseForMutation } from '@beaconhs/db'
 import {
   formResponseScores,
   formResponses,
   formTemplateVersions,
   formTemplates,
+  orgUnits,
   people,
+  tenantUsers,
 } from '@beaconhs/db/schema'
-import { extractScores, validateResponse, type ValidationError } from '@beaconhs/forms-core'
+import {
+  extractScores,
+  normalizeFormResponseData,
+  validateResponse,
+  type ValidationError,
+} from '@beaconhs/forms-core'
 import { recordDomainEvent } from '@beaconhs/events'
 import { formSubmittedEvent } from '@beaconhs/integrations'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -16,6 +24,10 @@ import { canEditResponsePayload } from '@/app/(app)/apps/_lib/access-policy'
 import { computeFormScore, type ComputeFormScoreResult } from '@/app/(app)/apps/_lib/score-router'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
+import { collectResponseEntityReferences } from './response-entity-references'
+import { loadApplicableFormObligation, loadFormObligation } from './form-compliance-obligation'
+import { materializeFormResponseEvidenceChange } from './form-response-evidence'
 
 type SubmitFormResponseLifecycleInput = {
   templateId: string
@@ -23,6 +35,7 @@ type SubmitFormResponseLifecycleInput = {
   siteOrgUnitId?: string | null
   subjectPersonId?: string | null
   responseId?: string | null
+  complianceObligationId?: string | null
 }
 
 type SubmitFormResponseLifecycleResult =
@@ -60,29 +73,33 @@ export async function submitFormResponseLifecycle(
   ctx: RequestContext,
   args: SubmitFormResponseLifecycleInput,
 ): Promise<SubmitFormResponseLifecycleResult> {
+  for (const [fieldId, value] of [
+    ['templateId', args.templateId],
+    ['responseId', args.responseId],
+    ['siteOrgUnitId', args.siteOrgUnitId],
+    ['subjectPersonId', args.subjectPersonId],
+    ['complianceObligationId', args.complianceObligationId],
+  ] as const) {
+    if (value != null && !isUuid(value)) {
+      return { ok: false, errors: [{ fieldId, message: 'Must be a valid identifier' }] }
+    }
+  }
+
   const result = await ctx.db(async (tx) => {
-    const [existing] = args.responseId
-      ? await tx
-          .select({
-            id: formResponses.id,
-            templateId: formResponses.templateId,
-            templateVersionId: formResponses.templateVersionId,
-            status: formResponses.status,
-            locked: formResponses.locked,
-            submittedBy: formResponses.submittedBy,
-            siteOrgUnitId: formResponses.siteOrgUnitId,
-            subjectPersonId: formResponses.subjectPersonId,
-          })
-          .from(formResponses)
-          .where(
-            and(
-              eq(formResponses.id, args.responseId),
-              eq(formResponses.tenantId, ctx.tenantId),
-              isNull(formResponses.deletedAt),
-            ),
-          )
-          .limit(1)
-      : []
+    let existing: typeof formResponses.$inferSelect | null = null
+    if (args.responseId) {
+      try {
+        existing = await lockFormResponseForMutation(tx, ctx.tenantId, args.responseId)
+      } catch (error) {
+        if (isFormResponseParentLockedError(error)) {
+          return {
+            ok: false as const,
+            errors: [{ fieldId: '', message: error.message }],
+          }
+        }
+        throw error
+      }
+    }
 
     if (args.responseId && !existing) {
       return {
@@ -94,6 +111,16 @@ export async function submitFormResponseLifecycle(
       return {
         ok: false as const,
         errors: [{ fieldId: '', message: 'Response belongs to a different template' }],
+      }
+    }
+    if (
+      existing?.complianceObligationId &&
+      args.complianceObligationId &&
+      existing.complianceObligationId !== args.complianceObligationId
+    ) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: 'complianceObligationId', message: 'Response task cannot be changed' }],
       }
     }
     if (existing && existing.status !== 'draft' && existing.status !== 'in_progress') {
@@ -109,6 +136,57 @@ export async function submitFormResponseLifecycle(
       }
     }
 
+    const [tmpl] = await tx
+      .select({
+        id: formTemplates.id,
+        category: formTemplates.category,
+        name: formTemplates.name,
+      })
+      .from(formTemplates)
+      .where(
+        and(
+          eq(formTemplates.id, args.templateId),
+          eq(formTemplates.tenantId, ctx.tenantId),
+          eq(formTemplates.status, 'published'),
+          isNull(formTemplates.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!tmpl) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: 'templateId', message: 'Published app not found' }],
+      }
+    }
+
+    const complianceObligationId =
+      existing?.complianceObligationId ?? args.complianceObligationId ?? null
+    const linkedObligation = complianceObligationId
+      ? existing?.complianceObligationId
+        ? await loadFormObligation(tx, {
+            tenantId: ctx.tenantId,
+            obligationId: complianceObligationId,
+            templateId: args.templateId,
+          })
+        : await loadApplicableFormObligation(tx, {
+            tenantId: ctx.tenantId,
+            obligationId: complianceObligationId,
+            templateId: args.templateId,
+            personId: ctx.personId,
+          })
+      : null
+    if (complianceObligationId && !linkedObligation) {
+      return {
+        ok: false as const,
+        errors: [
+          {
+            fieldId: 'complianceObligationId',
+            message: 'This compliance task is not assigned to you',
+          },
+        ],
+      }
+    }
+
     const [version] = existing
       ? await tx
           .select()
@@ -117,13 +195,21 @@ export async function submitFormResponseLifecycle(
             and(
               eq(formTemplateVersions.id, existing.templateVersionId),
               eq(formTemplateVersions.templateId, args.templateId),
+              eq(formTemplateVersions.tenantId, ctx.tenantId),
+              isNotNull(formTemplateVersions.publishedAt),
             ),
           )
           .limit(1)
       : await tx
           .select()
           .from(formTemplateVersions)
-          .where(eq(formTemplateVersions.templateId, args.templateId))
+          .where(
+            and(
+              eq(formTemplateVersions.templateId, args.templateId),
+              eq(formTemplateVersions.tenantId, ctx.tenantId),
+              isNotNull(formTemplateVersions.publishedAt),
+            ),
+          )
           .orderBy(desc(formTemplateVersions.version))
           .limit(1)
     if (!version) {
@@ -132,26 +218,133 @@ export async function submitFormResponseLifecycle(
         errors: [{ fieldId: '', message: existing ? 'Response version not found' : 'No version' }],
       }
     }
+    // Validate the caller-controlled payload before normalization. The
+    // normalizer intentionally removes unknown keys, so validating only the
+    // normalized object would silently accept fields that are not in the
+    // published schema.
+    const rawErrors = validateResponse(version.schema, args.data, 'submit')
+    if (rawErrors.length > 0) return { ok: false as const, errors: rawErrors }
 
-    const [tmpl] = await tx
-      .select({ category: formTemplates.category, name: formTemplates.name })
-      .from(formTemplates)
-      .where(eq(formTemplates.id, args.templateId))
-      .limit(1)
+    const data = normalizeFormResponseData(version.schema, args.data)
 
-    const errors = validateResponse(version.schema, args.data, 'submit')
+    // Sanitization can turn a previously non-empty value into an empty one.
+    // Revalidate the canonical payload before scoring or persistence.
+    const errors = validateResponse(version.schema, data, 'submit')
     if (errors.length > 0) return { ok: false as const, errors }
 
-    const verdict = computeFormScore(
-      version.schema,
-      args.data,
-      repeatingRows(version.schema, args.data),
-    )
+    const entityRefs = collectResponseEntityReferences(version.schema, data)
+    const personIds = [
+      ...new Set(entityRefs.filter((ref) => ref.kind === 'person').map((r) => r.id)),
+    ]
+    const orgUnitIds = [
+      ...new Set(entityRefs.filter((ref) => ref.kind === 'org_unit').map((r) => r.id)),
+    ]
+    if (personIds.length + orgUnitIds.length > 5_000) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: '', message: 'Response contains too many entity references' }],
+      }
+    }
+    const [validPeople, validOrgUnits] = await Promise.all([
+      personIds.length
+        ? tx
+            .select({ id: people.id })
+            .from(people)
+            .where(
+              and(
+                eq(people.tenantId, ctx.tenantId),
+                inArray(people.id, personIds),
+                eq(people.status, 'active'),
+                isNull(people.deletedAt),
+              ),
+            )
+        : Promise.resolve([]),
+      orgUnitIds.length
+        ? tx
+            .select({ id: orgUnits.id, level: orgUnits.level })
+            .from(orgUnits)
+            .where(
+              and(
+                eq(orgUnits.tenantId, ctx.tenantId),
+                inArray(orgUnits.id, orgUnitIds),
+                isNull(orgUnits.deletedAt),
+              ),
+            )
+        : Promise.resolve([]),
+    ])
+    const peopleFound = new Set(validPeople.map((row) => row.id))
+    const orgUnitsFound = new Map(validOrgUnits.map((row) => [row.id, row.level]))
+    const referenceErrors: ValidationError[] = []
+    for (const ref of entityRefs) {
+      if (
+        ref.kind === 'person' ? !peopleFound.has(ref.id) : orgUnitsFound.get(ref.id) !== ref.level
+      ) {
+        referenceErrors.push({
+          fieldId: ref.fieldId,
+          message:
+            ref.kind === 'person'
+              ? 'Selected person is not active in this workspace'
+              : `Selected ${ref.level} is not available in this workspace`,
+        })
+      }
+    }
+    if (referenceErrors.length > 0) {
+      return { ok: false as const, errors: referenceErrors }
+    }
+
+    const verdict = computeFormScore(version.schema, data, repeatingRows(version.schema, data))
     const finalStatus =
       verdict.status === 'non_compliant' ? ('non_compliant' as const) : ('submitted' as const)
     const submittedAt = new Date()
 
-    let resp: { id: string } | undefined = undefined
+    const siteOrgUnitId =
+      args.siteOrgUnitId === undefined ? (existing?.siteOrgUnitId ?? null) : args.siteOrgUnitId
+    const subjectPersonId =
+      args.subjectPersonId === undefined
+        ? (existing?.subjectPersonId ?? null)
+        : args.subjectPersonId
+    const [site, subject] = await Promise.all([
+      siteOrgUnitId
+        ? tx
+            .select({ id: orgUnits.id })
+            .from(orgUnits)
+            .where(
+              and(
+                eq(orgUnits.id, siteOrgUnitId),
+                eq(orgUnits.tenantId, ctx.tenantId),
+                isNull(orgUnits.deletedAt),
+              ),
+            )
+            .limit(1)
+        : Promise.resolve([]),
+      subjectPersonId
+        ? tx
+            .select({ id: people.id })
+            .from(people)
+            .where(
+              and(
+                eq(people.id, subjectPersonId),
+                eq(people.tenantId, ctx.tenantId),
+                isNull(people.deletedAt),
+              ),
+            )
+            .limit(1)
+        : Promise.resolve([]),
+    ])
+    if (siteOrgUnitId && !site[0]) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: 'siteOrgUnitId', message: 'Site not found in this workspace' }],
+      }
+    }
+    if (subjectPersonId && !subject[0]) {
+      return {
+        ok: false as const,
+        errors: [{ fieldId: 'subjectPersonId', message: 'Person not found in this workspace' }],
+      }
+    }
+
+    let resp: typeof formResponses.$inferSelect | undefined = undefined
     if (args.responseId && existing) {
       // A response that already left draft/in_progress must never fall through
       // to the insert branch — a double-click or replayed API POST would
@@ -166,20 +359,15 @@ export async function submitFormResponseLifecycle(
         .update(formResponses)
         .set({
           status: finalStatus,
-          siteOrgUnitId:
-            args.siteOrgUnitId === undefined
-              ? existing.siteOrgUnitId
-              : (args.siteOrgUnitId ?? null),
-          subjectPersonId:
-            args.subjectPersonId === undefined
-              ? existing.subjectPersonId
-              : (args.subjectPersonId ?? null),
+          siteOrgUnitId,
+          subjectPersonId,
+          complianceObligationId,
           // A reviewer may finalize somebody else's draft, but that must not
           // rewrite who originally submitted it. An unowned system draft is
           // claimed only when a real tenant member performs the submission.
           submittedBy: existing.submittedBy ?? ctx.membership?.id ?? null,
           submittedAt,
-          data: args.data,
+          data,
           complianceScore: String(verdict.score),
           complianceStatus: verdict.status,
           draftData: null,
@@ -197,7 +385,7 @@ export async function submitFormResponseLifecycle(
             ownerUnchanged,
           ),
         )
-        .returning({ id: formResponses.id })
+        .returning()
       if (!updated) {
         return {
           ok: false as const,
@@ -215,15 +403,16 @@ export async function submitFormResponseLifecycle(
           templateId: args.templateId,
           templateVersionId: version.id,
           status: finalStatus,
-          siteOrgUnitId: args.siteOrgUnitId ?? null,
-          subjectPersonId: args.subjectPersonId ?? null,
+          siteOrgUnitId,
+          subjectPersonId,
+          complianceObligationId,
           submittedBy: ctx.membership?.id ?? null,
           submittedAt,
-          data: args.data,
+          data,
           complianceScore: String(verdict.score),
           complianceStatus: verdict.status,
         })
-        .returning({ id: formResponses.id })
+        .returning()
       resp = inserted
     }
 
@@ -233,7 +422,7 @@ export async function submitFormResponseLifecycle(
         // replaces that snapshot; it must not append duplicate field scores.
         await tx.delete(formResponseScores).where(eq(formResponseScores.responseId, resp.id))
       }
-      const scores = extractScores(version.schema, args.data)
+      const scores = extractScores(version.schema, data)
       if (scores.length > 0) {
         await tx.insert(formResponseScores).values(
           scores.map((score) => ({
@@ -248,21 +437,36 @@ export async function submitFormResponseLifecycle(
         )
       }
 
-      const [submitterPerson] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.tenantId, ctx.tenantId), eq(people.userId, ctx.userId)))
-        .limit(1)
+      const effectiveSubmitterMembershipId = existing?.submittedBy ?? ctx.membership?.id ?? null
+      const [submitterPerson] = effectiveSubmitterMembershipId
+        ? await tx
+            .select({ id: people.id })
+            .from(tenantUsers)
+            .innerJoin(
+              people,
+              and(eq(people.tenantId, tenantUsers.tenantId), eq(people.userId, tenantUsers.userId)),
+            )
+            .where(
+              and(
+                eq(tenantUsers.tenantId, ctx.tenantId),
+                eq(tenantUsers.id, effectiveSubmitterMembershipId),
+                isNull(people.deletedAt),
+              ),
+            )
+            .limit(1)
+        : []
       await repopulateParticipants(tx, {
         tenantId: ctx.tenantId,
         responseId: resp.id,
         templateId: args.templateId,
-        category: tmpl?.category ?? null,
+        category: tmpl.category,
         schema: version.schema,
-        data: args.data,
+        data,
         submittedAt,
         submitterPersonId: submitterPerson?.id ?? null,
       })
+
+      await materializeFormResponseEvidenceChange(tx, ctx.tenantId, existing, resp)
 
       await recordDomainEvent(tx, {
         tenantId: ctx.tenantId,
@@ -273,18 +477,18 @@ export async function submitFormResponseLifecycle(
           integration: formSubmittedEvent(ctx.tenantId, {
             id: resp.id,
             templateId: args.templateId,
-            templateName: tmpl?.name ?? null,
+            templateName: tmpl.name,
             status: verdict.status,
             submittedAt,
             complianceScore: verdict.score,
             complianceStatus: verdict.status,
-            data: args.data,
+            data,
           }),
           web: {
             kind: 'form_submitted',
             subjectId: resp.id,
             templateId: args.templateId,
-            data: args.data,
+            data,
             score: verdict.score,
             status: verdict.status,
             recap: true,

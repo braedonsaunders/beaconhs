@@ -13,6 +13,7 @@ import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { assertNotImpersonating, can } from '@beaconhs/tenant'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionCreatedEvent, incidentCreatedEvent } from '@beaconhs/integrations'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
@@ -20,8 +21,7 @@ import { recordVisibilityWhere } from '@/lib/visibility'
 import { verifyProposal, type CaPreview, type IncidentPreview } from '@/lib/assistant/proposals'
 
 export type CommitResult =
-  | { ok: true; id: string; reference: string; href: string }
-  | { ok: false; error: string }
+  { ok: true; id: string; reference: string; href: string } | { ok: false; error: string }
 
 export async function commitCorrectiveAction(input: {
   preview: CaPreview
@@ -102,6 +102,10 @@ export async function commitCorrectiveAction(input: {
             event: 'on_create',
           }),
         },
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
       })
     }
     return r!

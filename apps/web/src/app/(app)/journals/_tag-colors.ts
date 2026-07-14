@@ -3,15 +3,7 @@
 // Class strings are full literals so Tailwind's content scanner emits them.
 
 type TagColorKey =
-  | 'slate'
-  | 'red'
-  | 'orange'
-  | 'amber'
-  | 'green'
-  | 'teal'
-  | 'blue'
-  | 'violet'
-  | 'pink'
+  'slate' | 'red' | 'orange' | 'amber' | 'green' | 'teal' | 'blue' | 'violet' | 'pink'
 
 export const TAG_COLOR_KEYS: TagColorKey[] = [
   'slate',

@@ -3,26 +3,31 @@
 // Bulk-action server actions for /documents.
 //
 // Three actions surface in the floating bulk-action bar:
-//   - bulkPublishDocuments     status='published' on N rows
 //   - bulkArchiveDocuments     status='archived' on N rows
 //   - bulkAddDocumentsToBook   pick a document_books row, insert
 //                              document_book_items for each (idempotent)
+//   - bulkDeleteDocuments      soft-delete eligible documents
 //
 // All mutations go through ctx.db (RLS auto-applies); audit log gets one row
 // per affected document plus a summary entry, sharing a batchId.
 
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import {
-  complianceObligations,
-  documentBookItems,
-  documentBooks,
-  documents,
-} from '@beaconhs/db/schema'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { documentBookItems, documentBooks, documents } from '@beaconhs/db/schema'
+import { MAX_DOCUMENT_BOOK_ITEMS } from '@beaconhs/db'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
+import { softDeleteDocumentsInTransaction } from '@/lib/document-deletion'
+import {
+  livePublishedDocumentIds,
+  lockDraftDocumentBook,
+  publishedBookDocumentIds,
+  publishedBookReferencesForDocuments,
+} from '@/lib/document-book-lifecycle'
 
 // "New document": create the draft and land straight on its full page — title
 // and everything else are edited inline there. Form action (POST) so a
@@ -30,107 +35,64 @@ import { recordAudit } from '@/lib/audit'
 export async function createDocument(): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  const key = `untitled-${Math.random().toString(36).slice(2, 8)}`
+  const key = `untitled-${randomUUID()}`
   const id = await ctx.db(async (tx) => {
     const [doc] = await tx
       .insert(documents)
       .values({ tenantId: ctx.tenantId, key, title: 'Untitled document', status: 'draft' })
       .returning({ id: documents.id })
     if (!doc) throw new Error('Failed to create document')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document',
+      entityId: doc.id,
+      action: 'create',
+      summary: 'Created document',
+      after: { key, title: 'Untitled document', status: 'draft' },
+    })
     return doc.id
-  })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: 'create',
-    summary: 'Created document',
   })
   revalidatePath('/documents')
   redirect(`/documents/${id}`)
 }
 
 type BulkActionResult =
-  | { ok: true; updated: number; skipped: number }
-  | { ok: false; error: string }
-
-const MAX_BULK = 500
-
-function makeBatchId(): string {
-  return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-export async function bulkPublishDocuments(args: {
-  documentIds: string[]
-}): Promise<BulkActionResult> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
-  const ids = args.documentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
-
-  const result = await ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ id: documents.id, status: documents.status, deletedAt: documents.deletedAt })
-      .from(documents)
-      .where(inArray(documents.id, ids))
-    const editable = rows
-      .filter((r) => r.deletedAt === null && r.status !== 'published')
-      .map((r) => r.id)
-    const skipped = rows.length - editable.length
-    if (editable.length === 0) return { updated: 0, skipped }
-    await tx.update(documents).set({ status: 'published' }).where(inArray(documents.id, editable))
-    return { updated: editable.length, skipped, editable }
-  })
-
-  if ('editable' in result && result.editable) {
-    for (const id of result.editable) {
-      await recordAudit(ctx, {
-        entityType: 'document',
-        entityId: id,
-        action: 'publish',
-        summary: 'Bulk action: published',
-        after: { status: 'published' },
-        metadata: { batchId },
-      })
-    }
-    await recordAudit(ctx, {
-      entityType: 'document',
-      action: 'publish',
-      summary: `Bulk published ${result.editable.length} document${result.editable.length === 1 ? '' : 's'}`,
-      metadata: { batchId, documentIds: result.editable, skipped: result.skipped },
-    })
-  }
-
-  revalidatePath('/documents')
-  return { ok: true, updated: result.updated, skipped: result.skipped }
-}
+  { ok: true; updated: number; skipped: number } | { ok: false; error: string }
 
 export async function bulkArchiveDocuments(args: {
   documentIds: string[]
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
-  const ids = args.documentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.documentIds, {
+    singular: 'document',
+    plural: 'documents',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
     const rows = await tx
       .select({ id: documents.id, status: documents.status, deletedAt: documents.deletedAt })
       .from(documents)
-      .where(inArray(documents.id, ids))
+      .where(and(eq(documents.tenantId, ctx.tenantId), inArray(documents.id, ids)))
+      .for('update')
+    const bookReferences = await publishedBookReferencesForDocuments(tx, ctx.tenantId, ids)
+    const bookProtectedIds = publishedBookDocumentIds(bookReferences)
     const editable = rows
-      .filter((r) => r.deletedAt === null && r.status !== 'archived')
+      .filter(
+        (row) =>
+          row.deletedAt === null && row.status !== 'archived' && !bookProtectedIds.has(row.id),
+      )
       .map((r) => r.id)
-    const skipped = rows.length - editable.length
+    const skipped = ids.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
-    await tx.update(documents).set({ status: 'archived' }).where(inArray(documents.id, editable))
-    return { updated: editable.length, skipped, editable }
-  })
-
-  if ('editable' in result && result.editable) {
-    for (const id of result.editable) {
-      await recordAudit(ctx, {
+    await tx
+      .update(documents)
+      .set({ status: 'archived' })
+      .where(and(eq(documents.tenantId, ctx.tenantId), inArray(documents.id, editable)))
+    for (const id of editable) {
+      await recordAuditInTransaction(tx, ctx, {
         entityType: 'document',
         entityId: id,
         action: 'archive',
@@ -139,13 +101,14 @@ export async function bulkArchiveDocuments(args: {
         metadata: { batchId },
       })
     }
-    await recordAudit(ctx, {
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'document',
       action: 'archive',
-      summary: `Bulk archived ${result.editable.length} document${result.editable.length === 1 ? '' : 's'}`,
-      metadata: { batchId, documentIds: result.editable, skipped: result.skipped },
+      summary: `Bulk archived ${editable.length} document${editable.length === 1 ? '' : 's'}`,
+      metadata: { batchId, documentIds: editable, skipped, publishedBookBlocked: bookReferences },
     })
-  }
+    return { updated: editable.length, skipped }
+  })
 
   revalidatePath('/documents')
   return { ok: true, updated: result.updated, skipped: result.skipped }
@@ -154,42 +117,30 @@ export async function bulkArchiveDocuments(args: {
 // Soft-delete: the document leaves every list and its editor sessions stop
 // minting (queries filter deletedAt); versions, acknowledgments and audit
 // history stay intact. Book memberships are removed so books never render a
-// deleted member. Documents an ACTIVE compliance obligation still targets are
-// skipped — deleting one would orphan the obligation.
+// deleted member. Documents targeted by an active compliance obligation or
+// pinned into a published book are skipped — either deletion would invalidate
+// a live requirement or publication.
 async function softDeleteDocuments(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   ids: string[],
-): Promise<{ deleted: string[]; blocked: number }> {
+  batchId?: string,
+): Promise<{ deleted: string[]; protectedIds: string[]; missingIds: string[] }> {
   return ctx.db(async (tx) => {
-    const rows = await tx
-      .select({ id: documents.id, deletedAt: documents.deletedAt })
-      .from(documents)
-      .where(inArray(documents.id, ids))
-    const live = rows.filter((r) => r.deletedAt === null).map((r) => r.id)
-    let withObligations = new Set<string>()
-    if (live.length > 0) {
-      const obligated = await tx
-        .select({ docId: sql<string>`${complianceObligations.targetRef}->>'documentId'` })
-        .from(complianceObligations)
-        .where(
-          and(
-            eq(complianceObligations.sourceModule, 'document'),
-            eq(complianceObligations.status, 'active'),
-            isNull(complianceObligations.deletedAt),
-            inArray(sql`${complianceObligations.targetRef}->>'documentId'`, live),
-          ),
-        )
-      withObligations = new Set(obligated.map((r) => r.docId))
+    const result = await softDeleteDocumentsInTransaction(tx, ctx.tenantId, ids)
+    for (const id of result.deletedIds) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document',
+        entityId: id,
+        action: 'delete',
+        summary: batchId ? 'Bulk action: deleted' : 'Document deleted',
+        metadata: batchId ? { batchId } : undefined,
+      })
     }
-    const deletable = live.filter((id) => !withObligations.has(id))
-    const blocked = ids.length - deletable.length
-    if (deletable.length === 0) return { deleted: [], blocked }
-    await tx
-      .update(documents)
-      .set({ deletedAt: new Date() })
-      .where(inArray(documents.id, deletable))
-    await tx.delete(documentBookItems).where(inArray(documentBookItems.documentId, deletable))
-    return { deleted: deletable, blocked }
+    return {
+      deleted: result.deletedIds,
+      protectedIds: result.protectedIds,
+      missingIds: result.missingIds,
+    }
   })
 }
 
@@ -200,18 +151,15 @@ export async function deleteDocument(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) throw new Error('Missing document id')
 
-  const { deleted } = await softDeleteDocuments(ctx, [id])
+  const { deleted, protectedIds } = await softDeleteDocuments(ctx, [id])
   if (deleted.length === 0) {
-    throw new Error(
-      'This document is required by an active compliance obligation. End the obligation first.',
-    )
+    if (protectedIds.includes(id)) {
+      throw new Error(
+        'This document is required by an active compliance obligation or a published book. End the obligation or unpublish the book first.',
+      )
+    }
+    throw new Error('Document not found.')
   }
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: 'delete',
-    summary: 'Document deleted',
-  })
   revalidatePath('/documents')
   redirect('/documents')
 }
@@ -221,27 +169,24 @@ export async function bulkDeleteDocuments(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
-  const ids = args.documentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.documentIds, {
+    singular: 'document',
+    plural: 'documents',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
-  const { deleted, blocked } = await softDeleteDocuments(ctx, ids)
+  const { deleted, protectedIds, missingIds } = await softDeleteDocuments(ctx, ids, batchId)
+  const blocked = protectedIds.length + missingIds.length
   if (deleted.length === 0 && blocked > 0) {
     return {
       ok: false,
-      error: 'Nothing deleted — the selected documents are required by active obligations.',
+      error:
+        'Nothing deleted — the selected documents are required by active obligations or published books.',
     }
   }
 
-  for (const id of deleted) {
-    await recordAudit(ctx, {
-      entityType: 'document',
-      entityId: id,
-      action: 'delete',
-      summary: 'Bulk action: deleted',
-      metadata: { batchId },
-    })
-  }
   if (deleted.length > 0) {
     await recordAudit(ctx, {
       entityType: 'document',
@@ -266,43 +211,54 @@ export async function bulkAddDocumentsToBook(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  if (args.documentIds.length === 0) return { ok: false, error: 'No documents selected.' }
-  if (!args.bookId) return { ok: false, error: 'Pick a book.' }
-  const ids = args.documentIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
-
-  const book = await ctx.db(async (tx) => {
-    const [b] = await tx
-      .select({ id: documentBooks.id, title: documentBooks.title })
-      .from(documentBooks)
-      .where(eq(documentBooks.id, args.bookId))
-      .limit(1)
-    return b ?? null
+  const parsedIds = parseBulkActionIds(args?.documentIds, {
+    singular: 'document',
+    plural: 'documents',
   })
-  if (!book) return { ok: false, error: 'Book not found.' }
-  const bookLabel = book.title || 'Untitled book'
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.bookId)) return { ok: false, error: 'Pick a book.' }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const result = await ctx.db(async (tx) => {
-    const validRows = await tx
-      .select({ id: documents.id })
-      .from(documents)
-      .where(and(inArray(documents.id, ids), isNull(documents.deletedAt)))
-    const validIds = validRows.map((r) => r.id)
+    const book = await lockDraftDocumentBook(tx, ctx.tenantId, args.bookId)
+    const publishedIds = await livePublishedDocumentIds(tx, ctx.tenantId, ids)
+    const validIds = ids.filter((id) => publishedIds.has(id))
     const skipped = ids.length - validIds.length
-    if (validIds.length === 0) return { updated: 0, skipped }
+    if (validIds.length === 0) return { updated: 0, skipped, bookLabel: book.title }
+    const existingRows = await tx
+      .select({ documentId: documentBookItems.documentId })
+      .from(documentBookItems)
+      .where(
+        and(
+          eq(documentBookItems.tenantId, ctx.tenantId),
+          eq(documentBookItems.bookId, args.bookId),
+          inArray(documentBookItems.documentId, validIds),
+        ),
+      )
+    const existingIds = new Set(existingRows.map((row) => row.documentId))
+    const addIds = validIds.filter((id) => !existingIds.has(id))
+    if (addIds.length === 0) {
+      return { updated: 0, skipped: ids.length, bookLabel: book.title }
+    }
 
     const [maxRow] = await tx
       .select({
         n: sql<number>`COALESCE(MAX(${documentBookItems.position}), -1)`,
       })
       .from(documentBookItems)
-      .where(eq(documentBookItems.bookId, args.bookId))
+      .where(
+        and(
+          eq(documentBookItems.tenantId, ctx.tenantId),
+          eq(documentBookItems.bookId, args.bookId),
+        ),
+      )
     const startPosition = Number(maxRow?.n ?? 0)
 
-    await tx
+    const added = await tx
       .insert(documentBookItems)
       .values(
-        validIds.map((documentId, idx) => ({
+        addIds.map((documentId, idx) => ({
           tenantId: ctx.tenantId,
           bookId: args.bookId,
           documentId,
@@ -310,13 +266,25 @@ export async function bulkAddDocumentsToBook(args: {
         })),
       )
       .onConflictDoNothing()
+      .returning({ documentId: documentBookItems.documentId })
 
-    return { updated: validIds.length, skipped, validIds }
-  })
+    const [countRow] = await tx
+      .select({ count: sql<number>`count(*)` })
+      .from(documentBookItems)
+      .where(
+        and(
+          eq(documentBookItems.tenantId, ctx.tenantId),
+          eq(documentBookItems.bookId, args.bookId),
+        ),
+      )
+    if (Number(countRow?.count ?? 0) > MAX_DOCUMENT_BOOK_ITEMS) {
+      throw new Error(`Document books may contain at most ${MAX_DOCUMENT_BOOK_ITEMS} documents.`)
+    }
 
-  if ('validIds' in result && result.validIds) {
-    for (const id of result.validIds) {
-      await recordAudit(ctx, {
+    const addedIds = added.map((row) => row.documentId)
+    const bookLabel = book.title || 'Untitled book'
+    for (const id of addedIds) {
+      await recordAuditInTransaction(tx, ctx, {
         entityType: 'document',
         entityId: id,
         action: 'update',
@@ -324,18 +292,21 @@ export async function bulkAddDocumentsToBook(args: {
         metadata: { batchId, bookId: args.bookId },
       })
     }
-    await recordAudit(ctx, {
-      entityType: 'document',
-      action: 'update',
-      summary: `Bulk added ${result.validIds.length} document${result.validIds.length === 1 ? '' : 's'} to "${bookLabel}"`,
-      metadata: {
-        batchId,
-        bookId: args.bookId,
-        documentIds: result.validIds,
-        skipped: result.skipped,
-      },
-    })
-  }
+    if (addedIds.length > 0) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document',
+        action: 'update',
+        summary: `Bulk added ${addedIds.length} document${addedIds.length === 1 ? '' : 's'} to "${bookLabel}"`,
+        metadata: {
+          batchId,
+          bookId: args.bookId,
+          documentIds: addedIds,
+          skipped: ids.length - addedIds.length,
+        },
+      })
+    }
+    return { updated: addedIds.length, skipped: ids.length - addedIds.length, bookLabel }
+  })
 
   revalidatePath('/documents')
   revalidatePath(`/documents/books/${args.bookId}`)
@@ -354,6 +325,7 @@ export async function listDocumentBooksForBulk(): Promise<{ id: string; label: s
         status: documentBooks.status,
       })
       .from(documentBooks)
+      .where(and(eq(documentBooks.tenantId, ctx.tenantId), eq(documentBooks.status, 'draft')))
       .orderBy(asc(documentBooks.title))
     return rows.map((r) => ({
       id: r.id,

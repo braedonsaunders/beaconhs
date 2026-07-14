@@ -10,32 +10,31 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Reorder, useDragControls } from 'framer-motion'
-import {
-  Boxes,
-  Camera,
-  GripVertical,
-  HardHat,
-  LayoutList,
-  ListChecks,
-  Plus,
-  Save,
-  Settings2,
-  Trash2,
-} from 'lucide-react'
-import { Badge, Button, Drawer, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
+import { HardHat, Save } from 'lucide-react'
+import { Badge, Button, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
-import { confirmDialog } from '@/lib/confirm'
-import { useReseededState } from '@/lib/use-reseeded-state'
 import {
   BuilderRailHeader,
-  BuilderRailTab,
-  BuilderRailTabs,
+  BuilderRailNavigation,
   BuilderScroll,
   BuilderShell,
-  BuilderSurfaceHeader,
 } from '@/components/builder/builder-shell'
-import { SortableList, SortableRow, useDebouncedCallback } from '@/components/builder/sortable-list'
+import {
+  BuilderDangerZone,
+  BuilderCheckboxRow,
+  ChecklistBuildMenu,
+  ChecklistSections,
+  ChecklistSurfaceHeader,
+  ImportCriteriaBankDrawer,
+  useBuilderActionRunner,
+  useConfirmedBuilderDelete,
+  useChecklistController,
+} from '@/components/builder/checklist-builder'
+import { SeverityCriterionEditorDrawer } from '@/components/builder/criterion-editors'
+import {
+  inspectionSeverityBadgeVariant as severityVariant,
+  type InspectionSeverity as Severity,
+} from '@/components/builder/inspection-severity'
 import {
   addTypeCriterion,
   addTypeGroup,
@@ -51,17 +50,6 @@ import {
 } from './_actions'
 
 type Kind = 'pre_use' | 'annual'
-type Severity = 'low' | 'medium' | 'high' | 'critical'
-const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']
-const SEVERITY_LABELS: Record<Severity, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High (creates corrective action)',
-  critical: 'Critical (creates corrective action)',
-}
-function severityVariant(s: Severity): 'destructive' | 'warning' | 'secondary' {
-  return s === 'critical' || s === 'high' ? 'destructive' : s === 'medium' ? 'warning' : 'secondary'
-}
 
 type BuilderType = {
   id: string
@@ -90,7 +78,7 @@ type BuilderBank = {
   criteriaCount: number
 }
 
-type EditorState = { mode: 'add' | 'edit'; groupId: string | null; criterion?: BuilderCriterion }
+type CriterionData = Omit<BuilderCriterion, 'id' | 'sequence' | 'inspectionKind'>
 
 export function PpeTypeBuilder({
   type,
@@ -98,6 +86,7 @@ export function PpeTypeBuilder({
   criteria: initialCriteria,
   banks,
   itemCount,
+  customFieldCount,
   activitySlot,
 }: {
   type: BuilderType
@@ -105,151 +94,59 @@ export function PpeTypeBuilder({
   criteria: BuilderCriterion[]
   banks: BuilderBank[]
   itemCount: number
+  customFieldCount: number
   activitySlot: React.ReactNode
 }) {
   const router = useRouter()
-  const [, startTransition] = React.useTransition()
-  const [groups, setGroups] = useReseededState(initialGroups, initialGroups)
-  const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [kind, setKind] = React.useState<Kind>('pre_use')
-  const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
-  const [editor, setEditor] = React.useState<EditorState | null>(null)
-  const [importing, setImporting] = React.useState(false)
-  const [selectedId, setSelectedId] = React.useState<string | null>(null)
-
-  const run = React.useCallback(
-    (fn: () => Promise<unknown>, errMsg = 'Something went wrong') => {
-      startTransition(async () => {
-        try {
-          await fn()
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : errMsg)
-          router.refresh()
-        }
-      })
+  const scope = React.useMemo(
+    () => ({
+      group: (group: BuilderGroup) => group.inspectionKind === kind,
+      criterion: (criterion: BuilderCriterion) => criterion.inspectionKind === kind,
+    }),
+    [kind],
+  )
+  const checklist = useChecklistController<BuilderGroup, BuilderCriterion, CriterionData>({
+    initialGroups,
+    initialCriteria,
+    scope,
+    getGroupId: (data) => data.groupId,
+    mergeCriterion: (criterion, data, sequence) => ({ ...criterion, ...data, sequence }),
+    actions: {
+      createGroup: async (sequence) => {
+        const result = await addTypeGroup({ typeId: type.id, kind })
+        return result?.id
+          ? { id: result.id, label: 'New section', sequence, inspectionKind: kind }
+          : null
+      },
+      renameGroup: (id, label) => renameTypeGroup({ typeId: type.id, id, label }),
+      deleteGroup: (id) => deleteTypeGroup({ typeId: type.id, id }),
+      reorderGroups: (ids) => reorderTypeGroups({ typeId: type.id, kind, ids }),
+      createCriterion: async (data, sequence) => {
+        const result = await addTypeCriterion({ typeId: type.id, kind, ...data })
+        return result?.id ? { id: result.id, sequence, inspectionKind: kind, ...data } : null
+      },
+      updateCriterion: (id, data) => updateTypeCriterion({ typeId: type.id, kind, id, ...data }),
+      deleteCriterion: (id) => deleteTypeCriterion({ typeId: type.id, id }),
+      reorderCriteria: (groupId, ids) => reorderTypeCriteria({ typeId: type.id, groupId, ids }),
     },
-    [router],
-  )
+  })
+  const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
+  const [importing, setImporting] = React.useState(false)
 
-  const persistGroupOrder = useDebouncedCallback((ids: string[]) =>
-    run(() => reorderTypeGroups({ typeId: type.id, kind, ids })),
-  )
-  const persistCriteriaOrder = useDebouncedCallback((groupId: string | null, ids: string[]) =>
-    run(() => reorderTypeCriteria({ typeId: type.id, groupId, ids })),
-  )
-
-  const criteriaFor = React.useCallback(
-    (groupId: string | null) =>
-      criteria
-        .filter((c) => c.inspectionKind === kind && (c.groupId ?? null) === groupId)
-        .sort((a, b) => a.sequence - b.sequence),
-    [criteria, kind],
-  )
-  const sortedGroups = groups
-    .filter((g) => g.inspectionKind === kind)
-    .sort((a, b) => a.sequence - b.sequence)
-  const ungrouped = criteriaFor(null)
-  const kindCriteria = criteria.filter((c) => c.inspectionKind === kind)
-  const isEmpty = sortedGroups.length === 0 && ungrouped.length === 0
   const counts: Record<Kind, number> = {
-    pre_use: criteria.filter((c) => c.inspectionKind === 'pre_use').length,
-    annual: criteria.filter((c) => c.inspectionKind === 'annual').length,
-  }
-
-  // --- groups ---
-  function handleAddGroup() {
-    const seq = sortedGroups.length
-    run(async () => {
-      const res = await addTypeGroup({ typeId: type.id, kind })
-      if (res?.id)
-        setGroups((g) => [
-          ...g,
-          { id: res.id!, label: 'New section', sequence: seq, inspectionKind: kind },
-        ])
-    })
-  }
-  function handleGroupReorder(next: BuilderGroup[]) {
-    const reseq = next.map((g, i) => ({ ...g, sequence: i }))
-    setGroups((all) => [...all.filter((g) => g.inspectionKind !== kind), ...reseq])
-    persistGroupOrder(reseq.map((g) => g.id))
-  }
-  function handleRenameGroup(id: string, label: string) {
-    setGroups((g) => g.map((x) => (x.id === id ? { ...x, label } : x)))
-    run(() => renameTypeGroup({ typeId: type.id, id, label }))
-  }
-  function handleDeleteGroup(id: string) {
-    setCriteria((c) => c.map((x) => (x.groupId === id ? { ...x, groupId: null } : x)))
-    setGroups((g) => g.filter((x) => x.id !== id))
-    run(() => deleteTypeGroup({ typeId: type.id, id }))
-  }
-
-  // --- criteria ---
-  function handleCriteriaReorder(groupId: string | null, next: BuilderCriterion[]) {
-    const ids = new Set(next.map((c) => c.id))
-    const reseq = next.map((c, i) => ({ ...c, sequence: i, groupId }))
-    setCriteria((all) => [...all.filter((c) => !ids.has(c.id)), ...reseq])
-    persistCriteriaOrder(
-      groupId,
-      reseq.map((c) => c.id),
-    )
-  }
-  function moveCriterion(c: BuilderCriterion, delta: -1 | 1) {
-    const list = criteriaFor(c.groupId ?? null)
-    const i = list.findIndex((x) => x.id === c.id)
-    const j = i + delta
-    if (j < 0 || j >= list.length) return
-    const next = [...list]
-    ;[next[i], next[j]] = [next[j]!, next[i]!]
-    handleCriteriaReorder(c.groupId ?? null, next)
-  }
-  function handleDeleteCriterion(c: BuilderCriterion) {
-    setCriteria((all) => all.filter((x) => x.id !== c.id))
-    if (selectedId === c.id) setSelectedId(null)
-    run(() => deleteTypeCriterion({ typeId: type.id, id: c.id }))
-  }
-  function openAdd(groupId: string | null) {
-    setEditor({ mode: 'add', groupId })
-  }
-  function openEdit(c: BuilderCriterion) {
-    setSelectedId(c.id)
-    setEditor({ mode: 'edit', groupId: c.groupId ?? null, criterion: c })
-  }
-  function saveCriterion(data: {
-    question: string
-    description: string | null
-    severity: Severity
-    requiresPhoto: boolean
-    groupId: string | null
-  }) {
-    if (!editor) return
-    if (editor.mode === 'add') {
-      const seq = criteriaFor(data.groupId).length
-      run(async () => {
-        const res = await addTypeCriterion({ typeId: type.id, kind, ...data })
-        if (res?.id)
-          setCriteria((all) => [
-            ...all,
-            { id: res.id!, sequence: seq, inspectionKind: kind, ...data },
-          ])
-      })
-    } else if (editor.criterion) {
-      const id = editor.criterion.id
-      const moving = (data.groupId ?? null) !== (editor.criterion.groupId ?? null)
-      const seq = moving ? criteriaFor(data.groupId).length : editor.criterion.sequence
-      setCriteria((all) => all.map((x) => (x.id === id ? { ...x, ...data, sequence: seq } : x)))
-      run(() => updateTypeCriterion({ typeId: type.id, kind, id, ...data }))
-    }
-    setEditor(null)
+    pre_use: checklist.criteria.filter((c) => c.inspectionKind === 'pre_use').length,
+    annual: checklist.criteria.filter((c) => c.inspectionKind === 'annual').length,
   }
 
   // --- import ---
   function handleImport(bankId: string) {
-    run(async () => {
+    checklist.run(async () => {
       const res = await importBankIntoType({ typeId: type.id, bankId, kind })
       if (res?.group) {
         const g = res.group as BuilderGroup
-        setGroups((prev) => [...prev, g])
-        setCriteria((prev) => [
+        checklist.setGroups((prev) => [...prev, g])
+        checklist.setCriteria((prev) => [
           ...prev,
           ...res.criteria.map(
             (c) => ({ ...c, groupId: g.id, inspectionKind: kind }) as BuilderCriterion,
@@ -269,62 +166,33 @@ export function PpeTypeBuilder({
         left={
           <>
             <BuilderRailHeader icon={<HardHat size={15} />} title={type.name} subtitle="PPE type" />
-            <BuilderRailTabs>
-              <BuilderRailTab
-                active={leftTab === 'build'}
-                onClick={() => setLeftTab('build')}
-                icon={<LayoutList size={14} />}
-                label="Build"
-              />
-              <BuilderRailTab
-                active={leftTab === 'settings'}
-                onClick={() => setLeftTab('settings')}
-                icon={<Settings2 size={14} />}
-                label="Settings"
-              />
-              <BuilderRailTab
-                active={leftTab === 'activity'}
-                onClick={() => setLeftTab('activity')}
-                label="Activity"
-              />
-            </BuilderRailTabs>
+            <BuilderRailNavigation active={leftTab} onChange={setLeftTab} />
             <BuilderScroll>
               {leftTab === 'build' ? (
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500 dark:text-slate-400">Checklist</Label>
-                    <KindToggle kind={kind} onChange={setKind} counts={counts} />
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Build the {kindLabel.toLowerCase()} checklist this PPE type runs. Group
-                    questions into sections, drag to reorder, or import a saved bank as a section.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={handleAddGroup}
-                  >
-                    <Plus size={14} /> Add section
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => openAdd(null)}
-                  >
-                    <ListChecks size={14} /> Add question
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => setImporting(true)}
-                  >
-                    <Boxes size={14} /> Import from bank
-                  </Button>
-                </div>
+                <ChecklistBuildMenu
+                  before={
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-slate-500 dark:text-slate-400">
+                        Checklist
+                      </Label>
+                      <KindToggle kind={kind} onChange={setKind} counts={counts} />
+                    </div>
+                  }
+                  description={
+                    <>
+                      Build the {kindLabel.toLowerCase()} checklist this PPE type runs. Group
+                      questions into sections, drag to reorder, or import a saved bank as a section.
+                    </>
+                  }
+                  onAddGroup={checklist.addGroup}
+                  onAddCriterion={() => checklist.openAdd(null)}
+                  onImport={() => setImporting(true)}
+                />
               ) : leftTab === 'settings' ? (
                 <SettingsPanel
                   type={type}
                   itemCount={itemCount}
+                  customFieldCount={customFieldCount}
                   onDeleted={() => router.push('/ppe/types')}
                 />
               ) : (
@@ -335,84 +203,46 @@ export function PpeTypeBuilder({
         }
         right={
           <>
-            <BuilderSurfaceHeader
-              icon={<LayoutList size={15} />}
+            <ChecklistSurfaceHeader
               title={`${kindLabel} checklist`}
-              actions={
-                <>
-                  <Badge variant="secondary">
-                    {sortedGroups.length} section{sortedGroups.length === 1 ? '' : 's'}
-                  </Badge>
-                  <Badge variant="secondary">
-                    {kindCriteria.length} criteri{kindCriteria.length === 1 ? 'on' : 'a'}
-                  </Badge>
-                </>
-              }
+              sectionCount={checklist.scopedGroups.length}
+              criterionCount={checklist.scopedCriteria.length}
             />
             <BuilderScroll className="space-y-3 lg:p-6">
-              {isEmpty ? (
-                <EmptyState
-                  icon={<ListChecks size={24} />}
-                  title={`No ${kindLabel.toLowerCase()} criteria yet`}
-                  description="Add a section and questions, or import a saved bank to get started."
-                />
-              ) : null}
-
-              <Reorder.Group
-                axis="y"
-                values={sortedGroups}
-                onReorder={handleGroupReorder}
-                as="div"
-                className="space-y-3"
-              >
-                {sortedGroups.map((g) => (
-                  <GroupCard
-                    key={g.id}
-                    group={g}
-                    criteria={criteriaFor(g.id)}
-                    selectedId={selectedId}
-                    onRename={handleRenameGroup}
-                    onAddCriterion={openAdd}
-                    onDeleteGroup={handleDeleteGroup}
-                    onReorder={handleCriteriaReorder}
-                    onSelect={openEdit}
-                    onMove={moveCriterion}
-                    onDeleteCriterion={handleDeleteCriterion}
-                  />
-                ))}
-              </Reorder.Group>
-
-              {ungrouped.length > 0 ? (
-                <CriteriaSection
-                  title="Ungrouped"
-                  criteria={ungrouped}
-                  selectedId={selectedId}
-                  onAddCriterion={() => openAdd(null)}
-                  onReorder={(next) => handleCriteriaReorder(null, next)}
-                  onSelect={openEdit}
-                  onMove={moveCriterion}
-                  onDeleteCriterion={handleDeleteCriterion}
-                />
-              ) : null}
-
-              <Button variant="outline" className="w-full" onClick={handleAddGroup}>
-                <Plus size={14} /> Add section
-              </Button>
+              <ChecklistSections
+                groups={checklist.scopedGroups}
+                criteriaFor={checklist.criteriaFor}
+                ungrouped={checklist.ungrouped}
+                selectedId={checklist.selectedId}
+                emptyTitle={`No ${kindLabel.toLowerCase()} criteria yet`}
+                emptyDescription="Add a section and questions, or import a saved bank to get started."
+                onGroupReorder={checklist.reorderGroups}
+                onRenameGroup={checklist.renameGroup}
+                onAddCriterion={checklist.openAdd}
+                onDeleteGroup={checklist.deleteGroup}
+                onCriteriaReorder={checklist.reorderCriteria}
+                onSelectCriterion={checklist.openEdit}
+                onMoveCriterion={checklist.moveCriterion}
+                onDeleteCriterion={checklist.deleteCriterion}
+                onAddGroup={checklist.addGroup}
+                renderCriterion={(criterion) => <CriterionContent c={criterion} />}
+              />
             </BuilderScroll>
           </>
         }
       />
 
-      <CriterionEditorDrawer
-        editor={editor}
-        groups={sortedGroups}
-        onClose={() => setEditor(null)}
-        onSave={saveCriterion}
+      <SeverityCriterionEditorDrawer
+        editor={checklist.editor}
+        groups={checklist.scopedGroups}
+        onClose={() => checklist.setEditor(null)}
+        onSave={checklist.saveCriterion}
       />
-      <ImportBankDrawer
+      <ImportCriteriaBankDrawer
         open={importing}
         banks={banks}
-        kindLabel={kindLabel}
+        description={`Copy a saved criteria bank in as a new section on the ${kindLabel.toLowerCase()} checklist. Edits afterwards stay on this type.`}
+        emptyMessage="No published banks yet. Create one under PPE → Criteria banks."
         onClose={() => setImporting(false)}
         onImport={handleImport}
       />
@@ -450,157 +280,6 @@ function KindToggle({
   )
 }
 
-// --- group card (a draggable section) --------------------------------------
-
-function GroupCard({
-  group,
-  criteria,
-  selectedId,
-  onRename,
-  onAddCriterion,
-  onDeleteGroup,
-  onReorder,
-  onSelect,
-  onMove,
-  onDeleteCriterion,
-}: {
-  group: BuilderGroup
-  criteria: BuilderCriterion[]
-  selectedId: string | null
-  onRename: (id: string, label: string) => void
-  onAddCriterion: (groupId: string) => void
-  onDeleteGroup: (id: string) => void
-  onReorder: (groupId: string, next: BuilderCriterion[]) => void
-  onSelect: (c: BuilderCriterion) => void
-  onMove: (c: BuilderCriterion, delta: -1 | 1) => void
-  onDeleteCriterion: (c: BuilderCriterion) => void
-}) {
-  const controls = useDragControls()
-  return (
-    <Reorder.Item
-      value={group}
-      dragListener={false}
-      dragControls={controls}
-      as="div"
-      className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-    >
-      <header className="flex items-center gap-2 border-b border-slate-100 px-2 py-1.5 dark:border-slate-800">
-        <button
-          type="button"
-          aria-label="Drag section"
-          onPointerDown={(e) => controls.start(e)}
-          className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600"
-        >
-          <GripVertical size={15} />
-        </button>
-        <input
-          defaultValue={group.label}
-          aria-label="Section name"
-          onBlur={(e) => {
-            const v = e.target.value.trim() || 'Section'
-            if (v !== group.label) onRename(group.id, v)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-          }}
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold text-slate-900 hover:border-slate-200 focus:border-slate-300 focus:bg-white focus:outline-none dark:text-slate-100 dark:hover:border-slate-700 dark:focus:bg-slate-950"
-        />
-        <Badge variant="secondary">{criteria.length}</Badge>
-        <Button size="sm" variant="ghost" onClick={() => onAddCriterion(group.id)}>
-          <Plus size={13} /> Question
-        </Button>
-        <button
-          type="button"
-          aria-label="Delete section"
-          onClick={() => onDeleteGroup(group.id)}
-          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/40"
-        >
-          <Trash2 size={14} />
-        </button>
-      </header>
-      <div className="p-2">
-        {criteria.length === 0 ? (
-          <p className="px-2 py-3 text-center text-xs text-slate-400 dark:text-slate-500">
-            No questions yet — add one or drag criteria here.
-          </p>
-        ) : (
-          <SortableList items={criteria} onReorder={(next) => onReorder(group.id, next)}>
-            {criteria.map((c, i) => (
-              <SortableRow
-                key={c.id}
-                value={c}
-                selected={selectedId === c.id}
-                onSelect={() => onSelect(c)}
-                onMoveUp={() => onMove(c, -1)}
-                onMoveDown={() => onMove(c, 1)}
-                onDelete={() => onDeleteCriterion(c)}
-                canUp={i > 0}
-                canDown={i < criteria.length - 1}
-              >
-                <CriterionContent c={c} />
-              </SortableRow>
-            ))}
-          </SortableList>
-        )}
-      </div>
-    </Reorder.Item>
-  )
-}
-
-// A non-draggable section (used for the "Ungrouped" bucket).
-function CriteriaSection({
-  title,
-  criteria,
-  selectedId,
-  onAddCriterion,
-  onReorder,
-  onSelect,
-  onMove,
-  onDeleteCriterion,
-}: {
-  title: string
-  criteria: BuilderCriterion[]
-  selectedId: string | null
-  onAddCriterion: () => void
-  onReorder: (next: BuilderCriterion[]) => void
-  onSelect: (c: BuilderCriterion) => void
-  onMove: (c: BuilderCriterion, delta: -1 | 1) => void
-  onDeleteCriterion: (c: BuilderCriterion) => void
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-dashed border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
-      <header className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 dark:border-slate-800">
-        <span className="flex-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
-          {title}
-        </span>
-        <Badge variant="secondary">{criteria.length}</Badge>
-        <Button size="sm" variant="ghost" onClick={onAddCriterion}>
-          <Plus size={13} /> Question
-        </Button>
-      </header>
-      <div className="p-2">
-        <SortableList items={criteria} onReorder={onReorder}>
-          {criteria.map((c, i) => (
-            <SortableRow
-              key={c.id}
-              value={c}
-              selected={selectedId === c.id}
-              onSelect={() => onSelect(c)}
-              onMoveUp={() => onMove(c, -1)}
-              onMoveDown={() => onMove(c, 1)}
-              onDelete={() => onDeleteCriterion(c)}
-              canUp={i > 0}
-              canDown={i < criteria.length - 1}
-            >
-              <CriterionContent c={c} />
-            </SortableRow>
-          ))}
-        </SortableList>
-      </div>
-    </div>
-  )
-}
-
 function CriterionContent({ c }: { c: BuilderCriterion }) {
   return (
     <>
@@ -616,180 +295,6 @@ function CriterionContent({ c }: { c: BuilderCriterion }) {
         </Badge>
       ) : null}
     </>
-  )
-}
-
-// --- criterion editor drawer (add / edit) ----------------------------------
-
-function CriterionEditorDrawer({
-  editor,
-  groups,
-  onClose,
-  onSave,
-}: {
-  editor: EditorState | null
-  groups: BuilderGroup[]
-  onClose: () => void
-  onSave: (data: {
-    question: string
-    description: string | null
-    severity: Severity
-    requiresPhoto: boolean
-    groupId: string | null
-  }) => void
-}) {
-  const criterion = editor?.criterion
-  const [question, setQuestion] = useReseededState(editor, criterion?.question ?? '')
-  const [description, setDescription] = useReseededState(editor, criterion?.description ?? '')
-  const [severity, setSeverity] = useReseededState<Severity>(
-    editor,
-    criterion?.severity ?? 'medium',
-  )
-  const [requiresPhoto, setRequiresPhoto] = useReseededState(
-    editor,
-    criterion?.requiresPhoto ?? false,
-  )
-  const [groupId, setGroupId] = useReseededState<string | null>(
-    editor,
-    editor?.groupId ?? criterion?.groupId ?? null,
-  )
-
-  return (
-    <Drawer
-      open={!!editor}
-      onClose={onClose}
-      title={editor?.mode === 'add' ? 'Add question' : 'Edit question'}
-      size="sm"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!question.trim()}
-            onClick={() =>
-              onSave({
-                question: question.trim(),
-                description: description.trim() || null,
-                severity,
-                requiresPhoto,
-                groupId,
-              })
-            }
-          >
-            {editor?.mode === 'add' ? 'Add' : 'Save'}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Question</Label>
-          <Textarea
-            rows={3}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="e.g. Webbing free of cuts, fraying, or burns?"
-            autoFocus
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Description</Label>
-          <Textarea
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional guidance shown to the inspector."
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Severity on fail</Label>
-          <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
-            {SEVERITIES.map((s) => (
-              <option key={s} value={s}>
-                {SEVERITY_LABELS[s]}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Section</Label>
-          <Select value={groupId ?? ''} onChange={(e) => setGroupId(e.target.value || null)}>
-            <option value="">Ungrouped</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={requiresPhoto}
-              onChange={(e) => setRequiresPhoto(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-            />
-            <span className="flex items-center gap-1.5">
-              <Camera size={13} /> Require a photo
-            </span>
-          </label>
-        </div>
-      </div>
-    </Drawer>
-  )
-}
-
-function ImportBankDrawer({
-  open,
-  banks,
-  kindLabel,
-  onClose,
-  onImport,
-}: {
-  open: boolean
-  banks: BuilderBank[]
-  kindLabel: string
-  onClose: () => void
-  onImport: (bankId: string) => void
-}) {
-  return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      title="Import from a bank"
-      description={`Copy a saved criteria bank in as a new section on the ${kindLabel.toLowerCase()} checklist. Edits afterwards stay on this type.`}
-      size="sm"
-    >
-      {banks.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          No published banks yet. Create one under PPE → Criteria banks.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {banks.map((b) => (
-            <li
-              key={b.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 p-3 dark:border-slate-800"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {b.name}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {b.category ? `${b.category.replace(/_/g, ' ')} · ` : ''}
-                  {b.criteriaCount} criteri{b.criteriaCount === 1 ? 'on' : 'a'}
-                </div>
-              </div>
-              <Button size="sm" onClick={() => onImport(b.id)}>
-                Import
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Drawer>
   )
 }
 
@@ -811,13 +316,15 @@ const CATEGORY_OPTIONS = [
 function SettingsPanel({
   type,
   itemCount,
+  customFieldCount,
   onDeleted,
 }: {
   type: BuilderType
   itemCount: number
+  customFieldCount: number
   onDeleted: () => void
 }) {
-  const [, start] = React.useTransition()
+  const run = useBuilderActionRunner('Failed to save')
   const [name, setName] = React.useState(type.name)
   const [category, setCategory] = React.useState(type.category ?? '')
   const [isInspectable, setIsInspectable] = React.useState(type.isInspectable)
@@ -826,50 +333,44 @@ function SettingsPanel({
   const [sizing, setSizing] = React.useState(
     type.sizingScheme && type.sizingScheme.length > 0 ? type.sizingScheme.join(', ') : '',
   )
+  const confirmDelete = useConfirmedBuilderDelete({
+    confirmMessage: 'Delete this PPE type? This cannot be undone.',
+    action: () => deleteType({ id: type.id }),
+    onDeleted,
+  })
 
   function save() {
-    start(async () => {
-      try {
-        await updateType({
-          id: type.id,
-          name,
-          category: category || null,
-          isInspectable,
-          everyDays: everyDays.trim() ? Number(everyDays) : null,
-          requiresCertificate,
-          sizingScheme: sizing.trim()
-            ? sizing
-                .split(/[,\n]/)
-                .map((s) => s.trim())
-                .filter(Boolean)
-            : null,
-        })
-        toast.success('Saved')
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to save')
-      }
+    run(async () => {
+      await updateType({
+        id: type.id,
+        name,
+        category: category || null,
+        isInspectable,
+        everyDays: everyDays.trim() ? Number(everyDays) : null,
+        requiresCertificate,
+        sizingScheme: sizing.trim()
+          ? sizing
+              .split(/[,\n]/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : null,
+      })
+      toast.success('Saved')
     })
   }
-  async function del() {
-    if (itemCount > 0) {
-      toast.error(`Cannot delete — ${itemCount} item(s) reference this type`)
+  function del() {
+    if (itemCount > 0 || customFieldCount > 0) {
+      toast.error(
+        `Cannot delete — ${[
+          itemCount > 0 ? `${itemCount} item(s)` : null,
+          customFieldCount > 0 ? `${customFieldCount} scoped custom field(s)` : null,
+        ]
+          .filter(Boolean)
+          .join(' and ')} reference this type`,
+      )
       return
     }
-    if (
-      !(await confirmDialog({
-        message: 'Delete this PPE type? This cannot be undone.',
-        tone: 'danger',
-      }))
-    )
-      return
-    start(async () => {
-      try {
-        await deleteType({ id: type.id })
-        onDeleted()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to delete')
-      }
-    })
+    void confirmDelete()
   }
 
   return (
@@ -890,15 +391,11 @@ function SettingsPanel({
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-medium text-slate-500">Inspection</legend>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={isInspectable}
-            onChange={(e) => setIsInspectable(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-          />
-          <span>This PPE type requires periodic inspection</span>
-        </label>
+        <BuilderCheckboxRow
+          label="This PPE type requires periodic inspection"
+          checked={isInspectable}
+          onChange={setIsInspectable}
+        />
         {isInspectable ? (
           <div className="space-y-1.5 pt-1">
             <Label className="text-xs">Inspection cadence (days)</Label>
@@ -914,15 +411,11 @@ function SettingsPanel({
       </fieldset>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-medium text-slate-500">Certificates</legend>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={requiresCertificate}
-            onChange={(e) => setRequiresCertificate(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-          />
-          <span>This PPE type requires third-party recertification certificates</span>
-        </label>
+        <BuilderCheckboxRow
+          label="This PPE type requires third-party recertification certificates"
+          checked={requiresCertificate}
+          onChange={setRequiresCertificate}
+        />
         <p className="px-1 text-xs text-slate-500 dark:text-slate-400">
           When on, items of this type get a Certificates tab for uploading the signed annual
           recertification (e.g. a harness inspection by a certified rigger).
@@ -947,22 +440,13 @@ function SettingsPanel({
         </Button>
       </div>
 
-      <div className="mt-4 rounded-md border border-rose-200 bg-rose-50/60 p-3 dark:border-rose-950 dark:bg-rose-950/20">
-        <h3 className="text-sm font-semibold text-rose-700 dark:text-rose-300">Delete PPE type</h3>
-        <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-300/80">
-          Removes this type and its criteria. Only allowed when no items reference it.
-        </p>
-        <div className="mt-2 flex justify-end">
-          <Button
-            variant="outline"
-            className="text-rose-600 hover:bg-rose-50"
-            disabled={itemCount > 0}
-            onClick={del}
-          >
-            <Trash2 size={14} /> Delete type
-          </Button>
-        </div>
-      </div>
+      <BuilderDangerZone
+        title="Delete PPE type"
+        description="Removes this type and its criteria. Only allowed when no items or custom fields reference it."
+        buttonLabel="Delete type"
+        onDelete={del}
+        disabled={itemCount > 0 || customFieldCount > 0}
+      />
     </div>
   )
 }

@@ -74,7 +74,8 @@ export function ReportPagedPreview({
         const { Previewer } = await import('pagedjs')
         if (cancelled) return
         const previewer = new Previewer()
-        const result = await previewer.preview(bodyHtml, [{ [window.location.href]: css }], el)
+        const stylesheet = Object.fromEntries([[window.location.href, css]])
+        const result = await previewer.preview(bodyHtml, [stylesheet], el)
         if (!cancelled) {
           setPages((result as { total?: number })?.total ?? null)
           fitToWidth()

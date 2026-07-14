@@ -8,6 +8,7 @@
 // `className="h-full max-w-none p-0"` so it fills the viewport.
 
 import * as React from 'react'
+import { LayoutList, Settings2 } from 'lucide-react'
 
 export function BuilderShell({ left, right }: { left: React.ReactNode; right: React.ReactNode }) {
   return (
@@ -53,6 +54,38 @@ export function BuilderRailTabs({ children }: { children: React.ReactNode }) {
     <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
       {children}
     </div>
+  )
+}
+
+type BuilderRailView = 'build' | 'settings' | 'activity'
+
+export function BuilderRailNavigation({
+  active,
+  onChange,
+}: {
+  active: BuilderRailView
+  onChange: (view: BuilderRailView) => void
+}) {
+  return (
+    <BuilderRailTabs>
+      <BuilderRailTab
+        active={active === 'build'}
+        onClick={() => onChange('build')}
+        icon={<LayoutList size={14} />}
+        label="Build"
+      />
+      <BuilderRailTab
+        active={active === 'settings'}
+        onClick={() => onChange('settings')}
+        icon={<Settings2 size={14} />}
+        label="Settings"
+      />
+      <BuilderRailTab
+        active={active === 'activity'}
+        onClick={() => onChange('activity')}
+        label="Activity"
+      />
+    </BuilderRailTabs>
   )
 }
 

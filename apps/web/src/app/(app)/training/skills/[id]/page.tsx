@@ -6,13 +6,12 @@
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import {
   CreditCard,
   FileImage,
   FileText,
   Paperclip,
-  Printer,
   RotateCcw,
   Settings,
   ShieldAlert,
@@ -50,20 +49,21 @@ import { formatDate } from '@/lib/datetime'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
-import { isUuid, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
-import { CredentialDownloadButton } from '@/components/credential-download-button'
+import { CredentialOutputsCard } from '@/components/credential-outputs-card'
+import { Pagination } from '@/components/pagination'
+import { RawImage } from '@/components/raw-image'
+import { SearchInput } from '@/components/search-input'
 import { StatTile, type StatTone } from '@/components/stat-tile'
+import { TableToolbar } from '@/components/table-toolbar'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import {
-  enabledCredentialOutputs,
-  type CredentialFormat,
-  type CredentialOutput,
-} from '@/lib/credential-designs'
+import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 import { ExtraFieldsSection } from '../../_components/extra-fields-section'
 import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
+import { loadTrainingExtraFieldPage } from '../../_lib/extra-field-query'
 import {
   deleteSkillAssignmentFile,
   renewSkillAssignment,
@@ -78,6 +78,7 @@ export const dynamic = 'force-dynamic'
 
 const TABS = ['overview', 'outputs', 'files', 'activity'] as const
 type Tab = (typeof TABS)[number]
+const EXTRA_SORTS = ['order'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -97,6 +98,24 @@ export default async function SkillAssignmentPage({
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const skillExtraListParams = parsePrefixedListParams(sp, 'skillExtra', {
+    sort: 'order',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: EXTRA_SORTS,
+  })
+  const typeExtraListParams = parsePrefixedListParams(sp, 'typeExtra', {
+    sort: 'order',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: EXTRA_SORTS,
+  })
+  const authorityExtraListParams = parsePrefixedListParams(sp, 'authorityExtra', {
+    sort: 'order',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: EXTRA_SORTS,
+  })
   const ctx = await requireRequestContext()
   const canManage = canManageModule(ctx, 'training')
 
@@ -133,35 +152,25 @@ export default async function SkillAssignmentPage({
       return null
 
     const [skillExtras, typeExtras, authorityExtras, files, tenant] = await Promise.all([
-      tx
-        .select()
-        .from(trainingExtraFields)
-        .where(and(eq(trainingExtraFields.ownerType, 'skill'), eq(trainingExtraFields.ownerId, id)))
-        .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt)),
+      loadTrainingExtraFieldPage(
+        tx,
+        eq(trainingExtraFields.skillAssignmentId, id),
+        skillExtraListParams,
+      ),
       row.type
-        ? tx
-            .select()
-            .from(trainingExtraFields)
-            .where(
-              and(
-                eq(trainingExtraFields.ownerType, 'skill_type'),
-                eq(trainingExtraFields.ownerId, row.type.id),
-              ),
-            )
-            .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
-        : Promise.resolve([] as (typeof trainingExtraFields.$inferSelect)[]),
+        ? loadTrainingExtraFieldPage(
+            tx,
+            eq(trainingExtraFields.skillTypeId, row.type.id),
+            typeExtraListParams,
+          )
+        : Promise.resolve({ rows: [], total: 0, filteredTotal: 0 }),
       row.authority
-        ? tx
-            .select()
-            .from(trainingExtraFields)
-            .where(
-              and(
-                eq(trainingExtraFields.ownerType, 'authority'),
-                eq(trainingExtraFields.ownerId, row.authority.id),
-              ),
-            )
-            .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
-        : Promise.resolve([] as (typeof trainingExtraFields.$inferSelect)[]),
+        ? loadTrainingExtraFieldPage(
+            tx,
+            eq(trainingExtraFields.authorityId, row.authority.id),
+            authorityExtraListParams,
+          )
+        : Promise.resolve({ rows: [], total: 0, filteredTotal: 0 }),
       tx
         .select({ file: trainingSkillAssignmentFiles, attachment: attachments })
         .from(trainingSkillAssignmentFiles)
@@ -176,33 +185,6 @@ export default async function SkillAssignmentPage({
         .then(([t]) => t),
     ])
 
-    // Option lists for the editable person/skill selects.
-    const [peopleList, skillTypesList] = await Promise.all([
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName)),
-      tx
-        .select({
-          id: trainingSkillTypes.id,
-          name: trainingSkillTypes.name,
-          code: trainingSkillTypes.code,
-          authorityName: trainingSkillAuthorities.name,
-        })
-        .from(trainingSkillTypes)
-        .innerJoin(
-          trainingSkillAuthorities,
-          eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-        )
-        .orderBy(asc(trainingSkillAuthorities.name), asc(trainingSkillTypes.name)),
-    ])
-
     return {
       ...row,
       skillExtras,
@@ -210,56 +192,16 @@ export default async function SkillAssignmentPage({
       authorityExtras,
       files,
       tenantSettings: tenant?.settings ?? {},
-      peopleList,
-      skillTypesList,
     }
   })
 
   if (!data) notFound()
-  const {
-    assignment,
-    type,
-    authority,
-    person,
-    skillExtras,
-    typeExtras,
-    authorityExtras,
-    files,
-    peopleList,
-    skillTypesList,
-  } = data
-  // Ensure the current holder + skill type are selectable even if no longer
-  // active (the option lists only carry active rows). A blank draft has neither
-  // yet, so there's nothing to inject.
-  const peopleOptions =
-    person && !peopleList.some((p) => p.id === person.id)
-      ? [
-          {
-            id: person.id,
-            firstName: person.firstName,
-            lastName: person.lastName,
-            employeeNo: person.employeeNo,
-          },
-          ...peopleList,
-        ]
-      : peopleList
-  const skillTypeOptions =
-    type && !skillTypesList.some((t) => t.id === type.id)
-      ? [
-          {
-            id: type.id,
-            name: type.name,
-            code: type.code,
-            authorityName: authority?.name ?? '—',
-          },
-          ...skillTypesList,
-        ]
-      : skillTypesList
+  const { assignment, type, authority, person, skillExtras, typeExtras, authorityExtras, files } =
+    data
 
   const isRevoked = assignment.deletedAt != null
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
   const credentialOutputs = enabledCredentialOutputs(data.tenantSettings)
-  const certOutput = credentialOutputs.find((o) => o.format !== 'wallet') ?? credentialOutputs[0]
 
   const today = new Date()
   const exp = assignment.expiresOn ? new Date(assignment.expiresOn) : null
@@ -271,6 +213,7 @@ export default async function SkillAssignmentPage({
   const drawer = pickString(sp.drawer)
   const basePath = `/training/skills/${id}`
   const filesCloseHref = `${basePath}?tab=files`
+  const extraFieldDrawerCloseHref = mergeHref(basePath, sp, { drawer: undefined })
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'training_skill', id, 50) : []
@@ -301,28 +244,15 @@ export default async function SkillAssignmentPage({
             </div>
           }
           actions={
-            certOutput || canManage ? (
+            canManage ? (
               <div className="flex items-center gap-2">
-                {certOutput && !isRevoked ? (
-                  <CredentialDownloadButton
-                    endpoint={`${basePath}/certificate`}
-                    outputId={certOutput.id}
-                    variant="outline"
-                    size="sm"
-                    title={`Open ${certOutput.name}`}
-                  >
-                    <FileText size={14} /> Open certificate
-                  </CredentialDownloadButton>
-                ) : null}
-                {canManage ? (
-                  <form action={renewSkillAssignment}>
-                    <input type="hidden" name="id" value={id} />
-                    <Button type="submit" variant="outline" size="sm">
-                      <RotateCcw size={14} /> Renew
-                    </Button>
-                  </form>
-                ) : null}
-                {canManage && !isRevoked ? (
+                <form action={renewSkillAssignment}>
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    <RotateCcw size={14} /> Renew
+                  </Button>
+                </form>
+                {!isRevoked ? (
                   <form action={revokeSkillAssignment}>
                     <input type="hidden" name="id" value={id} />
                     <ConfirmButton
@@ -400,7 +330,21 @@ export default async function SkillAssignmentPage({
               id={id}
               disabled={!canManage || isRevoked}
               personHref={person ? `/people/${person.id}?tab=skills` : null}
-              options={{ people: peopleOptions, skillTypes: skillTypeOptions }}
+              initialOptions={{
+                person: person
+                  ? {
+                      value: person.id,
+                      label: `${person.lastName}, ${person.firstName}`,
+                      hint: person.employeeNo ?? undefined,
+                    }
+                  : undefined,
+                skillType: type
+                  ? {
+                      value: type.id,
+                      label: `${authority?.name ?? '—'} · ${type.code ? `${type.code} · ` : ''}${type.name}`,
+                    }
+                  : undefined,
+              }}
               initial={{
                 personId: assignment.personId ?? '',
                 skillTypeId: assignment.skillTypeId ?? '',
@@ -412,19 +356,37 @@ export default async function SkillAssignmentPage({
             />
 
             {/* Catalogue fields inherited from the skill type + its authority */}
-            {type && typeExtras.length > 0 ? (
+            {type && (typeExtras.total > 0 || typeExtraListParams.q) ? (
               <ReadOnlyFields
-                title={`Skill type fields (${typeExtras.length})`}
+                title="Skill type fields"
                 subtitle={`From the ${type.name} catalogue entry.`}
-                rows={typeExtras}
+                rows={typeExtras.rows}
+                total={typeExtras.total}
+                filteredTotal={typeExtras.filteredTotal}
+                query={typeExtraListParams.q}
+                page={typeExtraListParams.page}
+                perPage={typeExtraListParams.perPage}
+                basePath={basePath}
+                currentParams={sp}
+                queryParamKey="typeExtraQ"
+                pageParamKey="typeExtraPage"
                 manageHref={canManage ? `/training/skills/types/${type.id}?tab=extras` : null}
               />
             ) : null}
-            {authority && authorityExtras.length > 0 ? (
+            {authority && (authorityExtras.total > 0 || authorityExtraListParams.q) ? (
               <ReadOnlyFields
-                title={`Authority fields (${authorityExtras.length})`}
+                title="Authority fields"
                 subtitle={`From ${authority.name}.`}
-                rows={authorityExtras}
+                rows={authorityExtras.rows}
+                total={authorityExtras.total}
+                filteredTotal={authorityExtras.filteredTotal}
+                query={authorityExtraListParams.q}
+                page={authorityExtraListParams.page}
+                perPage={authorityExtraListParams.perPage}
+                basePath={basePath}
+                currentParams={sp}
+                queryParamKey="authorityExtraQ"
+                pageParamKey="authorityExtraPage"
                 manageHref={canManage ? `/training/authorities/${authority.id}?tab=extras` : null}
               />
             ) : null}
@@ -434,100 +396,49 @@ export default async function SkillAssignmentPage({
               <ExtraFieldsSection
                 ownerType="skill"
                 ownerId={id}
-                rows={skillExtras.map((e) => ({
-                  id: e.id,
-                  fieldKey: e.fieldKey,
-                  fieldValue: e.fieldValue,
-                }))}
+                rows={skillExtras.rows}
+                list={{
+                  basePath,
+                  currentParams: sp,
+                  total: skillExtras.total,
+                  filteredTotal: skillExtras.filteredTotal,
+                  query: skillExtraListParams.q,
+                  page: skillExtraListParams.page,
+                  perPage: skillExtraListParams.perPage,
+                  queryParamKey: 'skillExtraQ',
+                  pageParamKey: 'skillExtraPage',
+                }}
                 drawerOpen={drawer === 'add-extra-field'}
-                drawerCloseHref={basePath}
-                addHref={`${basePath}?drawer=add-extra-field`}
+                drawerCloseHref={extraFieldDrawerCloseHref}
+                addHref={mergeHref(basePath, sp, { drawer: 'add-extra-field' })}
                 addAction={addExtraField}
                 deleteAction={deleteExtraField}
               />
-            ) : skillExtras.length > 0 ? (
+            ) : skillExtras.total > 0 || skillExtraListParams.q ? (
               <ReadOnlyFields
-                title={`Additional fields (${skillExtras.length})`}
-                rows={skillExtras}
+                title="Additional fields"
+                rows={skillExtras.rows}
+                total={skillExtras.total}
+                filteredTotal={skillExtras.filteredTotal}
+                query={skillExtraListParams.q}
+                page={skillExtraListParams.page}
+                perPage={skillExtraListParams.perPage}
+                basePath={basePath}
+                currentParams={sp}
+                queryParamKey="skillExtraQ"
+                pageParamKey="skillExtraPage"
               />
             ) : null}
           </>
         ) : null}
 
         {active === 'outputs' ? (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>Cards &amp; certificates ({credentialOutputs.length})</CardTitle>
-                {canDesignCredentials ? (
-                  <Link href="/training/credential-designs">
-                    <Button variant="outline" size="sm">
-                      <Settings size={14} /> Design
-                    </Button>
-                  </Link>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {credentialOutputs.map((output) => (
-                  <div
-                    key={output.id}
-                    className="flex min-h-44 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className="grid h-11 w-11 shrink-0 place-items-center rounded-md border"
-                        style={{
-                          borderColor: output.accent,
-                          color: output.primary,
-                          backgroundColor: output.paper,
-                        }}
-                      >
-                        <OutputIcon output={output} size={18} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold text-slate-900 dark:text-slate-100">
-                          {output.name}
-                        </div>
-                        <div className="mt-1">
-                          <Badge variant="secondary">{formatLabel(output.format)}</Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">
-                      {output.description}
-                    </p>
-                    <div className="mt-auto pt-4">
-                      <div className="flex flex-wrap gap-2">
-                        <CredentialDownloadButton
-                          endpoint={`${basePath}/certificate`}
-                          outputId={output.id}
-                          variant="outline"
-                          size="sm"
-                          title={`Open ${output.name}`}
-                        >
-                          <OutputIcon output={output} /> Open PDF
-                        </CredentialDownloadButton>
-                        {output.format === 'wallet' ? (
-                          <CredentialDownloadButton
-                            endpoint={`${basePath}/certificate`}
-                            outputId={output.id}
-                            action="print"
-                            variant="outline"
-                            size="sm"
-                            title={`Print ${output.name}`}
-                          >
-                            <Printer size={14} /> Print
-                          </CredentialDownloadButton>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <CredentialOutputsCard
+            outputs={credentialOutputs}
+            endpoint={`${basePath}/certificate`}
+            canDesign={canDesignCredentials}
+            unavailable={isRevoked}
+          />
         ) : null}
 
         {active === 'files' ? (
@@ -662,8 +573,12 @@ function FileCard({
       >
         <div className="grid h-28 place-items-center overflow-hidden bg-slate-50 dark:bg-slate-950/40">
           {isImage && href ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={href} alt={file.label} className="h-full w-full object-cover" />
+            <RawImage
+              src={href}
+              alt={file.label}
+              optimizationReason="authenticated"
+              className="h-full w-full object-cover"
+            />
           ) : (
             <FileGlyph contentType={attachment?.contentType ?? ''} />
           )}
@@ -746,19 +661,45 @@ function ReadOnlyFields({
   title,
   subtitle,
   rows,
+  total,
+  filteredTotal,
+  query,
+  page,
+  perPage,
+  basePath,
+  currentParams,
+  queryParamKey,
+  pageParamKey,
   manageHref,
 }: {
   title: string
   subtitle?: string
   rows: { id: string; fieldKey: string; fieldValue: string | null }[]
+  total: number
+  filteredTotal: number
+  query?: string
+  page: number
+  perPage: number
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  queryParamKey: string
+  pageParamKey: string
   manageHref?: string | null
 }) {
+  const countLabel =
+    filteredTotal === total
+      ? total.toLocaleString()
+      : `${filteredTotal.toLocaleString()} of ${total.toLocaleString()}`
+  const isOutOfRange = filteredTotal > 0 && rows.length === 0
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <CardTitle>{title}</CardTitle>
+            <CardTitle>
+              {title} ({countLabel})
+            </CardTitle>
             {subtitle ? (
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
             ) : null}
@@ -773,31 +714,50 @@ function ReadOnlyFields({
         </div>
       </CardHeader>
       <CardContent>
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-          {rows.map((r) => (
-            <div key={r.id} className="flex flex-col gap-0.5">
-              <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                {r.fieldKey}
-              </dt>
-              <dd className="break-words text-slate-900 dark:text-slate-100">
-                {r.fieldValue && r.fieldValue.length > 0 ? r.fieldValue : '—'}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <TableToolbar className="mb-3">
+          <SearchInput
+            placeholder="Search field name or value…"
+            paramKey={queryParamKey}
+            pageParamKey={pageParamKey}
+          />
+        </TableToolbar>
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={<Settings size={24} />}
+            title={isOutOfRange ? 'No fields on this page' : 'No fields match your search'}
+            description={
+              isOutOfRange
+                ? 'Use the pagination control to return to the last page.'
+                : query
+                  ? 'Clear the search to see other additional fields.'
+                  : 'No additional fields have been configured.'
+            }
+          />
+        ) : (
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            {rows.map((r) => (
+              <div key={r.id} className="flex flex-col gap-0.5">
+                <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  {r.fieldKey}
+                </dt>
+                <dd className="break-words text-slate-900 dark:text-slate-100">
+                  {r.fieldValue && r.fieldValue.length > 0 ? r.fieldValue : '—'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        <Pagination
+          basePath={basePath}
+          currentParams={currentParams}
+          total={filteredTotal}
+          page={page}
+          perPage={perPage}
+          pageParamKey={pageParamKey}
+        />
       </CardContent>
     </Card>
   )
-}
-
-function OutputIcon({ output, size = 14 }: { output: CredentialOutput; size?: number }) {
-  return output.format === 'wallet' ? <CreditCard size={size} /> : <FileText size={size} />
-}
-
-function formatLabel(format: CredentialFormat): string {
-  if (format === 'wallet') return 'CR80 wallet'
-  if (format === 'letter-portrait') return '8.5 x 11 portrait'
-  return '11 x 8.5 landscape'
 }
 
 function humanSize(bytes: number): string {

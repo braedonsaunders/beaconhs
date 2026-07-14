@@ -3,7 +3,7 @@
 // @beaconhs/forms-core; this owns persistence (delete+reinsert on submit) and
 // the per-person transcript read used by the people page + /apps/transcripts.
 
-import { and, asc, count, desc, eq, ilike, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { formResponseParticipants, formResponses, formTemplates, people } from '@beaconhs/db/schema'
 import { extractParticipants, type FormSchemaV1 } from '@beaconhs/forms-core'
@@ -43,9 +43,9 @@ export async function repopulateParticipants(
     schema: FormSchemaV1
     data: Record<string, unknown>
     submittedAt: Date
-    /** The person who submitted — recorded as a participant so a plain app (no
-     *  person-picker field) is still first-class compliance evidence of "this
-     *  person completed the app". Null when the submitter has no people record. */
+    /** The person who submitted — recorded so a plain app (no person-picker
+     *  field) still appears in that person's transcript. Null when the
+     *  submitter has no people record. */
     submitterPersonId?: string | null
   },
 ): Promise<number> {
@@ -69,9 +69,9 @@ export async function repopulateParticipants(
     role: p.role,
   }))
 
-  // The submitter counts as a participant (unless a person field already
-  // captured them) — this is what makes a Builder app a trackable compliance
-  // obligation: completing the app is recorded against the submitter.
+  // The submitter counts as a participant unless a person field already
+  // captured them. Compliance ownership is resolved from formResponses;
+  // this derived index exists for transcripts and participation reports.
   if (args.submitterPersonId && !extracted.some((p) => p.personId === args.submitterPersonId)) {
     rows.push({
       tenantId: args.tenantId,

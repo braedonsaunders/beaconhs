@@ -24,13 +24,20 @@ import {
   type ReportCustomQuery,
   type ReportRunRequestSnapshot,
 } from '@beaconhs/db/schema'
-import { enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
+import { assertReportRunJobData, enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
 import {
   computeRangeFor,
   refineEntityMapForDocuments,
   resolveReportLayout,
   runReport,
 } from '@beaconhs/reports'
+import {
+  assertBoundedReportFilters,
+  assertReportRecipientLimit,
+  normalizeReportRecipientEmails,
+  normalizeReportRecipientUserIds,
+  REPORT_SCHEDULE_LIMITS,
+} from '@beaconhs/reports/schedule-policy'
 import { discoverEntityMapWithScopedApps } from '@beaconhs/analytics/server'
 import {
   can,
@@ -40,7 +47,14 @@ import {
   resolveMembershipAccess,
 } from '@beaconhs/tenant'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
-import { getObject, newAttachmentKey, presignGet, putObject } from '@beaconhs/storage'
+import {
+  deleteObject,
+  getObject,
+  headObject,
+  newAttachmentKey,
+  presignGet,
+  putObject,
+} from '@beaconhs/storage'
 import { appBaseUrl } from '../lib/app-base-url'
 import { escapeHtml } from '../lib/escape-html'
 
@@ -48,12 +62,14 @@ import { escapeHtml } from '../lib/escape-html'
 // fall back to the download link only (base64 inflates ~33%, and most mail
 // providers reject anything near 25 MB).
 const MAX_EMAIL_ATTACHMENT_BYTES = 10 * 1024 * 1024
+const MAX_REPORT_PDF_BYTES = 200 * 1024 * 1024
 
 // Presigned download links in the email stay valid for 7 days — the same
 // policy as hazid signed-report bundles. The run record keeps the durable copy.
 const PDF_LINK_EXPIRY_SECONDS = 7 * 24 * 3600
 
 export async function processReportRun(job: Job<ReportRunJobData>): Promise<void> {
+  assertReportRunJobData(job.data)
   const { tenantId, scheduleId, runId } = job.data
 
   try {
@@ -65,7 +81,13 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         .select({ run: reportRuns, tenant: tenants })
         .from(reportRuns)
         .innerJoin(tenants, eq(tenants.id, reportRuns.tenantId))
-        .where(eq(reportRuns.id, runId))
+        .where(
+          and(
+            eq(reportRuns.id, runId),
+            eq(reportRuns.tenantId, tenantId),
+            eq(reportRuns.scheduleId, scheduleId),
+          ),
+        )
         .limit(1)
       return row ?? null
     })
@@ -82,11 +104,21 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
     await withSuperAdmin(db, (tx) =>
       tx
         .update(reportRuns)
-        .set({ status: 'running', error: null, finishedAt: null })
-        .where(eq(reportRuns.id, runId)),
+        .set({
+          status: 'running',
+          error: null,
+          finishedAt: null,
+          publishLeaseId: null,
+          publishClaimedAt: null,
+        })
+        .where(and(eq(reportRuns.id, runId), eq(reportRuns.tenantId, tenantId))),
     )
 
     const snapshot = ctx.run.requestSnapshot
+    const recipientUserIds = normalizeReportRecipientUserIds(snapshot.recipientUserIds)
+    const recipientEmails = normalizeReportRecipientEmails(snapshot.recipientEmails)
+    assertReportRecipientLimit(recipientUserIds, recipientEmails)
+    assertBoundedReportFilters(snapshot.filters)
     const range = computeRangeFor(snapshot.definition.queryKind, snapshot.filters)
     let artifact = await loadArtifact(tenantId, ctx.run.pdfAttachmentId, ctx.run.rowCount)
 
@@ -112,6 +144,9 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         groups,
         layout: resolveReportLayout(snapshot.definition.layout),
       })
+      if (pdf.length === 0 || pdf.length > MAX_REPORT_PDF_BYTES) {
+        throw new Error('Scheduled report PDF must be between 1 byte and 200 MiB')
+      }
       const filename = `${snapshot.definition.slug}-${dateStamp(new Date())}.pdf`
       const r2Key = newAttachmentKey({ tenantId, kind: 'document', filename })
       await putObject({
@@ -120,31 +155,79 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         contentType: 'application/pdf',
         contentDisposition: 'inline',
       })
-      const attachmentId = await withTenant(db, tenantId, async (tx) => {
-        const [att] = await tx
-          .insert(attachments)
-          .values({
-            tenantId,
-            kind: 'document',
-            r2Key,
-            contentType: 'application/pdf',
-            sizeBytes: pdf.length,
-            filename,
-          })
-          .returning({ id: attachments.id })
-        await tx
-          .update(reportRuns)
-          .set({ pdfAttachmentId: att!.id, rowCount })
-          .where(eq(reportRuns.id, runId))
-        return att!.id
-      })
-      artifact = { attachmentId, filename, r2Key, pdf, rowCount }
+      let persistence: { attachmentId: string; rowCount: number; created: boolean }
+      try {
+        persistence = await withTenant(db, tenantId, async (tx) => {
+          const [locked] = await tx
+            .select({
+              pdfAttachmentId: reportRuns.pdfAttachmentId,
+              rowCount: reportRuns.rowCount,
+            })
+            .from(reportRuns)
+            .where(and(eq(reportRuns.id, runId), eq(reportRuns.tenantId, tenantId)))
+            .for('update')
+            .limit(1)
+          if (!locked) throw new Error('Report run was removed before PDF persistence')
+          if (locked.pdfAttachmentId) {
+            return {
+              attachmentId: locked.pdfAttachmentId,
+              rowCount: locked.rowCount ?? rowCount,
+              created: false,
+            }
+          }
+
+          const [att] = await tx
+            .insert(attachments)
+            .values({
+              tenantId,
+              kind: 'document',
+              r2Key,
+              contentType: 'application/pdf',
+              sizeBytes: pdf.length,
+              filename,
+            })
+            .returning({ id: attachments.id })
+          if (!att) throw new Error('Failed to persist the scheduled report PDF attachment')
+          const [updated] = await tx
+            .update(reportRuns)
+            .set({ pdfAttachmentId: att.id, rowCount })
+            .where(
+              and(
+                eq(reportRuns.id, runId),
+                eq(reportRuns.tenantId, tenantId),
+                isNull(reportRuns.pdfAttachmentId),
+              ),
+            )
+            .returning({ id: reportRuns.id })
+          if (!updated) throw new Error('Report run was removed before PDF persistence')
+          return { attachmentId: att.id, rowCount, created: true }
+        })
+      } catch (error) {
+        await deleteObject({ key: r2Key }).catch(() => undefined)
+        throw error
+      }
+      if (persistence.created) {
+        artifact = {
+          attachmentId: persistence.attachmentId,
+          filename,
+          r2Key,
+          pdf: pdf.length <= MAX_EMAIL_ATTACHMENT_BYTES ? pdf : null,
+          rowCount,
+        }
+      } else {
+        await deleteObject({ key: r2Key }).catch((error: unknown) => {
+          console.warn('[reports] duplicate render object cleanup failed:', error)
+        })
+        artifact = await loadArtifact(tenantId, persistence.attachmentId, persistence.rowCount)
+        if (!artifact)
+          throw new Error('Concurrent report PDF persistence did not produce an artifact')
+      }
     }
 
     // Resolve the immutable recipient snapshot against CURRENT active
     // memberships, then persist one delivery row per normalized address.
-    const userEmails = await resolveUserEmails(tenantId, snapshot.recipientUserIds)
-    const allEmails = normalizeEmails([...userEmails, ...snapshot.recipientEmails])
+    const userEmails = await resolveUserEmails(tenantId, recipientUserIds)
+    const allEmails = normalizeReportRecipientEmails([...userEmails, ...recipientEmails])
     await withTenant(db, tenantId, async (tx) => {
       if (allEmails.length === 0) return
       await tx
@@ -161,8 +244,19 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         })
     })
     const deliveries = await withTenant(db, tenantId, (tx) =>
-      tx.select().from(reportRunDeliveries).where(eq(reportRunDeliveries.runId, runId)),
+      tx
+        .select()
+        .from(reportRunDeliveries)
+        .where(
+          and(eq(reportRunDeliveries.runId, runId), eq(reportRunDeliveries.tenantId, tenantId)),
+        )
+        .limit(REPORT_SCHEDULE_LIMITS.recipientCount + 1),
     )
+    if (deliveries.length > REPORT_SCHEDULE_LIMITS.recipientCount) {
+      throw new Error(
+        `Report run has more than ${REPORT_SCHEDULE_LIMITS.recipientCount} deliveries`,
+      )
+    }
 
     const subject = `${snapshot.scheduleName || snapshot.definition.name} for ${range.label}`
     const runLink = `${appBaseUrl()}/reports/schedules/${scheduleId}/runs/${runId}`
@@ -170,7 +264,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
       key: artifact.r2Key,
       expiresInSeconds: PDF_LINK_EXPIRY_SECONDS,
     })
-    const attachPdf = artifact.pdf.length <= MAX_EMAIL_ATTACHMENT_BYTES
+    const attachPdf = artifact.pdf !== null
     const footnote = attachPdf
       ? 'The PDF is attached to this email and stored on the run record. The download link is valid for 7 days.'
       : 'The PDF was too large to attach — use the download link (valid for 7 days) or the run record in the app.'
@@ -189,7 +283,7 @@ Download PDF (valid for 7 days): ${pdfLink}`
       ? [
           {
             filename: artifact.filename,
-            content: artifact.pdf.toString('base64'),
+            content: artifact.pdf!.toString('base64'),
             contentType: 'application/pdf',
           },
         ]
@@ -231,12 +325,12 @@ Download PDF (valid for 7 days): ${pdfLink}`
             pdfAttachmentId: artifact.attachmentId,
             rowCount: artifact.rowCount,
           })
-          .where(eq(reportRuns.id, runId))
+          .where(and(eq(reportRuns.id, runId), eq(reportRuns.tenantId, tenantId)))
       }
       await tx
         .update(reportSchedules)
         .set({ lastRunAt: new Date() })
-        .where(eq(reportSchedules.id, scheduleId))
+        .where(and(eq(reportSchedules.id, scheduleId), eq(reportSchedules.tenantId, tenantId)))
     })
 
     console.log(
@@ -245,14 +339,22 @@ Download PDF (valid for 7 days): ${pdfLink}`
         : `[reports] schedule ${scheduleId} succeeded (run=${runId}, rows=${artifact.rowCount}, no recipients)`,
     )
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = (err instanceof Error ? err.message : String(err))
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, ' ')
+      .slice(0, 4_000)
     console.error(`[reports] run failed for schedule ${scheduleId}:`, message)
     try {
       await withSuperAdmin(db, async (tx) => {
         await tx
           .update(reportRuns)
-          .set({ status: 'failed', error: message, finishedAt: new Date() })
-          .where(eq(reportRuns.id, runId))
+          .set({
+            status: 'failed',
+            error: message,
+            finishedAt: new Date(),
+            publishLeaseId: null,
+            publishClaimedAt: null,
+          })
+          .where(and(eq(reportRuns.id, runId), eq(reportRuns.tenantId, tenantId)))
       })
     } catch (updateErr) {
       console.error('[reports] also failed to mark run failed:', updateErr)
@@ -269,24 +371,51 @@ async function loadArtifact(
   attachmentId: string
   filename: string
   r2Key: string
-  pdf: Buffer
+  pdf: Buffer | null
   rowCount: number
 } | null> {
   if (!attachmentId || rowCount === null) return null
   const attachment = await withTenant(db, tenantId, async (tx) => {
     const [row] = await tx
-      .select({ id: attachments.id, filename: attachments.filename, r2Key: attachments.r2Key })
+      .select({
+        id: attachments.id,
+        filename: attachments.filename,
+        r2Key: attachments.r2Key,
+        contentType: attachments.contentType,
+        sizeBytes: attachments.sizeBytes,
+      })
       .from(attachments)
-      .where(eq(attachments.id, attachmentId))
+      .where(and(eq(attachments.id, attachmentId), eq(attachments.tenantId, tenantId)))
       .limit(1)
     return row ?? null
   })
   if (!attachment) throw new Error('Report run PDF attachment no longer exists')
+  if (attachment.contentType !== 'application/pdf' || attachment.sizeBytes <= 0) {
+    throw new Error('Report run PDF attachment metadata is invalid')
+  }
+  if (attachment.sizeBytes > MAX_REPORT_PDF_BYTES) {
+    throw new Error('Report run PDF exceeds the 200 MiB artifact limit')
+  }
+  const metadata = await headObject({ key: attachment.r2Key })
+  if (
+    !metadata ||
+    metadata.contentType !== 'application/pdf' ||
+    metadata.contentLength !== attachment.sizeBytes
+  ) {
+    throw new Error('Report run PDF object metadata does not match its attachment record')
+  }
+  const pdf =
+    attachment.sizeBytes <= MAX_EMAIL_ATTACHMENT_BYTES
+      ? await getObject({ key: attachment.r2Key })
+      : null
+  if (pdf && pdf.length !== attachment.sizeBytes) {
+    throw new Error('Report run PDF object size does not match its attachment record')
+  }
   return {
     attachmentId: attachment.id,
     filename: attachment.filename,
     r2Key: attachment.r2Key,
-    pdf: await getObject({ key: attachment.r2Key }),
+    pdf,
     rowCount,
   }
 }
@@ -401,15 +530,6 @@ async function resolveUserEmails(tenantId: string, userIds: string[]): Promise<s
       )
     return rows.map((r) => r.email)
   })
-}
-
-function normalizeEmails(emails: string[]): string[] {
-  const normalized = new Set<string>()
-  for (const email of emails) {
-    const value = email.trim().toLowerCase()
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) normalized.add(value)
-  }
-  return [...normalized]
 }
 
 // --- Small helpers -------------------------------------------------------

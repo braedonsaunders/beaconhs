@@ -5,7 +5,7 @@ import 'server-only'
 // [EquipmentName] (date)" email fires on submit). Field-map keys mirror
 // MODULE_FLOW_PROFILES['equipment-inspections'].
 
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import {
   attachments,
@@ -56,8 +56,8 @@ export function createEquipmentInspectionFlowAdapter(
     async loadValues() {
       const inspTU = alias(tenantUsers, 'eqi_inspector_tu')
       const inspU = alias(users, 'eqi_inspector_u')
-      const [head] = await ctx.db((tx) =>
-        tx
+      const loaded = await ctx.db(async (tx) => {
+        const [head] = await tx
           .select({
             r: equipmentInspectionRecords,
             typeName: equipmentInspectionTypes.name,
@@ -72,53 +72,125 @@ export function createEquipmentInspectionFlowAdapter(
           .from(equipmentInspectionRecords)
           .leftJoin(
             equipmentInspectionTypes,
-            eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+            and(
+              eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
+              eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+            ),
           )
           .leftJoin(
             equipmentItems,
-            eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+            and(
+              eq(equipmentItems.tenantId, equipmentInspectionRecords.tenantId),
+              eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+            ),
           )
-          .leftJoin(orgUnits, eq(orgUnits.id, equipmentInspectionRecords.siteOrgUnitId))
-          .leftJoin(inspTU, eq(inspTU.id, equipmentInspectionRecords.inspectorTenantUserId))
+          .leftJoin(
+            orgUnits,
+            and(
+              eq(orgUnits.tenantId, equipmentInspectionRecords.tenantId),
+              eq(orgUnits.id, equipmentInspectionRecords.siteOrgUnitId),
+            ),
+          )
+          .leftJoin(
+            inspTU,
+            and(
+              eq(inspTU.tenantId, equipmentInspectionRecords.tenantId),
+              eq(inspTU.id, equipmentInspectionRecords.inspectorTenantUserId),
+            ),
+          )
           .leftJoin(inspU, eq(inspU.id, inspTU.userId))
-          .leftJoin(people, eq(people.id, equipmentInspectionRecords.inspectorPersonId))
-          .where(eq(equipmentInspectionRecords.id, recordId))
-          .limit(1),
-      )
-      if (!head) return {}
-      const r = head.r
+          .leftJoin(
+            people,
+            and(
+              eq(people.tenantId, equipmentInspectionRecords.tenantId),
+              eq(people.id, equipmentInspectionRecords.inspectorPersonId),
+            ),
+          )
+          .where(
+            and(
+              eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
+              eq(equipmentInspectionRecords.id, recordId),
+              isNull(equipmentInspectionRecords.deletedAt),
+            ),
+          )
+          .limit(1)
+        if (!head) return null
 
-      const [criteria, photos] = await Promise.all([
-        ctx.db((tx) =>
-          tx
-            .select({
-              groupLabel: equipmentInspectionRecordCriteria.groupLabelSnapshot,
-              question: equipmentInspectionRecordCriteria.questionTextSnapshot,
-              answer: equipmentInspectionRecordCriteria.answer,
-              numericValue: equipmentInspectionRecordCriteria.numericValue,
-              textValue: equipmentInspectionRecordCriteria.textValue,
-              severity: equipmentInspectionRecordCriteria.severity,
-              comment: equipmentInspectionRecordCriteria.comment,
-              actionTaken: equipmentInspectionRecordCriteria.actionTaken,
-            })
-            .from(equipmentInspectionRecordCriteria)
-            .where(eq(equipmentInspectionRecordCriteria.recordId, recordId))
-            .orderBy(asc(equipmentInspectionRecordCriteria.sequence)),
-        ),
-        ctx.db((tx) =>
-          tx
-            .select({
-              caption: equipmentInspectionRecordAttachments.caption,
-              r2Key: attachments.r2Key,
-            })
-            .from(equipmentInspectionRecordAttachments)
-            .innerJoin(
-              attachments,
+        const criteria = await tx
+          .select({
+            groupLabel: equipmentInspectionRecordCriteria.groupLabelSnapshot,
+            question: equipmentInspectionRecordCriteria.questionTextSnapshot,
+            answer: equipmentInspectionRecordCriteria.answer,
+            numericValue: equipmentInspectionRecordCriteria.numericValue,
+            textValue: equipmentInspectionRecordCriteria.textValue,
+            severity: equipmentInspectionRecordCriteria.severity,
+            comment: equipmentInspectionRecordCriteria.comment,
+            actionTaken: equipmentInspectionRecordCriteria.actionTaken,
+            photoAttachmentIds: equipmentInspectionRecordCriteria.photoAttachmentIds,
+          })
+          .from(equipmentInspectionRecordCriteria)
+          .where(
+            and(
+              eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
+              eq(equipmentInspectionRecordCriteria.recordId, recordId),
+            ),
+          )
+          .orderBy(asc(equipmentInspectionRecordCriteria.sequence))
+
+        const recordPhotos = await tx
+          .select({
+            id: attachments.id,
+            filename: attachments.filename,
+            caption: equipmentInspectionRecordAttachments.caption,
+            r2Key: attachments.r2Key,
+          })
+          .from(equipmentInspectionRecordAttachments)
+          .innerJoin(
+            attachments,
+            and(
+              eq(attachments.tenantId, equipmentInspectionRecordAttachments.tenantId),
               eq(attachments.id, equipmentInspectionRecordAttachments.attachmentId),
-            )
-            .where(eq(equipmentInspectionRecordAttachments.recordId, recordId)),
-        ),
-      ])
+              eq(attachments.kind, 'image'),
+            ),
+          )
+          .where(
+            and(
+              eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+              eq(equipmentInspectionRecordAttachments.recordId, recordId),
+            ),
+          )
+
+        const criterionPhotoIds = [
+          ...new Set(criteria.flatMap((criterion) => criterion.photoAttachmentIds ?? [])),
+        ]
+        const criterionPhotos =
+          criterionPhotoIds.length === 0
+            ? []
+            : await tx
+                .select({
+                  id: attachments.id,
+                  filename: attachments.filename,
+                  caption: attachments.caption,
+                  r2Key: attachments.r2Key,
+                })
+                .from(attachments)
+                .where(
+                  and(
+                    eq(attachments.tenantId, ctx.tenantId),
+                    eq(attachments.kind, 'image'),
+                    inArray(attachments.id, criterionPhotoIds),
+                  ),
+                )
+
+        return { head, criteria, recordPhotos, criterionPhotos }
+      })
+      if (!loaded) return {}
+      const { head, criteria } = loaded
+      const r = head.r
+      const photosById = new Map(loaded.recordPhotos.map((photo) => [photo.id, photo] as const))
+      for (const photo of loaded.criterionPhotos) {
+        if (!photosById.has(photo.id)) photosById.set(photo.id, photo)
+      }
 
       const inspectorName =
         head.inspectorUserName ||
@@ -164,7 +236,7 @@ export function createEquipmentInspectionFlowAdapter(
           action_taken: c.actionTaken ?? '',
         })),
         photos: await Promise.all(
-          photos.map(async (p) => ({
+          [...photosById.values()].map(async (p) => ({
             url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
             caption: p.caption ?? '',
           })),
@@ -173,32 +245,41 @@ export function createEquipmentInspectionFlowAdapter(
     },
 
     async resolveSubmitter() {
-      const [r] = await ctx.db((tx) =>
-        tx
+      return ctx.db(async (tx) => {
+        const [r] = await tx
           .select({
             submittedBy: equipmentInspectionRecords.submittedByTenantUserId,
             inspector: equipmentInspectionRecords.inspectorTenantUserId,
           })
           .from(equipmentInspectionRecords)
-          .where(eq(equipmentInspectionRecords.id, recordId))
-          .limit(1),
-      )
-      const tuid = r?.submittedBy ?? r?.inspector ?? null
-      let email: string | null = null
-      let userId: string | null = null
-      if (tuid) {
-        const [u] = await ctx.db((tx) =>
-          tx
-            .select({ email: users.email, userId: users.id })
-            .from(tenantUsers)
-            .innerJoin(users, eq(users.id, tenantUsers.userId))
-            .where(eq(tenantUsers.id, tuid))
-            .limit(1),
-        )
-        email = u?.email ?? null
-        userId = u?.userId ?? null
-      }
-      return { tenantUserId: tuid, email, userId }
+          .where(
+            and(
+              eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
+              eq(equipmentInspectionRecords.id, recordId),
+              isNull(equipmentInspectionRecords.deletedAt),
+            ),
+          )
+          .limit(1)
+        const tuid = r?.submittedBy ?? r?.inspector ?? null
+        if (!tuid) return { tenantUserId: null, email: null, userId: null }
+        const [u] = await tx
+          .select({ email: users.email, userId: users.id })
+          .from(tenantUsers)
+          .innerJoin(users, eq(users.id, tenantUsers.userId))
+          .where(
+            and(
+              eq(tenantUsers.tenantId, ctx.tenantId),
+              eq(tenantUsers.id, tuid),
+              eq(tenantUsers.status, 'active'),
+            ),
+          )
+          .limit(1)
+        return {
+          tenantUserId: tuid,
+          email: u?.email ?? null,
+          userId: u?.userId ?? null,
+        }
+      })
     },
 
     spawnCorrectiveAction: (i) =>

@@ -8,6 +8,7 @@ import { correctiveActions } from '@beaconhs/db/schema'
 import { eq } from 'drizzle-orm'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
@@ -90,6 +91,10 @@ export async function spawnCorrectiveActionForSubject(
             event: 'on_create',
           }),
         },
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
       })
       return { record: inserted, replayed: false }
     }

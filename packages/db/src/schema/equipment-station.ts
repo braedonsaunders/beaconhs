@@ -7,10 +7,9 @@
 // snaps the asset back to `defaultCheckInOrgUnitId` so operators never have to
 // pick the home location every time. A missing row = built-in defaults.
 
-import { boolean, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, index, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
-import { orgUnits } from './org'
 
 // toggle  → one scan flips the asset's state (in ⇄ out). Fastest crib flow.
 // explicit→ the operator picks a direction; scans only ever do that action.
@@ -25,9 +24,7 @@ export const equipmentStationSettings = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     // Home location an item returns to on check-in. Auto-applied so the operator
     // never picks it. Should be one of the `is_equipment_base` org-units.
-    defaultCheckInOrgUnitId: uuid('default_check_in_org_unit_id').references(() => orgUnits.id, {
-      onDelete: 'set null',
-    }),
+    defaultCheckInOrgUnitId: uuid('default_check_in_org_unit_id'),
     // Hashed PIN for the public mounted-tablet kiosk. Null disables the public
     // kiosk (the in-app station is always available to permitted users).
     stationPin: text('station_pin'),
@@ -42,5 +39,9 @@ export const equipmentStationSettings = pgTable(
   },
   (t) => ({
     uniq: uniqueIndex('equipment_station_settings_uniq').on(t.tenantId),
+    defaultOrgUnitIdx: index('equipment_station_settings_default_org_unit_idx').on(
+      t.tenantId,
+      t.defaultCheckInOrgUnitId,
+    ),
   }),
 )

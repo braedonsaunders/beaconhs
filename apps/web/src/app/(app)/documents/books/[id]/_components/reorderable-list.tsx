@@ -11,6 +11,7 @@ type BookItem = {
   documentId: string
   title: string
   status: 'draft' | 'published' | 'archived' | 'under_review'
+  pinnedVersion: number | null
 }
 
 /**
@@ -20,7 +21,15 @@ type BookItem = {
  * Reorder is committed when the user releases the drag (drop fires the server
  * action). Up/down buttons commit immediately too.
  */
-export function ReorderableList({ bookId, initial }: { bookId: string; initial: BookItem[] }) {
+export function ReorderableList({
+  bookId,
+  initial,
+  locked,
+}: {
+  bookId: string
+  initial: BookItem[]
+  locked: boolean
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [items, setItems] = useState(initial)
@@ -28,6 +37,7 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
   const [overIdx, setOverIdx] = useState<number | null>(null)
 
   function commit(next: BookItem[]) {
+    if (locked) return
     setItems(next)
     start(async () => {
       await reorderBookItemsAction(
@@ -49,6 +59,7 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
   }
 
   function remove(documentId: string) {
+    if (locked) return
     start(async () => {
       await removeBookItemAction(bookId, documentId)
       router.refresh()
@@ -56,13 +67,16 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
   }
 
   function onDragStart(idx: number) {
+    if (locked) return
     setDragIdx(idx)
   }
   function onDragOver(e: React.DragEvent, idx: number) {
+    if (locked) return
     e.preventDefault()
     setOverIdx(idx)
   }
   function onDrop(idx: number) {
+    if (locked) return
     if (dragIdx === null || dragIdx === idx) {
       setDragIdx(null)
       setOverIdx(null)
@@ -85,7 +99,7 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
       {items.map((row, idx) => (
         <li
           key={row.documentId}
-          draggable
+          draggable={!locked}
           onDragStart={() => onDragStart(idx)}
           onDragOver={(e) => onDragOver(e, idx)}
           onDrop={() => onDrop(idx)}
@@ -96,14 +110,16 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
               : dragIdx === idx
                 ? 'border-slate-300 opacity-60 dark:border-slate-600'
                 : 'border-slate-200 dark:border-slate-800'
-          } ${pending ? 'cursor-progress' : 'cursor-grab'}`}
+          } ${pending ? 'cursor-progress' : locked ? 'cursor-default' : 'cursor-grab'}`}
         >
           <div className="flex min-w-0 items-center gap-3">
-            <GripVertical
-              size={14}
-              className="shrink-0 text-slate-400 dark:text-slate-500"
-              aria-hidden
-            />
+            {!locked ? (
+              <GripVertical
+                size={14}
+                className="shrink-0 text-slate-400 dark:text-slate-500"
+                aria-hidden
+              />
+            ) : null}
             <span className="w-6 shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">
               {idx + 1}.
             </span>
@@ -114,39 +130,48 @@ export function ReorderableList({ bookId, initial }: { bookId: string; initial: 
               {row.title}
             </Link>
             {row.status !== 'published' ? <Badge variant="warning">{row.status}</Badge> : null}
+            {locked ? (
+              row.pinnedVersion ? (
+                <Badge variant="secondary">v{row.pinnedVersion}</Badge>
+              ) : (
+                <Badge variant="warning">Snapshot missing</Badge>
+              )
+            ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={idx === 0 || pending}
-              aria-label="Move up"
-              onClick={() => move(row.documentId, 'up')}
-            >
-              <ArrowUp size={14} />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={idx === items.length - 1 || pending}
-              aria-label="Move down"
-              onClick={() => move(row.documentId, 'down')}
-            >
-              <ArrowDown size={14} />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={pending}
-              aria-label="Remove from book"
-              onClick={() => remove(row.documentId)}
-            >
-              <Trash2 size={14} className="text-red-500" />
-            </Button>
-          </div>
+          {!locked ? (
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={idx === 0 || pending}
+                aria-label="Move up"
+                onClick={() => move(row.documentId, 'up')}
+              >
+                <ArrowUp size={14} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={idx === items.length - 1 || pending}
+                aria-label="Move down"
+                onClick={() => move(row.documentId, 'down')}
+              >
+                <ArrowDown size={14} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                aria-label="Remove from book"
+                onClick={() => remove(row.documentId)}
+              >
+                <Trash2 size={14} className="text-red-500" />
+              </Button>
+            </div>
+          ) : null}
         </li>
       ))}
     </ol>

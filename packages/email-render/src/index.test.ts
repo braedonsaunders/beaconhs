@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EMAIL_RENDER_LIMITS,
   escapeHtml,
   expandRepeatMarkers,
   htmlToPlainText,
   interpolate,
+  normalizeEmailSubject,
   renderEmail,
   renderTemplate,
+  sanitizeEmailFragment,
   sanitizeEmailHtml,
+  sanitizeTokenizedEmailFragment,
 } from './index'
 
 describe('renderEmail — inline', () => {
@@ -152,6 +156,19 @@ describe('renderTemplate — blocks', () => {
     expect(renderTemplate('{{body}}', { body: '<b>hi</b>' }, { escapeHtml: true })).toBe('hi')
   })
 
+  it('can explicitly forbid raw merge values at an untrusted integration boundary', () => {
+    expect(
+      renderTemplate(
+        '{{{body}}}',
+        { body: '<img src=x onerror=alert(1)>safe' },
+        {
+          escapeHtml: true,
+          allowRawValues: false,
+        },
+      ),
+    ).toBe('safe')
+  })
+
   it('resolves nested #each, outer-scope tokens (via the scope chain) + dotted paths', () => {
     // No `../` — an inner block still sees outer tokens ({{ref}}) through the
     // scope chain, and {{this.kids}} drills into the current item.
@@ -209,6 +226,16 @@ describe('expandRepeatMarkers', () => {
     )
   })
 
+  it('rejects malformed repeated rows and marker expressions in bounded time', () => {
+    const malformed = '<tr data-each="rows">'.repeat(3_200)
+    const started = Date.now()
+    expect(() => expandRepeatMarkers(malformed)).toThrow(/nested table rows/)
+    expect(Date.now() - started).toBeLessThan(250)
+    expect(() => expandRepeatMarkers('<tr data-each="rows}}bad"><td>x</td></tr>')).toThrow(
+      /invalid value path/,
+    )
+  })
+
   // REGRESSION: the compile pipeline must sanitize BEFORE expanding. DOMPurify
   // foster-parents loose text out of <table> content, so sanitizing an
   // already-expanded template hoists the {{#each}}/{{#if}} braces after the
@@ -238,6 +265,27 @@ describe('sanitizeEmailHtml', () => {
     expect(out).toContain('<table')
     expect(out).not.toContain('<script>')
   })
+
+  it('sanitizes embeddable fragments without adding a document wrapper', () => {
+    const out = sanitizeEmailFragment(
+      '<p onclick="alert(1)">Safe</p><a href="javascript:alert(1)">link</a><script>x</script>',
+    )
+    expect(out).toContain('<p>Safe</p>')
+    expect(out).not.toContain('<html')
+    expect(out).not.toContain('onclick')
+    expect(out).not.toContain('javascript:')
+    expect(out).not.toContain('<script')
+  })
+
+  it('allows integration tokens only in inert text content', () => {
+    expect(sanitizeTokenizedEmailFragment('<p>Hello {{name}}</p>')).toBe('<p>Hello {{name}}</p>')
+    expect(() => sanitizeTokenizedEmailFragment('<a href="{{url}}">Open</a>')).toThrow(
+      /visible body text/,
+    )
+    expect(() => sanitizeTokenizedEmailFragment('<p style="color:{{color}}">x</p>')).toThrow(
+      /visible body text/,
+    )
+  })
 })
 
 describe('htmlToPlainText', () => {
@@ -245,6 +293,80 @@ describe('htmlToPlainText', () => {
     expect(htmlToPlainText('<p>Hello&nbsp;<b>world</b></p><p>A &amp; B</p>')).toBe(
       'Hello world\nA & B',
     )
+  })
+
+  it('handles quoted tag delimiters, spaced close tags, and hidden content', () => {
+    expect(
+      htmlToPlainText(
+        '<p title="a>b">Hello</p><script>bad()</script ><p>world<style>.x{}</style>!</p>',
+      ),
+    ).toBe('Hello\nworld !')
+  })
+
+  it('decodes entities exactly once and supports bounded numeric entities', () => {
+    expect(htmlToPlainText('&amp;lt; &#x41; &#65; &unknown;')).toBe('&lt; A A &unknown;')
+  })
+
+  it('normalizes CRLF as one line break', () => {
+    expect(htmlToPlainText('one\r\ntwo\n\n\nthree')).toBe('one\ntwo\n\nthree')
+  })
+
+  it('scans adversarial unclosed style input in linear time', () => {
+    const input = `safe${'<style'.repeat(16_000)} hidden`
+    const started = Date.now()
+    expect(htmlToPlainText(input)).toBe('safe')
+    expect(Date.now() - started).toBeLessThan(250)
+  })
+})
+
+describe('renderer resource limits', () => {
+  it('tokenizes the former overlapping-brace ReDoS witness in bounded time', () => {
+    const input = '{{'.repeat(20) + ' '.repeat(1_000) + 'x'
+    const started = Date.now()
+    expect(renderTemplate(input, {})).toBe(input)
+    expect(Date.now() - started).toBeLessThan(250)
+  })
+
+  it('rejects oversized input, token counts, output, depth, and loop expansion', () => {
+    expect(() => renderTemplate('x'.repeat(EMAIL_RENDER_LIMITS.templateChars + 1), {})).toThrow(
+      /Email template exceeded/,
+    )
+    expect(() => renderTemplate('{{x}}'.repeat(EMAIL_RENDER_LIMITS.tokens + 1), {})).toThrow(
+      /tokens/,
+    )
+    expect(() =>
+      renderTemplate('{{x}}'.repeat(5), {
+        x: 'x'.repeat(EMAIL_RENDER_LIMITS.mergeValueChars),
+      }),
+    ).toThrow(/Rendered output exceeded/)
+
+    const nested =
+      '{{#if x}}'.repeat(EMAIL_RENDER_LIMITS.nestingDepth + 1) +
+      'body' +
+      '{{/if}}'.repeat(EMAIL_RENDER_LIMITS.nestingDepth + 1)
+    expect(() => renderTemplate(nested, { x: true })).toThrow(/nested blocks/)
+
+    expect(() =>
+      renderTemplate('{{#each rows}}x{{/each}}', {
+        rows: Array.from({ length: EMAIL_RENDER_LIMITS.loopIterations + 1 }, () => 1),
+      }),
+    ).toThrow(/loop iterations/)
+  })
+
+  it('rejects structurally invalid block templates instead of silently dropping markers', () => {
+    expect(() => renderTemplate('{{#if x}}yes{{/each}}', { x: true })).toThrow(/expected/)
+    expect(() => renderTemplate('{{else}}no', {})).toThrow(/unexpected/)
+    expect(() => renderTemplate('{{#each rows}}x', { rows: [] })).toThrow(/unclosed/)
+  })
+})
+
+describe('normalizeEmailSubject', () => {
+  it('removes header-breaking whitespace and enforces the line ceiling', () => {
+    expect(normalizeEmailSubject('  One\r\n\tTwo  ')).toBe('One Two')
+    expect(() => normalizeEmailSubject('x'.repeat(EMAIL_RENDER_LIMITS.subjectChars + 1))).toThrow(
+      /Email subject exceeded/,
+    )
+    expect(() => normalizeEmailSubject('😀'.repeat(250))).toThrow(/Email subject exceeded/)
   })
 })
 

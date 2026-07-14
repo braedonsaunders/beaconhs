@@ -33,7 +33,9 @@ export default async function NewObligationPage({
     skillTypeId: pickString(sp.skillTypeId),
   }
 
-  const { targets, audienceOptions } = await loadObligationFormOptions(ctx)
+  const { targets, audienceOptions } = await loadObligationFormOptions(ctx, {
+    targetRef: prefillTargetRef,
+  })
 
   return (
     <PageContainer>

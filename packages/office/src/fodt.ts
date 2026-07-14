@@ -13,8 +13,7 @@
 // stream, mirroring how the extracted text separates them with newlines).
 
 type Token =
-  | { kind: 'tag'; raw: string; pseudo?: string }
-  | { kind: 'text'; raw: string; text: string }
+  { kind: 'tag'; raw: string; pseudo?: string } | { kind: 'text'; raw: string; text: string }
 
 export type FodtEdit = { find: string; replace: string }
 export type FodtEditResult = { find: string; count: number }
@@ -38,26 +37,120 @@ export function encodeEntities(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-function tokenize(fodt: string): Token[] {
-  const parts = fodt.split(/(<[^>]*>)/)
-  const tokens: Token[] = []
-  for (const part of parts) {
-    if (part === '') continue
-    if (part.startsWith('<')) {
-      // Whitespace elements participate in the plain-text stream.
-      if (/^<text:s\b[^>]*\/>$/.test(part)) {
-        const m = part.match(/text:c="(\d+)"/)
-        tokens.push({ kind: 'tag', raw: part, pseudo: ' '.repeat(m ? Number(m[1]) : 1) })
-      } else if (/^<text:tab\b[^>]*\/>$/.test(part)) {
-        tokens.push({ kind: 'tag', raw: part, pseudo: '\t' })
-      } else if (/^<text:line-break\b[^>]*\/>$/.test(part)) {
-        tokens.push({ kind: 'tag', raw: part, pseudo: '\n' })
-      } else {
-        tokens.push({ kind: 'tag', raw: part })
+function findMarkupEnd(xml: string, start: number): number {
+  const terminated = (marker: string, from: number) => {
+    const end = xml.indexOf(marker, from)
+    if (end === -1) throw new Error('Flat ODT contains unterminated XML markup')
+    return end + marker.length - 1
+  }
+  if (xml.startsWith('<!--', start)) return terminated('-->', start + 4)
+  if (xml.startsWith('<![CDATA[', start)) return terminated(']]>', start + 9)
+  if (xml.startsWith('<?', start)) return terminated('?>', start + 2)
+
+  let quote: '"' | "'" | null = null
+  let subsetDepth = 0
+  for (let i = start + 1; i < xml.length; i++) {
+    const char = xml[i]!
+    if (quote) {
+      if (char === quote) quote = null
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+    } else if (char === '[') {
+      subsetDepth += 1
+    } else if (char === ']' && subsetDepth > 0) {
+      subsetDepth -= 1
+    } else if (char === '>' && subsetDepth === 0) {
+      return i
+    }
+  }
+  throw new Error('Flat ODT contains an unterminated XML tag')
+}
+
+function openingTagName(raw: string): string | null {
+  if (raw[1] === '/' || raw[1] === '!' || raw[1] === '?') return null
+  let end = 1
+  while (end < raw.length && !/[\s/>]/.test(raw[end]!)) end += 1
+  return end > 1 ? raw.slice(1, end) : null
+}
+
+function isSelfClosingTag(raw: string): boolean {
+  let end = raw.length - 2
+  while (end >= 0 && /\s/.test(raw[end]!)) end -= 1
+  return raw[end] === '/'
+}
+
+function quotedAttribute(raw: string, name: string): string | null {
+  let from = 1
+  for (;;) {
+    const at = raw.indexOf(name, from)
+    if (at === -1) return null
+    const before = raw[at - 1]
+    let cursor = at + name.length
+    if (before && /[\w:.-]/.test(before)) {
+      from = cursor
+      continue
+    }
+    while (cursor < raw.length && /\s/.test(raw[cursor]!)) cursor += 1
+    if (raw[cursor] !== '=') {
+      from = cursor
+      continue
+    }
+    cursor += 1
+    while (cursor < raw.length && /\s/.test(raw[cursor]!)) cursor += 1
+    const quote = raw[cursor]
+    if (quote !== '"' && quote !== "'") return null
+    const end = raw.indexOf(quote, cursor + 1)
+    return end === -1 ? null : raw.slice(cursor + 1, end)
+  }
+}
+
+function whitespacePseudo(raw: string): string | undefined {
+  if (!isSelfClosingTag(raw)) return undefined
+  switch (openingTagName(raw)) {
+    case 'text:s': {
+      const rawCount = quotedAttribute(raw, 'text:c')
+      if (rawCount === null) return ' '
+      if (!/^\d{1,5}$/.test(rawCount)) {
+        throw new Error('Flat ODT contains an invalid text:s count')
       }
-    } else {
+      const count = Number(rawCount)
+      if (count < 1 || count > 10_000) {
+        throw new Error('Flat ODT text:s count is outside the supported range')
+      }
+      return ' '.repeat(count)
+    }
+    case 'text:tab':
+      return '\t'
+    case 'text:line-break':
+      return '\n'
+    default:
+      return undefined
+  }
+}
+
+function tokenize(fodt: string): Token[] {
+  const tokens: Token[] = []
+  let offset = 0
+  while (offset < fodt.length) {
+    const tagStart = fodt.indexOf('<', offset)
+    if (tagStart === -1) {
+      const part = fodt.slice(offset)
+      if (part) tokens.push({ kind: 'text', raw: part, text: decodeEntities(part) })
+      break
+    }
+    if (tagStart > offset) {
+      const part = fodt.slice(offset, tagStart)
       tokens.push({ kind: 'text', raw: part, text: decodeEntities(part) })
     }
+    const tagEnd = findMarkupEnd(fodt, tagStart)
+    const part = fodt.slice(tagStart, tagEnd + 1)
+    const pseudo = whitespacePseudo(part)
+    tokens.push(
+      pseudo === undefined ? { kind: 'tag', raw: part } : { kind: 'tag', raw: part, pseudo },
+    )
+    offset = tagEnd + 1
   }
   return tokens
 }

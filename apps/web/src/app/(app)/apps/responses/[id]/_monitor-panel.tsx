@@ -7,20 +7,11 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Loader2, MapPin, Square } from 'lucide-react'
+import { Check, Loader2, Square } from 'lucide-react'
 import { Badge, Button } from '@beaconhs/ui'
 import { cancelSession, endSession, recordSessionCheckin } from './_monitor-actions'
 
 export type MonitorStatus = 'active' | 'completed' | 'missed' | 'escalated' | 'cancelled'
-type MonitorCheckin = {
-  id: string
-  kind: string
-  recordedAt: string
-  geoLat: number | null
-  geoLng: number | null
-  note: string | null
-}
-
 const STATUS_BADGE: Record<
   MonitorStatus,
   { label: string; variant: 'success' | 'destructive' | 'secondary' | 'outline' }
@@ -43,16 +34,16 @@ export function MonitorPanel({
   nextCheckinDueAt,
   intervalMinutes,
   requireGeo,
-  checkins,
   readOnly,
+  history,
 }: {
   responseId: string
   monitorStatus: MonitorStatus
   nextCheckinDueAt: string | null
   intervalMinutes: number | null
   requireGeo: boolean
-  checkins: MonitorCheckin[]
   readOnly: boolean
+  history?: React.ReactNode
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
@@ -187,40 +178,7 @@ export function MonitorPanel({
         </div>
       ) : null}
 
-      {checkins.length > 0 ? (
-        <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Recent check-ins
-          </div>
-          <ul className="space-y-1">
-            {checkins.slice(0, 8).map((c) => (
-              <li
-                key={c.id}
-                className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"
-              >
-                <span className="font-mono text-slate-400">
-                  {new Date(c.recordedAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-                <span className="capitalize">{c.kind.replace(/_/g, ' ')}</span>
-                {c.geoLat != null && c.geoLng != null ? (
-                  <a
-                    href={`https://www.google.com/maps?q=${c.geoLat},${c.geoLng}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 text-teal-700 hover:underline dark:text-teal-300"
-                  >
-                    <MapPin size={11} /> map
-                  </a>
-                ) : null}
-                {c.note ? <span className="truncate text-slate-500">— {c.note}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      {history}
     </div>
   )
 }

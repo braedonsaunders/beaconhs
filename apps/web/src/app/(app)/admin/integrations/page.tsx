@@ -107,23 +107,21 @@ export default async function IntegrationsPage() {
   })
 
   const connected: Connected[] = [
-    ...connections.map(
-      (c): Connected => ({
-        id: c.id,
-        dir: 'in',
-        title: c.name,
-        subtitle: connectorName(c.connectorKey),
-        status: c.status,
-        href: `/admin/integrations/${c.id}`,
-        badge: c.enabled && c.schedule ? `every ${c.schedule}` : undefined,
-        meta: c.lastRunAt
-          ? `last run ${formatDateTime(new Date(c.lastRunAt), ctx.timezone)} · ${c.lastStatus ?? ''}`
-          : 'never run',
-        iconKey: iconFor(c.connectorKey),
-        deleteAction: deleteConnection,
-        createdAt: c.createdAt,
-      }),
-    ),
+    ...connections.map((c): Connected => ({
+      id: c.id,
+      dir: 'in',
+      title: c.name,
+      subtitle: connectorName(c.connectorKey),
+      status: c.status,
+      href: `/admin/integrations/${c.id}`,
+      badge: c.enabled && c.schedule ? `every ${c.schedule}` : undefined,
+      meta: c.lastRunAt
+        ? `last run ${formatDateTime(new Date(c.lastRunAt), ctx.timezone)} · ${c.lastStatus ?? ''}`
+        : 'never run',
+      iconKey: iconFor(c.connectorKey),
+      deleteAction: deleteConnection,
+      createdAt: c.createdAt,
+    })),
     ...outbound.map((o): Connected => {
       const dest = getDestination(o.destinationKey)
       const trig = getTrigger(o.triggerKey)
@@ -149,30 +147,26 @@ export default async function IntegrationsPage() {
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
   const catalog: CatalogItem[] = [
-    ...connectors.map(
-      (c): CatalogItem => ({
-        key: `in:${c.key}`,
-        addValue: c.key,
-        name: c.name,
-        description: c.description,
-        dir: 'in',
-        iconKey: c.iconKey ?? 'database',
-        detail: `Syncs ${c.entities.map((e) => ENTITY_LABELS[e] ?? e).join(', ')}`,
-        added: false,
-      }),
-    ),
-    ...listDestinations().map(
-      (d): CatalogItem => ({
-        key: `out:${d.key}`,
-        addValue: `outbound:${d.key}`,
-        name: `Send to ${d.name}`,
-        description: d.description,
-        dir: 'out',
-        iconKey: 'upload',
-        detail: 'Any trigger → this service',
-        added: false,
-      }),
-    ),
+    ...connectors.map((c): CatalogItem => ({
+      key: `in:${c.key}`,
+      addValue: c.key,
+      name: c.name,
+      description: c.description,
+      dir: 'in',
+      iconKey: c.iconKey ?? 'database',
+      detail: `Syncs ${c.entities.map((e) => ENTITY_LABELS[e] ?? e).join(', ')}`,
+      added: false,
+    })),
+    ...listDestinations().map((d): CatalogItem => ({
+      key: `out:${d.key}`,
+      addValue: `outbound:${d.key}`,
+      name: `Send to ${d.name}`,
+      description: d.description,
+      dir: 'out',
+      iconKey: 'upload',
+      detail: 'Any trigger → this service',
+      added: false,
+    })),
   ]
 
   return (

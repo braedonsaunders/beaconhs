@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, or, sql } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { people, vehicleLogSettings } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
@@ -6,14 +6,31 @@ import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { driverVehicleLogMode } from '../_service'
 import { VehicleLogSettingsForm } from './_form.client'
+import { parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Vehicle log settings' }
 export const dynamic = 'force-dynamic'
 
-export default async function VehicleLogSettingsPage() {
+const OVERRIDE_SORTS = ['name', 'mode'] as const
+
+export default async function VehicleLogSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const params = parseListParams(sp, {
+    sort: 'name',
+    dir: 'asc',
+    perPage: 20,
+    allowedSorts: OVERRIDE_SORTS,
+  })
+  const requestedMode = pickString(sp.overrideMode)
+  const overrideMode =
+    requestedMode === 'destination' || requestedMode === 'odometer' ? requestedMode : undefined
   const ctx = await requireModuleManage('vehicle-log')
 
-  const { settings, drivers } = await ctx.db(async (tx) => {
+  const { settings, overrides, total, filteredTotal } = await ctx.db(async (tx) => {
     const [s] = await tx
       .select({
         enabledModes: vehicleLogSettings.enabledModes,
@@ -22,19 +39,50 @@ export default async function VehicleLogSettingsPage() {
       .from(vehicleLogSettings)
       .where(eq(vehicleLogSettings.tenantId, ctx.tenantId))
       .limit(1)
-    const rows = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-        metadata: people.metadata,
-      })
-      .from(people)
-      .where(eq(people.status, 'active'))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(2000)
-    return { settings: s ?? null, drivers: rows }
+    const modeExpression = sql<string>`${people.metadata}->>'vehicleLogMode'`
+    const baseWhere = and(
+      eq(people.status, 'active'),
+      sql`${modeExpression} in ('destination', 'odometer')`,
+    )
+    const filteredWhere = and(
+      baseWhere,
+      params.q
+        ? or(
+            ilike(people.firstName, `%${params.q}%`),
+            ilike(people.lastName, `%${params.q}%`),
+            ilike(people.employeeNo, `%${params.q}%`),
+          )
+        : undefined,
+      overrideMode ? eq(modeExpression, overrideMode) : undefined,
+    )
+    const [totalRows, filteredRows, rows] = await Promise.all([
+      tx.select({ count: count() }).from(people).where(baseWhere),
+      tx.select({ count: count() }).from(people).where(filteredWhere),
+      tx
+        .select({
+          id: people.id,
+          firstName: people.firstName,
+          lastName: people.lastName,
+          employeeNo: people.employeeNo,
+          metadata: people.metadata,
+        })
+        .from(people)
+        .where(filteredWhere)
+        .orderBy(
+          ...(params.sort === 'mode' ? [asc(modeExpression)] : []),
+          asc(people.lastName),
+          asc(people.firstName),
+          asc(people.id),
+        )
+        .limit(params.perPage)
+        .offset((params.page - 1) * params.perPage),
+    ])
+    return {
+      settings: s ?? null,
+      overrides: rows,
+      total: Number(totalRows[0]?.count ?? 0),
+      filteredTotal: Number(filteredRows[0]?.count ?? 0),
+    }
   })
 
   return (
@@ -54,12 +102,17 @@ export default async function VehicleLogSettingsPage() {
           enabledModes: settings?.enabledModes ?? 'both',
           defaultMode: settings?.defaultMode ?? 'destination',
         }}
-        people={drivers.map((p) => ({
-          id: p.id,
-          label: `${p.lastName}, ${p.firstName}`,
-          hint: p.employeeNo ?? undefined,
-          mode: driverVehicleLogMode(p.metadata),
+        overrides={overrides.map((person) => ({
+          id: person.id,
+          label: `${person.lastName}, ${person.firstName}`,
+          hint: person.employeeNo ?? undefined,
+          mode: driverVehicleLogMode(person.metadata),
         }))}
+        total={total}
+        filteredTotal={filteredTotal}
+        page={params.page}
+        perPage={params.perPage}
+        currentParams={sp}
       />
     </ListPageLayout>
   )

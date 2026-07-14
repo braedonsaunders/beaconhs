@@ -7,10 +7,11 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, desc, eq, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
 import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
+  attachments,
   formResponses,
   formTemplateVersions,
   formTemplates,
@@ -37,7 +38,8 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canSeeRecord } from '@/lib/visibility'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import { hazardAssessmentCreatedEvent } from '@beaconhs/integrations'
 import { nextReference } from '@/lib/reference'
@@ -110,6 +112,97 @@ function revalidateAssessment(id: string) {
 }
 
 type HazidTx = any
+
+async function lockVisibleAssessment(
+  ctx: HazidCtx,
+  tx: HazidTx,
+  assessmentId: string,
+): Promise<{ locked: boolean }> {
+  const [row] = await tx
+    .select({
+      reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
+      siteOrgUnitId: hazidAssessments.siteOrgUnitId,
+      locked: hazidAssessments.locked,
+    })
+    .from(hazidAssessments)
+    .where(
+      and(
+        eq(hazidAssessments.tenantId, ctx.tenantId),
+        eq(hazidAssessments.id, assessmentId),
+        isNull(hazidAssessments.deletedAt),
+      ),
+    )
+    .limit(1)
+    .for('update')
+  if (!row) throw new Error('Assessment not found')
+  const visible = await canSeeRecord(ctx, tx, {
+    prefix: 'hazid',
+    ownerIds: [row.reportedByTenantUserId],
+    siteId: row.siteOrgUnitId,
+  })
+  if (!visible) throw new Error('Assessment not found')
+  return { locked: row.locked }
+}
+
+async function lockEditableAssessment(
+  ctx: HazidCtx,
+  tx: HazidTx,
+  assessmentId: string,
+): Promise<void> {
+  const row = await lockVisibleAssessment(ctx, tx, assessmentId)
+  if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
+}
+
+async function setLinkedAssessmentAppsLocked(
+  tx: HazidTx,
+  args: {
+    tenantId: string
+    assessmentId: string
+    locked: boolean
+    lockedAt: Date | null
+    lockedByTenantUserId: string | null
+  },
+): Promise<void> {
+  // Embedded Builder responses are assessment content. Lock their rows in a
+  // stable order before changing them so an already-open filler cannot alter
+  // the signed assessment through the generic form-response write paths.
+  const rows = await tx
+    .select({ id: formResponses.id })
+    .from(hazidAssessmentAppResponses)
+    .innerJoin(
+      formResponses,
+      and(
+        eq(formResponses.tenantId, hazidAssessmentAppResponses.tenantId),
+        eq(formResponses.templateId, hazidAssessmentAppResponses.templateId),
+        eq(formResponses.id, hazidAssessmentAppResponses.responseId),
+      ),
+    )
+    .where(
+      and(
+        eq(hazidAssessmentAppResponses.tenantId, args.tenantId),
+        eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId),
+        isNull(formResponses.deletedAt),
+      ),
+    )
+    .orderBy(asc(formResponses.id))
+    .for('update', { of: formResponses })
+  const responseIds = rows.map((row: { id: string }) => row.id)
+  if (responseIds.length === 0) return
+  await tx
+    .update(formResponses)
+    .set({
+      locked: args.locked,
+      lockedAt: args.lockedAt,
+      lockedByTenantUserId: args.lockedByTenantUserId,
+    })
+    .where(
+      and(
+        eq(formResponses.tenantId, args.tenantId),
+        inArray(formResponses.id, responseIds),
+        isNull(formResponses.deletedAt),
+      ),
+    )
+}
 
 async function latestTemplateVersion(tx: HazidTx, templateId: string) {
   const [version] = await tx
@@ -255,6 +348,7 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
   if (copyFromId) await assertCanSeeAssessment(ctx, copyFromId)
 
   const created = await ctx.db(async (tx) => {
+    if (copyFromId) await lockVisibleAssessment(ctx, tx, copyFromId)
     const reference = await nextReference(tx, ctx.tenantId, 'hazid')
 
     const [row] = await tx
@@ -523,15 +617,15 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
       },
     })
 
-    return row
-  })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: row.id,
+      action: 'create',
+      summary: `Created ${row.reference}`,
+      after: { reference: row.reference, assessmentTypeId, siteOrgUnitId },
+    })
 
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: created.id,
-    action: 'create',
-    summary: `Created ${created.reference}`,
-    after: { reference: created.reference, assessmentTypeId, siteOrgUnitId },
+    return row
   })
   revalidatePath('/hazard-assessments')
   return { id: created.id }
@@ -559,11 +653,11 @@ export async function openAssessmentApp(formData: FormData) {
   await assertCanSeeAssessment(ctx, assessmentId)
 
   const target = await ctx.db(async (tx) => {
+    const lockedAssessment = await lockVisibleAssessment(ctx, tx, assessmentId)
     const [assessment] = await tx
       .select({
         id: hazidAssessments.id,
         assessmentTypeId: hazidAssessments.assessmentTypeId,
-        locked: hazidAssessments.locked,
       })
       .from(hazidAssessments)
       .where(and(eq(hazidAssessments.id, assessmentId), isNull(hazidAssessments.deletedAt)))
@@ -629,11 +723,13 @@ export async function openAssessmentApp(formData: FormData) {
     }
     // Locked assessments are read-only: submitted responses stay viewable, but
     // pre-submit drafts must not be editable and new responses cannot start.
-    if (assessment.locked && existing && (status === 'draft' || status === 'in_progress')) {
+    if (lockedAssessment.locked && existing && (status === 'draft' || status === 'in_progress')) {
       throw new Error('Unlock this assessment before editing this app')
     }
     if (!responseId) {
-      if (assessment.locked) throw new Error('Unlock this assessment before starting a new app')
+      if (lockedAssessment.locked) {
+        throw new Error('Unlock this assessment before starting a new app')
+      }
       if (
         !can(ctx, 'forms.response.create') ||
         !canAccessTemplate(ctx, templateAccess, roleKeys, 'operate')
@@ -653,20 +749,18 @@ export async function openAssessmentApp(formData: FormData) {
       status = 'draft'
     }
 
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: `Opened embedded app "${typeApp.templateName}"`,
+      metadata: { responseId, templateId: typeApp.app.templateId },
+    })
+
     return {
-      templateId: typeApp.app.templateId,
-      templateName: typeApp.templateName,
       responseId,
       status,
     }
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: `Opened embedded app "${target.templateName}"`,
-    metadata: { responseId: target.responseId, templateId: target.templateId },
   })
 
   revalidateAssessment(assessmentId)
@@ -726,18 +820,19 @@ export async function updateTextField(formData: FormData) {
   }
 
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, id)
     const updates: Record<string, unknown> = { [field]: val }
     await tx
       .update(hazidAssessments)
       .set(updates as any)
       .where(eq(hazidAssessments.id, id))
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${field}`,
-    after: { [field]: val },
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${field}`,
+      after: { [field]: val },
+    })
   })
   revalidateAssessment(id)
 }
@@ -748,27 +843,42 @@ export async function lockAssessment(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
+    const assessment = await lockVisibleAssessment(ctx, tx, id)
+    if (assessment.locked) throw new Error('This assessment is already locked')
+    const lockedAt = new Date()
+    const lockedByTenantUserId = ctx.membership?.id ?? null
     await tx
       .update(hazidAssessments)
       .set({
         locked: true,
         inProgress: false,
-        lockedAt: new Date(),
-        lockedByTenantUserId: ctx.membership?.id ?? null,
+        lockedAt,
+        lockedByTenantUserId,
       })
       .where(eq(hazidAssessments.id, id))
+    await setLinkedAssessmentAppsLocked(tx, {
+      tenantId: ctx.tenantId,
+      assessmentId: id,
+      locked: true,
+      lockedAt,
+      lockedByTenantUserId,
+    })
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'hazid',
       event: 'on_lock',
       occurrenceKey: randomUUID(),
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: id,
-    action: 'update',
-    summary: 'Locked',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: id,
+      action: 'update',
+      summary: 'Locked',
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'hazard_assessment',
+      targetRef: {},
+    })
   })
   revalidateAssessment(id)
 }
@@ -779,6 +889,19 @@ export async function unlockAssessment(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
+    const assessment = await lockVisibleAssessment(ctx, tx, id)
+    if (!assessment.locked) throw new Error('This assessment is not locked')
+    const signatureAttachments = await tx
+      .select({ id: hazidAssessmentSignatures.signatureAttachmentId })
+      .from(hazidAssessmentSignatures)
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
+          eq(hazidAssessmentSignatures.assessmentId, id),
+          isNotNull(hazidAssessmentSignatures.signatureAttachmentId),
+        ),
+      )
+      .for('update')
     await tx
       .update(hazidAssessments)
       .set({
@@ -788,23 +911,48 @@ export async function unlockAssessment(formData: FormData) {
         lockedByTenantUserId: null,
       })
       .where(eq(hazidAssessments.id, id))
-    // Legacy parity: clear all signatures on unlock so they must be re-collected.
+    await setLinkedAssessmentAppsLocked(tx, {
+      tenantId: ctx.tenantId,
+      assessmentId: id,
+      locked: false,
+      lockedAt: null,
+      lockedByTenantUserId: null,
+    })
+    // A changed assessment needs fresh attestations from every listed signer.
     await tx
       .update(hazidAssessmentSignatures)
       .set({ signatureAttachmentId: null, signedAt: null })
       .where(eq(hazidAssessmentSignatures.assessmentId, id))
+    const attachmentIds = signatureAttachments.flatMap((row) => (row.id ? [row.id] : []))
+    if (attachmentIds.length > 0) {
+      // The attachment deletion trigger enqueues durable object removal after
+      // commit, so clearing signatures cannot leak private signature images.
+      await tx
+        .delete(attachments)
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.kind, 'signature'),
+            inArray(attachments.id, attachmentIds),
+          ),
+        )
+    }
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'hazid',
       event: 'on_unlock',
       occurrenceKey: randomUUID(),
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: id,
-    action: 'update',
-    summary: 'Unlocked (signatures cleared)',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: id,
+      action: 'update',
+      summary: 'Unlocked (signatures cleared)',
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'hazard_assessment',
+      targetRef: {},
+    })
   })
   revalidateAssessment(id)
 }
@@ -816,6 +964,7 @@ export async function deleteAssessment(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
+    await lockVisibleAssessment(ctx, tx, id)
     await tx
       .update(hazidAssessments)
       .set({ deletedAt: new Date() })
@@ -826,12 +975,16 @@ export async function deleteAssessment(formData: FormData) {
       event: 'on_delete',
       occurrenceKey: randomUUID(),
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: id,
-    action: 'delete',
-    summary: 'Soft-deleted assessment',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: id,
+      action: 'delete',
+      summary: 'Soft-deleted assessment',
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'hazard_assessment',
+      targetRef: {},
+    })
   })
   revalidatePath('/hazard-assessments')
   // Deleting from the detail page would otherwise reload into a 404.
@@ -863,6 +1016,7 @@ export async function copyAssessment(formData: FormData) {
   await assertCanSeeAssessment(ctx, sourceId)
 
   const created = await ctx.db(async (tx) => {
+    await lockVisibleAssessment(ctx, tx, sourceId)
     const [src] = await tx
       .select()
       .from(hazidAssessments)
@@ -992,20 +1146,20 @@ export async function copyAssessment(formData: FormData) {
       submittedBy: ctx.membership?.id ?? null,
     })
 
-    return { row, src }
-  })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: row.id,
+      action: 'copy',
+      summary: `Copied from ${src.reference} as ${row.reference}`,
+      after: { copiedFrom: src.id, copiedFromReference: src.reference },
+    })
 
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: created.row.id,
-    action: 'copy',
-    summary: `Copied from ${created.src.reference} as ${created.row.reference}`,
-    after: { copiedFrom: created.src.id, copiedFromReference: created.src.reference },
+    return row
   })
 
   revalidatePath('/hazard-assessments')
-  revalidatePath(`/hazard-assessments/${created.row.id}`)
-  redirect(`/hazard-assessments/${created.row.id}` as any)
+  revalidatePath(`/hazard-assessments/${created.id}`)
+  redirect(`/hazard-assessments/${created.id}` as any)
 }
 
 // ------------------------------------------------------------------
@@ -1022,6 +1176,7 @@ export async function addTask(formData: FormData) {
   await assertAssessmentEditable(ctx, assessmentId)
 
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
     let hazardIds: string[] = []
     let nextControls = controls
     let nextDescription = description
@@ -1047,12 +1202,12 @@ export async function addTask(formData: FormData) {
       controls: nextControls,
       entityOrder: order,
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: taskId ? 'Added task from library' : 'Added ad-hoc task',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: taskId ? 'Added task from library' : 'Added ad-hoc task',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1065,19 +1220,20 @@ export async function updateTask(formData: FormData) {
   await assertAssessmentEditable(ctx, assessmentId)
   const description = nullable(formData.get('description'))
   const controls = nullable(formData.get('controls'))
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .update(hazidAssessmentTasks)
       .set({ description, controls })
       .where(
         and(eq(hazidAssessmentTasks.id, id), eq(hazidAssessmentTasks.assessmentId, assessmentId)),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_task',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated task',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_task',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated task',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1088,18 +1244,19 @@ export async function deleteTask(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .delete(hazidAssessmentTasks)
       .where(
         and(eq(hazidAssessmentTasks.id, id), eq(hazidAssessmentTasks.assessmentId, assessmentId)),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_task',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted task',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_task',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted task',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1112,7 +1269,14 @@ export async function moveTask(formData: FormData) {
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
   await assertAssessmentEditable(ctx, assessmentId)
-  await reorderEntities(ctx, hazidAssessmentTasks, assessmentId, id, direction as 'up' | 'down')
+  await reorderEntities(
+    ctx,
+    hazidAssessmentTasks,
+    assessmentId,
+    id,
+    direction as 'up' | 'down',
+    'Reordered tasks',
+  )
   revalidateAssessment(assessmentId)
 }
 
@@ -1129,6 +1293,7 @@ export async function addHazard(formData: FormData) {
   await assertAssessmentEditable(ctx, assessmentId)
 
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
     let standardControls: string | null = null
     if (hazardId) {
       const [h] = await tx.select().from(hazidHazards).where(eq(hazidHazards.id, hazardId)).limit(1)
@@ -1147,12 +1312,12 @@ export async function addHazard(formData: FormData) {
       applicable: true,
       entityOrder: (maxOrder?.m ?? 0) + 1,
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: hazardId ? 'Added hazard from library' : 'Added ad-hoc hazard',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: hazardId ? 'Added hazard from library' : 'Added ad-hoc hazard',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1165,6 +1330,7 @@ export async function addHazardSet(formData: FormData) {
   if (!assessmentId || !setId) throw new Error('Missing ids')
   await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
     const [set] = await tx
       .select()
       .from(hazidHazardSets)
@@ -1191,12 +1357,12 @@ export async function addHazardSet(formData: FormData) {
         entityOrder: next++,
       })),
     )
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: 'Added hazard set',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: 'Added hazard set',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1223,8 +1389,9 @@ export async function updateHazard(formData: FormData) {
     updates.postLikelihood = riskRating(formData.get('postLikelihood'))
   if (formData.has('postSeverity')) updates.postSeverity = riskRating(formData.get('postSeverity'))
   if (formData.has('controls')) updates.controls = nullable(formData.get('controls'))
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .update(hazidAssessmentHazards)
       .set(updates)
       .where(
@@ -1232,13 +1399,13 @@ export async function updateHazard(formData: FormData) {
           eq(hazidAssessmentHazards.id, id),
           eq(hazidAssessmentHazards.assessmentId, assessmentId),
         ),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_hazard',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated hazard',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_hazard',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated hazard',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1249,21 +1416,22 @@ export async function deleteHazard(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .delete(hazidAssessmentHazards)
       .where(
         and(
           eq(hazidAssessmentHazards.id, id),
           eq(hazidAssessmentHazards.assessmentId, assessmentId),
         ),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_hazard',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted hazard',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_hazard',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted hazard',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1276,7 +1444,14 @@ export async function moveHazard(formData: FormData) {
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
   await assertAssessmentEditable(ctx, assessmentId)
-  await reorderEntities(ctx, hazidAssessmentHazards, assessmentId, id, direction as 'up' | 'down')
+  await reorderEntities(
+    ctx,
+    hazidAssessmentHazards,
+    assessmentId,
+    id,
+    direction as 'up' | 'down',
+    'Reordered hazards',
+  )
   revalidateAssessment(assessmentId)
 }
 
@@ -1293,6 +1468,7 @@ export async function addPPE(formData: FormData) {
   const description = nullable(formData.get('description'))
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
     const [maxOrder] = await tx
       .select({ m: max(hazidAssessmentPPE.entityOrder) })
       .from(hazidAssessmentPPE)
@@ -1305,12 +1481,12 @@ export async function addPPE(formData: FormData) {
       required,
       entityOrder: (maxOrder?.m ?? 0) + 1,
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: `Added PPE row "${name}"`,
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: `Added PPE row "${name}"`,
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1326,17 +1502,18 @@ export async function updatePPE(formData: FormData) {
   const required = formData.get('required') === 'on' || formData.get('required') === 'true'
   const updates: Record<string, unknown> = { description, required }
   if (name) updates.name = name
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .update(hazidAssessmentPPE)
       .set(updates)
-      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId))),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_ppe',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated PPE row',
+      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_ppe',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated PPE row',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1349,17 +1526,18 @@ export async function answerPPE(formData: FormData) {
   const answer = String(formData.get('answer') ?? '')
   if (!['yes', 'no', 'na'].includes(answer)) throw new Error('Bad answer')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .update(hazidAssessmentPPE)
       .set({ answer: answer as 'yes' | 'no' | 'na' })
-      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId))),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_ppe',
-    entityId: id,
-    action: 'update',
-    summary: `Answered PPE row: ${answer}`,
+      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_ppe',
+      entityId: id,
+      action: 'update',
+      summary: `Answered PPE row: ${answer}`,
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1370,16 +1548,17 @@ export async function deletePPE(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .delete(hazidAssessmentPPE)
-      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId))),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_ppe',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted PPE row',
+      .where(and(eq(hazidAssessmentPPE.id, id), eq(hazidAssessmentPPE.assessmentId, assessmentId)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_ppe',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted PPE row',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1392,7 +1571,14 @@ export async function movePPE(formData: FormData) {
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
   await assertAssessmentEditable(ctx, assessmentId)
-  await reorderEntities(ctx, hazidAssessmentPPE, assessmentId, id, direction as 'up' | 'down')
+  await reorderEntities(
+    ctx,
+    hazidAssessmentPPE,
+    assessmentId,
+    id,
+    direction as 'up' | 'down',
+    'Reordered PPE',
+  )
   revalidateAssessment(assessmentId)
 }
 
@@ -1407,9 +1593,7 @@ export async function addQuestion(formData: FormData) {
   if (!assessmentId || !question) throw new Error('Missing fields')
   await assertAssessmentEditable(ctx, assessmentId)
   const questionType = String(formData.get('questionType') ?? 'yes_no') as
-    | 'yes_no'
-    | 'text'
-    | 'multi_select'
+    'yes_no' | 'text' | 'multi_select'
   const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
   const answersRaw = String(formData.get('answers') ?? '').trim()
   const answers = answersRaw
@@ -1419,6 +1603,7 @@ export async function addQuestion(formData: FormData) {
         .filter((s) => s.length > 0)
     : []
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
     const [maxOrder] = await tx
       .select({ m: max(hazidAssessmentQuestions.entityOrder) })
       .from(hazidAssessmentQuestions)
@@ -1432,12 +1617,12 @@ export async function addQuestion(formData: FormData) {
       requiresYes,
       entityOrder: (maxOrder?.m ?? 0) + 1,
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: 'Added question',
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: 'Added question',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1449,8 +1634,9 @@ export async function answerQuestion(formData: FormData) {
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
   const answer = nullable(formData.get('answer'))
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .update(hazidAssessmentQuestions)
       .set({ answer })
       .where(
@@ -1458,13 +1644,13 @@ export async function answerQuestion(formData: FormData) {
           eq(hazidAssessmentQuestions.id, id),
           eq(hazidAssessmentQuestions.assessmentId, assessmentId),
         ),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_question',
-    entityId: id,
-    action: 'update',
-    summary: 'Answered question',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_question',
+      entityId: id,
+      action: 'update',
+      summary: 'Answered question',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1479,8 +1665,9 @@ export async function updateQuestion(formData: FormData) {
   const requiresYes = formData.get('requiresYes') === 'on' || formData.get('requiresYes') === 'true'
   const updates: Record<string, unknown> = { requiresYes }
   if (question) updates.question = question
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .update(hazidAssessmentQuestions)
       .set(updates)
       .where(
@@ -1488,13 +1675,13 @@ export async function updateQuestion(formData: FormData) {
           eq(hazidAssessmentQuestions.id, id),
           eq(hazidAssessmentQuestions.assessmentId, assessmentId),
         ),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_question',
-    entityId: id,
-    action: 'update',
-    summary: 'Updated question',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_question',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated question',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1505,21 +1692,22 @@ export async function deleteQuestion(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .delete(hazidAssessmentQuestions)
       .where(
         and(
           eq(hazidAssessmentQuestions.id, id),
           eq(hazidAssessmentQuestions.assessmentId, assessmentId),
         ),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_question',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted question',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_question',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted question',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1532,7 +1720,14 @@ export async function moveQuestion(formData: FormData) {
   const direction = String(formData.get('direction') ?? '')
   if (!['up', 'down'].includes(direction)) throw new Error('Bad direction')
   await assertAssessmentEditable(ctx, assessmentId)
-  await reorderEntities(ctx, hazidAssessmentQuestions, assessmentId, id, direction as 'up' | 'down')
+  await reorderEntities(
+    ctx,
+    hazidAssessmentQuestions,
+    assessmentId,
+    id,
+    direction as 'up' | 'down',
+    'Reordered questions',
+  )
   revalidateAssessment(assessmentId)
 }
 
@@ -1544,8 +1739,7 @@ export async function addSignature(formData: FormData) {
   assertCan(ctx, 'hazid.update')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   const signatureType = String(formData.get('signatureType') ?? 'internal') as
-    | 'internal'
-    | 'external'
+    'internal' | 'external'
   // Only keep the identity field that matches the signer type so a stale value
   // from the other mode can never be stored (and displayed) alongside it.
   const personId =
@@ -1567,6 +1761,7 @@ export async function addSignature(formData: FormData) {
     ctx,
     signatureDataUrl,
     async (tx, attachmentId) => {
+      await lockEditableAssessment(ctx, tx, assessmentId)
       const [created] = await tx
         .insert(hazidAssessmentSignatures)
         .values({
@@ -1590,15 +1785,17 @@ export async function addSignature(formData: FormData) {
           occurrenceKey: created.id,
         })
       }
+      if (!created) throw new Error('Signature could not be added')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'hazid_assessment_signature',
+        entityId: created.id,
+        action: 'sign',
+        summary: `Added ${signatureType} ${attachmentId ? 'signature' : 'signer'}`,
+      })
       return created
     },
   )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_signature',
-    entityId: row?.id,
-    action: 'sign',
-    summary: `Added ${signatureType} signature`,
-  })
+  void row
   revalidateAssessment(assessmentId)
 }
 
@@ -1608,21 +1805,46 @@ export async function deleteSignature(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    const [signature] = await tx
+      .select({ signatureAttachmentId: hazidAssessmentSignatures.signatureAttachmentId })
+      .from(hazidAssessmentSignatures)
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
+          eq(hazidAssessmentSignatures.id, id),
+          eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!signature) throw new Error('Signature not found')
+    await tx
       .delete(hazidAssessmentSignatures)
       .where(
         and(
           eq(hazidAssessmentSignatures.id, id),
           eq(hazidAssessmentSignatures.assessmentId, assessmentId),
         ),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment_signature',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted signature',
+      )
+    if (signature.signatureAttachmentId) {
+      await tx
+        .delete(attachments)
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.id, signature.signatureAttachmentId),
+            eq(attachments.kind, 'signature'),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment_signature',
+      entityId: id,
+      action: 'delete',
+      summary: 'Deleted signature',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1639,20 +1861,21 @@ export async function attachPhotos(formData: FormData) {
     .filter(Boolean)
   if (!assessmentId || ids.length === 0) return
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx.insert(hazidAssessmentPhotos).values(
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx.insert(hazidAssessmentPhotos).values(
       ids.map((attachmentId) => ({
         tenantId: ctx.tenantId,
         assessmentId,
         attachmentId,
       })),
-    ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
+    )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -1663,18 +1886,19 @@ export async function deletePhoto(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    await tx
       .delete(hazidAssessmentPhotos)
       .where(
         and(eq(hazidAssessmentPhotos.id, id), eq(hazidAssessmentPhotos.assessmentId, assessmentId)),
-      ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'hazid_assessment',
-    entityId: assessmentId,
-    action: 'update',
-    summary: 'Removed photo',
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: 'Removed photo',
+    })
   })
   revalidateAssessment(assessmentId)
 }
@@ -2005,8 +2229,10 @@ async function reorderEntities(
   assessmentId: string,
   rowId: string,
   direction: 'up' | 'down',
+  auditSummary: string,
 ) {
   await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
     const t = table as any
     const rows = (await tx
       .select({ id: t.id, entityOrder: t.entityOrder })
@@ -2022,5 +2248,12 @@ async function reorderEntities(
     if (!a || !b) return
     await tx.update(t).set({ entityOrder: b.entityOrder }).where(eq(t.id, a.id))
     await tx.update(t).set({ entityOrder: a.entityOrder }).where(eq(t.id, b.id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: auditSummary,
+      metadata: { rowId, direction },
+    })
   })
 }

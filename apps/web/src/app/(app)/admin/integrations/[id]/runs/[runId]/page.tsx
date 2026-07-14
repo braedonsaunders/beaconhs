@@ -33,7 +33,7 @@ import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 
 export const metadata = { title: 'Sync run' }
 export const dynamic = 'force-dynamic'
@@ -84,6 +84,8 @@ export default async function SyncRunPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id, runId } = await params
+  if (!isUuid(id) || !isUuid(runId)) notFound()
+
   const sp = await searchParams
   const listParams = parseListParams(sp, {
     sort: 'created',

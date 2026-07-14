@@ -111,7 +111,7 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
           prevValue={null}
           formatFn={fmtInt}
           suffix="%"
-          caption={`${data.trainingComplianceCounts.completed} of ${data.trainingComplianceCounts.total} records`}
+          caption={`${data.trainingComplianceCounts.completed} of ${data.trainingComplianceCounts.total} requirements`}
           trend={data.trainingComplianceTrend}
         />
       )

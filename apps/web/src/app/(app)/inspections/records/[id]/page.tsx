@@ -41,27 +41,38 @@ import {
 import { attachmentUrl } from '@/lib/attachment-url'
 import { assertCan } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
-import { canSeeRecord } from '@/lib/visibility'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
+import { isUuid } from '@/lib/list-params'
+import { canSeeRecord } from '@/lib/visibility'
+import {
+  inspectionCriterionIsAnswered,
+  isInspectionOutcomeResponseType,
+  normalizeInspectionNumberAnswer,
+  normalizeInspectionTextAnswer,
+} from '@/lib/inspection-response-config'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
-import { recentActivityForEntity } from '@/lib/audit'
+import { recentActivityForEntity, recordAuditInTransaction } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { PremiumSection as Section } from '@/components/premium-section'
 import { SectionNav, type SectionNavItem } from '@/components/section-nav'
-import { LiveDateTime, LiveField, LiveSelect } from '@/components/live-field'
+import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
 import {
-  findIncompleteCriteria,
-  logRecordAudit,
+  assertInspectionStatusTransitionInTx,
+  inspectionStatusMilestonePatch,
+  lockVisibleInspectionRecordForMutation,
   parseAnswer,
   parseSeverity,
-  syncCorrectiveActionForCriterion,
+  reconcileSubmittedInspectionInTx,
+  syncCorrectiveActionForCriterionInTx,
+  validateInspectionPhotoAttachmentIdsInTx,
 } from '../../_lib'
 import { localDatetimeValue } from '../../_datetime'
 import { CustomerSignatureCard } from './customer-signature'
@@ -115,43 +126,86 @@ function isOverdue(args: {
 // Server actions
 // ----------------------------------------------------------------------------
 
-// Re-check per-user record visibility on a mutation, mirroring the detail page's
-// read guard. `inspections.update` is the permission gate; this closes the
-// write-by-guessing-the-URL gap (read.self/site users mutating a record they
-// can't see). Throws `notFound`-equivalent (the action just errors) if denied.
-//
-// It also enforces the record lock: closing freezes the record, so every
-// mutation refuses locked records unless the caller explicitly allows them
-// (toggleLock — the only way to unfreeze).
-async function assertCanSeeInspection(
+type InspectionTx = Parameters<
+  Parameters<Awaited<ReturnType<typeof requireRequestContext>>['db']>[0]
+>[0]
+
+async function criterionForMutationInTx(
+  tx: InspectionTx,
+  tenantId: string,
+  recordId: string,
+  rowId: string,
+) {
+  const [criterion] = await tx
+    .select()
+    .from(inspectionRecordCriteria)
+    .where(
+      and(
+        eq(inspectionRecordCriteria.tenantId, tenantId),
+        eq(inspectionRecordCriteria.id, rowId),
+        eq(inspectionRecordCriteria.recordId, recordId),
+      ),
+    )
+    .limit(1)
+  if (!criterion) throw new Error('Inspection criterion not found')
+  return criterion
+}
+
+async function withLockedCriterionMutation(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   recordId: string,
-  opts?: { allowLocked?: boolean },
-): Promise<void> {
-  const [rec] = await ctx.db((tx) =>
-    tx
-      .select({
-        inspectorTenantUserId: inspectionRecords.inspectorTenantUserId,
-        submittedByTenantUserId: inspectionRecords.submittedByTenantUserId,
-        siteOrgUnitId: inspectionRecords.siteOrgUnitId,
-        locked: inspectionRecords.locked,
-      })
-      .from(inspectionRecords)
-      .where(eq(inspectionRecords.id, recordId))
-      .limit(1),
-  )
-  if (!rec) throw new Error('Inspection record not found')
-  const ok = await ctx.db((tx) =>
-    canSeeRecord(ctx, tx, {
-      prefix: 'inspections',
-      ownerIds: [rec.inspectorTenantUserId, rec.submittedByTenantUserId],
-      siteId: rec.siteOrgUnitId,
-    }),
-  )
-  if (!ok) throw new Error('Inspection record not found')
-  if (rec.locked && !opts?.allowLocked) {
-    throw new Error('Record is locked. Unlock it before making changes.')
-  }
+  rowId: string,
+  mutate: (
+    tx: InspectionTx,
+    record: typeof inspectionRecords.$inferSelect,
+    criterion: typeof inspectionRecordCriteria.$inferSelect,
+  ) => Promise<boolean>,
+): Promise<boolean> {
+  if (!isUuid(recordId) || !isUuid(rowId)) throw new Error('Inspection criterion not found')
+  return ctx.db(async (tx) => {
+    const record = await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const criterion = await criterionForMutationInTx(tx, ctx.tenantId, recordId, rowId)
+    const changed = await mutate(tx, record, criterion)
+    if (changed) await reconcileSubmittedInspectionInTx(tx, ctx, record)
+    return changed
+  })
+}
+
+async function markInspectionInProgressIfDraft(
+  tx: InspectionTx,
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  record: typeof inspectionRecords.$inferSelect,
+): Promise<boolean> {
+  if (record.status !== 'draft') return false
+  const [updated] = await tx
+    .update(inspectionRecords)
+    .set({ status: 'in_progress' })
+    .where(
+      and(
+        eq(inspectionRecords.tenantId, ctx.tenantId),
+        eq(inspectionRecords.id, record.id),
+        eq(inspectionRecords.status, 'draft'),
+        isNull(inspectionRecords.deletedAt),
+      ),
+    )
+    .returning({ id: inspectionRecords.id })
+  if (!updated) throw new Error('Inspection status changed before work could begin')
+  await recordModuleFlowEvent(tx, ctx, {
+    subjectId: record.id,
+    moduleKey: 'inspections',
+    event: 'status_change',
+    toStatus: 'in_progress',
+    occurrenceKey: randomUUID(),
+  })
+  await recordAuditInTransaction(tx, ctx, {
+    entityType: 'inspection_record',
+    entityId: record.id,
+    action: 'update',
+    summary: 'Started inspection work',
+    before: { status: 'draft' },
+    after: { status: 'in_progress' },
+  })
+  return true
 }
 
 async function updateStatus(formData: FormData) {
@@ -160,74 +214,42 @@ async function updateStatus(formData: FormData) {
   assertCan(ctx, 'inspections.update')
   const id = String(formData.get('id') ?? '')
   const status = String(formData.get('status') ?? '')
-  if (!STATUSES.includes(status as (typeof STATUSES)[number])) return
-  await assertCanSeeInspection(ctx, id)
-
-  const closing = status === 'closed'
-  const submitting = status === 'submitted' || closing
-
-  // Submit gate — refuse to flip to submitted/closed if any criterion is incomplete.
-  if (submitting) {
-    const missing = await findIncompleteCriteria(ctx, id)
-    if (missing.length > 0) {
-      throw new Error(
-        `Cannot submit: ${missing.length} item${missing.length === 1 ? '' : 's'} still incomplete. First missing: ${missing[0]}`,
-      )
-    }
-  }
-
-  const [current] = await ctx.db((tx) =>
-    tx
-      .select({ record: inspectionRecords, type: inspectionTypes })
-      .from(inspectionRecords)
-      .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
-      .where(eq(inspectionRecords.id, id))
-      .limit(1),
-  )
-  if (!current) throw new Error('Inspection record not found')
-
-  // Close gates — the type's workflow requirements are enforced here, not just
-  // advertised in the UI. Closing locks the record, so the evidence must be
-  // complete first.
-  if (closing) {
-    if (current.type.requiresCustomerSignature && !current.record.customerSignatureAttachmentId) {
-      throw new Error('Cannot close: this inspection type requires a customer signature.')
-    }
-    if (
-      current.type.requiresForeman &&
-      !current.record.foremanText &&
-      (current.record.foremanPersonIds ?? []).length === 0
-    ) {
-      throw new Error('Cannot close: this inspection type requires a foreman on the record.')
-    }
-  }
-  if (current.record.status === status) return
-
-  await ctx.db(async (tx) => {
-    await tx
+  if (!isUuid(id) || !STATUSES.includes(status as (typeof STATUSES)[number])) return
+  const nextStatus = status as (typeof STATUSES)[number]
+  const changed = await ctx.db(async (tx) => {
+    const current = await lockVisibleInspectionRecordForMutation(tx, ctx, id)
+    if (current.status === nextStatus) return false
+    await assertInspectionStatusTransitionInTx(tx, ctx.tenantId, current, nextStatus)
+    const now = new Date()
+    const patch = inspectionStatusMilestonePatch(
+      current,
+      nextStatus,
+      ctx.membership?.id ?? null,
+      now,
+    )
+    const [updated] = await tx
       .update(inspectionRecords)
-      .set({
-        status: status as (typeof STATUSES)[number],
-        // Preserve the original submit attribution when closing an
-        // already-submitted record; clear it when moving back to draft/in-progress.
-        submittedAt: submitting ? (current.record.submittedAt ?? new Date()) : null,
-        submittedByTenantUserId: submitting
-          ? (current.record.submittedByTenantUserId ?? ctx.membership?.id ?? null)
-          : null,
-        closedAt: closing ? new Date() : null,
-        closedByTenantUserId: closing ? (ctx.membership?.id ?? null) : null,
-        locked: closing,
-      })
-      .where(eq(inspectionRecords.id, id))
+      .set(patch)
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, id),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
+      .returning()
+    if (!updated) throw new Error('Inspection record changed before its status could be updated')
     const occurrenceKey = randomUUID()
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'inspections',
       event: 'status_change',
-      toStatus: status,
+      toStatus: nextStatus,
       occurrenceKey,
     })
-    if (status === 'submitted') {
+    const wasSubmitted = current.status === 'submitted' || current.status === 'closed'
+    const isSubmitted = nextStatus === 'submitted' || nextStatus === 'closed'
+    if (isSubmitted && !wasSubmitted) {
       await recordModuleFlowEvent(tx, ctx, {
         subjectId: id,
         moduleKey: 'inspections',
@@ -235,10 +257,21 @@ async function updateStatus(formData: FormData) {
         occurrenceKey,
       })
     }
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'inspection',
+      targetRef: { inspectionTypeId: current.typeId },
+    })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: id,
+      action: 'update',
+      summary: `Status changed to "${nextStatus.replace(/_/g, ' ')}"`,
+      before: { status: current.status, locked: current.locked },
+      after: { status: updated.status, locked: updated.locked },
+    })
+    return true
   })
-  await logRecordAudit(ctx, id, `Status changed to "${status.replace(/_/g, ' ')}"`, 'update', {
-    status,
-  })
+  if (!changed) return
   revalidatePath(`/inspections/records/${id}`)
   revalidatePath('/inspections/records')
 }
@@ -249,11 +282,56 @@ async function toggleLock(formData: FormData) {
   assertCan(ctx, 'inspections.update')
   const id = String(formData.get('id') ?? '')
   const lock = formData.get('lock') === 'true'
-  await assertCanSeeInspection(ctx, id, { allowLocked: true })
-  await ctx.db((tx) =>
-    tx.update(inspectionRecords).set({ locked: lock }).where(eq(inspectionRecords.id, id)),
-  )
-  await logRecordAudit(ctx, id, lock ? 'Locked' : 'Unlocked', 'update', { locked: lock })
+  if (!isUuid(id)) return
+  const changed = await ctx.db(async (tx) => {
+    const current = await lockVisibleInspectionRecordForMutation(tx, ctx, id, {
+      allowLocked: true,
+    })
+    const reopeningClosed = current.status === 'closed' && !lock
+    if (current.locked === lock && !reopeningClosed) return false
+    const patch = reopeningClosed
+      ? inspectionStatusMilestonePatch(current, 'submitted', ctx.membership?.id ?? null, new Date())
+      : { locked: lock }
+    const [updated] = await tx
+      .update(inspectionRecords)
+      .set(patch)
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, id),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
+      .returning({
+        id: inspectionRecords.id,
+        status: inspectionRecords.status,
+        locked: inspectionRecords.locked,
+      })
+    if (!updated) throw new Error('Inspection record changed before its lock could be updated')
+    if (reopeningClosed) {
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: id,
+        moduleKey: 'inspections',
+        event: 'status_change',
+        toStatus: 'submitted',
+        occurrenceKey: randomUUID(),
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'inspection',
+        targetRef: { inspectionTypeId: current.typeId },
+      })
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: id,
+      action: 'update',
+      summary: reopeningClosed ? 'Reopened closed inspection' : lock ? 'Locked' : 'Unlocked',
+      before: { status: current.status, locked: current.locked },
+      after: { status: updated.status, locked: updated.locked },
+    })
+    return true
+  })
+  if (!changed) return
   revalidatePath(`/inspections/records/${id}`)
 }
 
@@ -265,10 +343,7 @@ async function updateRecordField(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const field = String(formData.get('field') ?? '')
   const value = String(formData.get('value') ?? '')
-  if (!id || !field) throw new Error('Missing id/field')
-  // Visibility + lock are both enforced by the shared guard.
-  await assertCanSeeInspection(ctx, id)
-
+  if (!isUuid(id) || !field) throw new Error('Missing or invalid id/field')
   const ALLOWED = new Set(['occurredAt', 'siteOrgUnitId', 'foremanText', 'notes'])
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
 
@@ -277,19 +352,65 @@ async function updateRecordField(formData: FormData) {
 
   let val: unknown = value.trim() || null
   if (NULLABLE_IDS.has(field)) val = value || null
+  if (NULLABLE_IDS.has(field) && val && !isUuid(String(val))) throw new Error('Invalid reference')
   if (DATES.has(field)) {
     const d = value ? new Date(value) : null
     if (!d || Number.isNaN(d.getTime())) throw new Error('Invalid date')
     val = d
   }
 
-  await ctx.db((tx) =>
-    tx
+  const changed = await ctx.db(async (tx) => {
+    const current = await lockVisibleInspectionRecordForMutation(tx, ctx, id)
+    if (field === 'siteOrgUnitId' && val) {
+      const [site] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(
+          and(
+            eq(orgUnits.tenantId, ctx.tenantId),
+            eq(orgUnits.id, String(val)),
+            eq(orgUnits.level, 'site'),
+            isNull(orgUnits.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!site) throw new Error('Site not found')
+    }
+    const beforeValue = current[field as keyof typeof current]
+    const same =
+      beforeValue instanceof Date && val instanceof Date
+        ? beforeValue.getTime() === val.getTime()
+        : beforeValue === val
+    if (same) return false
+    const [updated] = await tx
       .update(inspectionRecords)
       .set({ [field]: val } as Record<string, unknown>)
-      .where(eq(inspectionRecords.id, id)),
-  )
-  await logRecordAudit(ctx, id, `Updated ${field}`, 'update', { [field]: val })
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, id),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
+      .returning({ typeId: inspectionRecords.typeId })
+    if (!updated) throw new Error('Inspection record not found')
+    if (field === 'occurredAt') {
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'inspection',
+        targetRef: { inspectionTypeId: updated.typeId },
+      })
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${field}`,
+      before: { [field]: beforeValue },
+      after: { [field]: val },
+    })
+    return true
+  })
+  if (!changed) return
   revalidatePath(`/inspections/records/${id}`)
 }
 
@@ -301,50 +422,178 @@ async function setCriterionAnswer(formData: FormData) {
   const rowId = String(formData.get('rowId') ?? '')
   const answer = parseAnswer(formData.get('answer'))
   if (!recordId || !rowId || !answer) return
-  await assertCanSeeInspection(ctx, recordId)
-
-  // Flipping to pass / N-A wipes the fail-only fields.
   const clear = answer !== 'fail'
-  await ctx.db(async (tx) => {
-    await tx
-      .update(inspectionRecordCriteria)
-      .set({
-        answer,
-        answeredAt: new Date(),
-        answeredByTenantUserId: ctx.membership?.id ?? null,
-        ...(clear
-          ? {
-              severity: null,
-              nonComplianceDescription: null,
-              actionTaken: null,
-              compliantNote: null,
-              assignedToPersonId: null,
-              assignedDueDate: null,
-            }
-          : {}),
-      })
-      .where(eq(inspectionRecordCriteria.id, rowId))
-    // Auto-transition draft -> in_progress on the first answer.
-    await tx
-      .update(inspectionRecords)
-      .set({ status: 'in_progress' })
-      .where(and(eq(inspectionRecords.id, recordId), eq(inspectionRecords.status, 'draft')))
-  })
-  const [row] = await ctx.db((tx) =>
-    tx
-      .select({ q: inspectionRecordCriteria.questionTextSnapshot })
-      .from(inspectionRecordCriteria)
-      .where(eq(inspectionRecordCriteria.id, rowId))
-      .limit(1),
-  )
-  await logRecordAudit(
+  const changed = await withLockedCriterionMutation(
     ctx,
     recordId,
-    `Answered "${row?.q?.slice(0, 50) ?? rowId.slice(0, 8)}" — ${answer}`,
-    'update',
-    { rowId, answer },
+    rowId,
+    async (tx, record, criterion) => {
+      if (!isInspectionOutcomeResponseType(criterion.responseType)) {
+        throw new Error('This criterion does not accept a pass/fail outcome')
+      }
+      const clearFieldsChanged =
+        clear &&
+        Boolean(
+          criterion.severity ||
+          criterion.nonComplianceDescription ||
+          criterion.actionTaken ||
+          criterion.compliantNote ||
+          criterion.assignedToPersonId ||
+          criterion.assignedToTenantUserId ||
+          criterion.assignedDueDate ||
+          criterion.correctedOn,
+        )
+      if (criterion.answer === answer && !clearFieldsChanged) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({
+          answer,
+          answeredAt: new Date(),
+          answeredByTenantUserId: ctx.membership?.id ?? null,
+          ...(clear
+            ? {
+                severity: null,
+                nonComplianceDescription: null,
+                actionTaken: null,
+                compliantNote: null,
+                assignedToPersonId: null,
+                assignedToTenantUserId: null,
+                assignedDueDate: null,
+                correctedOn: null,
+              }
+            : {}),
+        })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before it could be answered')
+      await markInspectionInProgressIfDraft(tx, ctx, record)
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, rowId)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: `Answered "${criterion.questionTextSnapshot.slice(0, 50)}" — ${answer}`,
+        before: { rowId, answer: criterion.answer },
+        after: { rowId, answer },
+      })
+      return true
+    },
   )
-  if (clear) await syncCorrectiveActionForCriterion(ctx, rowId)
+  if (!changed) return
+  revalidatePath(`/inspections/records/${recordId}`)
+}
+
+async function setCriterionChoiceAnswer(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  const recordId = String(formData.get('recordId') ?? '')
+  const rowId = String(formData.get('rowId') ?? '')
+  const choiceAnswer = String(formData.get('choiceAnswer') ?? '').trim() || null
+  if (!recordId || !rowId) return
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, record, criterion) => {
+      if (criterion.responseType !== 'choice') {
+        throw new Error('This criterion does not accept a configured choice')
+      }
+      if (choiceAnswer && !(criterion.choiceOptionsSnapshot ?? []).includes(choiceAnswer)) {
+        throw new Error('Select one of the configured options')
+      }
+      if (criterion.choiceAnswer === choiceAnswer) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({
+          choiceAnswer,
+          answeredAt: choiceAnswer ? new Date() : null,
+          answeredByTenantUserId: choiceAnswer ? (ctx.membership?.id ?? null) : null,
+        })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before it could be answered')
+      if (choiceAnswer) await markInspectionInProgressIfDraft(tx, ctx, record)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: `Answered "${criterion.questionTextSnapshot.slice(0, 50)}" — ${choiceAnswer ?? 'cleared'}`,
+        before: { rowId, choiceAnswer: criterion.choiceAnswer },
+        after: { rowId, choiceAnswer },
+      })
+      return true
+    },
+  )
+  if (!changed) return
+  revalidatePath(`/inspections/records/${recordId}`)
+}
+
+async function setCriterionValueAnswer(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  const recordId = String(formData.get('recordId') ?? '')
+  const rowId = String(formData.get('rowId') ?? '')
+  if (!recordId || !rowId) return
+  const rawValue = formData.get('value')
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, record, criterion) => {
+      const isText = criterion.responseType === 'text' || criterion.responseType === 'long_text'
+      const isNumber = criterion.responseType === 'number'
+      if (!isText && !isNumber) {
+        throw new Error('This criterion does not accept a text or number value')
+      }
+      const value = isNumber
+        ? normalizeInspectionNumberAnswer(rawValue)
+        : normalizeInspectionTextAnswer(rawValue)
+      const beforeValue = isNumber ? criterion.numberAnswer : criterion.textAnswer
+      if (beforeValue === value) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({
+          textAnswer: isText ? value : null,
+          numberAnswer: isNumber ? value : null,
+          answeredAt: value === null ? null : new Date(),
+          answeredByTenantUserId: value === null ? null : (ctx.membership?.id ?? null),
+        })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before it could be answered')
+      if (value !== null) await markInspectionInProgressIfDraft(tx, ctx, record)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: `Answered "${criterion.questionTextSnapshot.slice(0, 50)}" — ${value ?? 'cleared'}`,
+        before: { rowId, responseType: criterion.responseType, value: beforeValue },
+        after: { rowId, responseType: criterion.responseType, value },
+      })
+      return true
+    },
+  )
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -354,25 +603,44 @@ async function setCriterionSeverity(formData: FormData) {
   assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
   const rowId = String(formData.get('rowId') ?? '')
-  const severity = parseSeverity(formData.get('severity'))
+  const rawSeverity = String(formData.get('severity') ?? '').trim()
+  const severity = parseSeverity(rawSeverity)
   if (!recordId || !rowId) return
-  await assertCanSeeInspection(ctx, recordId)
-
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecordCriteria)
-      .set({ severity: severity ?? null })
-      .where(eq(inspectionRecordCriteria.id, rowId)),
-  )
-  await logRecordAudit(
+  if (rawSeverity && !severity) throw new Error('Severity is invalid')
+  const changed = await withLockedCriterionMutation(
     ctx,
     recordId,
-    `Set severity to "${severity ?? 'cleared'}" on a finding`,
-    'update',
-    { rowId, severity },
+    rowId,
+    async (tx, _record, criterion) => {
+      if (severity && criterion.answer !== 'fail') {
+        throw new Error('Severity applies only to a failed criterion')
+      }
+      if (criterion.severity === severity) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ severity })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before severity could be saved')
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, rowId)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: `Set severity to "${severity ?? 'cleared'}" on a finding`,
+        before: { rowId, severity: criterion.severity },
+        after: { rowId, severity },
+      })
+      return true
+    },
   )
-  // Newly-spawned CAs are audited inside the sync helper.
-  await syncCorrectiveActionForCriterion(ctx, rowId)
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -384,15 +652,41 @@ async function setCriterionNonCompliance(formData: FormData) {
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   if (!recordId || !rowId) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecordCriteria)
-      .set({ nonComplianceDescription: value })
-      .where(eq(inspectionRecordCriteria.id, rowId)),
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      if (value && criterion.answer !== 'fail') {
+        throw new Error('A non-compliance description applies only to a failed criterion')
+      }
+      if (criterion.nonComplianceDescription === value) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ nonComplianceDescription: value })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated)
+        throw new Error('Inspection criterion changed before description could be saved')
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, rowId)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Updated non-compliance description',
+        before: { rowId, value: criterion.nonComplianceDescription },
+        after: { rowId, value },
+      })
+      return true
+    },
   )
-  await logRecordAudit(ctx, recordId, 'Updated non-compliance description', 'update', { rowId })
-  await syncCorrectiveActionForCriterion(ctx, rowId)
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -404,15 +698,41 @@ async function setCriterionActionTaken(formData: FormData) {
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   if (!recordId || !rowId) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecordCriteria)
-      .set({ actionTaken: value })
-      .where(eq(inspectionRecordCriteria.id, rowId)),
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      if (value && criterion.answer !== 'fail') {
+        throw new Error('An action taken applies only to a failed criterion')
+      }
+      if (criterion.actionTaken === value) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ actionTaken: value })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated)
+        throw new Error('Inspection criterion changed before action taken could be saved')
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, rowId)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Updated action taken',
+        before: { rowId, value: criterion.actionTaken },
+        after: { rowId, value },
+      })
+      return true
+    },
   )
-  await logRecordAudit(ctx, recordId, 'Updated action taken', 'update', { rowId })
-  await syncCorrectiveActionForCriterion(ctx, rowId)
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -424,14 +744,37 @@ async function setCriterionCompliantNote(formData: FormData) {
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('value') ?? '').trim() || null
   if (!recordId || !rowId) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecordCriteria)
-      .set({ compliantNote: value })
-      .where(eq(inspectionRecordCriteria.id, rowId)),
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      if (criterion.compliantNote === value) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ compliantNote: value })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before note could be saved')
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, rowId)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Updated compliant note',
+        before: { rowId, value: criterion.compliantNote },
+        after: { rowId, value },
+      })
+      return true
+    },
   )
-  await logRecordAudit(ctx, recordId, 'Updated compliant note', 'update', { rowId })
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -444,15 +787,80 @@ async function setCriterionAssignment(formData: FormData) {
   const assignedToPersonId = String(formData.get('assignedToPersonId') ?? '').trim() || null
   const assignedDueDate = String(formData.get('assignedDueDate') ?? '').trim() || null
   if (!recordId || !rowId) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecordCriteria)
-      .set({ assignedToPersonId, assignedDueDate })
-      .where(eq(inspectionRecordCriteria.id, rowId)),
+  if (assignedToPersonId && !isUuid(assignedToPersonId)) throw new Error('Assignee is invalid')
+  if (assignedDueDate && !/^\d{4}-\d{2}-\d{2}$/.test(assignedDueDate)) {
+    throw new Error('Due date is invalid')
+  }
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      if ((assignedToPersonId || assignedDueDate) && criterion.answer !== 'fail') {
+        throw new Error('An assignment applies only to a failed criterion')
+      }
+      let assignedToTenantUserId: string | null = null
+      if (assignedToPersonId) {
+        const [person] = await tx
+          .select({ id: people.id, tenantUserId: tenantUsers.id })
+          .from(people)
+          .leftJoin(
+            tenantUsers,
+            and(
+              eq(tenantUsers.tenantId, people.tenantId),
+              eq(tenantUsers.userId, people.userId),
+              eq(tenantUsers.status, 'active'),
+            ),
+          )
+          .where(
+            and(
+              eq(people.tenantId, ctx.tenantId),
+              eq(people.id, assignedToPersonId),
+              eq(people.status, 'active'),
+              isNull(people.deletedAt),
+            ),
+          )
+          .limit(1)
+        if (!person) throw new Error('Assignee not found')
+        assignedToTenantUserId = person.tenantUserId
+      }
+      if (
+        criterion.assignedToPersonId === assignedToPersonId &&
+        criterion.assignedToTenantUserId === assignedToTenantUserId &&
+        criterion.assignedDueDate === assignedDueDate
+      ) {
+        return false
+      }
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ assignedToPersonId, assignedToTenantUserId, assignedDueDate })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before assignment could be saved')
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, rowId)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Updated assignment',
+        before: {
+          rowId,
+          assignedToPersonId: criterion.assignedToPersonId,
+          assignedToTenantUserId: criterion.assignedToTenantUserId,
+          assignedDueDate: criterion.assignedDueDate,
+        },
+        after: { rowId, assignedToPersonId, assignedToTenantUserId, assignedDueDate },
+      })
+      return true
+    },
   )
-  await logRecordAudit(ctx, recordId, 'Updated assignment', 'update', { rowId })
-  await syncCorrectiveActionForCriterion(ctx, rowId)
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -464,20 +872,41 @@ async function setCriterionCorrectedOn(formData: FormData) {
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('correctedOn') ?? '').trim() || null
   if (!recordId || !rowId) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db((tx) =>
-    tx
-      .update(inspectionRecordCriteria)
-      .set({ correctedOn: value })
-      .where(eq(inspectionRecordCriteria.id, rowId)),
-  )
-  await logRecordAudit(
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Correction date is invalid')
+  const changed = await withLockedCriterionMutation(
     ctx,
     recordId,
-    value ? `Marked finding corrected on ${value}` : 'Cleared corrected-on date',
-    'update',
-    { rowId, correctedOn: value },
+    rowId,
+    async (tx, _record, criterion) => {
+      if (value && criterion.answer !== 'fail') {
+        throw new Error('A correction date applies only to a failed criterion')
+      }
+      if (criterion.correctedOn === value) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ correctedOn: value })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated)
+        throw new Error('Inspection criterion changed before correction date could be saved')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: value ? `Marked finding corrected on ${value}` : 'Cleared corrected-on date',
+        before: { rowId, correctedOn: criterion.correctedOn },
+        after: { rowId, correctedOn: value },
+      })
+      return true
+    },
   )
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -492,26 +921,40 @@ async function addCriterionPhotos(formData: FormData) {
     .map((s) => s.trim())
     .filter(Boolean)
   if (!recordId || !rowId || ids.length === 0) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db(async (tx) => {
-    const [cur] = await tx
-      .select({ ids: inspectionRecordCriteria.photoAttachmentIds })
-      .from(inspectionRecordCriteria)
-      .where(eq(inspectionRecordCriteria.id, rowId))
-      .limit(1)
-    const next = [...(cur?.ids ?? []), ...ids]
-    await tx
-      .update(inspectionRecordCriteria)
-      .set({ photoAttachmentIds: next })
-      .where(eq(inspectionRecordCriteria.id, rowId))
-  })
-  await logRecordAudit(
+  const changed = await withLockedCriterionMutation(
     ctx,
     recordId,
-    `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'} to a criterion`,
-    'update',
-    { rowId },
+    rowId,
+    async (tx, _record, criterion) => {
+      const validIds = await validateInspectionPhotoAttachmentIdsInTx(tx, ctx.tenantId, ids)
+      const previousIds = criterion.photoAttachmentIds ?? []
+      const nextIds = [...new Set([...previousIds, ...validIds])]
+      if (nextIds.length === previousIds.length) return false
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ photoAttachmentIds: nextIds })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before photos could be attached')
+      const added = nextIds.length - previousIds.length
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: `Attached ${added} photo${added === 1 ? '' : 's'} to a criterion`,
+        before: { rowId, photoAttachmentIds: previousIds },
+        after: { rowId, photoAttachmentIds: nextIds },
+      })
+      return true
+    },
   )
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -520,20 +963,22 @@ async function passAll(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'inspections.update')
   const recordId = String(formData.get('recordId') ?? '')
-  if (!recordId) return
-  await assertCanSeeInspection(ctx, recordId)
+  if (!isUuid(recordId)) throw new Error('Inspection record not found')
   const flipped = await ctx.db(async (tx) => {
+    const record = await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
     const rows = await tx
       .select({ id: inspectionRecordCriteria.id })
       .from(inspectionRecordCriteria)
       .where(
         and(
+          eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
           eq(inspectionRecordCriteria.recordId, recordId),
           isNull(inspectionRecordCriteria.answer),
+          inArray(inspectionRecordCriteria.responseType, ['pass_fail_na', 'yes_no', 'rating']),
         ),
       )
     if (rows.length === 0) return 0
-    await tx
+    const updated = await tx
       .update(inspectionRecordCriteria)
       .set({
         answer: 'pass',
@@ -542,23 +987,27 @@ async function passAll(formData: FormData) {
       })
       .where(
         and(
+          eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
           eq(inspectionRecordCriteria.recordId, recordId),
           isNull(inspectionRecordCriteria.answer),
+          inArray(inspectionRecordCriteria.responseType, ['pass_fail_na', 'yes_no', 'rating']),
         ),
       )
-    await tx
-      .update(inspectionRecords)
-      .set({ status: 'in_progress' })
-      .where(and(eq(inspectionRecords.id, recordId), eq(inspectionRecords.status, 'draft')))
-    return rows.length
+      .returning({ id: inspectionRecordCriteria.id })
+    if (updated.length !== rows.length) {
+      throw new Error('Inspection criteria changed before they could all be marked pass')
+    }
+    await markInspectionInProgressIfDraft(tx, ctx, record)
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: `Marked all as pass via shortcut (${updated.length} item${updated.length === 1 ? '' : 's'} flipped)`,
+      metadata: { flipped: updated.length },
+    })
+    return updated.length
   })
-  await logRecordAudit(
-    ctx,
-    recordId,
-    `Marked all as pass via shortcut (${flipped} item${flipped === 1 ? '' : 's'} flipped)`,
-    'update',
-    { flipped },
-  )
+  if (flipped === 0) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -569,30 +1018,68 @@ async function saveCustomerSignature(formData: FormData) {
   const recordId = String(formData.get('recordId') ?? '')
   const signature = String(formData.get('signature') ?? '')
   const signerName = String(formData.get('signerName') ?? '').trim() || null
-  if (!recordId) return
-  await assertCanSeeInspection(ctx, recordId)
+  if (!isUuid(recordId)) throw new Error('Inspection record not found')
   const dataUrl = signature === 'clear' || signature === '' ? null : signature
-  const storedSignature = await withStoredSignatureAttachment(
-    ctx,
-    dataUrl,
-    async (tx, attachmentId) => {
-      await tx
-        .update(inspectionRecords)
-        .set({
-          customerSignatureAttachmentId: attachmentId,
-          customerSignerName: signerName,
-          customerSignedAt: attachmentId ? new Date() : null,
-        })
-        .where(eq(inspectionRecords.id, recordId))
-      return attachmentId
-    },
-  )
-  await logRecordAudit(
-    ctx,
-    recordId,
-    storedSignature ? 'Captured customer signature' : 'Cleared customer signature',
-    storedSignature ? 'sign' : 'update',
-  )
+  const changed = await withStoredSignatureAttachment(ctx, dataUrl, async (tx, attachmentId) => {
+    const current = await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const nextSignerName = attachmentId ? signerName : null
+    if (
+      !attachmentId &&
+      !current.customerSignatureAttachmentId &&
+      !current.customerSignerName &&
+      !current.customerSignedAt
+    ) {
+      return false
+    }
+    const [updated] = await tx
+      .update(inspectionRecords)
+      .set({
+        customerSignatureAttachmentId: attachmentId,
+        customerSignerName: nextSignerName,
+        customerSignedAt: attachmentId ? new Date() : null,
+      })
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, recordId),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
+      .returning({ id: inspectionRecords.id })
+    if (!updated) throw new Error('Inspection record changed before its signature could be saved')
+    if (
+      current.customerSignatureAttachmentId &&
+      current.customerSignatureAttachmentId !== attachmentId
+    ) {
+      const [retired] = await tx
+        .delete(attachments)
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.id, current.customerSignatureAttachmentId),
+            eq(attachments.kind, 'signature'),
+          ),
+        )
+        .returning({ id: attachments.id })
+      if (!retired) throw new Error('The previous customer signature could not be retired')
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: attachmentId ? 'sign' : 'update',
+      summary: attachmentId ? 'Captured customer signature' : 'Cleared customer signature',
+      before: {
+        customerSignatureAttachmentId: current.customerSignatureAttachmentId,
+        customerSignerName: current.customerSignerName,
+      },
+      after: {
+        customerSignatureAttachmentId: attachmentId,
+        customerSignerName: nextSignerName,
+      },
+    })
+    return true
+  })
+  if (!changed) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -600,23 +1087,41 @@ async function saveCustomerSignature(formData: FormData) {
 async function attachRecordPhotos(recordId: string, ids: string[]) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'inspections.update')
+  if (!isUuid(recordId)) throw new Error('Inspection record not found')
   if (ids.length === 0) return
-  await assertCanSeeInspection(ctx, recordId)
-  await ctx.db((tx) =>
-    tx.insert(inspectionRecordAttachments).values(
-      ids.map((attachmentId) => ({
+  const attached = await ctx.db(async (tx) => {
+    await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const validIds = await validateInspectionPhotoAttachmentIdsInTx(tx, ctx.tenantId, ids)
+    const existing = await tx
+      .select({ attachmentId: inspectionRecordAttachments.attachmentId })
+      .from(inspectionRecordAttachments)
+      .where(
+        and(
+          eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(inspectionRecordAttachments.recordId, recordId),
+          inArray(inspectionRecordAttachments.attachmentId, validIds),
+        ),
+      )
+    const existingIds = new Set(existing.map((row) => row.attachmentId))
+    const newIds = validIds.filter((id) => !existingIds.has(id))
+    if (newIds.length === 0) return 0
+    await tx.insert(inspectionRecordAttachments).values(
+      newIds.map((attachmentId) => ({
         tenantId: ctx.tenantId,
         recordId,
         attachmentId,
       })),
-    ),
-  )
-  await logRecordAudit(
-    ctx,
-    recordId,
-    `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
-    'update',
-  )
+    )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: `Attached ${newIds.length} photo${newIds.length === 1 ? '' : 's'}`,
+      after: { attachmentIds: newIds },
+    })
+    return newIds.length
+  })
+  if (attached === 0) return
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
@@ -635,7 +1140,10 @@ export default async function InspectionRecordDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.read.self')
   const pendingGates = await getPendingFlowGatesForSubject(
     ctx,
     'module',
@@ -652,13 +1160,43 @@ export default async function InspectionRecordDetailPage({
         inspector: user,
       })
       .from(inspectionRecords)
-      .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
-      .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
-      .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
+      .innerJoin(
+        inspectionTypes,
+        and(
+          eq(inspectionTypes.tenantId, inspectionRecords.tenantId),
+          eq(inspectionTypes.id, inspectionRecords.typeId),
+        ),
+      )
+      .leftJoin(
+        orgUnits,
+        and(
+          eq(orgUnits.tenantId, inspectionRecords.tenantId),
+          eq(orgUnits.id, inspectionRecords.siteOrgUnitId),
+        ),
+      )
+      .leftJoin(
+        tenantUsers,
+        and(
+          eq(tenantUsers.tenantId, inspectionRecords.tenantId),
+          eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId),
+        ),
+      )
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(inspectionRecords.id, id))
+      .where(
+        and(
+          eq(inspectionRecords.tenantId, ctx.tenantId),
+          eq(inspectionRecords.id, id),
+          isNull(inspectionRecords.deletedAt),
+        ),
+      )
       .limit(1)
     if (!row) return null
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'inspections',
+      ownerIds: [row.record.inspectorTenantUserId, row.record.submittedByTenantUserId],
+      siteId: row.record.siteOrgUnitId,
+    })
+    if (!visible) return null
 
     const criteria = await tx
       .select({
@@ -667,36 +1205,47 @@ export default async function InspectionRecordDetailPage({
         ca: correctiveActions,
       })
       .from(inspectionRecordCriteria)
-      .leftJoin(people, eq(people.id, inspectionRecordCriteria.assignedToPersonId))
+      .leftJoin(
+        people,
+        and(
+          eq(people.tenantId, inspectionRecordCriteria.tenantId),
+          eq(people.id, inspectionRecordCriteria.assignedToPersonId),
+          isNull(people.deletedAt),
+        ),
+      )
       .leftJoin(
         correctiveActions,
-        eq(correctiveActions.id, inspectionRecordCriteria.correctiveActionId),
+        and(
+          eq(correctiveActions.tenantId, inspectionRecordCriteria.tenantId),
+          eq(correctiveActions.id, inspectionRecordCriteria.correctiveActionId),
+          isNull(correctiveActions.deletedAt),
+        ),
       )
-      .where(eq(inspectionRecordCriteria.recordId, id))
+      .where(
+        and(
+          eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+          eq(inspectionRecordCriteria.recordId, id),
+        ),
+      )
       .orderBy(asc(inspectionRecordCriteria.sequence))
 
     const photos = await tx
       .select({ link: inspectionRecordAttachments, attachment: attachments })
       .from(inspectionRecordAttachments)
-      .innerJoin(attachments, eq(attachments.id, inspectionRecordAttachments.attachmentId))
-      .where(eq(inspectionRecordAttachments.recordId, id))
-
-    const peopleList = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-
-    const siteOptions = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
-      .orderBy(asc(orgUnits.name))
+      .innerJoin(
+        attachments,
+        and(
+          eq(attachments.tenantId, inspectionRecordAttachments.tenantId),
+          eq(attachments.id, inspectionRecordAttachments.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+      .where(
+        and(
+          eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(inspectionRecordAttachments.recordId, id),
+        ),
+      )
 
     // Resolve per-criterion photo previews in one pass.
     const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.c.photoAttachmentIds ?? [])))
@@ -705,7 +1254,13 @@ export default async function InspectionRecordDetailPage({
       const rows = await tx
         .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
         .from(attachments)
-        .where(inArray(attachments.id, allPhotoIds))
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.kind, 'image'),
+            inArray(attachments.id, allPhotoIds),
+          ),
+        )
       for (const r of rows) {
         criterionPhotoMap.set(r.id, {
           id: r.id,
@@ -715,30 +1270,35 @@ export default async function InspectionRecordDetailPage({
       }
     }
 
-    return { ...row, criteria, photos, peopleList, siteOptions, criterionPhotoMap }
+    return { ...row, criteria, photos, criterionPhotoMap }
   })
 
   if (!data) notFound()
-  // Per-user record visibility: read.all → any; read.site → my sites; else → ones
-  // I performed or submitted.
-  if (
-    !(await ctx.db((tx) =>
-      canSeeRecord(ctx, tx, {
-        prefix: 'inspections',
-        ownerIds: [data.record.inspectorTenantUserId, data.record.submittedByTenantUserId],
-        siteId: data.record.siteOrgUnitId,
-      }),
-    ))
-  )
-    notFound()
-  const { record, type, site, inspector, criteria, photos, peopleList, siteOptions } = data
+  const { record, type, site, inspector, criteria, photos } = data
 
   // Summary counts
   const total = criteria.length
   const passCount = criteria.filter((c) => c.c.answer === 'pass').length
   const failCount = criteria.filter((c) => c.c.answer === 'fail').length
   const naCount = criteria.filter((c) => c.c.answer === 'n_a').length
-  const unansweredCount = criteria.filter((c) => !c.c.answer).length
+  const isAnswered = (criterion: typeof inspectionRecordCriteria.$inferSelect) =>
+    inspectionCriterionIsAnswered({
+      responseType: criterion.responseType,
+      outcomeAnswer: criterion.answer,
+      choiceAnswer: criterion.choiceAnswer,
+      textAnswer: criterion.textAnswer,
+      numberAnswer: criterion.numberAnswer,
+    })
+  const supplementalAnsweredCount = criteria.filter(
+    (c) => !isInspectionOutcomeResponseType(c.c.responseType) && isAnswered(c.c),
+  ).length
+  const hasSupplementalCriteria = criteria.some(
+    (c) => !isInspectionOutcomeResponseType(c.c.responseType),
+  )
+  const unansweredCount = criteria.filter((c) => !isAnswered(c.c)).length
+  const passableUnansweredCount = criteria.filter(
+    (c) => isInspectionOutcomeResponseType(c.c.responseType) && !c.c.answer,
+  ).length
   const answeredCount = total - unansweredCount
   const compliantPct =
     passCount + failCount > 0 ? Math.round((passCount / (passCount + failCount)) * 100) : 0
@@ -758,14 +1318,10 @@ export default async function InspectionRecordDetailPage({
     caption: p.link.caption,
   }))
 
-  const peopleOptions = peopleList.map((p) => ({
-    value: p.id,
-    label: `${p.lastName}, ${p.firstName}`,
-    hint: p.employeeNo ?? undefined,
-  }))
-
   const criterionActions = {
     setAnswer: setCriterionAnswer,
+    setChoiceAnswer: setCriterionChoiceAnswer,
+    setValueAnswer: setCriterionValueAnswer,
     setSeverity: setCriterionSeverity,
     setNonCompliance: setCriterionNonCompliance,
     setActionTaken: setCriterionActionTaken,
@@ -777,6 +1333,7 @@ export default async function InspectionRecordDetailPage({
 
   const needsSignature = type.requiresCustomerSignature
   const signed = Boolean(record.customerSignatureAttachmentId)
+  const recordImmutable = record.locked || record.status === 'closed'
 
   const sectionItems: SectionNavItem[] = [
     { id: 'overview', label: 'Overview' },
@@ -811,7 +1368,7 @@ export default async function InspectionRecordDetailPage({
               >
                 {record.status.replace(/_/g, ' ')}
               </Badge>
-              {record.locked ? (
+              {recordImmutable ? (
                 <Badge variant="success">
                   <Lock size={10} /> Locked
                 </Badge>
@@ -835,9 +1392,9 @@ export default async function InspectionRecordDetailPage({
               </Link>
               <form action={toggleLock}>
                 <input type="hidden" name="id" value={id} />
-                <input type="hidden" name="lock" value={record.locked ? 'false' : 'true'} />
+                <input type="hidden" name="lock" value={recordImmutable ? 'false' : 'true'} />
                 <Button variant="outline" type="submit">
-                  {record.locked ? (
+                  {recordImmutable ? (
                     <>
                       <Unlock size={14} /> Unlock
                     </>
@@ -854,13 +1411,25 @@ export default async function InspectionRecordDetailPage({
       }
       alerts={
         <>
-          {record.locked ? (
+          {recordImmutable ? (
             <Alert variant="warning">
-              <AlertTitle>This inspection is locked</AlertTitle>
+              <AlertTitle>
+                {record.status === 'closed'
+                  ? 'This inspection is closed and locked'
+                  : 'This inspection is locked'}
+              </AlertTitle>
               <AlertDescription>
-                Closed on{' '}
-                {record.closedAt ? formatDate(new Date(record.closedAt), ctx.timezone) : '—'}.
-                Unlock from the header to make further edits.
+                {record.status === 'closed' ? (
+                  <>
+                    Closed on{' '}
+                    {record.closedAt
+                      ? formatDate(new Date(record.closedAt), ctx.timezone)
+                      : 'an unknown date'}
+                    . Unlocking reopens it as Submitted so you can make an approved correction.
+                  </>
+                ) : (
+                  <>Unlock from the header to make further edits.</>
+                )}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -946,10 +1515,19 @@ export default async function InspectionRecordDetailPage({
           </div>
 
           {/* Compliance tiles */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div
+            className={`grid grid-cols-2 gap-3 ${hasSupplementalCriteria ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
+          >
             <StatTile label="Pass" value={passCount} accent="emerald" />
             <StatTile label="Fail" value={failCount} accent="red" />
             <StatTile label="N/A" value={naCount} accent="slate" />
+            {hasSupplementalCriteria ? (
+              <StatTile
+                label="Other responses"
+                value={supplementalAnsweredCount}
+                accent="emerald"
+              />
+            ) : null}
             <StatTile label="Unanswered" value={unansweredCount} accent="amber" />
           </div>
 
@@ -965,16 +1543,16 @@ export default async function InspectionRecordDetailPage({
                 field="occurredAt"
                 label="Occurred at"
                 initialValue={localDatetimeValue(new Date(record.occurredAt))}
-                disabled={record.locked}
+                disabled={recordImmutable}
                 updateAction={updateRecordField}
               />
-              <LiveSelect
+              <LiveRemoteSelect
                 id={record.id}
                 field="siteOrgUnitId"
                 label="Site"
                 initialValue={record.siteOrgUnitId}
-                options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
-                disabled={record.locked}
+                lookup="inspection-sites"
+                disabled={recordImmutable}
                 updateAction={updateRecordField}
               />
               <div className="sm:col-span-2">
@@ -984,7 +1562,7 @@ export default async function InspectionRecordDetailPage({
                   label="Foreman"
                   initialValue={record.foremanText}
                   placeholder="Crew foreman on shift"
-                  disabled={record.locked}
+                  disabled={recordImmutable}
                   updateAction={updateRecordField}
                 />
               </div>
@@ -997,7 +1575,7 @@ export default async function InspectionRecordDetailPage({
                   multiline
                   rows={3}
                   placeholder="Anything important about this inspection"
-                  disabled={record.locked}
+                  disabled={recordImmutable}
                   updateAction={updateRecordField}
                 />
               </div>
@@ -1045,7 +1623,7 @@ export default async function InspectionRecordDetailPage({
                 <input type="hidden" name="id" value={id} />
                 <div className="space-y-1.5">
                   <Label>Move to</Label>
-                  <Select name="status" defaultValue={record.status} disabled={record.locked}>
+                  <Select name="status" defaultValue={record.status} disabled={recordImmutable}>
                     {STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {s.replace(/_/g, ' ')}
@@ -1053,15 +1631,15 @@ export default async function InspectionRecordDetailPage({
                     ))}
                   </Select>
                 </div>
-                <Button type="submit" disabled={record.locked}>
+                <Button type="submit" disabled={recordImmutable}>
                   Update status
                 </Button>
               </form>
-              {unansweredCount > 0 && !record.locked ? (
+              {passableUnansweredCount > 0 && !recordImmutable ? (
                 <form action={passAll}>
                   <input type="hidden" name="recordId" value={id} />
                   <Button type="submit" variant="outline">
-                    <CheckCircle2 size={14} /> Mark {unansweredCount} unanswered as pass
+                    <CheckCircle2 size={14} /> Mark {passableUnansweredCount} unanswered as pass
                   </Button>
                 </form>
               ) : null}
@@ -1120,6 +1698,10 @@ export default async function InspectionRecordDetailPage({
                         index={indexById.get(row.c.id) ?? 0}
                         question={row.c.questionTextSnapshot}
                         responseType={row.c.responseType as CriterionResponseType}
+                        choiceOptions={row.c.choiceOptionsSnapshot}
+                        choiceAnswer={row.c.choiceAnswer}
+                        textAnswer={row.c.textAnswer}
+                        numberAnswer={row.c.numberAnswer}
                         requiresPhoto={row.c.requiresPhoto ?? false}
                         requiresComment={row.c.requiresComment ?? false}
                         answer={row.c.answer}
@@ -1143,8 +1725,7 @@ export default async function InspectionRecordDetailPage({
                           )}
                         correctiveActionRef={row.ca?.reference ?? null}
                         correctiveActionId={row.c.correctiveActionId}
-                        peopleOptions={peopleOptions}
-                        locked={record.locked}
+                        locked={recordImmutable}
                         allowCompliantNotes={type.allowCompliantNotes}
                         actions={criterionActions}
                       />
@@ -1168,7 +1749,7 @@ export default async function InspectionRecordDetailPage({
           >
             <div className="space-y-3">
               <PhotoGallery photos={galleryPhotos} />
-              {!record.locked ? (
+              {!recordImmutable ? (
                 <PhotoUploaderSection
                   attachAction={async (ids) => {
                     'use server'
@@ -1200,7 +1781,7 @@ export default async function InspectionRecordDetailPage({
                 }
                 currentSignerName={record.customerSignerName}
                 signedAt={record.customerSignedAt}
-                locked={record.locked}
+                locked={recordImmutable}
                 saveAction={saveCustomerSignature}
               />
             </Section>

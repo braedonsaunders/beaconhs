@@ -244,7 +244,12 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'station', label: 'Check in / out', href: '/equipment/station' },
       { key: 'work-orders', label: 'Work orders', href: '/equipment/work-orders' },
       { key: 'vehicle-log', label: 'Vehicle log', href: '/equipment/vehicle-log' },
-      { key: 'inspections', label: 'Inspections', href: '/equipment/inspections' },
+      {
+        key: 'inspections',
+        label: 'Inspections',
+        href: '/equipment/inspections',
+        permission: 'equipment.read.self',
+      },
     ],
     sections: [
       {

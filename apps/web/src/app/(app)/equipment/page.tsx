@@ -19,7 +19,6 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
-import { listPeopleForBulkHolder, listSiteOrgUnits } from './_actions'
 import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
 import { EquipmentTypeCategoryFilters } from './_filters'
 
@@ -69,6 +68,7 @@ export default async function EquipmentPage({
   const typeFilter = pickString(sp.type)
   const categoryFilter = pickString(sp.category)
   const ctx = await requireRequestContext()
+  const canManageEquipment = can(ctx, 'equipment.manage')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.site')
 
   const { rows, total, statusCounts, availabilityCounts, allTypes, allCats } = await ctx.db(
@@ -171,8 +171,6 @@ export default async function EquipmentPage({
     },
   )
 
-  const [sites, holders] = await Promise.all([listSiteOrgUnits(), listPeopleForBulkHolder()])
-
   const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
   const categoryOptions = allCats.map((c) => ({ value: c.id, label: c.name }))
 
@@ -203,9 +201,11 @@ export default async function EquipmentPage({
                     <Button variant="outline">Export CSV</Button>
                   </a>
                 ) : null}
-                <Link href="/equipment/new">
-                  <Button>Add equipment</Button>
-                </Link>
+                {canManageEquipment ? (
+                  <Link href="/equipment/new">
+                    <Button>Add equipment</Button>
+                  </Link>
+                ) : null}
               </div>
             }
           />
@@ -247,21 +247,22 @@ export default async function EquipmentPage({
           title={params.q || statusFilter ? 'No equipment matches these filters' : 'No equipment'}
           description="Add an asset to track inspections, transfers, and work orders."
           action={
-            <Link href="/equipment/new">
-              <Button>Add equipment</Button>
-            </Link>
+            canManageEquipment ? (
+              <Link href="/equipment/new">
+                <Button>Add equipment</Button>
+              </Link>
+            ) : undefined
           }
         />
       ) : (
         <>
           <EquipmentRecordsTable
             rows={tableRows}
-            sites={sites}
-            holders={holders}
             basePath="/equipment"
             currentParams={sp}
             sort={params.sort}
             dir={params.dir}
+            canManage={canManageEquipment}
             canExport={canExport}
           />
           <Pagination

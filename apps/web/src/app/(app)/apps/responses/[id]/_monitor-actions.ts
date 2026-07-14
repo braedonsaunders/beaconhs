@@ -8,6 +8,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { isFormResponseParentLockedError, lockFormResponseForMutation } from '@beaconhs/db'
 import { formResponseCheckins, formResponses, formTemplates } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -111,11 +112,12 @@ export async function recordSessionCheckin(args: {
     (geoLng !== null &&
       (typeof geoLng !== 'number' || !Number.isFinite(geoLng) || geoLng < -180 || geoLng > 180)) ||
     (geoLat === null) !== (geoLng === null) ||
-    (args.note !== undefined && args.note !== null && typeof args.note !== 'string')
+    (args.note !== undefined && args.note !== null && typeof args.note !== 'string') ||
+    (typeof args.note === 'string' && args.note.trim().length > 2_000)
   ) {
     return { ok: false, error: 'Invalid check-in details.' }
   }
-  const note = typeof args.note === 'string' ? args.note.trim().slice(0, 2_000) || null : null
+  const note = typeof args.note === 'string' ? args.note.trim() || null : null
   const s = await loadSession(ctx, args.responseId)
   if (!s) return { ok: false, error: 'Session not found.' }
   if (!ownsSession(ctx, s) && !ctx.isSuperAdmin && !ctx.permissions.has('*')) {
@@ -127,34 +129,42 @@ export async function recordSessionCheckin(args: {
   }
   const interval = s.checkinIntervalMinutes ?? 30
   const now = new Date()
-  const changed = await ctx.db(async (tx) => {
-    const [claimed] = await tx
-      .update(formResponses)
-      .set({
-        monitorStatus: 'active',
-        lastCheckinAt: now,
-        nextCheckinDueAt: new Date(now.getTime() + interval * 60_000),
-        escalatedAt: null,
+  let changed: boolean
+  try {
+    changed = await ctx.db(async (tx) => {
+      const mutable = await lockFormResponseForMutation(tx, ctx.tenantId, args.responseId)
+      if (!mutable) return false
+      const [claimed] = await tx
+        .update(formResponses)
+        .set({
+          monitorStatus: 'active',
+          lastCheckinAt: now,
+          nextCheckinDueAt: new Date(now.getTime() + interval * 60_000),
+          escalatedAt: null,
+        })
+        .where(
+          and(
+            eq(formResponses.id, args.responseId),
+            inArray(formResponses.monitorStatus, ['active', 'missed', 'escalated']),
+          ),
+        )
+        .returning({ id: formResponses.id })
+      if (!claimed) return false
+      await tx.insert(formResponseCheckins).values({
+        tenantId: ctx.tenantId,
+        responseId: args.responseId,
+        kind: 'manual',
+        geoLat,
+        geoLng,
+        note,
+        byTenantUserId: safeTenantUserId(ctx),
       })
-      .where(
-        and(
-          eq(formResponses.id, args.responseId),
-          inArray(formResponses.monitorStatus, ['active', 'missed', 'escalated']),
-        ),
-      )
-      .returning({ id: formResponses.id })
-    if (!claimed) return false
-    await tx.insert(formResponseCheckins).values({
-      tenantId: ctx.tenantId,
-      responseId: args.responseId,
-      kind: 'manual',
-      geoLat,
-      geoLng,
-      note,
-      byTenantUserId: safeTenantUserId(ctx),
+      return true
     })
-    return true
-  })
+  } catch (error) {
+    if (isFormResponseParentLockedError(error)) return { ok: false, error: error.message }
+    throw error
+  }
   if (!changed) return { ok: false, error: 'This session has already ended.' }
   await recordAudit(ctx, {
     entityType: 'form_response',
@@ -177,18 +187,27 @@ async function closeSession(
   if (!s) return { ok: false, error: 'Session not found.' }
   if (!canManageSession(ctx, s)) return { ok: false, error: 'You cannot close this session.' }
   if (!s.monitorStatus) return { ok: false, error: 'This response is not a monitored session.' }
-  const [closed] = await ctx.db((tx) =>
-    tx
-      .update(formResponses)
-      .set({ monitorStatus: status, closedAt: new Date() })
-      .where(
-        and(
-          eq(formResponses.id, responseId),
-          inArray(formResponses.monitorStatus, ['active', 'missed', 'escalated']),
-        ),
-      )
-      .returning({ id: formResponses.id }),
-  )
+  let closed: { id: string } | null
+  try {
+    closed = await ctx.db(async (tx) => {
+      const mutable = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+      if (!mutable) return null
+      const [updated] = await tx
+        .update(formResponses)
+        .set({ monitorStatus: status, closedAt: new Date() })
+        .where(
+          and(
+            eq(formResponses.id, responseId),
+            inArray(formResponses.monitorStatus, ['active', 'missed', 'escalated']),
+          ),
+        )
+        .returning({ id: formResponses.id })
+      return updated ?? null
+    })
+  } catch (error) {
+    if (isFormResponseParentLockedError(error)) return { ok: false, error: error.message }
+    throw error
+  }
   if (!closed) return { ok: false, error: 'This session has already ended.' }
   await recordAudit(ctx, {
     entityType: 'form_response',

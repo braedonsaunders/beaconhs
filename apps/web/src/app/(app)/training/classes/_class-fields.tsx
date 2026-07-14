@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
-import { LiveDateTime, LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
+import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
 
 // The class "Class details" card — the auto-saving field set shared by the
 // record page (id present) and the lazy /new page (id omitted; the row is
@@ -18,14 +18,9 @@ type ClassFieldValues = {
 }
 
 type ClassFieldOptions = {
-  courses: { id: string; name: string; code: string }[]
-  sites: { id: string; name: string }[]
-  instructors: {
-    id: string
-    name: string | null
-    displayName: string | null
-    email: string | null
-  }[]
+  course?: SelectOption
+  site?: SelectOption
+  instructor?: SelectOption
 }
 
 export function ClassDetailFields({
@@ -46,12 +41,6 @@ export function ClassDetailFields({
   notice?: React.ReactNode
   updateAction: (formData: FormData) => Promise<void>
 }) {
-  const instructorOptions = options.instructors.map((i) => ({
-    value: i.id,
-    label: i.displayName ?? i.name ?? '(no name)',
-    hint: i.email ?? undefined,
-  }))
-
   return (
     <Card>
       <CardHeader>
@@ -60,13 +49,14 @@ export function ClassDetailFields({
       <CardContent className="space-y-4">
         {notice}
         <div className="space-y-1">
-          <LiveSelect
+          <LiveRemoteSelect
             id={id}
             field="courseId"
             label="Course"
             initialValue={initial.courseId}
+            initialOption={options.course}
+            lookup="training-class-courses"
             allowEmpty={false}
-            options={options.courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
             disabled={disabled}
             updateAction={updateAction}
           />
@@ -84,6 +74,7 @@ export function ClassDetailFields({
           field="title"
           label="Title"
           initialValue={initial.title}
+          maxLength={200}
           disabled={disabled}
           updateAction={updateAction}
         />
@@ -106,25 +97,25 @@ export function ClassDetailFields({
           />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <LiveSelect
+          <LiveRemoteSelect
             id={id}
             field="siteOrgUnitId"
             label="Site (location)"
             initialValue={initial.siteOrgUnitId}
-            options={options.sites.map((s) => ({ value: s.id, label: s.name }))}
+            initialOption={options.site}
+            lookup="training-class-sites"
             emptyLabel="— No site —"
             disabled={disabled}
             updateAction={updateAction}
           />
-          <LivePersonSelect
+          <LiveRemoteSelect
             id={id}
             field="instructorTenantUserId"
             label="Instructor"
             initialValue={initial.instructorTenantUserId}
-            options={instructorOptions}
-            sheetTitle="Select an instructor"
-            placeholder="Pick an instructor…"
-            searchPlaceholder="Search instructors…"
+            initialOption={options.instructor}
+            lookup="training-class-instructors"
+            emptyLabel="— No instructor —"
             disabled={disabled}
             updateAction={updateAction}
           />
@@ -135,6 +126,8 @@ export function ClassDetailFields({
           label="Max attendees"
           initialValue={initial.capacity}
           type="number"
+          min={1}
+          max={1000}
           disabled={disabled}
           updateAction={updateAction}
         />
@@ -145,6 +138,7 @@ export function ClassDetailFields({
           initialValue={initial.notes}
           multiline
           rows={3}
+          maxLength={20000}
           disabled={disabled}
           updateAction={updateAction}
         />

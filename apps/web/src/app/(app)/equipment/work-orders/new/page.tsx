@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq, isNull } from 'drizzle-orm'
 import {
   Button,
   Card,
@@ -11,12 +10,11 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { equipmentItems, people, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
-import { PersonSelectField } from '@/components/person-select-field'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { createEquipmentWorkOrder } from '../_lib'
 
 export const metadata = { title: 'New work order' }
@@ -63,45 +61,7 @@ export default async function NewWorkOrderPage({
     redirect(`/equipment/${presetItemId}?tab=work_orders&drawer=new-work-order`)
   }
   const ctx = await requireRequestContext()
-
-  const { items, assignees, reporters } = await ctx.db(async (tx) => {
-    const [i, a, r] = await Promise.all([
-      tx
-        .select({
-          id: equipmentItems.id,
-          assetTag: equipmentItems.assetTag,
-          name: equipmentItems.name,
-        })
-        .from(equipmentItems)
-        .where(isNull(equipmentItems.deletedAt))
-        .orderBy(asc(equipmentItems.assetTag))
-        .limit(500),
-      tx
-        .select({
-          id: tenantUsers.id,
-          displayName: tenantUsers.displayName,
-          userName: user.name,
-          email: user.email,
-        })
-        .from(tenantUsers)
-        .leftJoin(user, eq(user.id, tenantUsers.userId))
-        .where(eq(tenantUsers.status, 'active'))
-        .orderBy(asc(tenantUsers.displayName))
-        .limit(500),
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(500),
-    ])
-    return { items: i, assignees: a, reporters: r }
-  })
+  assertCan(ctx, 'equipment.workorder.create')
 
   return (
     <PageContainer>
@@ -115,22 +75,29 @@ export default async function NewWorkOrderPage({
           <CardContent className="pt-6">
             <form action={createWorkOrder} className="space-y-4">
               <Field label="Equipment" required>
-                <Select name="itemId" defaultValue={presetItemId} required>
-                  <option value="">— Select equipment —</option>
-                  {items.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.assetTag} · {it.name}
-                    </option>
-                  ))}
-                </Select>
+                <RemoteSelectField
+                  name="itemId"
+                  defaultValue={presetItemId}
+                  lookup="equipment-work-order-items"
+                  placeholder="Select equipment…"
+                  searchPlaceholder="Search asset tag or equipment…"
+                  sheetTitle="Select equipment"
+                  clearable={false}
+                />
               </Field>
               <Field label="Summary" required>
-                <Input name="summary" required placeholder="e.g. Brake lights inoperative" />
+                <Input
+                  name="summary"
+                  required
+                  maxLength={500}
+                  placeholder="e.g. Brake lights inoperative"
+                />
               </Field>
               <Field label="Description">
                 <Textarea
                   name="description"
                   rows={4}
+                  maxLength={10000}
                   placeholder="What's wrong? Steps to reproduce, smell, sound, error code…"
                 />
               </Field>
@@ -143,30 +110,24 @@ export default async function NewWorkOrderPage({
                   </Select>
                 </Field>
                 <Field label="Assign to">
-                  <PersonSelectField
+                  <RemoteSelectField
                     name="assignedToTenantUserId"
                     defaultValue=""
-                    options={assignees.map((a) => ({
-                      value: a.id,
-                      label: a.userName ?? a.displayName ?? a.id.slice(0, 6),
-                      hint: a.email ?? undefined,
-                    }))}
+                    lookup="equipment-work-order-assignees"
                     placeholder="Select an assignee..."
-                    searchPlaceholder="Search people..."
+                    searchPlaceholder="Search active members..."
                     sheetTitle="Assign to"
                     emptyLabel="Unassigned"
                   />
                 </Field>
                 <Field label="Reported by" className="sm:col-span-2">
-                  <PersonSelectField
+                  <RemoteSelectField
                     name="reportedByPersonId"
                     defaultValue=""
-                    options={reporters.map((p) => ({
-                      value: p.id,
-                      label: `${p.lastName}, ${p.firstName}`,
-                      hint: p.employeeNo ?? undefined,
-                    }))}
+                    lookup="equipment-work-order-reporters"
                     placeholder="Select a person…"
+                    searchPlaceholder="Search active people…"
+                    sheetTitle="Reported by"
                     clearable
                     emptyLabel="— Not specified —"
                   />

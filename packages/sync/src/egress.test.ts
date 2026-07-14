@@ -3,8 +3,10 @@ import test from 'node:test'
 import {
   isPublicIpAddress,
   normalizeOutboundHostname,
+  resolveOutboundRedirect,
   resolvePublicHost,
   secureFetch,
+  validateOutboundRequestConfiguration,
 } from './egress'
 import { connectDb } from './db-drivers'
 import { planSnapshotArchives } from './snapshot-policy'
@@ -26,6 +28,7 @@ test('public IP policy rejects local, private, special, mapped, and documentatio
     '2001:db8::1',
     'fc00::1',
     'fe80::1',
+    'fec0::1',
     'ff02::1',
   ]) {
     assert.equal(isPublicIpAddress(address), false, address)
@@ -86,6 +89,70 @@ test('DNS policy rejects a hostname if any answer is non-public', async () => {
   )
 })
 
+test('every DNS resolution is revalidated so a rebinding answer fails closed', async () => {
+  let calls = 0
+  const resolver = async () => {
+    calls++
+    return calls === 1
+      ? [{ address: '93.184.216.34', family: 4 as const }]
+      : [{ address: '127.0.0.1', family: 4 as const }]
+  }
+
+  await resolvePublicHost('hooks.example.net', { resolver })
+  await assert.rejects(resolvePublicHost('hooks.example.net', { resolver }), /blocked non-public/)
+  assert.equal(calls, 2)
+})
+
+test('outbound configuration and redirect policy reject unsafe request metadata', () => {
+  assert.throws(
+    () => validateOutboundRequestConfiguration('http://hooks.example.net'),
+    /must use HTTPS/,
+  )
+  assert.throws(
+    () =>
+      validateOutboundRequestConfiguration('https://hooks.example.net', {
+        Expect: '100-continue',
+      }),
+    /header "expect" is not allowed/,
+  )
+  assert.throws(
+    () =>
+      validateOutboundRequestConfiguration('https://hooks.example.net', {
+        'X-Forwarded-Host': 'metadata.internal',
+      }),
+    /header "x-forwarded-host" is not allowed/,
+  )
+  assert.throws(
+    () =>
+      validateOutboundRequestConfiguration('https://hooks.example.net', {
+        'Accept-Encoding': 'gzip',
+      }),
+    /header "accept-encoding" must be identity/,
+  )
+  const secretHeader = 'do-not-echo-this-secret'
+  assert.throws(
+    () =>
+      validateOutboundRequestConfiguration('https://hooks.example.net', {
+        Authorization: `Bearer ${secretHeader}\r\nX-Injected: true`,
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      /header "authorization" contains invalid data/.test(error.message) &&
+      !error.message.includes(secretHeader),
+  )
+
+  const current = new URL('https://hooks.example.net/start')
+  assert.equal(resolveOutboundRedirect(current, '/next').href, 'https://hooks.example.net/next')
+  assert.throws(
+    () => resolveOutboundRedirect(current, 'https://internal.example.org/next'),
+    /Cross-origin outbound redirects are not allowed/,
+  )
+  assert.throws(
+    () => resolveOutboundRedirect(current, 'http://hooks.example.net/next'),
+    /must use HTTPS/,
+  )
+})
+
 test('secure fetch rejects unsafe schemes, credentials, normalized private literals, and hop headers', async () => {
   await assert.rejects(secureFetch('http://example.com'), /must use HTTPS/)
   await assert.rejects(secureFetch('https://user:pass@example.com'), /must not include credentials/)
@@ -94,6 +161,12 @@ test('secure fetch rejects unsafe schemes, credentials, normalized private liter
   await assert.rejects(
     secureFetch('https://8.8.8.8', { headers: { Host: 'localhost' } }),
     /header "host" is not allowed/,
+  )
+  await assert.rejects(
+    secureFetch('https://private.example.net', {
+      resolver: async () => [{ address: '10.0.0.8', family: 4 }],
+    }),
+    /blocked non-public/,
   )
   await assert.rejects(
     secureFetch('https://8.8.8.8', { headers: { 'x-large': 'x'.repeat(16 * 1024) } }),
@@ -110,6 +183,26 @@ test('secure fetch rejects unsafe schemes, credentials, normalized private liter
   await assert.rejects(
     secureFetch('https://8.8.8.8', { maxResponseBytes: 16 * 1024 * 1024 + 1 }),
     /Maximum response size/,
+  )
+
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(
+    secureFetch('https://8.8.8.8', { signal: controller.signal }),
+    (error: unknown) => error instanceof Error && error.name === 'AbortError',
+  )
+})
+
+test('an abort signal interrupts an in-flight DNS resolution', async () => {
+  const controller = new AbortController()
+  const pending = secureFetch('https://public.example.net', {
+    signal: controller.signal,
+    resolver: () => new Promise(() => {}),
+  })
+  controller.abort()
+  await assert.rejects(
+    pending,
+    (error: unknown) => error instanceof Error && error.name === 'AbortError',
   )
 })
 

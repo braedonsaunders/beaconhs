@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Plus, Search, Trash2 } from 'lucide-react'
 import { Button, Drawer, Input } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { toast } from '@/lib/toast'
 import {
   MAX_QUICK_ACTIONS,
@@ -22,8 +23,7 @@ type View = 'list' | 'picker' | 'edit'
 type PickerTab = 'common' | 'forms' | 'custom'
 
 function genId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return 'qa-' + Math.random().toString(36).slice(2, 10)
+  return globalThis.crypto.randomUUID()
 }
 
 export function QuickActionsEditor({
@@ -355,11 +355,10 @@ function PickerView({
 }) {
   const tabs: { key: PickerTab; label: string }[] = [
     { key: 'common', label: 'Common' },
-    { key: 'forms', label: 'Apps' },
+    ...(options?.canChooseApps ? ([{ key: 'forms', label: 'Apps' }] as const) : []),
     { key: 'custom', label: 'Custom URL' },
   ]
-  const list =
-    tab === 'common' ? (options?.common ?? []) : tab === 'forms' ? (options?.forms ?? []) : []
+  const list = tab === 'common' ? (options?.common ?? []) : []
   const q = search.trim().toLowerCase()
   const filtered = q
     ? list.filter((o) => o.label.toLowerCase().includes(q) || o.href.toLowerCase().includes(q))
@@ -428,6 +427,32 @@ function PickerView({
             Add action
           </Button>
         </div>
+      ) : tab === 'forms' ? (
+        <div className="space-y-2">
+          <RemoteSearchSelect
+            lookup="dashboard-quick-action-forms"
+            value=""
+            onChange={() => undefined}
+            onOptionChange={(option) => {
+              if (!option?.meta || option.meta.kind !== 'dashboard-quick-action') return
+              onAddOption({
+                label: option.label,
+                href: option.meta.href,
+                iconKey: option.meta.iconKey,
+                tone: option.meta.tone,
+                hint: option.hint,
+              })
+            }}
+            placeholder="Choose an app…"
+            searchPlaceholder="Search apps and forms…"
+            sheetTitle="Choose an app"
+            ariaLabel="Choose an app or form"
+            clearable={false}
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Search by app or form name. Choosing a result adds it immediately.
+          </p>
+        </div>
       ) : (
         <>
           <div className="relative">
@@ -450,7 +475,7 @@ function PickerView({
             </div>
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-              {tab === 'forms' ? 'No published apps yet.' : 'No matches.'}
+              No matches.
             </p>
           ) : (
             <ul className="space-y-1">

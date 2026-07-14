@@ -10,8 +10,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { can, type RequestContext } from '@beaconhs/tenant'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import {
   people,
   trainingAssessments,
@@ -21,10 +22,20 @@ import {
   trainingLessons,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import {
+  assertLessonCourse,
+  minimumTimeRemainingSeconds,
+  requireTrainingUuid,
+} from '@/lib/training-mutation-validation'
 import { deliveryMeta } from '../_lib/delivery'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { completeOnlineEnrollment, recomputeEnrollmentCompletion } from './_lib/completion'
+import {
+  findOutstandingCourseRequirement,
+  shouldRestartEnrollment,
+} from './_lib/compliance-requirement'
+import { requireOpenTrainingEnrollment } from './_lib/enrollment'
 
 // Resolve the signed-in user's People record id, or null when no People row is
 // linked to their login (e.g. an admin with no worker profile). Workers without
@@ -65,6 +76,7 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
+  courseId = requireTrainingUuid(courseId, 'Course')
 
   // Assigning a course to another person is a privileged action. A server action
   // is a POST endpoint, so without this gate any authenticated tenant user could
@@ -78,12 +90,13 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
   if (!requested) {
     personId = await resolvePersonId(ctx)
   } else {
+    personIdArg = requireTrainingUuid(requested, 'Person')
     const ownPersonId = await resolveMyPersonId(ctx)
-    assigning = requested !== ownPersonId
+    assigning = personIdArg !== ownPersonId
     if (assigning && !canAssignTraining(ctx)) {
       throw new Error('You do not have permission to assign training to other people.')
     }
-    personId = requested
+    personId = personIdArg
   }
 
   await ctx.db(async (tx) => {
@@ -93,7 +106,7 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
     const [course] = await tx
       .select({ deliveryType: trainingCourses.deliveryType })
       .from(trainingCourses)
-      .where(eq(trainingCourses.id, courseId))
+      .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
       .limit(1)
     if (!course) throw new Error('Course not found')
     const meta = deliveryMeta(course.deliveryType)
@@ -106,6 +119,20 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
       throw new Error('This course is assigned by your training team — it cannot be self-started.')
     }
 
+    const [person] = await tx
+      .select({ id: people.id })
+      .from(people)
+      .where(eq(people.id, personId))
+      .limit(1)
+    if (!person) throw new Error('Person not found')
+
+    const requirement = await findOutstandingCourseRequirement(tx, {
+      tenantId,
+      personId,
+      courseId,
+    })
+    const source = assigning ? 'assigned' : requirement ? 'compliance' : 'self'
+
     const [existing] = await tx
       .select()
       .from(trainingEnrollments)
@@ -114,26 +141,74 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
       )
       .limit(1)
     if (existing) {
-      if (existing.status === 'not_started') {
+      if (shouldRestartEnrollment(existing, { assigning, requirement })) {
         await tx
+          .delete(trainingLessonProgress)
+          .where(eq(trainingLessonProgress.enrollmentId, existing.id))
+        const [restarted] = await tx
           .update(trainingEnrollments)
-          .set({ status: 'in_progress', startedAt: existing.startedAt ?? new Date() })
+          .set({
+            status: 'in_progress',
+            source,
+            assignedByTenantUserId: assigning ? (ctx.membership?.id ?? null) : null,
+            progressPercent: 0,
+            currentLessonId: null,
+            startedAt: new Date(),
+            completedAt: null,
+            dueOn: requirement?.dueOn ?? null,
+            expiresOn: null,
+            recordId: null,
+            deletedAt: null,
+          })
           .where(eq(trainingEnrollments.id, existing.id))
+          .returning({ id: trainingEnrollments.id })
+        if (!restarted) throw new Error('Could not restart the enrollment.')
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'training_enrollment',
+          entityId: restarted.id,
+          action: 'update',
+          summary: 'Restarted course enrollment',
+          after: { courseId, personId, source },
+        })
+        await materializeEvidenceTargetObligations(tx, tenantId, {
+          sourceModule: 'training',
+          targetRef: { courseId },
+        })
+        return { id: restarted.id, changed: true, restarted: true, source }
       }
-      return
+      return { id: existing.id, changed: false, restarted: false, source: existing.source }
     }
-    await tx.insert(trainingEnrollments).values({
-      tenantId,
-      courseId,
-      personId,
-      status: 'in_progress',
-      source: assigning ? 'assigned' : 'self',
-      assignedByTenantUserId: assigning ? (ctx.membership?.id ?? null) : null,
-      startedAt: new Date(),
+    const [created] = await tx
+      .insert(trainingEnrollments)
+      .values({
+        tenantId,
+        courseId,
+        personId,
+        status: 'in_progress',
+        source,
+        assignedByTenantUserId: assigning ? (ctx.membership?.id ?? null) : null,
+        dueOn: requirement?.dueOn ?? null,
+        startedAt: new Date(),
+      })
+      .returning({ id: trainingEnrollments.id })
+    if (!created) throw new Error('Could not create the enrollment.')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_enrollment',
+      entityId: created.id,
+      action: 'create',
+      summary: 'Started course enrollment',
+      after: { courseId, personId, source },
     })
+    await materializeEvidenceTargetObligations(tx, tenantId, {
+      sourceModule: 'training',
+      targetRef: { courseId },
+    })
+    return { id: created.id, changed: true, restarted: false, source }
   })
   revalidatePath(`/training/learn/${courseId}`)
   revalidatePath('/training/learn')
+  revalidatePath('/my/training')
+  revalidatePath('/compliance/mine')
 }
 
 // Self-attested completion for `online` courses — no lessons to track, so the
@@ -144,46 +219,121 @@ export async function completeOnlineCourse(enrollmentId: string) {
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
   const personId = await resolvePersonId(ctx)
+  enrollmentId = requireTrainingUuid(enrollmentId, 'Enrollment')
 
   const result = await ctx.db(async (tx) => {
-    const [enr] = await tx
-      .select()
-      .from(trainingEnrollments)
-      .where(eq(trainingEnrollments.id, enrollmentId))
-      .limit(1)
-    if (!enr) throw new Error('Enrollment not found')
-    if (enr.personId !== personId) throw new Error('That enrollment is not yours')
-
-    const [course] = await tx
-      .select({ deliveryType: trainingCourses.deliveryType })
-      .from(trainingCourses)
-      .where(eq(trainingCourses.id, enr.courseId))
-      .limit(1)
-    if (!course || course.deliveryType !== 'online') {
+    const enrollment = await requireOpenTrainingEnrollment(tx, {
+      enrollmentId,
+      expectedPersonId: personId,
+    })
+    if (enrollment.deliveryType !== 'online') {
       throw new Error('This course is not an online course.')
     }
 
     const summary = await completeOnlineEnrollment(tx, {
       tenantId,
       enrollmentId,
-      courseId: enr.courseId,
+      courseId: enrollment.courseId,
       personId,
     })
-    return { courseId: enr.courseId, ...summary }
+    if (summary.newlyCompleted && summary.recordId) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'training_enrollment',
+        entityId: enrollmentId,
+        action: 'sign',
+        summary: `Completed online course — issued record ${summary.recordId}`,
+        after: { recordId: summary.recordId, certificateId: summary.certificateId },
+      })
+    }
+    return { courseId: enrollment.courseId, ...summary }
   })
-
-  if (result.completed && result.recordId) {
-    await recordAudit(ctx, {
-      entityType: 'training_enrollment',
-      entityId: enrollmentId,
-      action: 'sign',
-      summary: `Completed online course — issued record ${result.recordId}`,
-      after: { recordId: result.recordId, certificateId: result.certificateId },
-    })
-  }
   revalidatePath(`/training/learn/${result.courseId}`)
   revalidatePath('/training/learn')
   revalidatePath('/my/training')
+}
+
+// Stamp a server-authoritative start time when a learner opens a lesson. The
+// minimum-time completion rule uses this persisted timestamp; browser clocks
+// and caller-supplied elapsed values are never trusted.
+export async function startLesson(enrollmentId: string, lessonId: string) {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  const tenantId = ctx.tenantId
+  const personId = await resolvePersonId(ctx)
+  enrollmentId = requireTrainingUuid(enrollmentId, 'Enrollment')
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
+
+  const result = await ctx.db(async (tx) => {
+    const enrollment = await requireOpenTrainingEnrollment(tx, {
+      enrollmentId,
+      expectedPersonId: personId,
+    })
+
+    const [lesson] = await tx
+      .select({ courseId: trainingLessons.courseId })
+      .from(trainingLessons)
+      .where(and(eq(trainingLessons.id, lessonId), isNull(trainingLessons.deletedAt)))
+      .limit(1)
+    if (!lesson) throw new Error('Lesson not found')
+    assertLessonCourse(enrollment.courseId, lesson.courseId)
+
+    const [existing] = await tx
+      .select({
+        id: trainingLessonProgress.id,
+        personId: trainingLessonProgress.personId,
+        status: trainingLessonProgress.status,
+        startedAt: trainingLessonProgress.startedAt,
+      })
+      .from(trainingLessonProgress)
+      .where(
+        and(
+          eq(trainingLessonProgress.enrollmentId, enrollmentId),
+          eq(trainingLessonProgress.lessonId, lessonId),
+        ),
+      )
+      .limit(1)
+    if (existing && existing.personId !== personId) {
+      throw new Error('Lesson progress does not belong to this learner.')
+    }
+    if (existing?.status === 'completed' || existing?.startedAt) {
+      return { id: existing.id, courseId: enrollment.courseId, changed: false }
+    }
+
+    const now = new Date()
+    if (existing) {
+      const [updated] = await tx
+        .update(trainingLessonProgress)
+        .set({ status: 'in_progress', startedAt: now })
+        .where(eq(trainingLessonProgress.id, existing.id))
+        .returning({ id: trainingLessonProgress.id })
+      if (!updated) throw new Error('Could not start the lesson.')
+      return { id: updated.id, courseId: enrollment.courseId, changed: true }
+    }
+    const [created] = await tx
+      .insert(trainingLessonProgress)
+      .values({
+        tenantId,
+        enrollmentId,
+        lessonId,
+        personId,
+        status: 'in_progress',
+        startedAt: now,
+      })
+      .returning({ id: trainingLessonProgress.id })
+    if (!created) throw new Error('Could not start the lesson.')
+    return { id: created.id, courseId: enrollment.courseId, changed: true }
+  })
+
+  if (result.changed) {
+    await recordAudit(ctx, {
+      entityType: 'training_lesson_progress',
+      entityId: result.id,
+      action: 'create',
+      summary: 'Started lesson',
+      after: { enrollmentId, lessonId },
+    })
+  }
+  revalidatePath(`/training/learn/${result.courseId}`)
 }
 
 export async function markLessonComplete(enrollmentId: string, lessonId: string) {
@@ -191,47 +341,23 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
   const personId = await resolvePersonId(ctx)
+  enrollmentId = requireTrainingUuid(enrollmentId, 'Enrollment')
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
 
   const result = await ctx.db(async (tx) => {
-    const [enr] = await tx
-      .select()
-      .from(trainingEnrollments)
-      .where(eq(trainingEnrollments.id, enrollmentId))
-      .limit(1)
-    if (!enr) throw new Error('Enrollment not found')
-    if (enr.personId !== personId) throw new Error('That enrollment is not yours')
+    const enrollment = await requireOpenTrainingEnrollment(tx, {
+      enrollmentId,
+      expectedPersonId: personId,
+    })
 
     const [lesson] = await tx
       .select()
       .from(trainingLessons)
-      .where(eq(trainingLessons.id, lessonId))
+      .where(and(eq(trainingLessons.id, lessonId), isNull(trainingLessons.deletedAt)))
       .limit(1)
     if (!lesson) throw new Error('Lesson not found')
+    assertLessonCourse(enrollment.courseId, lesson.courseId)
 
-    // Practical lessons can never be self-completed.
-    if (lesson.completionRule === 'evaluator') {
-      throw new Error('This lesson requires an evaluator sign-off.')
-    }
-
-    // Quiz lessons that gate on a pass require a passed attempt first.
-    if (lesson.kind === 'quiz' && lesson.completionRule === 'pass') {
-      if (!lesson.assessmentTypeId) throw new Error('This quiz has no assessment configured.')
-      const [passedAttempt] = await tx
-        .select({ id: trainingAssessments.id })
-        .from(trainingAssessments)
-        .where(
-          and(
-            eq(trainingAssessments.personId, personId),
-            eq(trainingAssessments.typeId, lesson.assessmentTypeId),
-            eq(trainingAssessments.passed, true),
-          ),
-        )
-        .orderBy(desc(trainingAssessments.completedAt))
-        .limit(1)
-      if (!passedAttempt) throw new Error('Pass the quiz before completing this lesson.')
-    }
-
-    const now = new Date()
     const [existing] = await tx
       .select()
       .from(trainingLessonProgress)
@@ -242,21 +368,83 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
         ),
       )
       .limit(1)
+    if (existing && existing.personId !== personId) {
+      throw new Error('Lesson progress does not belong to this learner.')
+    }
+    if (existing?.status === 'completed') throw new Error('Lesson is already complete.')
+
+    // Practical lessons can never be self-completed.
+    if (lesson.completionRule === 'evaluator') {
+      throw new Error('This lesson requires an evaluator sign-off.')
+    }
+
+    // Quiz lessons that gate on a pass require a passed attempt first.
+    if (lesson.kind === 'quiz' && lesson.completionRule === 'pass') {
+      if (!lesson.assessmentTypeId) throw new Error('This quiz has no assessment configured.')
+      if (!existing?.assessmentId) throw new Error('Start and pass this lesson quiz first.')
+      const [passedAttempt] = await tx
+        .select({ id: trainingAssessments.id })
+        .from(trainingAssessments)
+        .where(
+          and(
+            eq(trainingAssessments.id, existing.assessmentId),
+            eq(trainingAssessments.personId, personId),
+            eq(trainingAssessments.typeId, lesson.assessmentTypeId),
+            eq(trainingAssessments.passed, true),
+          ),
+        )
+        .limit(1)
+      if (!passedAttempt) throw new Error('Pass the quiz before completing this lesson.')
+    }
+
+    const now = new Date()
+    const elapsedSeconds = existing?.startedAt
+      ? Math.max(0, Math.floor((now.getTime() - existing.startedAt.getTime()) / 1_000))
+      : 0
+    if (lesson.completionRule === 'min_time') {
+      if (!lesson.minTimeSeconds || lesson.minTimeSeconds < 1) {
+        throw new Error('This lesson has an invalid minimum-time configuration.')
+      }
+      const remaining = minimumTimeRemainingSeconds(
+        existing?.startedAt ?? null,
+        lesson.minTimeSeconds,
+        now,
+      )
+      if (remaining > 0) {
+        const minutes = Math.ceil(remaining / 60)
+        throw new Error(
+          `Spend at least ${minutes} more minute${minutes === 1 ? '' : 's'} in this lesson.`,
+        )
+      }
+    }
+    let progressId: string
     if (existing) {
-      await tx
+      const [updated] = await tx
         .update(trainingLessonProgress)
-        .set({ status: 'completed', completedAt: now })
+        .set({
+          status: 'completed',
+          completedAt: now,
+          timeSpentSeconds: Math.max(existing.timeSpentSeconds ?? 0, elapsedSeconds),
+        })
         .where(eq(trainingLessonProgress.id, existing.id))
+        .returning({ id: trainingLessonProgress.id })
+      if (!updated) throw new Error('Could not complete the lesson.')
+      progressId = existing.id
     } else {
-      await tx.insert(trainingLessonProgress).values({
-        tenantId,
-        enrollmentId,
-        lessonId,
-        personId,
-        status: 'completed',
-        startedAt: now,
-        completedAt: now,
-      })
+      const [created] = await tx
+        .insert(trainingLessonProgress)
+        .values({
+          tenantId,
+          enrollmentId,
+          lessonId,
+          personId,
+          status: 'completed',
+          startedAt: now,
+          completedAt: now,
+        })
+        .returning({ id: trainingLessonProgress.id })
+      if (!created) throw new Error('Could not complete the lesson.')
+      progressId = created.id
     }
 
     // Recompute progress across all lessons; finish (record + certificate) if
@@ -264,24 +452,30 @@ export async function markLessonComplete(enrollmentId: string, lessonId: string)
     const summary = await recomputeEnrollmentCompletion(tx, {
       tenantId,
       enrollmentId,
-      courseId: enr.courseId,
+      courseId: enrollment.courseId,
       personId,
       currentLessonId: lessonId,
     })
-    return { courseId: enr.courseId, ...summary }
-  })
-
-  if (result.completed) {
-    await recordAudit(ctx, {
-      entityType: 'training_enrollment',
-      entityId: enrollmentId,
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_lesson_progress',
+      entityId: progressId,
       action: 'sign',
-      summary: result.recordId
-        ? `Completed course — issued record ${result.recordId}`
-        : 'Completed course content — record issued separately at class completion',
-      after: { recordId: result.recordId, certificateId: result.certificateId },
+      summary: 'Completed lesson',
+      after: { enrollmentId, lessonId },
     })
-  }
+    if (summary.newlyCompleted) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'training_enrollment',
+        entityId: enrollmentId,
+        action: 'sign',
+        summary: summary.recordId
+          ? `Completed course — issued record ${summary.recordId}`
+          : 'Completed course content — record issued separately at class completion',
+        after: { recordId: summary.recordId, certificateId: summary.certificateId },
+      })
+    }
+    return { courseId: enrollment.courseId, progressId, ...summary }
+  })
   revalidatePath(`/training/learn/${result.courseId}`)
   revalidatePath('/training/learn')
 }
@@ -294,36 +488,29 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
   const personId = await resolvePersonId(ctx)
+  enrollmentId = requireTrainingUuid(enrollmentId, 'Enrollment')
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
 
   const attemptId = await ctx.db(async (tx) => {
     // Ownership: the attempt + lesson-progress rows are written against this
     // enrollment, so confirm it belongs to the caller before touching it (mirrors
     // markLessonComplete). Without this any tenant user could spawn an attempt on
     // and mutate someone else's enrollment progress.
-    const [enr] = await tx
-      .select({ personId: trainingEnrollments.personId })
-      .from(trainingEnrollments)
-      .where(eq(trainingEnrollments.id, enrollmentId))
-      .limit(1)
-    if (!enr) throw new Error('Enrollment not found')
-    if (enr.personId !== personId) throw new Error('That enrollment is not yours')
+    const enrollment = await requireOpenTrainingEnrollment(tx, {
+      enrollmentId,
+      expectedPersonId: personId,
+    })
 
     const [lesson] = await tx
       .select()
       .from(trainingLessons)
-      .where(eq(trainingLessons.id, lessonId))
+      .where(and(eq(trainingLessons.id, lessonId), isNull(trainingLessons.deletedAt)))
       .limit(1)
-    if (!lesson || !lesson.assessmentTypeId) throw new Error('This lesson has no quiz configured.')
-
-    // Shared creation path (also used by the proctor "New attempt" flow).
-    // Soft-deleted types are rejected; the catalogue `active` flag is not
-    // required here — a type hidden from the catalogue keeps working for the
-    // lessons still wired to it.
-    const attempt = await createAssessmentAttempt(tx, {
-      tenantId,
-      typeId: lesson.assessmentTypeId,
-      personId,
-    })
+    if (!lesson) throw new Error('Lesson not found')
+    assertLessonCourse(enrollment.courseId, lesson.courseId)
+    if (lesson.kind !== 'quiz' || !lesson.assessmentTypeId) {
+      throw new Error('This lesson has no quiz configured.')
+    }
 
     const [existing] = await tx
       .select()
@@ -335,8 +522,24 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
         ),
       )
       .limit(1)
+    if (existing && existing.personId !== personId) {
+      throw new Error('Lesson progress does not belong to this learner.')
+    }
+    if (existing?.status === 'completed') throw new Error('Lesson is already complete.')
+
+    // Shared creation path (also used by the proctor "New attempt" flow).
+    // Soft-deleted types are rejected; the catalogue `active` flag is not
+    // required here — a type hidden from the catalogue keeps working for the
+    // lessons still wired to it.
+    const { attempt } = await createAssessmentAttempt(tx, {
+      tenantId,
+      typeId: lesson.assessmentTypeId,
+      personId,
+      source: 'lesson_quiz',
+    })
+
     if (existing) {
-      await tx
+      const [updated] = await tx
         .update(trainingLessonProgress)
         .set({
           status: 'in_progress',
@@ -345,17 +548,23 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
           attempts: (existing.attempts ?? 0) + 1,
         })
         .where(eq(trainingLessonProgress.id, existing.id))
+        .returning({ id: trainingLessonProgress.id })
+      if (!updated) throw new Error('Could not start the quiz.')
     } else {
-      await tx.insert(trainingLessonProgress).values({
-        tenantId,
-        enrollmentId,
-        lessonId,
-        personId,
-        status: 'in_progress',
-        assessmentId: attempt.id,
-        startedAt: new Date(),
-        attempts: 1,
-      })
+      const [created] = await tx
+        .insert(trainingLessonProgress)
+        .values({
+          tenantId,
+          enrollmentId,
+          lessonId,
+          personId,
+          status: 'in_progress',
+          assessmentId: attempt.id,
+          startedAt: new Date(),
+          attempts: 1,
+        })
+        .returning({ id: trainingLessonProgress.id })
+      if (!created) throw new Error('Could not start the quiz.')
     }
     return attempt.id
   })

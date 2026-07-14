@@ -4,15 +4,10 @@ import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Archive, BookOpen, CheckSquare, Send, Square, Trash2, X } from 'lucide-react'
+import { Archive, BookOpen, Trash2, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
-import {
-  bulkAddDocumentsToBook,
-  bulkArchiveDocuments,
-  bulkDeleteDocuments,
-  bulkPublishDocuments,
-} from './_actions'
+import { bulkAddDocumentsToBook, bulkArchiveDocuments, bulkDeleteDocuments } from './_actions'
 
 export type DocumentBookOption = { id: string; label: string }
 
@@ -27,7 +22,7 @@ export function BulkDocumentsBar({
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'publish' | 'archive' | 'addToBook' | 'delete'>('publish')
+  const [action, setAction] = useState<'archive' | 'addToBook' | 'delete'>('archive')
   const [bookId, setBookId] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -42,19 +37,6 @@ export function BulkDocumentsBar({
     setError(null)
     // Success is surfaced via toast — clearing the selection unmounts the bar,
     // so any inline message would never be seen.
-    if (action === 'publish') {
-      start(async () => {
-        const res = await bulkPublishDocuments({ documentIds: selectedIds })
-        if (!res.ok) {
-          setError(res.error)
-          return
-        }
-        toast.success(`Published ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
-        onClear()
-        router.refresh()
-      })
-      return
-    }
     if (action === 'archive') {
       if (
         !(await confirmDialog({
@@ -136,7 +118,6 @@ export function BulkDocumentsBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          <option value="publish">Publish</option>
           <option value="archive">Archive</option>
           <option value="addToBook">Add to book</option>
           <option value="delete">Delete</option>
@@ -169,10 +150,6 @@ export function BulkDocumentsBar({
         >
           {pending ? (
             'Working…'
-          ) : action === 'publish' ? (
-            <span className="inline-flex items-center gap-1">
-              <Send size={14} /> Publish
-            </span>
           ) : action === 'archive' ? (
             <span className="inline-flex items-center gap-1">
               <Archive size={14} /> Archive
@@ -191,56 +168,5 @@ export function BulkDocumentsBar({
       </div>
     </div>,
     document.body,
-  )
-}
-
-export function SelectionCheckbox({
-  id,
-  selected,
-  onToggle,
-}: {
-  id: string
-  selected: boolean
-  onToggle: (id: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        onToggle(id)
-      }}
-      aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-    >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
-  )
-}
-
-export function HeaderSelectAll({
-  allSelected,
-  onToggleAll,
-}: {
-  allSelected: boolean
-  onToggleAll: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggleAll}
-      aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-    >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
   )
 }

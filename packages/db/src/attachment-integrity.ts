@@ -15,7 +15,6 @@ export const ATTACHMENT_TENANT_REFERENCES = [
   { table: 'ca_complete_steps', column: 'signature_attachment_id', onDelete: 'set null' },
   { table: 'ca_photos', column: 'attachment_id', onDelete: 'cascade' },
   { table: 'document_acknowledgments', column: 'signature_attachment_id', onDelete: 'set null' },
-  { table: 'document_references', column: 'attachment_id', onDelete: 'set null' },
   { table: 'document_versions', column: 'content_attachment_id', onDelete: 'set null' },
   { table: 'document_versions', column: 'docx_attachment_id', onDelete: 'set null' },
   { table: 'document_versions', column: 'pdf_attachment_id', onDelete: 'set null' },
@@ -63,9 +62,9 @@ export const ATTACHMENT_TENANT_REFERENCES = [
   { table: 'people', column: 'signature_attachment_id', onDelete: 'set null' },
   { table: 'person_files', column: 'attachment_id', onDelete: 'set null' },
   { table: 'ppe_annual_records', column: 'certificate_attachment_id', onDelete: 'set null' },
+  { table: 'ppe_inspection_attachments', column: 'attachment_id', onDelete: 'cascade' },
   { table: 'ppe_issues', column: 'receipt_signature_attachment_id', onDelete: 'set null' },
   { table: 'report_runs', column: 'pdf_attachment_id', onDelete: 'set null' },
-  { table: 'training_certificates', column: 'pdf_attachment_id', onDelete: 'set null' },
   { table: 'training_class_attendees', column: 'signature_attachment_id', onDelete: 'set null' },
   { table: 'training_content_items', column: 'attachment_id', onDelete: 'set null' },
   { table: 'training_content_items', column: 'source_attachment_id', onDelete: 'set null' },
@@ -80,7 +79,6 @@ export const ATTACHMENT_TENANT_REFERENCES = [
   { table: 'training_records', column: 'certificate_attachment_id', onDelete: 'set null' },
   { table: 'training_skill_assignment_files', column: 'attachment_id', onDelete: 'set null' },
   { table: 'training_skill_assignments', column: 'evidence_attachment_id', onDelete: 'set null' },
-  { table: 'training_skill_certificates', column: 'pdf_attachment_id', onDelete: 'set null' },
 ] as const satisfies readonly AttachmentTenantReference[]
 
 function stableHash(value: string): string {

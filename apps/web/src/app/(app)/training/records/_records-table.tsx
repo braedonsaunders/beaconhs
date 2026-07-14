@@ -1,14 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CreditCard, FileText, Printer } from 'lucide-react'
-import { Badge } from '@beaconhs/ui'
+import { FileText } from 'lucide-react'
+import { Badge, Button } from '@beaconhs/ui'
+import { RowSelectionButton, SelectVisibleRowsButton } from '@/components/row-selection-buttons'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
-import { CredentialDownloadButton } from '@/components/credential-download-button'
-import type { CredentialOutput } from '@/lib/credential-designs'
-import { BulkTrainingRecordsBar, HeaderSelectAll, SelectionCheckbox } from './_bulk-bar'
+import { useRowSelection } from '@/lib/row-selection'
+import { BulkTrainingRecordsBar } from './_bulk-bar'
 
 export type TrainingRecordsTableRow = {
   id: string
@@ -30,7 +29,6 @@ export type TrainingRecordsTableRow = {
 
 export function TrainingRecordsTable({
   rows,
-  credentialOutputs,
   basePath,
   currentParams,
   sort,
@@ -39,7 +37,6 @@ export function TrainingRecordsTable({
   canExport,
 }: {
   rows: TrainingRecordsTableRow[]
-  credentialOutputs: CredentialOutput[]
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   sort: string
@@ -52,30 +49,7 @@ export function TrainingRecordsTable({
   // No bulk action available → no row selection at all (e.g. a self-only viewer
   // who can see their own records but neither manage nor bulk-export them).
   const bulkEnabled = canManage || canExport
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-
-  const allSelected = useMemo(
-    () => rows.length > 0 && rows.every((r) => selected.has(r.id)),
-    [rows, selected],
-  )
-
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  function toggleAll() {
-    setSelected((prev) => {
-      if (rows.length > 0 && rows.every((r) => prev.has(r.id))) return new Set()
-      return new Set(rows.map((r) => r.id))
-    })
-  }
-  function clear() {
-    setSelected(new Set())
-  }
+  const { selected, selectedIds, allSelected, toggleOne, toggleAll, clear } = useRowSelection(rows)
 
   const sortProps = { basePath, currentParams, sort, dir }
 
@@ -98,7 +72,11 @@ export function TrainingRecordsTable({
               href={`/training/records/${r.id}`}
               leading={
                 bulkEnabled ? (
-                  <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+                  <RowSelectionButton
+                    id={r.id}
+                    selected={selected.has(r.id)}
+                    onToggle={toggleOne}
+                  />
                 ) : undefined
               }
               person={`${r.personLastName}, ${r.personFirstName}`}
@@ -132,7 +110,7 @@ export function TrainingRecordsTable({
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               {bulkEnabled ? (
                 <th className="w-8 px-3 py-2">
-                  <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
+                  <SelectVisibleRowsButton allSelected={allSelected} onToggleAll={toggleAll} />
                 </th>
               ) : null}
               <SortTh column="employee" {...sortProps}>
@@ -150,7 +128,7 @@ export function TrainingRecordsTable({
               <SortTh column="source" {...sortProps}>
                 Source
               </SortTh>
-              <th className="px-3 py-2 text-right">Credential</th>
+              <th className="px-3 py-2 text-right">Credentials</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -175,7 +153,7 @@ export function TrainingRecordsTable({
                 >
                   {bulkEnabled ? (
                     <td className="w-8 px-3 py-2">
-                      <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
+                      <RowSelectionButton id={r.id} selected={isSelected} onToggle={toggleOne} />
                     </td>
                   ) : null}
                   <td className="px-3 py-2">
@@ -218,38 +196,12 @@ export function TrainingRecordsTable({
                     {r.source.replace('_', ' ')}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex justify-end gap-1.5">
-                      {credentialOutputs.map((output) => (
-                        <span key={output.id} className="inline-flex gap-1">
-                          <CredentialDownloadButton
-                            endpoint={`/training/records/${r.id}/certificate`}
-                            outputId={output.id}
-                            variant="ghost"
-                            size="sm"
-                            title={`Open ${output.name}`}
-                            pendingLabel=""
-                          >
-                            {output.format === 'wallet' ? (
-                              <CreditCard size={15} />
-                            ) : (
-                              <FileText size={15} />
-                            )}
-                          </CredentialDownloadButton>
-                          {output.format === 'wallet' ? (
-                            <CredentialDownloadButton
-                              endpoint={`/training/records/${r.id}/certificate`}
-                              outputId={output.id}
-                              action="print"
-                              variant="ghost"
-                              size="sm"
-                              title={`Print ${output.name}`}
-                              pendingLabel=""
-                            >
-                              <Printer size={15} />
-                            </CredentialDownloadButton>
-                          ) : null}
-                        </span>
-                      ))}
+                    <div className="flex justify-end">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/training/records/${r.id}?tab=outputs`}>
+                          <FileText size={15} /> View
+                        </Link>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -260,7 +212,7 @@ export function TrainingRecordsTable({
       </div>
       {bulkEnabled ? (
         <BulkTrainingRecordsBar
-          selectedIds={Array.from(selected)}
+          selectedIds={selectedIds}
           onClear={clear}
           canManage={canManage}
           canExport={canExport}

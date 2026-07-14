@@ -106,51 +106,6 @@ export function DetailPageLayout({
 }
 
 /**
- * Split layout for entity detail pages that have a sticky sidebar (profile
- * card etc) + a tabbed pane. The sidebar AND the body each scroll
- * independently so neither bleeds out of the viewport.
- */
-function DetailSplitLayout({
-  header,
-  alerts,
-  sidebar,
-  subtabs,
-  children,
-}: {
-  header: React.ReactNode
-  alerts?: React.ReactNode
-  sidebar: React.ReactNode
-  subtabs?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-screen-2xl px-6 pt-5">
-          {header}
-          {alerts ? <div className="mt-3 space-y-2">{alerts}</div> : null}
-        </FadeInHeader>
-      </div>
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="app-scroll w-72 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          {sidebar}
-        </aside>
-        <div className="flex min-h-0 flex-1 flex-col">
-          {subtabs ? (
-            <div className="border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-900">
-              <div className="mx-auto max-w-screen-2xl">{subtabs}</div>
-            </div>
-          ) : null}
-          <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-            <FadeInBody className="mx-auto max-w-screen-2xl p-6">{children}</FadeInBody>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
  * Three-row "wizard" layout for forms — sticky header (title/progress),
  * scrollable body (the active step), sticky footer (Back/Next/Submit).
  */

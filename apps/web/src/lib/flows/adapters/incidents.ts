@@ -2,7 +2,7 @@ import 'server-only'
 
 // Incidents FlowSubjectAdapter. Field-map keys mirror MODULE_FLOW_PROFILES.incidents.
 
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import {
   attachments,
   departments,
@@ -11,6 +11,8 @@ import {
   incidentContributingFactors,
   incidentEvents,
   incidentInjuries,
+  incidentInjuryTypeAssignments,
+  incidentInjuryTypes,
   incidentLostTimeEvents,
   incidentPeople,
   incidentPreventativeSteps,
@@ -94,8 +96,8 @@ export function createIncidentFlowAdapter(
               .leftJoin(people, eq(people.id, incidentPeople.personId))
               .where(eq(incidentPeople.incidentId, incidentId)),
           ),
-          ctx.db((tx) =>
-            tx
+          ctx.db(async (tx) => {
+            const rows = await tx
               .select({
                 row: incidentInjuries,
                 pFirst: people.firstName,
@@ -104,8 +106,37 @@ export function createIncidentFlowAdapter(
               })
               .from(incidentInjuries)
               .leftJoin(people, eq(people.id, incidentInjuries.personId))
-              .where(eq(incidentInjuries.incidentId, incidentId)),
-          ),
+              .where(eq(incidentInjuries.incidentId, incidentId))
+            const injuryIds = rows.map((row) => row.row.id)
+            const assignmentRows =
+              injuryIds.length === 0
+                ? []
+                : await tx
+                    .select({
+                      injuryId: incidentInjuryTypeAssignments.injuryId,
+                      name: incidentInjuryTypes.name,
+                    })
+                    .from(incidentInjuryTypeAssignments)
+                    .innerJoin(
+                      incidentInjuryTypes,
+                      and(
+                        eq(incidentInjuryTypes.tenantId, incidentInjuryTypeAssignments.tenantId),
+                        eq(incidentInjuryTypes.id, incidentInjuryTypeAssignments.injuryTypeId),
+                      ),
+                    )
+                    .where(inArray(incidentInjuryTypeAssignments.injuryId, injuryIds))
+                    .orderBy(asc(incidentInjuryTypes.sortOrder), asc(incidentInjuryTypes.name))
+            const typeNamesByInjury = new Map<string, string[]>()
+            for (const assignment of assignmentRows) {
+              const names = typeNamesByInjury.get(assignment.injuryId) ?? []
+              names.push(assignment.name)
+              typeNamesByInjury.set(assignment.injuryId, names)
+            }
+            return rows.map((row) => ({
+              ...row,
+              injuryTypeNames: typeNamesByInjury.get(row.row.id) ?? [],
+            }))
+          }),
           ctx.db((tx) =>
             tx
               .select({
@@ -237,7 +268,8 @@ export function createIncidentFlowAdapter(
             r.row.personName ||
             'Unknown',
           body_parts: (r.row.bodyParts ?? []).join(', '),
-          injury_types: (r.row.injuryTypes ?? []).join(', '),
+          injury_types: r.injuryTypeNames.join(', '),
+          injury_result: r.row.injuryResult ?? '',
           treatment: r.row.treatment ?? '',
           treated_at_facility: r.row.treatedAtFacility ?? '',
           worked_hours_prior_to: r.row.workedHoursPriorTo ?? '',

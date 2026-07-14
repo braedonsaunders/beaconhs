@@ -90,6 +90,8 @@ export type CustomFieldTypeMeta = {
   supportsUnit: boolean
   /** Whether min/max/step are meaningful. */
   supportsRange: boolean
+  /** Whether the rendered input supports placeholder text. */
+  supportsPlaceholder: boolean
 }
 
 export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta> = {
@@ -101,6 +103,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: true,
   },
   textarea: {
     type: 'textarea',
@@ -110,6 +113,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: true,
   },
   number: {
     type: 'number',
@@ -119,6 +123,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: true,
     supportsRange: true,
+    supportsPlaceholder: true,
   },
   date: {
     type: 'date',
@@ -128,6 +133,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: false,
   },
   datetime: {
     type: 'datetime',
@@ -137,6 +143,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: false,
   },
   boolean: {
     type: 'boolean',
@@ -146,6 +153,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: false,
   },
   select: {
     type: 'select',
@@ -155,6 +163,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: true,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: false,
   },
   multi_select: {
     type: 'multi_select',
@@ -164,6 +173,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: true,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: false,
   },
   url: {
     type: 'url',
@@ -173,6 +183,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: true,
   },
   email: {
     type: 'email',
@@ -182,6 +193,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: true,
   },
   phone: {
     type: 'phone',
@@ -191,6 +203,7 @@ export const CUSTOM_FIELD_TYPE_META: Record<CustomFieldType, CustomFieldTypeMeta
     hasOptions: false,
     supportsUnit: false,
     supportsRange: false,
+    supportsPlaceholder: true,
   },
 }
 
@@ -199,6 +212,27 @@ export const CUSTOM_FIELD_METADATA_NAMESPACE = 'custom' as const
 
 const KEY_RE = /^[a-z][a-z0-9_]{0,62}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const HTTP_URL_RE = /^https?:\/\/(?:\[[0-9a-f:.]+\]|[^\s/?#:@]+)(?::\d{1,5})?(?:[/?#][^\s]*)?$/i
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+const ISO_DATETIME_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/
+
+/** Shared server and input bounds for the metadata-backed custom-field layer. */
+export const CUSTOM_FIELD_LIMITS = {
+  label: 200,
+  helpText: 2_000,
+  groupLabel: 200,
+  unit: 64,
+  placeholder: 500,
+  options: 100,
+  optionValue: 128,
+  optionLabel: 200,
+  text: 10_000,
+  textarea: 100_000,
+  url: 2_048,
+  email: 320,
+  phone: 100,
+} as const
 
 /**
  * Derive a stable machine key from a human label. Lower-cased, non-alnum runs
@@ -232,8 +266,7 @@ export function readCustomFieldValues(
 }
 
 export type CoerceResult =
-  | { ok: true; value: string | number | boolean | string[] | null }
-  | { ok: false; error: string }
+  { ok: true; value: string | number | boolean | string[] | null } | { ok: false; error: string }
 
 /**
  * Validate + coerce a raw string (as it arrives from a form submission) into
@@ -247,6 +280,10 @@ export function coerceCustomFieldValue(def: CustomFieldDefinition, raw: string):
   const required = !!def.required
   const label = def.label || def.key
 
+  // Bound attacker-controlled input before Number(), JSON.parse(), URL(), or
+  // any regular expression. Long text is the largest supported value type.
+  if ((raw ?? '').length > CUSTOM_FIELD_LIMITS.textarea) return tooLongErr(label)
+
   switch (def.fieldType) {
     case 'boolean': {
       // A toggle is never "missing"; absence reads as false.
@@ -254,6 +291,7 @@ export function coerceCustomFieldValue(def: CustomFieldDefinition, raw: string):
     }
     case 'number': {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
+      if (trimmed.length > 128) return { ok: false, error: `${label} must be a number.` }
       const n = Number(trimmed)
       if (!Number.isFinite(n)) return { ok: false, error: `${label} must be a number.` }
       const cfg = def.config ?? {}
@@ -261,10 +299,19 @@ export function coerceCustomFieldValue(def: CustomFieldDefinition, raw: string):
         return { ok: false, error: `${label} must be at least ${cfg.min}.` }
       if (cfg.max != null && n > cfg.max)
         return { ok: false, error: `${label} must be at most ${cfg.max}.` }
+      if (cfg.step != null && cfg.step > 0) {
+        const base = cfg.min ?? 0
+        const quotient = (n - base) / cfg.step
+        const tolerance = Number.EPSILON * Math.max(1, Math.abs(quotient)) * 8
+        if (Math.abs(quotient - Math.round(quotient)) > tolerance)
+          return { ok: false, error: `${label} must use increments of ${cfg.step}.` }
+      }
       return { ok: true, value: n }
     }
     case 'select': {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
+      if (trimmed.length > CUSTOM_FIELD_LIMITS.optionValue)
+        return { ok: false, error: `${label}: invalid selection.` }
       const options = def.config?.options ?? []
       if (!options.some((o) => o.value === trimmed))
         return { ok: false, error: `${label}: "${trimmed}" is not an allowed option.` }
@@ -283,8 +330,13 @@ export function coerceCustomFieldValue(def: CustomFieldDefinition, raw: string):
       if (!Array.isArray(arr) || arr.some((v) => typeof v !== 'string'))
         return { ok: false, error: `${label}: invalid selection.` }
       const options = def.config?.options ?? []
+      if (
+        arr.length > CUSTOM_FIELD_LIMITS.options ||
+        arr.some((v) => (v as string).length > CUSTOM_FIELD_LIMITS.optionValue)
+      )
+        return { ok: false, error: `${label}: invalid selection.` }
       const allowed = new Set(options.map((o) => o.value))
-      const values = (arr as string[]).filter((v, i, a) => a.indexOf(v) === i)
+      const values = [...new Set(arr as string[])]
       for (const v of values)
         if (!allowed.has(v))
           return { ok: false, error: `${label}: "${v}" is not an allowed option.` }
@@ -293,35 +345,47 @@ export function coerceCustomFieldValue(def: CustomFieldDefinition, raw: string):
     }
     case 'date': {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed))
-        return { ok: false, error: `${label} must be a valid date.` }
-      if (Number.isNaN(Date.parse(trimmed)))
+      if (!hasValidCalendarDate(trimmed))
         return { ok: false, error: `${label} must be a valid date.` }
       return { ok: true, value: trimmed }
     }
     case 'datetime': {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
-      if (Number.isNaN(Date.parse(trimmed)))
+      const match = ISO_DATETIME_RE.exec(trimmed)
+      if (!match || !hasValidCalendarParts(match[1], match[2], match[3]))
         return { ok: false, error: `${label} must be a valid date & time.` }
       return { ok: true, value: trimmed }
     }
     case 'email': {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
-      if (!EMAIL_RE.test(trimmed))
+      // Bound input before the backtracking email expression. Apart from
+      // matching the practical maximum address length, this prevents a long
+      // attacker-controlled local part from turning metadata validation into
+      // a CPU-amplification path.
+      if (trimmed.length > CUSTOM_FIELD_LIMITS.email || !EMAIL_RE.test(trimmed))
         return { ok: false, error: `${label} must be a valid email address.` }
       return { ok: true, value: trimmed }
     }
     case 'url': {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
-      if (!/^https?:\/\/\S+$/i.test(trimmed))
+      if (trimmed.length > CUSTOM_FIELD_LIMITS.url || !isHttpUrl(trimmed))
         return { ok: false, error: `${label} must be a URL starting with http:// or https://.` }
       return { ok: true, value: trimmed }
     }
-    case 'phone':
+    case 'phone': {
+      if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
+      if (trimmed.length > CUSTOM_FIELD_LIMITS.phone) return tooLongErr(label)
+      return { ok: true, value: trimmed }
+    }
+    case 'textarea': {
+      if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
+      if (trimmed.length > CUSTOM_FIELD_LIMITS.textarea) return tooLongErr(label)
+      return { ok: true, value: trimmed }
+    }
     case 'text':
-    case 'textarea':
     default: {
       if (trimmed === '') return required ? requiredErr(label) : { ok: true, value: null }
+      if (trimmed.length > CUSTOM_FIELD_LIMITS.text) return tooLongErr(label)
       return { ok: true, value: trimmed }
     }
   }
@@ -329,6 +393,33 @@ export function coerceCustomFieldValue(def: CustomFieldDefinition, raw: string):
 
 function requiredErr(label: string): CoerceResult {
   return { ok: false, error: `${label} is required.` }
+}
+
+function tooLongErr(label: string): CoerceResult {
+  return { ok: false, error: `${label} is too long.` }
+}
+
+function hasValidCalendarDate(value: string): boolean {
+  const match = ISO_DATE_RE.exec(value)
+  return Boolean(match && hasValidCalendarParts(match[1], match[2], match[3]))
+}
+
+function hasValidCalendarParts(
+  yearRaw: string | undefined,
+  monthRaw: string | undefined,
+  dayRaw: string | undefined,
+): boolean {
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return day <= (days[month - 1] ?? 0)
+}
+
+function isHttpUrl(value: string): boolean {
+  return HTTP_URL_RE.test(value)
 }
 
 /**
@@ -346,21 +437,27 @@ export function normalizeCustomFieldConfig(
   if (meta.hasOptions) {
     const seen = new Set<string>()
     const options: CustomFieldOption[] = []
-    for (const o of src.options ?? []) {
-      const value = (o?.value ?? '').toString().trim()
-      const optLabel = (o?.label ?? '').toString().trim() || value
+    for (const o of (src.options ?? []).slice(0, CUSTOM_FIELD_LIMITS.options)) {
+      const value = (o?.value ?? '').toString().trim().slice(0, CUSTOM_FIELD_LIMITS.optionValue)
+      const optLabel = ((o?.label ?? '').toString().trim() || value).slice(
+        0,
+        CUSTOM_FIELD_LIMITS.optionLabel,
+      )
       if (!value || seen.has(value)) continue
       seen.add(value)
       options.push({ value, label: optLabel })
     }
     out.options = options
   }
-  if (meta.supportsUnit && src.unit) out.unit = String(src.unit).trim() || null
+  if (meta.supportsUnit && src.unit)
+    out.unit = String(src.unit).trim().slice(0, CUSTOM_FIELD_LIMITS.unit) || null
   if (meta.supportsRange) {
     if (src.min != null && Number.isFinite(Number(src.min))) out.min = Number(src.min)
     if (src.max != null && Number.isFinite(Number(src.max))) out.max = Number(src.max)
-    if (src.step != null && Number.isFinite(Number(src.step))) out.step = Number(src.step)
+    if (src.step != null && Number.isFinite(Number(src.step)) && Number(src.step) > 0)
+      out.step = Number(src.step)
   }
-  if (src.placeholder) out.placeholder = String(src.placeholder)
+  if (meta.supportsPlaceholder && src.placeholder)
+    out.placeholder = String(src.placeholder).trim().slice(0, CUSTOM_FIELD_LIMITS.placeholder)
   return Object.keys(out).length > 0 ? out : null
 }

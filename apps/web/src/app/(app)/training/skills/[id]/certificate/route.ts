@@ -13,6 +13,7 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { issueTrainingSkillCertificate } from '@/lib/training-certificate-issuance'
 import { pdfResponse, renderSkillCredentialPdf } from '@/lib/training-credential-pdf'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,6 +23,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id: assignmentId } = await params
+  if (!isUuid(assignmentId)) {
+    return NextResponse.json({ error: 'Skill assignment not found.' }, { status: 404 })
+  }
+
   const outputId = req.nextUrl.searchParams.get('output')
 
   const ctx = await requireRequestContext()

@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { CornerDownLeft, Plus, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { tagSwatch } from './_tag-colors'
-import type { TagSuggestion } from './_types'
+import { JOURNAL_ENTRY_TAG_LIMIT, JOURNAL_TAG_NAME_LIMIT, type TagSuggestion } from './_types'
 
 const MAX_SUGGESTIONS = 8
 
@@ -32,6 +32,7 @@ export function TagEditor({
   const [input, setInput] = useState('')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listId = useId()
@@ -68,18 +69,29 @@ export function TagEditor({
   function commit(raw: string) {
     const t = raw.trim().toLowerCase()
     if (!t) return
+    if (t.length > JOURNAL_TAG_NAME_LIMIT) {
+      setValidationError(`Tags can be at most ${JOURNAL_TAG_NAME_LIMIT} characters.`)
+      return
+    }
+    if (!tags.includes(t) && tags.length >= JOURNAL_ENTRY_TAG_LIMIT) {
+      setValidationError(`An entry can have at most ${JOURNAL_ENTRY_TAG_LIMIT} tags.`)
+      return
+    }
     if (!tags.includes(t)) onChange([...tags, t])
+    setValidationError(null)
     setInput('')
     setHighlight(-1)
   }
 
   function remove(tag: string) {
     onChange(tags.filter((t) => t !== tag))
+    setValidationError(null)
     inputRef.current?.focus()
   }
 
   function onChangeInput(v: string) {
     setInput(v)
+    setValidationError(null)
     setOpen(true)
     setHighlight(v.trim() ? 0 : -1)
   }
@@ -121,9 +133,18 @@ export function TagEditor({
       .map((p) => p.trim().toLowerCase())
       .filter(Boolean)
     if (!parts.length) return
+    if (parts.some((part) => part.length > JOURNAL_TAG_NAME_LIMIT)) {
+      setValidationError(`Tags can be at most ${JOURNAL_TAG_NAME_LIMIT} characters.`)
+      return
+    }
     const next = [...tags]
     for (const p of parts) if (!next.includes(p)) next.push(p)
+    if (next.length > JOURNAL_ENTRY_TAG_LIMIT) {
+      setValidationError(`An entry can have at most ${JOURNAL_ENTRY_TAG_LIMIT} tags.`)
+      return
+    }
     onChange(next)
+    setValidationError(null)
     setInput('')
   }
 
@@ -185,6 +206,7 @@ export function TagEditor({
           <input
             ref={inputRef}
             value={input}
+            maxLength={JOURNAL_TAG_NAME_LIMIT}
             onChange={(e) => onChangeInput(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
@@ -214,6 +236,12 @@ export function TagEditor({
           <span className="px-1 text-sm text-slate-400 dark:text-slate-500">No tags</span>
         ) : null}
       </div>
+
+      {validationError ? (
+        <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+          {validationError}
+        </p>
+      ) : null}
 
       <AnimatePresence>
         {hasMenu ? (

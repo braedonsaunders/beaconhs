@@ -8,7 +8,7 @@ import { can } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 import { getEntry } from '../../_data'
-import { isUuid } from '../../_lib'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params
+  if (!isUuid(id)) return new Response('Not found', { status: 404 })
+
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
@@ -24,8 +26,6 @@ export async function GET(
   if (!can(ctx, 'journals.read.self')) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (!isUuid(id)) return new Response('Not found', { status: 404 })
-
   // Read-scope the PDF exactly like the HTML page + /print route: getEntry
   // applies journalScopeWhere, so a journals.read.self user can't fetch another
   // author's journal by id. The renderer below loads by id under RLS only, which

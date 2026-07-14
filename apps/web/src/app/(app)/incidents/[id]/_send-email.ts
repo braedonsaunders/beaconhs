@@ -4,8 +4,16 @@
 // body carries injury, hospital, and insurance details, so the sender must
 // name who receives it (matches the hazard-assessment / document senders).
 
-import { eq } from 'drizzle-orm'
-import { departments, incidentInjuries, incidents, orgUnits, people } from '@beaconhs/db/schema'
+import { and, eq, inArray } from 'drizzle-orm'
+import {
+  departments,
+  incidentInjuries,
+  incidentInjuryTypeAssignments,
+  incidentInjuryTypes,
+  incidents,
+  orgUnits,
+  people,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'
@@ -37,7 +45,39 @@ export async function sendIncidentEmail(
       .leftJoin(people, eq(people.id, incidentInjuries.personId))
       .where(eq(incidentInjuries.incidentId, incidentId))
 
-    return { ...inc, injuries }
+    const injuryIds = injuries.map((row) => row.inj.id)
+    const assignmentRows =
+      injuryIds.length === 0
+        ? []
+        : await tx
+            .select({
+              injuryId: incidentInjuryTypeAssignments.injuryId,
+              name: incidentInjuryTypes.name,
+            })
+            .from(incidentInjuryTypeAssignments)
+            .innerJoin(
+              incidentInjuryTypes,
+              and(
+                eq(incidentInjuryTypes.tenantId, incidentInjuryTypeAssignments.tenantId),
+                eq(incidentInjuryTypes.id, incidentInjuryTypeAssignments.injuryTypeId),
+              ),
+            )
+            .where(inArray(incidentInjuryTypeAssignments.injuryId, injuryIds))
+            .orderBy(incidentInjuryTypes.sortOrder, incidentInjuryTypes.name)
+    const typeNamesByInjury = new Map<string, string[]>()
+    for (const assignment of assignmentRows) {
+      const names = typeNamesByInjury.get(assignment.injuryId) ?? []
+      names.push(assignment.name)
+      typeNamesByInjury.set(assignment.injuryId, names)
+    }
+
+    return {
+      ...inc,
+      injuries: injuries.map((row) => ({
+        ...row,
+        injuryTypeNames: typeNamesByInjury.get(row.inj.id) ?? [],
+      })),
+    }
   })
   if (!data) return null
 
@@ -56,11 +96,9 @@ export async function sendIncidentEmail(
       ? `${j.person.firstName} ${j.person.lastName}`
       : (j.inj.personName ?? 'Unknown')
     const parts = j.inj.bodyParts.join(', ') || '—'
-    const types =
-      Array.isArray(j.inj.injuryTypes) && j.inj.injuryTypes.length > 0
-        ? j.inj.injuryTypes.join(', ')
-        : '—'
-    return `  - ${name} · ${types} · ${parts}`
+    const types = j.injuryTypeNames.join(', ') || '—'
+    const outcome = j.inj.injuryResult ? ` · Result/outcome: ${j.inj.injuryResult}` : ''
+    return `  - ${name} · ${types} · ${parts}${outcome}`
   })
 
   const text = [
@@ -141,12 +179,12 @@ export async function sendIncidentEmail(
                 const name = j.person
                   ? `${escapeHtml(j.person.firstName)} ${escapeHtml(j.person.lastName)}`
                   : escapeHtml(j.inj.personName ?? 'Unknown')
-                const types =
-                  Array.isArray(j.inj.injuryTypes) && j.inj.injuryTypes.length > 0
-                    ? escapeHtml(j.inj.injuryTypes.join(', '))
-                    : '—'
+                const types = escapeHtml(j.injuryTypeNames.join(', ') || '—')
                 const parts = escapeHtml(j.inj.bodyParts.join(', ') || '—')
-                return `<li>${name} — ${types} (${parts})</li>`
+                const outcome = j.inj.injuryResult
+                  ? `<div style="color:#475569;margin-top:2px;">Result / outcome: ${escapeHtml(j.inj.injuryResult)}</div>`
+                  : ''
+                return `<li>${name} — ${types} (${parts})${outcome}</li>`
               })
               .join('')}</ul>`
       }

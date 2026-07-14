@@ -1,8 +1,8 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
-import { asc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { FileText, Mail } from 'lucide-react'
 import { Badge, Button, DetailHeader, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import {
@@ -12,12 +12,12 @@ import {
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
@@ -25,8 +25,16 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
-import { PersonSelectField } from '@/components/person-select-field'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { sendWorkOrderEmail } from './_send-email'
+import { assertEquipmentWorkOrderReferences } from '../_lib'
+import {
+  optionalTextInput,
+  optionalUuidInput,
+  requiredTextInput,
+  requireEnumInput,
+  requireUuidInput,
+} from '@/lib/mutation-input'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,14 +77,15 @@ async function updateOverview(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.workorder.close')
-  const id = String(formData.get('id') ?? '')
-  const summary = String(formData.get('summary') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const priority = String(formData.get('priority') ?? 'med') as (typeof PRIORITIES)[number]
-  const assignedToTenantUserId = String(formData.get('assignedToTenantUserId') ?? '').trim() || null
-  const reportedByPersonId = String(formData.get('reportedByPersonId') ?? '').trim() || null
-  if (!id || !summary) return
-  if (!PRIORITIES.includes(priority)) return
+  const id = requireUuidInput(formData.get('id'), 'Work order')
+  const summary = requiredTextInput(formData.get('summary'), 'Summary', 500)
+  const description = optionalTextInput(formData.get('description'), 'Description', 10_000)
+  const priority = requireEnumInput(formData.get('priority') ?? 'med', PRIORITIES, 'Priority')
+  const assignedToTenantUserId = optionalUuidInput(
+    formData.get('assignedToTenantUserId'),
+    'Assignee',
+  )
+  const reportedByPersonId = optionalUuidInput(formData.get('reportedByPersonId'), 'Reporter')
 
   const itemId = await ctx.db(async (tx) => {
     const [existing] = await tx
@@ -85,7 +94,13 @@ async function updateOverview(formData: FormData) {
       .where(eq(equipmentWorkOrders.id, id))
       .limit(1)
       .for('update')
-    await tx
+    if (!existing) throw new Error('Work order was not found.')
+    await assertEquipmentWorkOrderReferences(ctx, tx, {
+      itemId: existing.itemId,
+      assignedToTenantUserId,
+      reportedByPersonId,
+    })
+    const [updated] = await tx
       .update(equipmentWorkOrders)
       .set({
         summary,
@@ -95,7 +110,9 @@ async function updateOverview(formData: FormData) {
         reportedByPersonId,
       })
       .where(eq(equipmentWorkOrders.id, id))
-    return existing?.itemId
+      .returning({ itemId: equipmentWorkOrders.itemId })
+    if (!updated) throw new Error('Work order was not updated.')
+    return updated.itemId
   })
   await recordAudit(ctx, {
     entityType: 'equipment_work_order',
@@ -104,7 +121,7 @@ async function updateOverview(formData: FormData) {
     summary: 'Work order details updated',
     after: { summary, priority, assignedToTenantUserId, reportedByPersonId },
   })
-  if (itemId) revalidatePath(`/equipment/${itemId}`)
+  revalidatePath(`/equipment/${itemId}`)
   revalidatePath(`/equipment/work-orders/${id}`)
   revalidatePath('/equipment/work-orders')
 }
@@ -250,10 +267,16 @@ export default async function WorkOrderDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
 
   const ctx = await requireRequestContext()
+  const canClose = can(ctx, 'equipment.workorder.close')
+  const canSend = can(ctx, 'equipment.read.all')
+  if (!canClose && (active === 'action_taken' || active === 'status')) {
+    redirect(`/equipment/work-orders/${id}`)
+  }
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -281,36 +304,11 @@ export default async function WorkOrderDetailPage({
       personId: row.wo.reportedByPersonId,
     })
     if (!visible) return null
-    const [assignees, reporters] = await Promise.all([
-      tx
-        .select({
-          id: tenantUsers.id,
-          displayName: tenantUsers.displayName,
-          userName: user.name,
-          email: user.email,
-        })
-        .from(tenantUsers)
-        .leftJoin(user, eq(user.id, tenantUsers.userId))
-        .where(eq(tenantUsers.status, 'active'))
-        .orderBy(asc(tenantUsers.displayName))
-        .limit(500),
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(500),
-    ])
-    return { ...row, assignees, reporters }
+    return row
   })
 
   if (!data) notFound()
-  const { wo, item, assignee, assigneeUser, reporter, assignees, reporters } = data
+  const { wo, item, assignee, assigneeUser, reporter } = data
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'equipment_work_order', id, 50) : []
   const basePath = `/equipment/work-orders/${id}`
@@ -338,17 +336,19 @@ export default async function WorkOrderDetailPage({
                   <FileText size={14} /> PDF
                 </Button>
               </Link>
-              <Link
-                href={
-                  `/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
-                }
-                scroll={false}
-              >
-                <Button variant="outline">
-                  <Mail size={14} /> Send email
-                </Button>
-              </Link>
-              {!closed ? (
+              {canSend ? (
+                <Link
+                  href={
+                    `/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                  }
+                  scroll={false}
+                >
+                  <Button variant="outline">
+                    <Mail size={14} /> Send email
+                  </Button>
+                </Link>
+              ) : null}
+              {canClose && !closed ? (
                 <form action={markComplete}>
                   <input type="hidden" name="id" value={id} />
                   <Button type="submit">Mark complete</Button>
@@ -365,8 +365,12 @@ export default async function WorkOrderDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'action_taken', label: 'Action taken' },
-            { key: 'status', label: 'Status' },
+            ...(canClose
+              ? ([
+                  { key: 'action_taken', label: 'Action taken' },
+                  { key: 'status', label: 'Status' },
+                ] as const)
+              : []),
             { key: 'activity', label: 'Activity', count: activity.length },
           ]}
         />
@@ -431,60 +435,82 @@ export default async function WorkOrderDetailPage({
                 </div>
               ) : null}
             </Section>
-            <Section title="Edit details">
-              <form action={updateOverview} className="space-y-4">
-                <input type="hidden" name="id" value={id} />
-                <Field label="Summary" required>
-                  <Input name="summary" required defaultValue={wo.summary} />
-                </Field>
-                <Field label="Description">
-                  <Textarea name="description" rows={4} defaultValue={wo.description ?? ''} />
-                </Field>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Priority" required>
-                    <Select name="priority" defaultValue={wo.priority}>
-                      <option value="low">Low</option>
-                      <option value="med">Medium</option>
-                      <option value="high">High</option>
-                    </Select>
+            {canClose ? (
+              <Section title="Edit details">
+                <form action={updateOverview} className="space-y-4">
+                  <input type="hidden" name="id" value={id} />
+                  <Field label="Summary" required>
+                    <Input name="summary" required maxLength={500} defaultValue={wo.summary} />
                   </Field>
-                  <Field label="Assign to">
-                    <PersonSelectField
-                      name="assignedToTenantUserId"
-                      defaultValue={wo.assignedToTenantUserId ?? ''}
-                      options={assignees.map((a) => ({
-                        value: a.id,
-                        label: a.userName ?? a.displayName ?? a.id.slice(0, 6),
-                        hint: a.email ?? undefined,
-                      }))}
-                      placeholder="Select an assignee..."
-                      searchPlaceholder="Search people..."
-                      sheetTitle="Assign to"
-                      emptyLabel="Unassigned"
+                  <Field label="Description">
+                    <Textarea
+                      name="description"
+                      rows={4}
+                      maxLength={10000}
+                      defaultValue={wo.description ?? ''}
                     />
                   </Field>
-                  <Field label="Reported by" className="sm:col-span-2">
-                    <PersonSelectField
-                      name="reportedByPersonId"
-                      defaultValue={wo.reportedByPersonId ?? ''}
-                      options={reporters.map((p) => ({
-                        value: p.id,
-                        label: `${p.lastName}, ${p.firstName}`,
-                        hint: p.employeeNo ?? undefined,
-                      }))}
-                      placeholder="Select a person…"
-                      clearable
-                      emptyLabel="— Not specified —"
-                    />
-                  </Field>
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={closed}>
-                    Save changes
-                  </Button>
-                </div>
-              </form>
-            </Section>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Priority" required>
+                      <Select name="priority" defaultValue={wo.priority}>
+                        <option value="low">Low</option>
+                        <option value="med">Medium</option>
+                        <option value="high">High</option>
+                      </Select>
+                    </Field>
+                    <Field label="Assign to">
+                      <RemoteSelectField
+                        name="assignedToTenantUserId"
+                        defaultValue={wo.assignedToTenantUserId ?? ''}
+                        lookup="equipment-work-order-assignees"
+                        initialOption={
+                          assignee
+                            ? {
+                                value: assignee.id,
+                                label:
+                                  assigneeUser?.name ??
+                                  assignee.displayName ??
+                                  assignee.id.slice(0, 6),
+                                hint: assigneeUser?.email ?? undefined,
+                              }
+                            : undefined
+                        }
+                        placeholder="Select an assignee..."
+                        searchPlaceholder="Search active members..."
+                        sheetTitle="Assign to"
+                        emptyLabel="Unassigned"
+                      />
+                    </Field>
+                    <Field label="Reported by" className="sm:col-span-2">
+                      <RemoteSelectField
+                        name="reportedByPersonId"
+                        defaultValue={wo.reportedByPersonId ?? ''}
+                        lookup="equipment-work-order-reporters"
+                        initialOption={
+                          reporter
+                            ? {
+                                value: reporter.id,
+                                label: `${reporter.lastName}, ${reporter.firstName}`,
+                                hint: reporter.employeeNo ?? undefined,
+                              }
+                            : undefined
+                        }
+                        placeholder="Select a person…"
+                        searchPlaceholder="Search active people…"
+                        sheetTitle="Reported by"
+                        clearable
+                        emptyLabel="— Not specified —"
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="submit" disabled={closed}>
+                      Save changes
+                    </Button>
+                  </div>
+                </form>
+              </Section>
+            ) : null}
           </>
         ) : null}
 
@@ -554,7 +580,7 @@ export default async function WorkOrderDetailPage({
       </div>
 
       <GenericSendEmailDialog
-        open={pickString(sp.send) === '1'}
+        open={canSend && pickString(sp.send) === '1'}
         title="Send work order"
         description="Sends a recap of this work order to the tenant admin distribution list and the assignee. Add explicit recipients below to override."
         reference={wo.reference}

@@ -1,6 +1,6 @@
 // Tenant-managed PDF DOCUMENT TEMPLATES — paper-size, paginated documents the
 // flow `send_email` action can ATTACH (separate from email_templates, which are
-// the email body). Authored in the same drag-and-drop builder but on a real page
+// the email body). Authored in the same HTML builder but on a real page
 // (Letter/A4 + margins), with a Paged.js pagination preview. The compiled HTML
 // carries {{merge}} tokens + {{#each}} loops resolved per-render by
 // @beaconhs/email-render; the worker prints it to PDF via Puppeteer @page CSS.
@@ -50,8 +50,6 @@ export const pdfTemplates = pgTable(
     headerHtml: text('header_html'),
     footerHtml: text('footer_html'),
     // --- content ---
-    // GrapesJS getProjectData() — the builder doc, the authoritative reload format.
-    design: jsonb('design').$type<Record<string, unknown>>().notNull().default({}),
     // Server-compiled, sanitized HTML body, {{tokens}} / {{#each}} still embedded.
     compiledHtml: text('compiled_html').notNull().default(''),
     // The editable inline-styled HTML the builder canvas loads (data-each markers).

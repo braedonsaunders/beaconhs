@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import type { ReactNode } from 'react'
+import { alias } from 'drizzle-orm/pg-core'
 import {
   AlertTriangle,
   Folder,
@@ -13,7 +15,7 @@ import {
   Truck,
   Users,
 } from 'lucide-react'
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -48,8 +50,13 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { LiveField } from '@/components/live-field'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { DetailPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
 import { Section } from '@/components/section'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import {
   archiveLocation,
   createContactFromDrawer,
@@ -85,6 +92,99 @@ const SITE_TABS = ['overview', 'contacts', 'incidents', 'equipment', 'activity']
 type CustomerTab = (typeof CUSTOMER_TABS)[number]
 type ProjectTab = (typeof PROJECT_TABS)[number]
 type SiteTab = (typeof SITE_TABS)[number]
+type LocationListParams = ReturnType<typeof parseListParams<'name'>>
+
+const LOCATION_LIST_KEYS = {
+  overview: {
+    q: 'overviewQ',
+    sort: 'overviewSort',
+    dir: 'overviewDir',
+    page: 'overviewPage',
+    perPage: 'overviewPerPage',
+    filter: 'overviewFilter',
+  },
+  projects: {
+    q: 'projectQ',
+    sort: 'projectSort',
+    dir: 'projectDir',
+    page: 'projectPage',
+    perPage: 'projectPerPage',
+    filter: 'projectFilter',
+  },
+  sites: {
+    q: 'siteQ',
+    sort: 'siteSort',
+    dir: 'siteDir',
+    page: 'sitePage',
+    perPage: 'sitePerPage',
+    filter: 'siteFilter',
+  },
+  contacts: {
+    q: 'contactQ',
+    sort: 'contactSort',
+    dir: 'contactDir',
+    page: 'contactPage',
+    perPage: 'contactPerPage',
+    filter: 'contactFilter',
+  },
+  incidents: {
+    q: 'incidentQ',
+    sort: 'incidentSort',
+    dir: 'incidentDir',
+    page: 'incidentPage',
+    perPage: 'incidentPerPage',
+    filter: 'incidentStatus',
+  },
+  equipment: {
+    q: 'equipmentQ',
+    sort: 'equipmentSort',
+    dir: 'equipmentDir',
+    page: 'equipmentPage',
+    perPage: 'equipmentPerPage',
+    filter: 'equipmentStatus',
+  },
+  activity: {
+    q: 'activityQ',
+    sort: 'activitySort',
+    dir: 'activityDir',
+    page: 'activityPage',
+    perPage: 'activityPerPage',
+    filter: 'activityFilter',
+  },
+} as const
+
+type LocationTab = keyof typeof LOCATION_LIST_KEYS
+type LocationListKeys = (typeof LOCATION_LIST_KEYS)[LocationTab]
+
+function listKeysForLocationTab(value: string | undefined): LocationListKeys {
+  return value && value in LOCATION_LIST_KEYS
+    ? LOCATION_LIST_KEYS[value as LocationTab]
+    : LOCATION_LIST_KEYS.overview
+}
+
+const LIST_SORTS = ['name'] as const
+const INCIDENT_STATUSES = [
+  { value: 'reported', label: 'Reported' },
+  { value: 'under_investigation', label: 'Under investigation' },
+  { value: 'pending_review', label: 'Pending review' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'reopened', label: 'Reopened' },
+] as const
+const EQUIPMENT_STATUSES = [
+  { value: 'in_service', label: 'In service' },
+  { value: 'out_of_service', label: 'Out of service' },
+  { value: 'in_repair', label: 'In repair' },
+  { value: 'lost', label: 'Lost' },
+  { value: 'retired', label: 'Retired' },
+] as const
+
+function incidentStatusFrom(value: string | undefined) {
+  return INCIDENT_STATUSES.find((option) => option.value === value)?.value
+}
+
+function equipmentStatusFrom(value: string | undefined) {
+  return EQUIPMENT_STATUSES.find((option) => option.value === value)?.value
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -124,8 +224,11 @@ async function resolveDescendantIds(
 async function loadIncidentsForUnits(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   orgUnitIds: string[],
+  params: LocationListParams,
+  status: 'reported' | 'under_investigation' | 'pending_review' | 'closed' | 'reopened' | undefined,
+  includeRows: boolean,
 ) {
-  if (orgUnitIds.length === 0) return []
+  if (orgUnitIds.length === 0) return { rows: [], total: 0, filteredTotal: 0 }
   return ctx.db(async (tx) => {
     // Honor the viewer's incidents read tier — the same predicate the
     // /incidents list applies, so this tab can't be used to enumerate
@@ -135,36 +238,142 @@ async function loadIncidentsForUnits(
       ownerCols: [incidents.reportedByTenantUserId],
       siteCol: incidents.siteOrgUnitId,
     })
-    return tx
-      .select()
-      .from(incidents)
-      .where(
-        and(
-          inArray(incidents.siteOrgUnitId, orgUnitIds),
-          isNull(incidents.deletedAt),
-          ...(vis ? [vis] : []),
-        ),
-      )
-      .orderBy(desc(incidents.occurredAt))
-      .limit(100)
+    const base = and(inArray(incidents.siteOrgUnitId, orgUnitIds), isNull(incidents.deletedAt), vis)
+    const search = params.q
+      ? or(
+          ilike(incidents.reference, `%${params.q}%`),
+          ilike(incidents.title, `%${params.q}%`),
+          ilike(incidents.description, `%${params.q}%`),
+        )
+      : undefined
+    const filtered = and(base, search, status ? eq(incidents.status, status) : undefined)
+    const [[totalRow], [filteredRow], rows] = await Promise.all([
+      tx.select({ c: count() }).from(incidents).where(base),
+      includeRows ? tx.select({ c: count() }).from(incidents).where(filtered) : Promise.resolve([]),
+      includeRows
+        ? tx
+            .select()
+            .from(incidents)
+            .where(filtered)
+            .orderBy(desc(incidents.occurredAt), desc(incidents.id))
+            .limit(params.perPage)
+            .offset((params.page - 1) * params.perPage)
+        : Promise.resolve([]),
+    ])
+    return {
+      rows,
+      total: Number(totalRow?.c ?? 0),
+      filteredTotal: Number(filteredRow?.c ?? 0),
+    }
   })
 }
 
 async function loadEquipmentForUnits(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   orgUnitIds: string[],
+  params: LocationListParams,
+  status: 'in_service' | 'out_of_service' | 'in_repair' | 'lost' | 'retired' | undefined,
+  includeRows: boolean,
 ) {
-  if (orgUnitIds.length === 0) return []
-  return ctx.db((tx) =>
-    tx
-      .select({ item: equipmentItems, type: equipmentTypes, holder: people })
-      .from(equipmentItems)
-      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-      .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-      .where(inArray(equipmentItems.currentSiteOrgUnitId, orgUnitIds))
-      .orderBy(asc(equipmentItems.name))
-      .limit(200),
-  )
+  if (orgUnitIds.length === 0) return { rows: [], total: 0, filteredTotal: 0 }
+  return ctx.db(async (tx) => {
+    const vis = await moduleScopeWhere(ctx, tx, {
+      prefix: 'equipment',
+      siteCol: equipmentItems.currentSiteOrgUnitId,
+      personCol: equipmentItems.currentHolderPersonId,
+    })
+    const base = and(
+      inArray(equipmentItems.currentSiteOrgUnitId, orgUnitIds),
+      isNull(equipmentItems.deletedAt),
+      vis,
+    )
+    const search = params.q
+      ? or(
+          ilike(equipmentItems.name, `%${params.q}%`),
+          ilike(equipmentItems.assetTag, `%${params.q}%`),
+          ilike(equipmentTypes.name, `%${params.q}%`),
+          ilike(people.firstName, `%${params.q}%`),
+          ilike(people.lastName, `%${params.q}%`),
+        )
+      : undefined
+    const filtered = and(base, search, status ? eq(equipmentItems.status, status) : undefined)
+    const [[totalRow], [filteredRow], rows] = await Promise.all([
+      tx.select({ c: count() }).from(equipmentItems).where(base),
+      includeRows
+        ? tx
+            .select({ c: count() })
+            .from(equipmentItems)
+            .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+            .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+            .where(filtered)
+        : Promise.resolve([]),
+      includeRows
+        ? tx
+            .select({ item: equipmentItems, type: equipmentTypes, holder: people })
+            .from(equipmentItems)
+            .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+            .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
+            .where(filtered)
+            .orderBy(asc(equipmentItems.name), asc(equipmentItems.id))
+            .limit(params.perPage)
+            .offset((params.page - 1) * params.perPage)
+        : Promise.resolve([]),
+    ])
+    return {
+      rows,
+      total: Number(totalRow?.c ?? 0),
+      filteredTotal: Number(filteredRow?.c ?? 0),
+    }
+  })
+}
+
+async function loadContactsForUnit(
+  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  orgUnitId: string,
+  params: LocationListParams,
+  includeRows: boolean,
+  editContactId: string | null,
+) {
+  return ctx.db(async (tx) => {
+    const base = eq(customerContacts.orgUnitId, orgUnitId)
+    const search = params.q
+      ? or(
+          ilike(customerContacts.name, `%${params.q}%`),
+          ilike(customerContacts.role, `%${params.q}%`),
+          ilike(customerContacts.email, `%${params.q}%`),
+          ilike(customerContacts.phone, `%${params.q}%`),
+        )
+      : undefined
+    const filtered = and(base, search)
+    const [[totalRow], [filteredRow], rows, editRows] = await Promise.all([
+      tx.select({ c: count() }).from(customerContacts).where(base),
+      includeRows
+        ? tx.select({ c: count() }).from(customerContacts).where(filtered)
+        : Promise.resolve([]),
+      includeRows
+        ? tx
+            .select()
+            .from(customerContacts)
+            .where(filtered)
+            .orderBy(asc(customerContacts.name), asc(customerContacts.id))
+            .limit(params.perPage)
+            .offset((params.page - 1) * params.perPage)
+        : Promise.resolve([]),
+      editContactId
+        ? tx
+            .select()
+            .from(customerContacts)
+            .where(and(base, eq(customerContacts.id, editContactId)))
+            .limit(1)
+        : Promise.resolve([]),
+    ])
+    return {
+      rows,
+      total: Number(totalRow?.c ?? 0),
+      filteredTotal: Number(filteredRow?.c ?? 0),
+      editing: editRows[0] ?? null,
+    }
+  })
 }
 
 // -------------------- Page entry --------------------
@@ -177,9 +386,31 @@ export default async function LocationDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
+  const listKeys = listKeysForLocationTab(pickString(sp.tab))
+  const listParams = parseListParams(
+    {
+      q: sp[listKeys.q],
+      sort: sp[listKeys.sort],
+      dir: sp[listKeys.dir],
+      page: sp[listKeys.page],
+      perPage: sp[listKeys.perPage],
+    },
+    {
+      sort: 'name',
+      dir: 'asc',
+      perPage: 25,
+      allowedSorts: LIST_SORTS,
+    },
+  )
   const drawer = typeof sp.drawer === 'string' ? sp.drawer : null
-  const editContactId = typeof sp.contactId === 'string' ? sp.contactId : null
+  const requestedContactId = typeof sp.contactId === 'string' ? sp.contactId : null
+  const editContactId =
+    drawer === 'edit-contact' && requestedContactId && isUuid(requestedContactId)
+      ? requestedContactId
+      : null
   const ctx = await requireRequestContext()
   const hierarchy = await getTenantHierarchy(ctx.tenantId)
   // Read-only unless the viewer can manage the org tree. The autosave / write
@@ -195,23 +426,17 @@ export default async function LocationDetailPage({
       ? await tx.select().from(orgUnits).where(eq(orgUnits.id, unit.parentId)).limit(1)
       : [null]
 
-    const children = await tx
-      .select()
-      .from(orgUnits)
-      .where(eq(orgUnits.parentId, id))
-      .orderBy(asc(orgUnits.name))
-
-    return { unit, parent, children }
+    return { unit, parent }
   })
 
   if (!data) notFound()
-  const { unit, parent, children } = data
+  const { unit, parent } = data
 
   if (unit.level === 'customer') {
     return renderCustomer({
       unit,
-      children,
       sp,
+      listParams,
       drawer,
       editContactId,
       id,
@@ -224,8 +449,8 @@ export default async function LocationDetailPage({
     return renderProject({
       unit,
       parent,
-      children,
       sp,
+      listParams,
       drawer,
       editContactId,
       id,
@@ -234,15 +459,25 @@ export default async function LocationDetailPage({
       canManage,
     })
   }
-  return renderSite({ unit, parent, sp, drawer, editContactId, id, ctx, canManage })
+  return renderSite({
+    unit,
+    parent,
+    sp,
+    listParams,
+    drawer,
+    editContactId,
+    id,
+    ctx,
+    canManage,
+  })
 }
 
 // -------------------- Customer view --------------------
 
 async function renderCustomer({
   unit,
-  children,
   sp,
+  listParams,
   drawer,
   editContactId,
   id,
@@ -251,8 +486,8 @@ async function renderCustomer({
   canManage,
 }: {
   unit: typeof orgUnits.$inferSelect
-  children: (typeof orgUnits.$inferSelect)[]
   sp: Record<string, string | string[] | undefined>
+  listParams: LocationListParams
   drawer: string | null
   editContactId: string | null
   id: string
@@ -266,46 +501,99 @@ async function renderCustomer({
     (t) => (t !== 'projects' || hierarchy.project) && (t !== 'sites' || hierarchy.site),
   )
   const active: CustomerTab = pickActiveTab(sp, visibleTabs, 'overview')
+  const listKeys = LOCATION_LIST_KEYS[active]
   const basePath = `/locations/${id}`
-
-  const projects = children.filter((c) => c.level === 'project')
-
-  const allSites = await ctx.db(async (tx) => {
-    const direct = children.filter((c) => c.level === 'site')
-    const projectIds = projects.map((p) => p.id)
-    let nested: (typeof orgUnits.$inferSelect)[] = []
-    if (projectIds.length > 0) {
-      nested = await tx
-        .select()
-        .from(orgUnits)
-        .where(and(eq(orgUnits.level, 'site'), inArray(orgUnits.parentId, projectIds)))
-        .orderBy(asc(orgUnits.name))
-    }
-    return [...direct, ...nested]
-  })
-
-  const contacts = await ctx.db((tx) =>
-    tx
-      .select()
-      .from(customerContacts)
-      .where(eq(customerContacts.orgUnitId, id))
-      .orderBy(asc(customerContacts.name)),
-  )
-
-  const descendantIds = await resolveDescendantIds(ctx, id)
-  const [allIncidents, allEquipment] = await Promise.all([
-    loadIncidentsForUnits(ctx, descendantIds),
-    loadEquipmentForUnits(ctx, descendantIds),
+  const siteParent = alias(orgUnits, 'site_parent')
+  const [orgData, contactData, descendantIds] = await Promise.all([
+    ctx.db(async (tx) => {
+      const projectBase = and(eq(orgUnits.parentId, id), eq(orgUnits.level, 'project'))
+      const projectSearch = listParams.q
+        ? or(ilike(orgUnits.name, `%${listParams.q}%`), ilike(orgUnits.code, `%${listParams.q}%`))
+        : undefined
+      const projectWhere = and(projectBase, projectSearch)
+      const siteBase = and(
+        eq(orgUnits.level, 'site'),
+        or(eq(orgUnits.parentId, id), eq(siteParent.parentId, id)),
+      )
+      const siteSearch = listParams.q
+        ? or(
+            ilike(orgUnits.name, `%${listParams.q}%`),
+            ilike(orgUnits.code, `%${listParams.q}%`),
+            ilike(siteParent.name, `%${listParams.q}%`),
+          )
+        : undefined
+      const siteWhere = and(siteBase, siteSearch)
+      const [
+        [projectCountRow],
+        [siteCountRow],
+        [filteredProjectRow],
+        [filteredSiteRow],
+        projects,
+        sites,
+      ] = await Promise.all([
+        tx.select({ c: count() }).from(orgUnits).where(projectBase),
+        tx
+          .select({ c: count() })
+          .from(orgUnits)
+          .leftJoin(siteParent, eq(siteParent.id, orgUnits.parentId))
+          .where(siteBase),
+        active === 'projects'
+          ? tx.select({ c: count() }).from(orgUnits).where(projectWhere)
+          : Promise.resolve([]),
+        active === 'sites'
+          ? tx
+              .select({ c: count() })
+              .from(orgUnits)
+              .leftJoin(siteParent, eq(siteParent.id, orgUnits.parentId))
+              .where(siteWhere)
+          : Promise.resolve([]),
+        active === 'projects'
+          ? tx
+              .select()
+              .from(orgUnits)
+              .where(projectWhere)
+              .orderBy(
+                asc(sql`${orgUnits.deletedAt} is not null`),
+                asc(orgUnits.name),
+                asc(orgUnits.id),
+              )
+              .limit(listParams.perPage)
+              .offset((listParams.page - 1) * listParams.perPage)
+          : Promise.resolve([]),
+        active === 'sites'
+          ? tx
+              .select({ unit: orgUnits, parentName: siteParent.name })
+              .from(orgUnits)
+              .leftJoin(siteParent, eq(siteParent.id, orgUnits.parentId))
+              .where(siteWhere)
+              .orderBy(asc(orgUnits.name), asc(orgUnits.id))
+              .limit(listParams.perPage)
+              .offset((listParams.page - 1) * listParams.perPage)
+          : Promise.resolve([]),
+      ])
+      return {
+        projects,
+        projectCount: Number(projectCountRow?.c ?? 0),
+        filteredProjectCount: Number(filteredProjectRow?.c ?? 0),
+        sites,
+        siteCount: Number(siteCountRow?.c ?? 0),
+        filteredSiteCount: Number(filteredSiteRow?.c ?? 0),
+      }
+    }),
+    loadContactsForUnit(ctx, id, listParams, active === 'contacts', editContactId),
+    resolveDescendantIds(ctx, id),
+  ])
+  const incidentStatus =
+    active === 'incidents' ? incidentStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const equipmentStatus =
+    active === 'equipment' ? equipmentStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const [incidentData, equipmentData] = await Promise.all([
+    loadIncidentsForUnits(ctx, descendantIds, listParams, incidentStatus, active === 'incidents'),
+    loadEquipmentForUnits(ctx, descendantIds, listParams, equipmentStatus, active === 'equipment'),
   ])
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'org_unit', id, 25) : []
-
-  const projectParentName = (siteParentId: string | null): string | undefined => {
-    if (!siteParentId) return undefined
-    const p = projects.find((pr) => pr.id === siteParentId)
-    return p?.name
-  }
 
   return (
     <DetailPageLayout
@@ -352,13 +640,13 @@ async function renderCustomer({
             {
               key: 'projects',
               label: 'Projects',
-              count: projects.length,
+              count: orgData.projectCount,
               hidden: !hierarchy.project,
             },
-            { key: 'sites', label: 'Sites', count: allSites.length, hidden: !hierarchy.site },
-            { key: 'contacts', label: 'Contacts', count: contacts.length },
-            { key: 'incidents', label: 'Incidents', count: allIncidents.length },
-            { key: 'equipment', label: 'Equipment', count: allEquipment.length },
+            { key: 'sites', label: 'Sites', count: orgData.siteCount, hidden: !hierarchy.site },
+            { key: 'contacts', label: 'Contacts', count: contactData.total },
+            { key: 'incidents', label: 'Incidents', count: incidentData.total },
+            { key: 'equipment', label: 'Equipment', count: equipmentData.total },
             { key: 'activity', label: 'Activity' },
           ]}
         />
@@ -366,20 +654,91 @@ async function renderCustomer({
     >
       {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
       {active === 'projects' ? (
-        <ProjectsTab unit={unit} projects={projects} canManage={canManage} />
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={orgData.filteredProjectCount}
+          placeholder="Search projects…"
+        >
+          <ProjectsTab unit={unit} projects={orgData.projects} canManage={canManage} />
+        </ListTabShell>
       ) : null}
-      {active === 'sites' ? <SitesTab sites={allSites} parentNameFor={projectParentName} /> : null}
+      {active === 'sites' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={orgData.filteredSiteCount}
+          placeholder="Search sites…"
+        >
+          <SitesTab sites={orgData.sites} showParent />
+        </ListTabShell>
+      ) : null}
       {active === 'contacts' ? (
-        <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={contactData.filteredTotal}
+          placeholder="Search contacts…"
+        >
+          <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
+        </ListTabShell>
       ) : null}
-      {active === 'incidents' ? <IncidentsTab rows={allIncidents} timeZone={ctx.timezone} /> : null}
-      {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
+      {active === 'incidents' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={incidentData.filteredTotal}
+          placeholder="Search incidents…"
+          filters={
+            <FilterChips
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={listKeys.filter}
+              pageParamKey={listKeys.page}
+              label="Status"
+              options={[...INCIDENT_STATUSES]}
+            />
+          }
+        >
+          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} />
+        </ListTabShell>
+      ) : null}
+      {active === 'equipment' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={equipmentData.filteredTotal}
+          placeholder="Search equipment…"
+          filters={
+            <FilterChips
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={listKeys.filter}
+              pageParamKey={listKeys.page}
+              label="Status"
+              options={[...EQUIPMENT_STATUSES]}
+            />
+          }
+        >
+          <EquipmentTab equipment={equipmentData.rows} />
+        </ListTabShell>
+      ) : null}
       {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
           orgUnitId={id}
-          contact={resolveEditContact(contacts, drawer, editContactId)}
+          contact={resolveEditContact(contactData.editing, drawer)}
           closeHref={`${basePath}?tab=contacts`}
           createAction={createContactFromDrawer}
           updateAction={updateContactFromDrawer}
@@ -394,8 +753,8 @@ async function renderCustomer({
 async function renderProject({
   unit,
   parent,
-  children,
   sp,
+  listParams,
   drawer,
   editContactId,
   id,
@@ -405,8 +764,8 @@ async function renderProject({
 }: {
   unit: typeof orgUnits.$inferSelect
   parent: typeof orgUnits.$inferSelect | null
-  children: (typeof orgUnits.$inferSelect)[]
   sp: Record<string, string | string[] | undefined>
+  listParams: LocationListParams
   drawer: string | null
   editContactId: string | null
   id: string
@@ -416,21 +775,46 @@ async function renderProject({
 }) {
   const visibleTabs = PROJECT_TABS.filter((t) => t !== 'sites' || hierarchy.site)
   const active: ProjectTab = pickActiveTab(sp, visibleTabs, 'overview')
+  const listKeys = LOCATION_LIST_KEYS[active]
   const basePath = `/locations/${id}`
-  const sites = children.filter((c) => c.level === 'site')
-
-  const contacts = await ctx.db((tx) =>
-    tx
-      .select()
-      .from(customerContacts)
-      .where(eq(customerContacts.orgUnitId, id))
-      .orderBy(asc(customerContacts.name)),
-  )
-
-  const descendantIds = await resolveDescendantIds(ctx, id)
-  const [allIncidents, allEquipment] = await Promise.all([
-    loadIncidentsForUnits(ctx, descendantIds),
-    loadEquipmentForUnits(ctx, descendantIds),
+  const [siteData, contactData, descendantIds] = await Promise.all([
+    ctx.db(async (tx) => {
+      const base = and(eq(orgUnits.parentId, id), eq(orgUnits.level, 'site'))
+      const search = listParams.q
+        ? or(ilike(orgUnits.name, `%${listParams.q}%`), ilike(orgUnits.code, `%${listParams.q}%`))
+        : undefined
+      const filtered = and(base, search)
+      const [[totalRow], [filteredRow], rows] = await Promise.all([
+        tx.select({ c: count() }).from(orgUnits).where(base),
+        active === 'sites'
+          ? tx.select({ c: count() }).from(orgUnits).where(filtered)
+          : Promise.resolve([]),
+        active === 'sites'
+          ? tx
+              .select()
+              .from(orgUnits)
+              .where(filtered)
+              .orderBy(asc(orgUnits.name), asc(orgUnits.id))
+              .limit(listParams.perPage)
+              .offset((listParams.page - 1) * listParams.perPage)
+          : Promise.resolve([]),
+      ])
+      return {
+        rows: rows.map((unit) => ({ unit, parentName: null })),
+        total: Number(totalRow?.c ?? 0),
+        filteredTotal: Number(filteredRow?.c ?? 0),
+      }
+    }),
+    loadContactsForUnit(ctx, id, listParams, active === 'contacts', editContactId),
+    resolveDescendantIds(ctx, id),
+  ])
+  const incidentStatus =
+    active === 'incidents' ? incidentStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const equipmentStatus =
+    active === 'equipment' ? equipmentStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const [incidentData, equipmentData] = await Promise.all([
+    loadIncidentsForUnits(ctx, descendantIds, listParams, incidentStatus, active === 'incidents'),
+    loadEquipmentForUnits(ctx, descendantIds, listParams, equipmentStatus, active === 'equipment'),
   ])
 
   const activity =
@@ -459,28 +843,90 @@ async function renderProject({
           variant="pills"
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'sites', label: 'Sites', count: sites.length, hidden: !hierarchy.site },
-            { key: 'contacts', label: 'Contacts', count: contacts.length },
-            { key: 'incidents', label: 'Incidents', count: allIncidents.length },
-            { key: 'equipment', label: 'Equipment', count: allEquipment.length },
+            { key: 'sites', label: 'Sites', count: siteData.total, hidden: !hierarchy.site },
+            { key: 'contacts', label: 'Contacts', count: contactData.total },
+            { key: 'incidents', label: 'Incidents', count: incidentData.total },
+            { key: 'equipment', label: 'Equipment', count: equipmentData.total },
             { key: 'activity', label: 'Activity' },
           ]}
         />
       }
     >
       {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
-      {active === 'sites' ? <SitesTab sites={sites} /> : null}
-      {active === 'contacts' ? (
-        <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
+      {active === 'sites' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={siteData.filteredTotal}
+          placeholder="Search sites…"
+        >
+          <SitesTab sites={siteData.rows} />
+        </ListTabShell>
       ) : null}
-      {active === 'incidents' ? <IncidentsTab rows={allIncidents} timeZone={ctx.timezone} /> : null}
-      {active === 'equipment' ? <EquipmentTab equipment={allEquipment} /> : null}
+      {active === 'contacts' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={contactData.filteredTotal}
+          placeholder="Search contacts…"
+        >
+          <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
+        </ListTabShell>
+      ) : null}
+      {active === 'incidents' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={incidentData.filteredTotal}
+          placeholder="Search incidents…"
+          filters={
+            <FilterChips
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={listKeys.filter}
+              pageParamKey={listKeys.page}
+              label="Status"
+              options={[...INCIDENT_STATUSES]}
+            />
+          }
+        >
+          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} />
+        </ListTabShell>
+      ) : null}
+      {active === 'equipment' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={equipmentData.filteredTotal}
+          placeholder="Search equipment…"
+          filters={
+            <FilterChips
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={listKeys.filter}
+              pageParamKey={listKeys.page}
+              label="Status"
+              options={[...EQUIPMENT_STATUSES]}
+            />
+          }
+        >
+          <EquipmentTab equipment={equipmentData.rows} />
+        </ListTabShell>
+      ) : null}
       {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
           orgUnitId={id}
-          contact={resolveEditContact(contacts, drawer, editContactId)}
+          contact={resolveEditContact(contactData.editing, drawer)}
           closeHref={`${basePath}?tab=contacts`}
           createAction={createContactFromDrawer}
           updateAction={updateContactFromDrawer}
@@ -496,6 +942,7 @@ async function renderSite({
   unit,
   parent,
   sp,
+  listParams,
   drawer,
   editContactId,
   id,
@@ -505,6 +952,7 @@ async function renderSite({
   unit: typeof orgUnits.$inferSelect
   parent: typeof orgUnits.$inferSelect | null
   sp: Record<string, string | string[] | undefined>
+  listParams: LocationListParams
   drawer: string | null
   editContactId: string | null
   id: string
@@ -512,19 +960,22 @@ async function renderSite({
   canManage: boolean
 }) {
   const active: SiteTab = pickActiveTab(sp, SITE_TABS, 'overview')
+  const listKeys = LOCATION_LIST_KEYS[active]
   const basePath = `/locations/${id}`
-
-  const contacts = await ctx.db((tx) =>
-    tx
-      .select()
-      .from(customerContacts)
-      .where(eq(customerContacts.orgUnitId, id))
-      .orderBy(asc(customerContacts.name)),
+  const contactData = await loadContactsForUnit(
+    ctx,
+    id,
+    listParams,
+    active === 'contacts',
+    editContactId,
   )
-
-  const [siteIncidents, siteEquipment] = await Promise.all([
-    loadIncidentsForUnits(ctx, [id]),
-    loadEquipmentForUnits(ctx, [id]),
+  const incidentStatus =
+    active === 'incidents' ? incidentStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const equipmentStatus =
+    active === 'equipment' ? equipmentStatusFrom(pickString(sp[listKeys.filter])) : undefined
+  const [incidentData, equipmentData] = await Promise.all([
+    loadIncidentsForUnits(ctx, [id], listParams, incidentStatus, active === 'incidents'),
+    loadEquipmentForUnits(ctx, [id], listParams, equipmentStatus, active === 'equipment'),
   ])
 
   const activity =
@@ -553,9 +1004,9 @@ async function renderSite({
           variant="pills"
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'contacts', label: 'Contacts', count: contacts.length },
-            { key: 'incidents', label: 'Incidents', count: siteIncidents.length },
-            { key: 'equipment', label: 'Equipment', count: siteEquipment.length },
+            { key: 'contacts', label: 'Contacts', count: contactData.total },
+            { key: 'incidents', label: 'Incidents', count: incidentData.total },
+            { key: 'equipment', label: 'Equipment', count: equipmentData.total },
             { key: 'activity', label: 'Activity' },
           ]}
         />
@@ -563,18 +1014,67 @@ async function renderSite({
     >
       {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
       {active === 'contacts' ? (
-        <ContactsTab unit={unit} contacts={contacts} canManage={canManage} />
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={contactData.filteredTotal}
+          placeholder="Search contacts…"
+        >
+          <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
+        </ListTabShell>
       ) : null}
       {active === 'incidents' ? (
-        <IncidentsTab rows={siteIncidents} timeZone={ctx.timezone} />
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={incidentData.filteredTotal}
+          placeholder="Search incidents…"
+          filters={
+            <FilterChips
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={listKeys.filter}
+              pageParamKey={listKeys.page}
+              label="Status"
+              options={[...INCIDENT_STATUSES]}
+            />
+          }
+        >
+          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} />
+        </ListTabShell>
       ) : null}
-      {active === 'equipment' ? <EquipmentTab equipment={siteEquipment} /> : null}
+      {active === 'equipment' ? (
+        <ListTabShell
+          basePath={basePath}
+          sp={sp}
+          params={listParams}
+          listKeys={listKeys}
+          total={equipmentData.filteredTotal}
+          placeholder="Search equipment…"
+          filters={
+            <FilterChips
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={listKeys.filter}
+              pageParamKey={listKeys.page}
+              label="Status"
+              options={[...EQUIPMENT_STATUSES]}
+            />
+          }
+        >
+          <EquipmentTab equipment={equipmentData.rows} />
+        </ListTabShell>
+      ) : null}
       {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
           orgUnitId={id}
-          contact={resolveEditContact(contacts, drawer, editContactId)}
+          contact={resolveEditContact(contactData.editing, drawer)}
           closeHref={`${basePath}?tab=contacts`}
           createAction={createContactFromDrawer}
           updateAction={updateContactFromDrawer}
@@ -588,13 +1088,10 @@ async function renderSite({
 
 /** Find the contact targeted by ?drawer=edit-contact&contactId=… for prefill. */
 function resolveEditContact(
-  contacts: (typeof customerContacts.$inferSelect)[],
+  c: typeof customerContacts.$inferSelect | null,
   drawer: string | null,
-  contactId: string | null,
 ): ContactRow | null {
-  if (drawer !== 'edit-contact' || !contactId) return null
-  const c = contacts.find((row) => row.id === contactId)
-  if (!c) return null
+  if (drawer !== 'edit-contact' || !c) return null
   return {
     id: c.id,
     name: c.name,
@@ -604,6 +1101,44 @@ function resolveEditContact(
     notes: c.notes,
     isPrimary: c.isPrimary,
   }
+}
+
+function ListTabShell({
+  basePath,
+  sp,
+  params,
+  listKeys,
+  total,
+  placeholder,
+  filters,
+  children,
+}: {
+  basePath: string
+  sp: Record<string, string | string[] | undefined>
+  params: LocationListParams
+  listKeys: LocationListKeys
+  total: number
+  placeholder: string
+  filters?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="space-y-3">
+      <TableToolbar>
+        <SearchInput placeholder={placeholder} paramKey={listKeys.q} pageParamKey={listKeys.page} />
+        {filters}
+      </TableToolbar>
+      {children}
+      <Pagination
+        basePath={basePath}
+        currentParams={sp}
+        total={total}
+        page={params.page}
+        perPage={params.perPage}
+        pageParamKey={listKeys.page}
+      />
+    </div>
+  )
 }
 
 async function OverviewTab({
@@ -825,34 +1360,30 @@ function ProjectsTab({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {[...projects]
-              .sort((a, b) => (a.deletedAt ? 1 : 0) - (b.deletedAt ? 1 : 0))
-              .map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/locations/${p.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {p.name}
-                      </Link>
-                      {p.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600">
-                    {p.code ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-right">
+            {projects.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
                     <Link
                       href={`/locations/${p.id}`}
-                      className="text-xs text-teal-700 hover:underline"
+                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                     >
-                      View →
+                      {p.name}
                     </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    {p.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
+                  </div>
+                </TableCell>
+                <TableCell className="font-mono text-xs text-slate-600">{p.code ?? '—'}</TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/locations/${p.id}`}
+                    className="text-xs text-teal-700 hover:underline"
+                  >
+                    View →
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       )}
@@ -862,10 +1393,10 @@ function ProjectsTab({
 
 function SitesTab({
   sites,
-  parentNameFor,
+  showParent = false,
 }: {
-  sites: (typeof orgUnits.$inferSelect)[]
-  parentNameFor?: (parentId: string | null) => string | undefined
+  sites: { unit: typeof orgUnits.$inferSelect; parentName: string | null }[]
+  showParent?: boolean
 }) {
   if (sites.length === 0) {
     return (
@@ -881,14 +1412,14 @@ function SitesTab({
       <TableHeader>
         <TableRow>
           <TableHead>Site</TableHead>
-          {parentNameFor ? <TableHead>Project</TableHead> : null}
+          {showParent ? <TableHead>Project</TableHead> : null}
           <TableHead>Code</TableHead>
           <TableHead>Coordinates</TableHead>
           <TableHead></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sites.map((s) => (
+        {sites.map(({ unit: s, parentName }) => (
           <TableRow key={s.id}>
             <TableCell>
               <Link
@@ -898,8 +1429,8 @@ function SitesTab({
                 {s.name}
               </Link>
             </TableCell>
-            {parentNameFor ? (
-              <TableCell className="text-slate-600">{parentNameFor(s.parentId) ?? '—'}</TableCell>
+            {showParent ? (
+              <TableCell className="text-slate-600">{parentName ?? '—'}</TableCell>
             ) : null}
             <TableCell className="font-mono text-xs text-slate-600">{s.code ?? '—'}</TableCell>
             <TableCell className="text-slate-600">

@@ -3,6 +3,7 @@
 // views in the registry do not, so they're list-only.
 
 import { REPORT_ENTITIES, type ReportEntity } from '@beaconhs/reports'
+export { isUuid } from '../list-params'
 
 const ID_COLUMN = 'id'
 
@@ -17,10 +18,4 @@ export function isRecordable(entityKey: string): boolean {
 /** The id column to select/filter for an entity, or null for list-only views. */
 export function recordIdColumn(entity: ReportEntity): string | null {
   return entity.table.startsWith('report_') ? null : ID_COLUMN
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-export function isUuid(value: string): boolean {
-  return UUID_RE.test(value)
 }

@@ -7,6 +7,7 @@ import { equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
+import { isUuid } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function EquipmentQrPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const ctx = await requireRequestContext()
   const row = await ctx.db(async (tx) => {
     const [r] = await tx

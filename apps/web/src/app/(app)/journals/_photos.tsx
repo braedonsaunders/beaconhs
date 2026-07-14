@@ -84,6 +84,7 @@ export function Photos({
                 <RawImage
                   src={p.url}
                   alt={p.caption ?? ''}
+                  optimizationReason="authenticated"
                   className="h-full w-full object-cover"
                 />
               ) : null}

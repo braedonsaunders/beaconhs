@@ -1,6 +1,20 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gt,
+  gte,
+  ilike,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 import { Users } from 'lucide-react'
 import {
   Badge,
@@ -25,17 +39,30 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
-import { pickString } from '@/lib/list-params'
+import {
+  isUuid,
+  mergeHref,
+  parseListParams,
+  parsePrefixedListParams,
+  pickString,
+} from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { ExtraFieldsSection } from '../../../_components/extra-fields-section'
 import { addExtraField, deleteExtraField } from '../../../_lib/extra-fields-actions'
+import { loadTrainingExtraFieldPage } from '../../../_lib/extra-field-query'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = ['overview', 'holders', 'extras'] as const
 type Tab = (typeof TABS)[number]
+const SORTS = ['expiry'] as const
+const EXTRA_SORTS = ['order'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -50,8 +77,31 @@ export default async function SkillTypeDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const listParams = parseListParams(sp, {
+    sort: 'expiry',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
+  const extraListParams = parsePrefixedListParams(sp, 'extra', {
+    sort: 'order',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: EXTRA_SORTS,
+  })
+  const statusParam = pickString(sp.status)
+  const statusFilter = ['valid', 'expiring', 'expired', 'no_expiry'].includes(statusParam ?? '')
+    ? (statusParam as 'valid' | 'expiring' | 'expired' | 'no_expiry')
+    : undefined
+  const now = new Date()
+  const todayIso = now.toISOString().slice(0, 10)
+  const in30 = new Date(now)
+  in30.setDate(in30.getDate() + 30)
+  const in30Iso = in30.toISOString().slice(0, 10)
 
   const ctx = await requireModuleManage('training')
   const data = await ctx.db(async (tx) => {
@@ -65,33 +115,84 @@ export default async function SkillTypeDetailPage({
       .where(eq(trainingSkillTypes.id, id))
       .limit(1)
     if (!row) return null
+    const search: SQL<unknown> | undefined = listParams.q
+      ? or(
+          ilike(people.firstName, `%${listParams.q}%`),
+          ilike(people.lastName, `%${listParams.q}%`),
+          ilike(people.employeeNo, `%${listParams.q}%`),
+        )
+      : undefined
+    const status =
+      statusFilter === 'expired'
+        ? lt(trainingSkillAssignments.expiresOn, todayIso)
+        : statusFilter === 'expiring'
+          ? and(
+              gte(trainingSkillAssignments.expiresOn, todayIso),
+              lte(trainingSkillAssignments.expiresOn, in30Iso),
+            )
+          : statusFilter === 'valid'
+            ? gt(trainingSkillAssignments.expiresOn, in30Iso)
+            : statusFilter === 'no_expiry'
+              ? isNull(trainingSkillAssignments.expiresOn)
+              : undefined
+    const baseWhere = and(
+      eq(trainingSkillAssignments.skillTypeId, id),
+      isNull(trainingSkillAssignments.deletedAt),
+    )
+    const where = and(baseWhere, search, status)
+    const [holderSummary] = await tx
+      .select({
+        total: count(),
+        expired: sql<string>`count(*) filter (where ${trainingSkillAssignments.expiresOn} < ${todayIso})`,
+        expiring: sql<string>`count(*) filter (where ${trainingSkillAssignments.expiresOn} >= ${todayIso} and ${trainingSkillAssignments.expiresOn} <= ${in30Iso})`,
+      })
+      .from(trainingSkillAssignments)
+      .where(baseWhere)
+    const [filteredCount] = await tx
+      .select({ c: count() })
+      .from(trainingSkillAssignments)
+      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
+      .where(where)
     const holders = await tx
       .select({ assignment: trainingSkillAssignments, person: people })
       .from(trainingSkillAssignments)
       .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-      .where(
-        and(
-          eq(trainingSkillAssignments.skillTypeId, id),
-          isNull(trainingSkillAssignments.deletedAt),
-        ),
-      )
+      .where(where)
       .orderBy(asc(trainingSkillAssignments.expiresOn))
-    const extras = await tx
-      .select()
-      .from(trainingExtraFields)
-      .where(
-        and(eq(trainingExtraFields.ownerType, 'skill_type'), eq(trainingExtraFields.ownerId, id)),
-      )
-      .orderBy(asc(trainingExtraFields.sortOrder), asc(trainingExtraFields.createdAt))
-    return { ...row, holders, extras }
+      .limit(listParams.perPage)
+      .offset((listParams.page - 1) * listParams.perPage)
+    const extras = await loadTrainingExtraFieldPage(
+      tx,
+      eq(trainingExtraFields.skillTypeId, id),
+      extraListParams,
+    )
+    return {
+      ...row,
+      holders,
+      holderCount: Number(holderSummary?.total ?? 0),
+      expiredCount: Number(holderSummary?.expired ?? 0),
+      expiringCount: Number(holderSummary?.expiring ?? 0),
+      filteredHolderCount: Number(filteredCount?.c ?? 0),
+      extras,
+    }
   })
 
   if (!data) notFound()
-  const { type, authority, holders, extras } = data
+  const {
+    type,
+    authority,
+    holders,
+    holderCount,
+    expiredCount,
+    expiringCount,
+    filteredHolderCount,
+    extras,
+  } = data
   const drawer = pickString(sp.drawer)
-  const closeHref = `${`/training/skills/types/${id}`}${active === 'overview' ? '' : `?tab=${active}`}`
+  const basePath = `/training/skills/types/${id}`
+  const closeHref = mergeHref(basePath, sp, { drawer: undefined })
 
-  const today = new Date()
+  const today = now
   const holdersWithStatus = holders.map((h) => {
     const exp = h.assignment.expiresOn ? new Date(h.assignment.expiresOn) : null
     const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
@@ -105,11 +206,6 @@ export default async function SkillTypeDetailPage({
             : 'valid'
     return { ...h, daysLeft, status }
   })
-
-  const expiredCount = holdersWithStatus.filter((h) => h.status === 'expired').length
-  const expiringCount = holdersWithStatus.filter((h) => h.status === 'expiring').length
-
-  const basePath = `/training/skills/types/${id}`
 
   return (
     <DetailPageLayout
@@ -134,8 +230,8 @@ export default async function SkillTypeDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            { key: 'holders', label: 'Holders', count: holders.length },
-            { key: 'extras', label: 'Additional fields', count: extras.length },
+            { key: 'holders', label: 'Holders', count: holderCount },
+            { key: 'extras', label: 'Additional fields', count: extras.total },
           ]}
         />
       }
@@ -165,7 +261,7 @@ export default async function SkillTypeDetailPage({
                   label: 'Valid for',
                   value: type.validForMonths ? `${type.validForMonths} months` : 'No expiry',
                 },
-                { label: 'Holders', value: holders.length },
+                { label: 'Holders', value: holderCount },
                 {
                   label: 'Expiring (30d)',
                   value: expiringCount > 0 ? <Badge variant="warning">{expiringCount}</Badge> : '0',
@@ -195,14 +291,21 @@ export default async function SkillTypeDetailPage({
         <ExtraFieldsSection
           ownerType="skill_type"
           ownerId={id}
-          rows={extras.map((e) => ({
-            id: e.id,
-            fieldKey: e.fieldKey,
-            fieldValue: e.fieldValue,
-          }))}
+          rows={extras.rows}
+          list={{
+            basePath,
+            currentParams: sp,
+            total: extras.total,
+            filteredTotal: extras.filteredTotal,
+            query: extraListParams.q,
+            page: extraListParams.page,
+            perPage: extraListParams.perPage,
+            queryParamKey: 'extraQ',
+            pageParamKey: 'extraPage',
+          }}
           drawerOpen={drawer === 'add-extra-field'}
           drawerCloseHref={closeHref}
-          addHref={`/training/skills/types/${id}?tab=extras&drawer=add-extra-field`}
+          addHref={mergeHref(basePath, sp, { tab: 'extras', drawer: 'add-extra-field' })}
           addAction={addExtraField}
           deleteAction={deleteExtraField}
         />
@@ -211,14 +314,35 @@ export default async function SkillTypeDetailPage({
       {active === 'holders' ? (
         <Card>
           <CardHeader>
-            <CardTitle>Holders ({holders.length})</CardTitle>
+            <CardTitle>Holders ({holderCount})</CardTitle>
           </CardHeader>
           <CardContent>
+            <TableToolbar className="mb-3">
+              <SearchInput placeholder="Search person or employee number…" />
+              <FilterChips
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="status"
+                label="Status"
+                options={[
+                  { value: 'valid', label: 'Valid' },
+                  { value: 'expiring', label: 'Expiring' },
+                  { value: 'expired', label: 'Expired' },
+                  { value: 'no_expiry', label: 'No expiry' },
+                ]}
+              />
+            </TableToolbar>
             {holdersWithStatus.length === 0 ? (
               <EmptyState
                 icon={<Users size={24} />}
-                title="No holders"
-                description="Assign this skill to a person from their profile."
+                title={
+                  listParams.q || statusFilter ? 'No holders match your filters' : 'No holders'
+                }
+                description={
+                  listParams.q || statusFilter
+                    ? 'Clear the search or status filter to see other holders.'
+                    : 'Assign this skill to a person from their profile.'
+                }
               />
             ) : (
               <Table>
@@ -263,6 +387,13 @@ export default async function SkillTypeDetailPage({
                 </TableBody>
               </Table>
             )}
+            <Pagination
+              basePath={basePath}
+              currentParams={sp}
+              total={filteredHolderCount}
+              page={listParams.page}
+              perPage={listParams.perPage}
+            />
           </CardContent>
         </Card>
       ) : null}

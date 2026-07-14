@@ -12,7 +12,17 @@
 // 1/3-2/3 builder mirrors the PPE + inspection type builders exactly.
 
 import { relations } from 'drizzle-orm'
-import { boolean, index, integer, pgEnum, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  foreignKey,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 import { equipmentTypes } from './equipment'
@@ -37,9 +47,9 @@ export const equipmentInspectionTypes = pgTable(
     // When set, this template is meant for items of a specific equipment_type
     // (e.g. "Pickup truck — Annual safety"). When null, the template is
     // generic and can be applied to any item.
-    appliesToTypeId: uuid('applies_to_type_id').references(() => equipmentTypes.id, {
-      onDelete: 'set null',
-    }),
+    // The physical tenant-aware key uses partial-column SET NULL so deleting
+    // the equipment type clears only applies_to_type_id.
+    appliesToTypeId: uuid('applies_to_type_id'),
     name: text('name').notNull(),
     description: text('description'),
     // Default cadence for this template: "every {intervalValue} {intervalUnit}s".
@@ -61,6 +71,7 @@ export const equipmentInspectionTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('equipment_inspection_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('equipment_inspection_types_tenant_id_id_ux').on(t.tenantId, t.id),
     appliesToIdx: index('equipment_inspection_types_applies_idx').on(t.tenantId, t.appliesToTypeId),
   }),
 )
@@ -76,9 +87,7 @@ export const equipmentInspectionGroups = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    inspectionTypeId: uuid('inspection_type_id')
-      .notNull()
-      .references(() => equipmentInspectionTypes.id, { onDelete: 'cascade' }),
+    inspectionTypeId: uuid('inspection_type_id').notNull(),
     sequence: integer('sequence').default(0).notNull(),
     label: text('label').notNull(),
     description: text('description'),
@@ -86,10 +95,17 @@ export const equipmentInspectionGroups = pgTable(
   },
   (t) => ({
     tenantIdx: index('equipment_inspection_groups_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('equipment_inspection_groups_tenant_id_id_ux').on(t.tenantId, t.id),
     typeSeqIdx: index('equipment_inspection_groups_type_seq_idx').on(
+      t.tenantId,
       t.inspectionTypeId,
       t.sequence,
     ),
+    inspectionTypeFk: foreignKey({
+      name: 'equipment_inspection_groups_tenant_type_fk',
+      columns: [t.tenantId, t.inspectionTypeId],
+      foreignColumns: [equipmentInspectionTypes.tenantId, equipmentInspectionTypes.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -113,13 +129,9 @@ export const equipmentInspectionCriteria = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    inspectionTypeId: uuid('inspection_type_id')
-      .notNull()
-      .references(() => equipmentInspectionTypes.id, { onDelete: 'cascade' }),
+    inspectionTypeId: uuid('inspection_type_id').notNull(),
     // Section this criterion belongs to; null = ungrouped (catch-all section).
-    groupId: uuid('group_id').references(() => equipmentInspectionGroups.id, {
-      onDelete: 'set null',
-    }),
+    groupId: uuid('group_id'),
     sequence: integer('sequence').notNull(),
     question: text('question').notNull(),
     description: text('description'),
@@ -139,11 +151,17 @@ export const equipmentInspectionCriteria = pgTable(
   },
   (t) => ({
     typeSeqIdx: index('equipment_inspection_criteria_type_seq_idx').on(
+      t.tenantId,
       t.inspectionTypeId,
       t.sequence,
     ),
-    groupIdx: index('equipment_inspection_criteria_group_idx').on(t.groupId),
+    groupIdx: index('equipment_inspection_criteria_group_idx').on(t.tenantId, t.groupId),
     tenantIdx: index('equipment_inspection_criteria_tenant_idx').on(t.tenantId),
+    inspectionTypeFk: foreignKey({
+      name: 'equipment_inspection_criteria_tenant_type_fk',
+      columns: [t.tenantId, t.inspectionTypeId],
+      foreignColumns: [equipmentInspectionTypes.tenantId, equipmentInspectionTypes.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -155,8 +173,8 @@ export const equipmentInspectionTypesRelations = relations(
       references: [tenants.id],
     }),
     appliesTo: one(equipmentTypes, {
-      fields: [equipmentInspectionTypes.appliesToTypeId],
-      references: [equipmentTypes.id],
+      fields: [equipmentInspectionTypes.tenantId, equipmentInspectionTypes.appliesToTypeId],
+      references: [equipmentTypes.tenantId, equipmentTypes.id],
     }),
     groups: many(equipmentInspectionGroups),
     criteria: many(equipmentInspectionCriteria),
@@ -171,8 +189,8 @@ export const equipmentInspectionGroupsRelations = relations(
       references: [tenants.id],
     }),
     type: one(equipmentInspectionTypes, {
-      fields: [equipmentInspectionGroups.inspectionTypeId],
-      references: [equipmentInspectionTypes.id],
+      fields: [equipmentInspectionGroups.tenantId, equipmentInspectionGroups.inspectionTypeId],
+      references: [equipmentInspectionTypes.tenantId, equipmentInspectionTypes.id],
     }),
     criteria: many(equipmentInspectionCriteria),
   }),
@@ -186,12 +204,12 @@ export const equipmentInspectionCriteriaRelations = relations(
       references: [tenants.id],
     }),
     type: one(equipmentInspectionTypes, {
-      fields: [equipmentInspectionCriteria.inspectionTypeId],
-      references: [equipmentInspectionTypes.id],
+      fields: [equipmentInspectionCriteria.tenantId, equipmentInspectionCriteria.inspectionTypeId],
+      references: [equipmentInspectionTypes.tenantId, equipmentInspectionTypes.id],
     }),
     group: one(equipmentInspectionGroups, {
-      fields: [equipmentInspectionCriteria.groupId],
-      references: [equipmentInspectionGroups.id],
+      fields: [equipmentInspectionCriteria.tenantId, equipmentInspectionCriteria.groupId],
+      references: [equipmentInspectionGroups.tenantId, equipmentInspectionGroups.id],
     }),
   }),
 )

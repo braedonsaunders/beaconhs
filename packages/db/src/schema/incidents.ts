@@ -11,6 +11,7 @@ import { relations } from 'drizzle-orm'
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -24,6 +25,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
+import { formResponses } from './forms'
 import { departments, orgUnits, people } from './org'
 import { incidentClassifications, incidentInjuryTypes } from './incident-classifications'
 
@@ -81,14 +83,14 @@ export const incidents = pgTable(
     reportedAt: timestamp('reported_at', { withTimezone: true }).defaultNow().notNull(),
 
     // Location
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
+    siteOrgUnitId: uuid('site_org_unit_id'),
     location: text('location'), // location-on-site / specific area
     weather: text('weather'),
-    departmentId: uuid('department_id').references(() => departments.id),
+    departmentId: uuid('department_id'),
 
     // People involved (single-FK convenience pointers; multi-person tracked in incident_people)
-    reportedByTenantUserId: uuid('reported_by_tenant_user_id').references(() => tenantUsers.id),
-    supervisorPersonId: uuid('supervisor_person_id').references(() => people.id),
+    reportedByTenantUserId: uuid('reported_by_tenant_user_id'),
+    supervisorPersonId: uuid('supervisor_person_id'),
     foremanText: text('foreman_text'), // freeform when foreman isn't a person row
     externalPeopleInvolved: text('external_people_involved'),
     witnesses: text('witnesses'),
@@ -153,22 +155,18 @@ export const incidents = pgTable(
     insuranceClaimNumber: text('insurance_claim_number'),
 
     // Explicit FK to the tenant-defined classification taxonomy.
-    classificationId: uuid('classification_id').references(() => incidentClassifications.id, {
-      onDelete: 'set null',
-    }),
+    classificationId: uuid('classification_id'),
 
     // Investigation
     rootCause: text('root_cause'),
     contributingFactors: jsonb('contributing_factors').$type<string[]>().default([]).notNull(),
-    assignedInvestigatorTenantUserId: uuid('assigned_investigator_tenant_user_id').references(
-      () => tenantUsers.id,
-    ),
+    assignedInvestigatorTenantUserId: uuid('assigned_investigator_tenant_user_id'),
 
     // Lock-on-completion
     inProgress: boolean('in_progress').default(true).notNull(),
     locked: boolean('locked').default(false).notNull(),
     closedAt: timestamp('closed_at', { withTimezone: true }),
-    closedByTenantUserId: uuid('closed_by_tenant_user_id').references(() => tenantUsers.id),
+    closedByTenantUserId: uuid('closed_by_tenant_user_id'),
 
     // Typed FK shortcut to the form_response that spawned this incident from
     // the Create-Incident drawer on the response detail page. Lets the
@@ -181,11 +179,55 @@ export const incidents = pgTable(
   },
   (t) => ({
     tenantIdx: index('incidents_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('incidents_tenant_id_id_ux').on(t.tenantId, t.id),
     referenceIdx: index('incidents_reference_idx').on(t.tenantId, t.reference),
     statusIdx: index('incidents_status_idx').on(t.tenantId, t.status),
     occurredIdx: index('incidents_occurred_idx').on(t.tenantId, t.occurredAt),
     siteIdx: index('incidents_site_idx').on(t.tenantId, t.siteOrgUnitId),
+    departmentIdx: index('incidents_department_idx').on(t.tenantId, t.departmentId),
+    reportedByIdx: index('incidents_reported_by_idx').on(t.tenantId, t.reportedByTenantUserId),
+    supervisorIdx: index('incidents_supervisor_idx').on(t.tenantId, t.supervisorPersonId),
+    classificationIdx: index('incidents_classification_idx').on(t.tenantId, t.classificationId),
+    investigatorIdx: index('incidents_investigator_idx').on(
+      t.tenantId,
+      t.assignedInvestigatorTenantUserId,
+    ),
+    closedByIdx: index('incidents_closed_by_idx').on(t.tenantId, t.closedByTenantUserId),
+    sourceResponseIdx: index('incidents_source_response_idx').on(
+      t.tenantId,
+      t.sourceFormResponseId,
+    ),
     flowExecutionUx: uniqueIndex('incidents_flow_execution_ux').on(t.tenantId, t.flowExecutionKey),
+    siteFk: foreignKey({
+      name: 'incidents_tenant_site_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    departmentFk: foreignKey({
+      name: 'incidents_tenant_department_fk',
+      columns: [t.tenantId, t.departmentId],
+      foreignColumns: [departments.tenantId, departments.id],
+    }),
+    reportedByFk: foreignKey({
+      name: 'incidents_tenant_reported_by_fk',
+      columns: [t.tenantId, t.reportedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    supervisorFk: foreignKey({
+      name: 'incidents_tenant_supervisor_fk',
+      columns: [t.tenantId, t.supervisorPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+    investigatorFk: foreignKey({
+      name: 'incidents_tenant_investigator_fk',
+      columns: [t.tenantId, t.assignedInvestigatorTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    closedByFk: foreignKey({
+      name: 'incidents_tenant_closed_by_fk',
+      columns: [t.tenantId, t.closedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -197,17 +239,26 @@ export const incidentPeople = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id').references(() => people.id),
+    incidentId: uuid('incident_id').notNull(),
+    personId: uuid('person_id'),
     personNameText: text('person_name_text'), // freeform name if not in directory
     role: text('role'), // 'involved' | 'witness' | 'supervisor' | 'foreman'
     ...timestamps,
   },
   (t) => ({
-    incidentIdx: index('incident_people_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_people_incident_idx').on(t.tenantId, t.incidentId),
+    personIdx: index('incident_people_person_idx').on(t.tenantId, t.personId),
     tenantIdx: index('incident_people_tenant_idx').on(t.tenantId),
+    incidentFk: foreignKey({
+      name: 'incident_people_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'incident_people_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
   }),
 )
 
@@ -219,20 +270,14 @@ export const incidentInjuries = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id').references(() => people.id),
+    incidentId: uuid('incident_id').notNull(),
+    personId: uuid('person_id'),
     personName: text('person_name'),
     bodyParts: jsonb('body_parts').$type<string[]>().default([]).notNull(),
-    // Legacy: free-form list of injury labels.  New rows should also set
-    // `injuryTypeId` so the report rollups can join against the tenant
-    // taxonomy.  We keep the array in place for back-compat and to support
-    // multi-type injuries (laceration + chemical burn).
-    injuryTypes: jsonb('injury_types').$type<string[]>().default([]).notNull(),
-    injuryTypeId: uuid('injury_type_id').references(() => incidentInjuryTypes.id, {
-      onDelete: 'set null',
-    }),
+    // Descriptive outcome/result is intentionally separate from the managed
+    // injury-type taxonomy. An injury can have many canonical types through
+    // incident_injury_type_assignments below.
+    injuryResult: text('injury_result'),
     treatment: text('treatment'),
     treatedAtFacility: text('treated_at_facility'),
     workedHoursPriorTo: integer('worked_hours_prior_to'),
@@ -240,8 +285,59 @@ export const incidentInjuries = pgTable(
   },
   (t) => ({
     tenantIdx: index('incident_injuries_tenant_idx').on(t.tenantId),
-    incidentIdx: index('incident_injuries_incident_idx').on(t.incidentId),
-    injuryTypeIdx: index('incident_injuries_injury_type_idx').on(t.injuryTypeId),
+    tenantIdIdUx: uniqueIndex('incident_injuries_tenant_id_id_ux').on(t.tenantId, t.id),
+    incidentIdx: index('incident_injuries_incident_idx').on(t.tenantId, t.incidentId),
+    personIdx: index('incident_injuries_person_idx').on(t.tenantId, t.personId),
+    incidentFk: foreignKey({
+      name: 'incident_injuries_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'incident_injuries_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+  }),
+)
+
+// Canonical many-to-many link between an injured-person record and the
+// tenant-managed injury-type taxonomy. Keeping tenant_id on the link and both
+// composite foreign keys makes cross-tenant assignments impossible even if a
+// caller bypasses an application-level lookup.
+export const incidentInjuryTypeAssignments = pgTable(
+  'incident_injury_type_assignments',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    injuryId: uuid('injury_id').notNull(),
+    injuryTypeId: uuid('injury_type_id').notNull(),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('incident_injury_type_assignments_tenant_idx').on(t.tenantId),
+    injuryIdx: index('incident_injury_type_assignments_injury_idx').on(t.tenantId, t.injuryId),
+    injuryTypeIdx: index('incident_injury_type_assignments_type_idx').on(
+      t.tenantId,
+      t.injuryTypeId,
+    ),
+    tenantInjuryTypeUx: uniqueIndex('incident_injury_type_assignments_injury_type_ux').on(
+      t.tenantId,
+      t.injuryId,
+      t.injuryTypeId,
+    ),
+    injuryFk: foreignKey({
+      name: 'incident_injury_type_assignments_tenant_injury_fk',
+      columns: [t.tenantId, t.injuryId],
+      foreignColumns: [incidentInjuries.tenantId, incidentInjuries.id],
+    }).onDelete('cascade'),
+    injuryTypeFk: foreignKey({
+      name: 'incident_injury_type_assignments_tenant_type_fk',
+      columns: [t.tenantId, t.injuryTypeId],
+      foreignColumns: [incidentInjuryTypes.tenantId, incidentInjuryTypes.id],
+    }),
   }),
 )
 
@@ -259,10 +355,8 @@ export const incidentLostTimeEvents = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
-    injuryId: uuid('injury_id').references(() => incidentInjuries.id),
+    incidentId: uuid('incident_id').notNull(),
+    injuryId: uuid('injury_id'),
     status: lostTimeStatus('status').notNull(),
     validFrom: date('valid_from').notNull(),
     validTo: date('valid_to'),
@@ -270,8 +364,19 @@ export const incidentLostTimeEvents = pgTable(
     ...timestamps,
   },
   (t) => ({
-    incidentIdx: index('incident_lost_time_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_lost_time_incident_idx').on(t.tenantId, t.incidentId),
+    injuryIdx: index('incident_lost_time_injury_idx').on(t.tenantId, t.injuryId),
     tenantIdx: index('incident_lost_time_tenant_idx').on(t.tenantId),
+    incidentFk: foreignKey({
+      name: 'incident_lost_time_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
+    injuryFk: foreignKey({
+      name: 'incident_lost_time_tenant_injury_fk',
+      columns: [t.tenantId, t.injuryId],
+      foreignColumns: [incidentInjuries.tenantId, incidentInjuries.id],
+    }),
   }),
 )
 
@@ -284,15 +389,18 @@ export const incidentAttachments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id').notNull(),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
     ...timestamps,
   },
   (t) => ({
-    incidentIdx: index('incident_attachments_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_attachments_incident_idx').on(t.tenantId, t.incidentId),
+    incidentFk: foreignKey({
+      name: 'incident_attachments_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -314,20 +422,25 @@ export const incidentEvents = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
-    recordedByTenantUserId: uuid('recorded_by_tenant_user_id').references(() => tenantUsers.id, {
-      onDelete: 'set null',
-    }),
+    recordedByTenantUserId: uuid('recorded_by_tenant_user_id'),
     description: text('description').notNull(),
     ...timestamps,
   },
   (t) => ({
-    incidentIdx: index('incident_events_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_events_incident_idx').on(t.tenantId, t.incidentId),
+    recordedByIdx: index('incident_events_recorded_by_idx').on(
+      t.tenantId,
+      t.recordedByTenantUserId,
+    ),
     tenantIdx: index('incident_events_tenant_idx').on(t.tenantId),
     occurredIdx: index('incident_events_occurred_idx').on(t.incidentId, t.occurredAt),
+    incidentFk: foreignKey({
+      name: 'incident_events_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -348,16 +461,19 @@ export const incidentContributingFactors = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id').notNull(),
     category: incidentFactorCategory('category').notNull(),
     description: text('description').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
-    incidentIdx: index('incident_contributing_factors_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_contributing_factors_incident_idx').on(t.tenantId, t.incidentId),
     tenantIdx: index('incident_contributing_factors_tenant_idx').on(t.tenantId),
+    incidentFk: foreignKey({
+      name: 'incident_contributing_factors_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -369,20 +485,24 @@ export const incidentRootCauseWhys = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id').notNull(),
     ordinal: integer('ordinal').notNull(),
     whyText: text('why_text').notNull(),
     ...timestamps,
   },
   (t) => ({
-    incidentIdx: index('incident_root_cause_whys_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_root_cause_whys_incident_idx').on(t.tenantId, t.incidentId),
     tenantIdx: index('incident_root_cause_whys_tenant_idx').on(t.tenantId),
-    incidentOrdinalUx: index('incident_root_cause_whys_incident_ordinal_idx').on(
+    incidentOrdinalUx: uniqueIndex('incident_root_cause_whys_tenant_incident_ordinal_ux').on(
+      t.tenantId,
       t.incidentId,
       t.ordinal,
     ),
+    incidentFk: foreignKey({
+      name: 'incident_root_cause_whys_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -402,30 +522,39 @@ export const incidentPreventativeSteps = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    incidentId: uuid('incident_id')
-      .notNull()
-      .references(() => incidents.id, { onDelete: 'cascade' }),
+    incidentId: uuid('incident_id').notNull(),
     description: text('description').notNull(),
-    ownerPersonId: uuid('owner_person_id').references(() => people.id, {
-      onDelete: 'set null',
-    }),
+    ownerPersonId: uuid('owner_person_id'),
     targetDate: date('target_date'),
     status: incidentPreventativeStepStatus('status').default('planned').notNull(),
     ...timestamps,
   },
   (t) => ({
-    incidentIdx: index('incident_preventative_steps_incident_idx').on(t.incidentId),
+    incidentIdx: index('incident_preventative_steps_incident_idx').on(t.tenantId, t.incidentId),
+    ownerIdx: index('incident_preventative_steps_owner_idx').on(t.tenantId, t.ownerPersonId),
     tenantIdx: index('incident_preventative_steps_tenant_idx').on(t.tenantId),
     statusIdx: index('incident_preventative_steps_status_idx').on(t.tenantId, t.status),
+    incidentFk: foreignKey({
+      name: 'incident_preventative_steps_tenant_incident_fk',
+      columns: [t.tenantId, t.incidentId],
+      foreignColumns: [incidents.tenantId, incidents.id],
+    }).onDelete('cascade'),
   }),
 )
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   tenant: one(tenants, { fields: [incidents.tenantId], references: [tenants.id] }),
-  site: one(orgUnits, { fields: [incidents.siteOrgUnitId], references: [orgUnits.id] }),
+  site: one(orgUnits, {
+    fields: [incidents.tenantId, incidents.siteOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
+  }),
   classificationRef: one(incidentClassifications, {
-    fields: [incidents.classificationId],
-    references: [incidentClassifications.id],
+    fields: [incidents.tenantId, incidents.classificationId],
+    references: [incidentClassifications.tenantId, incidentClassifications.id],
+  }),
+  sourceFormResponse: one(formResponses, {
+    fields: [incidents.tenantId, incidents.sourceFormResponseId],
+    references: [formResponses.tenantId, formResponses.id],
   }),
   injuries: many(incidentInjuries),
   lostTimeEvents: many(incidentLostTimeEvents),
@@ -439,12 +568,12 @@ export const incidentsRelations = relations(incidents, ({ one, many }) => ({
 
 export const incidentEventsRelations = relations(incidentEvents, ({ one }) => ({
   incident: one(incidents, {
-    fields: [incidentEvents.incidentId],
-    references: [incidents.id],
+    fields: [incidentEvents.tenantId, incidentEvents.incidentId],
+    references: [incidents.tenantId, incidents.id],
   }),
   recordedBy: one(tenantUsers, {
-    fields: [incidentEvents.recordedByTenantUserId],
-    references: [tenantUsers.id],
+    fields: [incidentEvents.tenantId, incidentEvents.recordedByTenantUserId],
+    references: [tenantUsers.tenantId, tenantUsers.id],
   }),
 }))
 
@@ -452,16 +581,16 @@ export const incidentContributingFactorsRelations = relations(
   incidentContributingFactors,
   ({ one }) => ({
     incident: one(incidents, {
-      fields: [incidentContributingFactors.incidentId],
-      references: [incidents.id],
+      fields: [incidentContributingFactors.tenantId, incidentContributingFactors.incidentId],
+      references: [incidents.tenantId, incidents.id],
     }),
   }),
 )
 
 export const incidentRootCauseWhysRelations = relations(incidentRootCauseWhys, ({ one }) => ({
   incident: one(incidents, {
-    fields: [incidentRootCauseWhys.incidentId],
-    references: [incidents.id],
+    fields: [incidentRootCauseWhys.tenantId, incidentRootCauseWhys.incidentId],
+    references: [incidents.tenantId, incidents.id],
   }),
 }))
 
@@ -469,27 +598,38 @@ export const incidentPreventativeStepsRelations = relations(
   incidentPreventativeSteps,
   ({ one }) => ({
     incident: one(incidents, {
-      fields: [incidentPreventativeSteps.incidentId],
-      references: [incidents.id],
+      fields: [incidentPreventativeSteps.tenantId, incidentPreventativeSteps.incidentId],
+      references: [incidents.tenantId, incidents.id],
     }),
     owner: one(people, {
-      fields: [incidentPreventativeSteps.ownerPersonId],
-      references: [people.id],
+      fields: [incidentPreventativeSteps.tenantId, incidentPreventativeSteps.ownerPersonId],
+      references: [people.tenantId, people.id],
     }),
   }),
 )
 
-export const incidentInjuriesRelations = relations(incidentInjuries, ({ one }) => ({
+export const incidentInjuriesRelations = relations(incidentInjuries, ({ one, many }) => ({
   incident: one(incidents, {
-    fields: [incidentInjuries.incidentId],
-    references: [incidents.id],
-  }),
-  injuryTypeRef: one(incidentInjuryTypes, {
-    fields: [incidentInjuries.injuryTypeId],
-    references: [incidentInjuryTypes.id],
+    fields: [incidentInjuries.tenantId, incidentInjuries.incidentId],
+    references: [incidents.tenantId, incidents.id],
   }),
   person: one(people, {
-    fields: [incidentInjuries.personId],
-    references: [people.id],
+    fields: [incidentInjuries.tenantId, incidentInjuries.personId],
+    references: [people.tenantId, people.id],
   }),
+  injuryTypeAssignments: many(incidentInjuryTypeAssignments),
 }))
+
+export const incidentInjuryTypeAssignmentsRelations = relations(
+  incidentInjuryTypeAssignments,
+  ({ one }) => ({
+    injury: one(incidentInjuries, {
+      fields: [incidentInjuryTypeAssignments.tenantId, incidentInjuryTypeAssignments.injuryId],
+      references: [incidentInjuries.tenantId, incidentInjuries.id],
+    }),
+    injuryType: one(incidentInjuryTypes, {
+      fields: [incidentInjuryTypeAssignments.tenantId, incidentInjuryTypeAssignments.injuryTypeId],
+      references: [incidentInjuryTypes.tenantId, incidentInjuryTypes.id],
+    }),
+  }),
+)

@@ -14,19 +14,10 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Plus } from 'lucide-react'
-import {
-  Button,
-  FileUploader,
-  Input,
-  Label,
-  SearchSelect,
-  Select,
-  Textarea,
-  UrlDrawer,
-  type SelectOption,
-} from '@beaconhs/ui'
+import { Button, FileUploader, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 export type CertificateInput = {
   itemId: string
@@ -43,14 +34,12 @@ export function CertificateDrawer({
   open,
   closeHref,
   itemId,
-  peopleOptions,
   todayIso,
   saveAction,
 }: {
   open: boolean
   closeHref: string
   itemId: string
-  peopleOptions: SelectOption[]
   /** Server-computed YYYY-MM-DD so the default date is stable across hydration. */
   todayIso: string
   saveAction: (input: CertificateInput) => Promise<{ ok: true } | { ok: false; error: string }>
@@ -167,10 +156,10 @@ export function CertificateDrawer({
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Inspected by (internal person)</Label>
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="ppe-active-people"
             value={personId}
             onChange={setPersonId}
-            options={peopleOptions}
             placeholder="Select a person…"
             searchPlaceholder="Search active people…"
             ariaLabel="Inspected by"

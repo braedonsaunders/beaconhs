@@ -229,7 +229,7 @@ export const REPORT_VIEWS_SQL: string[] = [
      e.serial_number                      AS serial_number,
      e.status                             AS status,
      t.name                               AS equipment_type,
-     t.category                           AS type_category,
+     type_category.name                   AS type_category,
      e.current_site_org_unit_id           AS current_site_org_unit_id,
      site.name                            AS site_name,
      CASE WHEN holder.id IS NULL THEN NULL
@@ -251,6 +251,8 @@ export const REPORT_VIEWS_SQL: string[] = [
      usage.hours_total                    AS hours_total
    FROM equipment_items e
    LEFT JOIN equipment_types t ON t.id = e.type_id AND t.tenant_id = e.tenant_id
+   LEFT JOIN equipment_categories type_category
+     ON type_category.id = t.category_id AND type_category.tenant_id = t.tenant_id
    LEFT JOIN org_units site ON site.id = e.current_site_org_unit_id AND site.tenant_id = e.tenant_id
    LEFT JOIN people holder ON holder.id = e.current_holder_person_id AND holder.tenant_id = e.tenant_id
    LEFT JOIN LATERAL (

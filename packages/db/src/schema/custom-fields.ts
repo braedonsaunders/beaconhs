@@ -4,9 +4,10 @@
 // @beaconhs/forms-core custom-fields helpers). This is the configurable,
 // UI-driven replacement for the legacy "extra column with no admin UI" pattern.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -52,7 +53,7 @@ export const customFieldDefinitions = pgTable(
     entityKind: customFieldEntityKind('entity_kind').notNull(),
     // Optional scope to a subtype (equipment_types.id / ppe_types.id). NULL =
     // applies to every record of the kind. No FK — the referenced table varies
-    // by entityKind, and a dangling subtypeId simply widens visibility to all.
+    // by entityKind, so the write boundary validates the matching catalogue.
     subtypeId: uuid('subtype_id'),
     // Stable machine key — the property name under `metadata.custom`. Unique per
     // (tenant, entityKind) so a stored value maps unambiguously regardless of
@@ -79,8 +80,16 @@ export const customFieldDefinitions = pgTable(
   (t) => ({
     tenantKindIdx: index('custom_field_definitions_tenant_kind_idx').on(t.tenantId, t.entityKind),
     subtypeIdx: index('custom_field_definitions_subtype_idx').on(t.subtypeId),
-    // One key per (tenant, entityKind). Soft-deleted rows keep their key
-    // reserved until purged — acceptable; the designer reuses/reactivates.
+    keyFormatCk: check(
+      'custom_field_definitions_key_format_ck',
+      sql`${t.key} ~ '^[a-z][a-z0-9_]{0,62}$'`,
+    ),
+    subtypeKindCk: check(
+      'custom_field_definitions_subtype_kind_ck',
+      sql`${t.subtypeId} IS NULL OR ${t.entityKind} IN ('equipment', 'ppe')`,
+    ),
+    // One key per (tenant, entityKind). Definition deletion atomically removes
+    // the corresponding metadata values before freeing this key for reuse.
     tenantKindKeyUx: uniqueIndex('custom_field_definitions_tenant_kind_key_ux').on(
       t.tenantId,
       t.entityKind,

@@ -48,6 +48,28 @@ export function parseListParams<S extends string>(
   return { q: q && q.length ? q : undefined, sort, dir, page, perPage }
 }
 
+/**
+ * Parse a list that shares its route with other independently paged lists.
+ * `prefix="review"` reads reviewQ/reviewSort/reviewDir/reviewPage/reviewPerPage,
+ * keeping one sub-list's controls from resetting another one.
+ */
+export function parsePrefixedListParams<S extends string>(
+  searchParams: Search,
+  prefix: string,
+  config: { sort: S; dir?: 'asc' | 'desc'; perPage?: number; allowedSorts: readonly S[] },
+): ListParams<S> {
+  return parseListParams(
+    {
+      q: searchParams[`${prefix}Q`],
+      sort: searchParams[`${prefix}Sort`],
+      dir: searchParams[`${prefix}Dir`],
+      page: searchParams[`${prefix}Page`],
+      perPage: searchParams[`${prefix}PerPage`],
+    },
+    config,
+  )
+}
+
 export function pickString(v: string | string[] | undefined): string | undefined {
   if (Array.isArray(v)) return v[0]
   return v

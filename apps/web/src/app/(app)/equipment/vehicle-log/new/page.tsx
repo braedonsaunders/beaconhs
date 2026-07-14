@@ -1,71 +1,35 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq, isNull } from 'drizzle-orm'
-import {
-  Button,
-  Card,
-  CardContent,
-  DetailHeader,
-  Input,
-  Label,
-  Select,
-  Textarea,
-} from '@beaconhs/ui'
-import { equipmentItems, orgUnits, people } from '@beaconhs/db/schema'
+import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
-import { PersonSelectField } from '@/components/person-select-field'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { upsertVehicleLogEntry } from '../_service'
+import { normalizeVehicleLogEntryInput } from '../_entry-input'
 
 export const metadata = { title: 'New vehicle log entry' }
 export const dynamic = 'force-dynamic'
-
-function safeInt(raw: FormDataEntryValue | null): number | null {
-  if (raw === null || raw === undefined) return null
-  const s = String(raw).trim()
-  if (!s) return null
-  const n = Number(s)
-  return Number.isFinite(n) ? Math.trunc(n) : null
-}
-
-function safeStr(raw: FormDataEntryValue | null): string | null {
-  if (raw === null || raw === undefined) return null
-  const s = String(raw).trim()
-  return s || null
-}
 
 async function createEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
-  const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
-  const entryDate = String(formData.get('entryDate') ?? '').trim()
-  if (!equipmentItemId || !entryDate) throw new Error('Truck and date are required.')
-
-  const driverPersonId = safeStr(formData.get('driverPersonId'))
-  if (!driverPersonId) throw new Error('Driver is required.')
-  const startOdometer = safeInt(formData.get('startOdometer'))
-  const endOdometer = safeInt(formData.get('endOdometer'))
-  const siteOrgUnitId = safeStr(formData.get('siteOrgUnitId'))
-  const hoursRaw = safeStr(formData.get('hoursOnSite'))
-  const manpowerCount = safeInt(formData.get('manpowerCount'))
-  const notes = safeStr(formData.get('notes'))
-
-  await upsertVehicleLogEntry(ctx, {
-    equipmentItemId,
-    entryDate,
-    driverPersonId,
+  const input = normalizeVehicleLogEntryInput({
+    equipmentItemId: formData.get('equipmentItemId'),
+    entryDate: formData.get('entryDate'),
+    driverPersonId: formData.get('driverPersonId'),
     entryMode: 'odometer',
-    startOdometer,
-    endOdometer,
-    siteOrgUnitId,
-    hoursOnSite: hoursRaw,
-    manpowerCount,
-    notes,
+    startOdometer: formData.get('startOdometer'),
+    endOdometer: formData.get('endOdometer'),
+    siteOrgUnitId: formData.get('siteOrgUnitId'),
+    hoursOnSite: formData.get('hoursOnSite'),
+    manpowerCount: formData.get('manpowerCount'),
+    notes: formData.get('notes'),
   })
-  const monthParam = entryDate.slice(0, 7)
+  await upsertVehicleLogEntry(ctx, input)
+  const monthParam = input.entryDate.slice(0, 7)
   redirect(`/equipment/vehicle-log?month=${monthParam}`)
 }
 
@@ -87,39 +51,7 @@ export default async function NewTruckLogEntryPage({
     redirect(`/equipment/${presetTruckId}?tab=log&drawer=new-truck-log-entry`)
   }
   const ctx = await requireRequestContext()
-
-  const { trucks, sites, drivers } = await ctx.db(async (tx) => {
-    const [t, s, d] = await Promise.all([
-      tx
-        .select({
-          id: equipmentItems.id,
-          assetTag: equipmentItems.assetTag,
-          name: equipmentItems.name,
-        })
-        .from(equipmentItems)
-        .where(isNull(equipmentItems.deletedAt))
-        .orderBy(asc(equipmentItems.assetTag))
-        .limit(500),
-      tx
-        .select({ id: orgUnits.id, name: orgUnits.name, level: orgUnits.level })
-        .from(orgUnits)
-        .where(eq(orgUnits.level, 'customer'))
-        .orderBy(asc(orgUnits.name))
-        .limit(500),
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName))
-        .limit(500),
-    ])
-    return { trucks: t, sites: s, drivers: d }
-  })
+  assertCan(ctx, 'equipment.manage')
 
   return (
     <PageContainer>
@@ -134,64 +66,67 @@ export default async function NewTruckLogEntryPage({
             <form action={createEntry} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Vehicle" required>
-                  <Select name="equipmentItemId" defaultValue={presetTruckId} required>
-                    <option value="">— Select vehicle —</option>
-                    {trucks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.assetTag} · {t.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <RemoteSelectField
+                    name="equipmentItemId"
+                    defaultValue={presetTruckId}
+                    lookup="vehicle-equipment"
+                    placeholder="Select a vehicle…"
+                    searchPlaceholder="Search asset tag or vehicle…"
+                    sheetTitle="Select vehicle"
+                    clearable={false}
+                  />
                 </Field>
                 <Field label="Date" required>
                   <Input name="entryDate" type="date" required defaultValue={initialDate} />
                 </Field>
                 <Field label="Driver" required>
-                  <PersonSelectField
+                  <RemoteSelectField
                     name="driverPersonId"
                     defaultValue=""
-                    options={drivers.map((p) => ({
-                      value: p.id,
-                      label: `${p.lastName}, ${p.firstName}`,
-                      hint: p.employeeNo ?? undefined,
-                    }))}
+                    lookup="vehicle-drivers"
                     placeholder="Select a driver…"
+                    searchPlaceholder="Search active drivers…"
+                    sheetTitle="Select driver"
                     clearable={false}
                   />
                 </Field>
                 <Field label="Customer / site">
-                  <Select name="siteOrgUnitId" defaultValue="">
-                    <option value="">—</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <RemoteSelectField
+                    name="siteOrgUnitId"
+                    defaultValue=""
+                    lookup="vehicle-customers"
+                    placeholder="Select a customer…"
+                    searchPlaceholder="Search customers…"
+                    sheetTitle="Select customer"
+                    clearable
+                    emptyLabel="— None —"
+                  />
                 </Field>
                 <Field label="Start odometer (km)">
-                  <Input name="startOdometer" type="number" min="0" step="1" />
+                  <Input name="startOdometer" type="number" min="0" max="2147483647" step="1" />
                 </Field>
                 <Field label="End odometer (km)">
-                  <Input name="endOdometer" type="number" min="0" step="1" />
+                  <Input name="endOdometer" type="number" min="0" max="2147483647" step="1" />
                 </Field>
                 <Field label="Hours on site">
                   <Input
                     name="hoursOnSite"
                     type="number"
                     min="0"
+                    max="24"
                     step="0.25"
                     placeholder="e.g. 8.5"
                   />
                 </Field>
                 <Field label="Crew count">
-                  <Input name="manpowerCount" type="number" min="0" step="1" />
+                  <Input name="manpowerCount" type="number" min="0" max="100000" step="1" />
                 </Field>
               </div>
               <Field label="Notes">
                 <Textarea
                   name="notes"
                   rows={3}
+                  maxLength={5000}
                   placeholder="Anything noteworthy for this trip or maintenance."
                 />
               </Field>

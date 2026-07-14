@@ -7,13 +7,11 @@
 // dropped so a removed widget can't crash the renderer.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, sql } from 'drizzle-orm'
-import { formTemplates, userDashboardLayouts, type DashboardLayoutData } from '@beaconhs/db/schema'
+import { and, eq, sql } from 'drizzle-orm'
+import { userDashboardLayouts, type DashboardLayoutData } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { NAV_MODULES } from '@/lib/nav/registry'
-import { templateAccessWhere } from '../apps/_lib/access'
 import { canViewInsights } from '../insights/_access'
 import { getUserRoleTier } from './_role-tier'
 import {
@@ -175,30 +173,14 @@ export async function saveQuickActions(input: unknown) {
   return { ok: true as const }
 }
 
-function labelForKind(kind: string): string {
-  switch (kind) {
-    case 'wizard':
-      return 'Wizard'
-    case 'checklist':
-      return 'Checklist'
-    case 'register':
-      return 'Register'
-    case 'mini_app':
-      return 'App'
-    default:
-      return 'Form'
-  }
-}
-
 /**
  * The catalogue shown in the "Add action" picker:
  *   • common — curated create-CTAs + every nav destination the user may see
- *   • forms  — published forms & Builder apps for the tenant
+ *   • forms  — searched remotely through the purpose-scoped picker API
  * Permission-filtered so the picker only offers things the user can reach.
  */
 export async function listQuickActionOptions(): Promise<QuickActionOptions> {
   const ctx = await requireRequestContext()
-  const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
   // Curated "start something" shortcuts (shared with the default tiles),
   // filtered to what the caller can actually reach — no dead-end offers.
@@ -224,37 +206,7 @@ export async function listQuickActionOptions(): Promise<QuickActionOptions> {
     common.push(o)
   }
 
-  const formRows = can(ctx, 'forms.response.create')
-    ? await ctx.db(async (tx) =>
-        tx
-          .select({
-            key: formTemplates.key,
-            name: formTemplates.name,
-            iconKey: formTemplates.iconKey,
-            kind: formTemplates.kind,
-            surfaceAsTool: formTemplates.surfaceAsTool,
-          })
-          .from(formTemplates)
-          .where(
-            and(
-              eq(formTemplates.tenantId, ctx.tenantId),
-              templateAccessWhere(ctx, effectiveRoleKeys, 'operate'),
-            ),
-          )
-          .orderBy(desc(formTemplates.surfaceAsTool), asc(formTemplates.name))
-          .limit(200),
-      )
-    : []
-
-  const forms: QuickActionOption[] = formRows.map((f) => ({
-    label: f.name,
-    href: `/apps/by-key/${f.key}/fill`,
-    iconKey: f.iconKey ?? (f.surfaceAsTool ? 'cog' : 'clipboard'),
-    tone: f.surfaceAsTool ? 'violet' : 'sky',
-    hint: f.surfaceAsTool ? 'App' : labelForKind(f.kind),
-  }))
-
-  return { common, forms }
+  return { common, canChooseApps: can(ctx, 'forms.response.create') }
 }
 
 export async function resetDashboardLayout() {

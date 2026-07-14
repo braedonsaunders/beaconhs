@@ -6,5 +6,11 @@
 // + drizzle-orm; takes a `tx` + tenantId, never the web's RequestContext.
 
 export * from './audience'
+export * from './audience-targets'
+export * from './evidence'
 export * from './evaluate'
+export * from './identity'
 export * from './materialize'
+export * from './schedule'
+export * from './target-lock'
+export * from './target-retirement'

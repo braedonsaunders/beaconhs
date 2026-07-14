@@ -1,6 +1,4 @@
-import { asc, eq } from 'drizzle-orm'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHeader, TableRow } from '@beaconhs/ui'
-import { people } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
@@ -50,25 +48,6 @@ export default async function ByPersonPage({
     allowedSorts: SORTS,
   })
 
-  const peopleOptions = await ctx.db((tx) =>
-    tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        jobTitle: people.jobTitle,
-      })
-      .from(people)
-      .where(eq(people.status, 'active'))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(2000),
-  )
-  const personOptions = peopleOptions.map((p) => ({
-    value: p.id,
-    label: `${p.lastName ?? ''}${p.lastName ? ', ' : ''}${p.firstName ?? ''}`.trim() || '(unnamed)',
-    hint: p.jobTitle ?? undefined,
-  }))
-
   const allRows = personId ? await personCompliance(ctx, personId) : []
   const isOverdue = (s: string) => s === 'overdue' || s === 'expiring'
   const totals = {
@@ -111,7 +90,7 @@ export default async function ByPersonPage({
       }
     >
       <div className="space-y-6">
-        <PersonPicker people={personOptions} selected={personId ?? ''} />
+        <PersonPicker selected={personId ?? ''} />
 
         {personId ? (
           <TableToolbar>

@@ -28,7 +28,7 @@ import {
   TableRow,
   UrlDrawer,
 } from '@beaconhs/ui'
-import { can } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import {
   inspectionRecordCriteria,
   inspectionRecords,
@@ -48,6 +48,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { InspectionsSubNav } from '../_sub-nav'
 import { parseDateFilter } from '../_datetime'
@@ -92,9 +93,10 @@ export default async function InspectionRecordsPage({
   const dateTo = parseDateFilter(dateToRaw, 'end')
   const drawerKey = pickString(sp.drawer)
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.read.self')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'inspections.read.self')
 
-  const { rows, total, statusCounts, types, sites, inspectors } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts } = await ctx.db(async (tx) => {
     // Per-user record visibility: read.all → everything, read.site → my sites,
     // else → inspections I performed or submitted.
     const vis = await moduleScopeWhere(ctx, tx, {
@@ -105,7 +107,7 @@ export default async function InspectionRecordsPage({
       ],
       siteCol: inspectionRecords.siteOrgUnitId,
     })
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(inspectionRecords.deletedAt)]
     if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
@@ -198,46 +200,15 @@ export default async function InspectionRecordsPage({
     const ss = await tx
       .select({ s: inspectionRecords.status, c: count() })
       .from(inspectionRecords)
-      .where(vis)
+      .where(and(vis, isNull(inspectionRecords.deletedAt)))
       .groupBy(inspectionRecords.status)
     const sc: Record<string, number> = {}
     for (const r of ss) sc[r.s] = Number(r.c)
-
-    const tt = await tx
-      .select({ id: inspectionTypes.id, name: inspectionTypes.name })
-      .from(inspectionTypes)
-      .where(and(eq(inspectionTypes.isPublished, true), isNull(inspectionTypes.deletedAt)))
-      .orderBy(asc(inspectionTypes.name))
-
-    const siteOptions = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .innerJoin(inspectionRecords, eq(inspectionRecords.siteOrgUnitId, orgUnits.id))
-      .where(vis)
-      .groupBy(orgUnits.id, orgUnits.name)
-      .orderBy(asc(orgUnits.name))
-      .limit(30)
-
-    const inspectorOptions = await tx
-      .select({
-        id: tenantUsers.id,
-        displayName: tenantUsers.displayName,
-        c: count(),
-      })
-      .from(tenantUsers)
-      .innerJoin(inspectionRecords, eq(inspectionRecords.inspectorTenantUserId, tenantUsers.id))
-      .where(vis)
-      .groupBy(tenantUsers.id, tenantUsers.displayName)
-      .orderBy(desc(count()))
-      .limit(20)
 
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: sc,
-      types: tt,
-      sites: siteOptions,
-      inspectors: inspectorOptions,
     }
   })
 
@@ -333,37 +304,33 @@ export default async function InspectionRecordsPage({
                 label="Status"
                 options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
               />
-              {types.length > 0 ? (
-                <FilterChips
-                  basePath="/inspections/records"
-                  currentParams={sp}
-                  paramKey="type"
-                  label="Type"
-                  options={types.slice(0, 12).map((t) => ({ value: t.id, label: t.name }))}
-                />
-              ) : null}
-              {sites.length > 0 ? (
-                <FilterChips
-                  basePath="/inspections/records"
-                  currentParams={sp}
-                  paramKey="site"
-                  label="Site"
-                  options={sites.slice(0, 12).map((s) => ({ value: s.id, label: s.name }))}
-                />
-              ) : null}
-              {inspectors.length > 0 ? (
-                <FilterChips
-                  basePath="/inspections/records"
-                  currentParams={sp}
-                  paramKey="inspector"
-                  label="Inspector"
-                  options={inspectors.slice(0, 12).map((i) => ({
-                    value: i.id,
-                    label: i.displayName ?? '—',
-                    count: Number(i.c),
-                  }))}
-                />
-              ) : null}
+              <RemoteSearchFilter
+                lookup="inspection-record-filter-types"
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="type"
+                placeholder="All inspection types"
+                allLabel="All inspection types"
+                searchPlaceholder="Search visible inspection types…"
+              />
+              <RemoteSearchFilter
+                lookup="inspection-record-filter-sites"
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="site"
+                placeholder="All sites"
+                allLabel="All sites"
+                searchPlaceholder="Search visible sites…"
+              />
+              <RemoteSearchFilter
+                lookup="inspection-record-filter-inspectors"
+                basePath="/inspections/records"
+                currentParams={sp}
+                paramKey="inspector"
+                placeholder="All inspectors"
+                allLabel="All inspectors"
+                searchPlaceholder="Search visible inspectors…"
+              />
               <FilterChips
                 basePath="/inspections/records"
                 currentParams={sp}
@@ -381,7 +348,18 @@ export default async function InspectionRecordsPage({
         {rows.length === 0 ? (
           <EmptyState
             icon={<ClipboardList size={32} />}
-            title={params.q ? `No records match "${params.q}"` : 'No inspection records'}
+            title={
+              params.q ||
+              statusFilter ||
+              typeFilter ||
+              siteFilter ||
+              inspectorFilter ||
+              signedFilter ||
+              dateFrom ||
+              dateTo
+                ? 'No inspection records match these filters'
+                : 'No inspection records'
+            }
             description="Select an inspection type to start one."
             action={
               <Link href="/inspections/records?drawer=new">

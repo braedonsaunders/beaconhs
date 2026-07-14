@@ -20,6 +20,7 @@ import {
   UrlDrawer,
   type SelectOption,
 } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 type PpeDrawerType = {
   id: string
@@ -43,13 +44,11 @@ export function PpeDrawers({
   openDrawer,
   closeHref,
   types,
-  people,
   issueAction,
 }: {
   openDrawer: 'issue' | null
   closeHref: string
   types: PpeDrawerType[]
-  people: SelectOption[]
   issueAction: IssueAction
 }) {
   return (
@@ -57,7 +56,6 @@ export function PpeDrawers({
       open={openDrawer === 'issue'}
       closeHref={closeHref}
       types={types}
-      people={people}
       action={issueAction}
     />
   )
@@ -67,13 +65,11 @@ function IssueDrawer({
   open,
   closeHref,
   types,
-  people,
   action,
 }: {
   open: boolean
   closeHref: string
   types: PpeDrawerType[]
-  people: SelectOption[]
   action: IssueAction
 }) {
   const router = useRouter()
@@ -240,10 +236,10 @@ function IssueDrawer({
         <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-800">
           <div className="space-y-1.5">
             <Label>Issue to a person (optional)</Label>
-            <SearchSelect
+            <RemoteSearchSelect
+              lookup="ppe-active-people"
               value={personId}
               onChange={setPersonId}
-              options={people}
               placeholder="Leave blank to add to stock…"
               searchPlaceholder="Search people…"
               sheetTitle="Issue to a person"

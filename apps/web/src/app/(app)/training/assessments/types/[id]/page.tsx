@@ -23,6 +23,7 @@ import {
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
+import { isUuid } from '@/lib/list-params'
 import {
   createAssessmentQuestion,
   deleteAssessmentQuestion,
@@ -48,6 +49,8 @@ export default async function AssessmentTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('training')
 
   const data = await ctx.db(async (tx) => {

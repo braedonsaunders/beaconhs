@@ -9,6 +9,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { renderFormResponsePdfResponse } from '@/lib/module-pdf'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 import { canAccessResponseTemplate } from '../../../_lib/access'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +19,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params
+  if (!isUuid(id)) return new Response('Not found', { status: 404 })
+
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })

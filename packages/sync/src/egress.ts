@@ -19,15 +19,32 @@ const MAX_HEADER_BYTES = 16 * 1024
 const FORBIDDEN_REQUEST_HEADERS = new Set([
   'connection',
   'content-length',
+  'expect',
+  'forwarded',
   'host',
   'keep-alive',
+  'proxy-connection',
   'proxy-authenticate',
   'proxy-authorization',
   'te',
   'trailer',
   'transfer-encoding',
   'upgrade',
+  'via',
+  'x-http-method',
+  'x-http-method-override',
+  'x-method-override',
+  'x-real-ip',
+  'x-rewrite-url',
 ])
+
+function isForbiddenRequestHeader(name: string): boolean {
+  return (
+    FORBIDDEN_REQUEST_HEADERS.has(name) ||
+    name.startsWith('x-forwarded-') ||
+    name.startsWith('x-original-')
+  )
+}
 
 const RESERVED_HOST_SUFFIXES = [
   '.example',
@@ -79,6 +96,7 @@ for (const [network, prefix] of [
   ['5f00::', 16],
   ['fc00::', 7],
   ['fe80::', 10],
+  ['fec0::', 10],
   ['ff00::', 8],
 ] as const) {
   ipv6BlockList.addSubnet(network, prefix, 'ipv6')
@@ -97,6 +115,7 @@ export type OutboundDnsResolver = (hostname: string) => Promise<readonly LookupA
 export interface ResolvePublicHostOptions {
   timeoutMs?: number
   resolver?: OutboundDnsResolver
+  signal?: AbortSignal
 }
 
 export interface SecureFetchOptions {
@@ -107,6 +126,14 @@ export interface SecureFetchOptions {
   maxRequestBytes?: number
   maxResponseBytes?: number
   maxRedirects?: number
+  signal?: AbortSignal
+  /** Optional resolver for controlled runtimes and tests. Every answer is still subject to the public-IP policy. */
+  resolver?: OutboundDnsResolver
+}
+
+export interface ValidatedOutboundRequestConfiguration {
+  url: URL
+  headers: Record<string, string>
 }
 
 function boundedInteger(
@@ -178,19 +205,38 @@ function assertPublicHostname(hostname: string): void {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('This operation was aborted.', 'AbortError')
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+  signal?: AbortSignal,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    let settled = false
+    const finish = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      callback()
+    }
+    const onAbort = () => finish(() => reject(abortError(signal!)))
+    const timer = setTimeout(() => finish(() => reject(new Error(message))), timeoutMs)
     timer.unref?.()
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
     promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (error: unknown) => {
-        clearTimeout(timer)
-        reject(error)
-      },
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
     )
   })
 }
@@ -222,6 +268,7 @@ export async function resolvePublicHost(
     (options.resolver ?? systemResolver)(hostname),
     timeoutMs,
     'Outbound DNS lookup timed out.',
+    options.signal,
   )
   if (addresses.length === 0) throw new Error('Outbound host did not resolve to an address.')
 
@@ -258,6 +305,24 @@ function parseOutboundUrl(input: string | URL): URL {
   return url
 }
 
+/**
+ * Validate the non-network portion of an outbound request configuration.
+ *
+ * This is shared by persistence boundaries that need to reject malformed or
+ * unsafe configuration before it is stored. Runtime callers must still use
+ * `secureFetch`, which repeats these checks and validates DNS immediately
+ * before opening every socket.
+ */
+export function validateOutboundRequestConfiguration(
+  input: string | URL,
+  headers?: Headers | Record<string, string>,
+): ValidatedOutboundRequestConfiguration {
+  return {
+    url: parseOutboundUrl(input),
+    headers: normalizedHeaders(headers),
+  }
+}
+
 function requestBodyBytes(body: SecureFetchOptions['body']): Buffer | undefined {
   if (body == null) return undefined
   if (typeof body === 'string') return Buffer.from(body)
@@ -269,11 +334,24 @@ function requestBodyBytes(body: SecureFetchOptions['body']): Buffer | undefined 
 function normalizedHeaders(
   input: Headers | Record<string, string> | undefined,
 ): Record<string, string> {
+  if (input && !(input instanceof Headers)) {
+    for (const [name, value] of Object.entries(input)) {
+      if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) {
+        throw new Error('Outbound request contains an invalid header name.')
+      }
+      if (typeof value !== 'string' || /[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)) {
+        throw new Error(`Outbound request header "${name.toLowerCase()}" contains invalid data.`)
+      }
+    }
+  }
   const headers = new Headers(input)
   const out: Record<string, string> = {}
   for (const [name, value] of headers) {
-    if (FORBIDDEN_REQUEST_HEADERS.has(name)) {
+    if (isForbiddenRequestHeader(name)) {
       throw new Error(`Outbound request header "${name}" is not allowed.`)
+    }
+    if (name === 'accept-encoding' && value.trim().toLowerCase() !== 'identity') {
+      throw new Error('Outbound request header "accept-encoding" must be identity.')
     }
     out[name] = value
   }
@@ -286,6 +364,15 @@ function normalizedHeaders(
     throw new Error(`Outbound request headers exceeded ${MAX_HEADER_BYTES} bytes.`)
   }
   return out
+}
+
+/** Parse an outbound redirect without allowing an origin change; the fetch loop rechecks DNS next. */
+export function resolveOutboundRedirect(current: URL, location: string): URL {
+  const next = parseOutboundUrl(new URL(location, current))
+  if (next.origin !== current.origin) {
+    throw new Error('Cross-origin outbound redirects are not allowed.')
+  }
+  return next
 }
 
 function responseHeaders(raw: IncomingHttpHeaders): Headers {
@@ -315,6 +402,7 @@ function requestOnce(
   body: Buffer | undefined,
   maxResponseBytes: number,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<RawResponse> {
   return new Promise<RawResponse>((resolve, reject) => {
     let settled = false
@@ -322,13 +410,20 @@ function requestOnce(
       if (settled) return
       settled = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
       reject(error)
     }
     const finish = (value: RawResponse) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
       resolve(value)
+    }
+    const onAbort = () => {
+      const error = abortError(signal!)
+      request.destroy(error)
+      finishError(error)
     }
 
     const requestHeaders: Record<string, string> = {
@@ -401,6 +496,11 @@ function requestOnce(
       request.destroy(new Error(`Outbound request timed out after ${timeoutMs} ms.`))
     }, timeoutMs)
     timer.unref?.()
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
     request.on('error', (error) => finishError(error))
     if (body) request.write(body)
     request.end()
@@ -435,6 +535,7 @@ export async function secureFetch(
   input: string | URL,
   options: SecureFetchOptions = {},
 ): Promise<Response> {
+  if (options.signal?.aborted) throw abortError(options.signal)
   const timeoutMs = boundedInteger(
     options.timeoutMs,
     DEFAULT_TIMEOUT_MS,
@@ -471,10 +572,11 @@ export async function secureFetch(
   if ((body?.length ?? 0) > maxRequestBytes) {
     throw new Error(`Outbound request body exceeded ${maxRequestBytes} bytes.`)
   }
-  const headers = normalizedHeaders(options.headers)
+  const configured = validateOutboundRequestConfiguration(input, options.headers)
+  const headers = configured.headers
   const deadline = Date.now() + timeoutMs
   const visited = new Set<string>()
-  let url = parseOutboundUrl(input)
+  let url = configured.url
 
   for (let redirectCount = 0; ; redirectCount++) {
     if (visited.has(url.href)) throw new Error('Outbound redirect loop detected.')
@@ -482,7 +584,11 @@ export async function secureFetch(
     const remaining = deadline - Date.now()
     if (remaining <= 0) throw new Error(`Outbound request timed out after ${timeoutMs} ms.`)
 
-    const resolved = await resolvePublicHost(url.hostname, { timeoutMs: remaining })
+    const resolved = await resolvePublicHost(url.hostname, {
+      timeoutMs: remaining,
+      resolver: options.resolver,
+      signal: options.signal,
+    })
     const raw = await requestOnce(
       url,
       resolved,
@@ -491,6 +597,7 @@ export async function secureFetch(
       body,
       maxResponseBytes,
       Math.max(1, deadline - Date.now()),
+      options.signal,
     )
     if (!isRedirect(raw.status)) return responseFromRaw(raw)
 
@@ -499,10 +606,7 @@ export async function secureFetch(
     if (redirectCount >= maxRedirects) {
       throw new Error(`Outbound request exceeded ${maxRedirects} redirect(s).`)
     }
-    const next = parseOutboundUrl(new URL(location, url))
-    if (next.origin !== url.origin) {
-      throw new Error('Cross-origin outbound redirects are not allowed.')
-    }
+    const next = resolveOutboundRedirect(url, location)
 
     if (raw.status === 303 || ((raw.status === 301 || raw.status === 302) && method === 'POST')) {
       method = 'GET'

@@ -29,7 +29,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
 import { pickActiveTab } from '@/components/tab-nav'
-import { mergeHref } from '@/lib/list-params'
+import { isUuid, mergeHref } from '@/lib/list-params'
 import { DashboardGrid } from '@/app/(app)/dashboard/_dashboard-grid'
 import { loadDashboardEditCanvas } from '@/app/(app)/dashboard/_edit-canvas'
 import { DEFAULT_LAYOUTS } from '@/app/(app)/dashboard/_role-defaults'
@@ -66,9 +66,11 @@ export default async function AdminRoleEditPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.roles.manage')) redirect('/admin')
-  const { id } = await params
   const sp = await searchParams
   const active = pickActiveTab(sp, ROLE_TABS, 'details')
   const error = typeof sp.error === 'string' ? sp.error : undefined

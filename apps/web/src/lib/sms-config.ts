@@ -10,6 +10,9 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { platformSettings, PLATFORM_SETTINGS_ID, tenants } from '@beaconhs/db/schema'
 import {
   isSmsProvider,
+  isSmsPolicyMode,
+  resolveSmsTransport,
+  validateStoredSmsConfig,
   type PlatformSmsConfig,
   type RawSmsConfig,
   type SmsPolicyMode,
@@ -41,9 +44,9 @@ type SmsSettings = {
 
 type PlatformSmsSettings = SmsSettings & { mode: SmsPolicyMode }
 
-function toSettings(raw: RawSmsConfig): SmsSettings {
+export function toSmsSettings(raw: RawSmsConfig): SmsSettings {
   return {
-    enabled: raw.enabled !== false,
+    enabled: Boolean(raw.provider) && raw.enabled === true,
     provider: normProvider(raw.provider),
     fromNumber: raw.fromNumber ?? '',
     twilioAccountSid: raw.twilioAccountSid ?? '',
@@ -67,9 +70,61 @@ export type SmsSettingsInput = {
   secret?: string
 }
 
-// Merge form input over the previously-stored config, re-sealing the secret only
-// when a new one was typed.
-function mergeRaw(prev: RawSmsConfig, input: SmsSettingsInput): RawSmsConfig {
+type SmsConfigChange = {
+  previousProvider: SmsProvider | null
+  providerChanged: boolean
+  credentialChange: 'unchanged' | 'added' | 'replaced' | 'removed'
+  enabledChanged: boolean
+}
+
+function hasCredential(raw: RawSmsConfig): boolean {
+  return Boolean(raw.keyCiphertext && raw.keyNonce)
+}
+
+export function describeSmsConfigChange(
+  prev: RawSmsConfig,
+  next: RawSmsConfig,
+  credentialSupplied: boolean,
+): SmsConfigChange {
+  const hadCredential = hasCredential(prev)
+  const hasNextCredential = hasCredential(next)
+  const credentialChange: SmsConfigChange['credentialChange'] = credentialSupplied
+    ? hadCredential
+      ? 'replaced'
+      : 'added'
+    : hadCredential && !hasNextCredential
+      ? 'removed'
+      : 'unchanged'
+  const wasEnabled = Boolean(prev.provider) && prev.enabled === true
+  return {
+    previousProvider: prev.provider ?? null,
+    providerChanged: prev.provider !== next.provider,
+    credentialChange,
+    enabledChanged: wasEnabled !== (Boolean(next.provider) && next.enabled === true),
+  }
+}
+
+export function assertTenantSmsOverrideAllowed(platform: PlatformSmsConfig): void {
+  if ((platform.mode ?? 'tenant_optional') !== 'tenant_optional') {
+    throw new Error(
+      'Tenant SMS provider overrides are unavailable under the current platform policy.',
+    )
+  }
+}
+
+export function validateSmsConfigForSave(raw: RawSmsConfig, requireLive: boolean): void {
+  validateStoredSmsConfig(raw, { requireComplete: requireLive })
+  if (requireLive && !resolveSmsTransport(raw)) {
+    throw new Error(
+      'The saved SMS provider credential could not be decrypted. Replace the credential before enabling SMS delivery.',
+    )
+  }
+}
+
+// Provider credentials are not interchangeable. A stored secret is retained
+// only when the provider remains unchanged.
+export function mergeSmsConfig(prev: RawSmsConfig, input: SmsSettingsInput): RawSmsConfig {
+  const sameProvider = prev.provider === input.provider
   const next: RawSmsConfig = {
     enabled: input.enabled,
     provider: input.provider,
@@ -78,8 +133,8 @@ function mergeRaw(prev: RawSmsConfig, input: SmsSettingsInput): RawSmsConfig {
     vonageApiKey: input.vonageApiKey || undefined,
     plivoAuthId: input.plivoAuthId || undefined,
     telnyxMessagingProfileId: input.telnyxMessagingProfileId || undefined,
-    keyCiphertext: prev.keyCiphertext,
-    keyNonce: prev.keyNonce,
+    keyCiphertext: sameProvider ? prev.keyCiphertext : undefined,
+    keyNonce: sameProvider ? prev.keyNonce : undefined,
   }
   if (input.secret && input.secret.trim()) {
     const sealed = sealSecret(input.secret.trim())
@@ -107,7 +162,7 @@ async function readTenantSms(tenantId: string): Promise<RawSmsConfig> {
 
 /** UI-facing settings for this tenant (no secret). */
 export async function getTenantSmsSettings(ctx: RequestContext): Promise<SmsSettings> {
-  return toSettings(await readTenantSms(ctx.tenantId))
+  return toSmsSettings(await readTenantSms(ctx.tenantId))
 }
 
 /** Raw stored config incl. the sealed secret — for the "send test" action. */
@@ -118,47 +173,94 @@ export async function getTenantSmsRaw(ctx: RequestContext): Promise<RawSmsConfig
 export async function saveTenantSmsSettings(
   ctx: RequestContext,
   input: SmsSettingsInput,
-): Promise<void> {
-  await withSuperAdmin(db, async (tx) => {
+): Promise<SmsConfigChange> {
+  return withSuperAdmin(db, async (tx) => {
+    await tx
+      .insert(platformSettings)
+      .values({ id: PLATFORM_SETTINGS_ID })
+      .onConflictDoNothing({ target: platformSettings.id })
+    const [platformRow] = await tx
+      .select({ sms: platformSettings.sms })
+      .from(platformSettings)
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .limit(1)
+      .for('share')
+    const platformRaw = platformRow?.sms
+    assertTenantSmsOverrideAllowed(
+      (platformRaw && typeof platformRaw === 'object' ? platformRaw : {}) as PlatformSmsConfig,
+    )
+
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
       .for('update')
-    const settings = (t?.settings as Record<string, unknown>) ?? {}
+    if (!t) throw new Error('The active tenant no longer exists.')
+    const settings = t.settings as Record<string, unknown>
     const prev = (
       settings.sms && typeof settings.sms === 'object' ? settings.sms : {}
     ) as RawSmsConfig
-    await tx
+    const next = mergeSmsConfig(prev, input)
+    validateSmsConfigForSave(next, next.enabled === true)
+    const updated = await tx
       .update(tenants)
-      .set({ settings: { ...settings, sms: mergeRaw(prev, input) } })
+      .set({ settings: { ...settings, sms: next } })
       .where(eq(tenants.id, ctx.tenantId))
+      .returning({ id: tenants.id })
+    if (updated.length !== 1) throw new Error('The active tenant no longer exists.')
+    return describeSmsConfigChange(prev, next, Boolean(input.secret))
   })
 }
 
-/** Clear the stored secret for this tenant. */
-export async function clearTenantSmsKey(ctx: RequestContext): Promise<void> {
-  await withSuperAdmin(db, async (tx) => {
+/** Clear the stored secret and disable this tenant's incomplete provider. */
+export async function clearTenantSmsKey(ctx: RequestContext): Promise<SmsConfigChange> {
+  return withSuperAdmin(db, async (tx) => {
+    await tx
+      .insert(platformSettings)
+      .values({ id: PLATFORM_SETTINGS_ID })
+      .onConflictDoNothing({ target: platformSettings.id })
+    const [platformRow] = await tx
+      .select({ sms: platformSettings.sms })
+      .from(platformSettings)
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .limit(1)
+      .for('share')
+    const platformRaw = platformRow?.sms
+    assertTenantSmsOverrideAllowed(
+      (platformRaw && typeof platformRaw === 'object' ? platformRaw : {}) as PlatformSmsConfig,
+    )
+
     const [t] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
       .where(eq(tenants.id, ctx.tenantId))
       .limit(1)
       .for('update')
-    const settings = (t?.settings as Record<string, unknown>) ?? {}
+    if (!t) throw new Error('The active tenant no longer exists.')
+    const settings = t.settings as Record<string, unknown>
     const prev = (
       settings.sms && typeof settings.sms === 'object' ? settings.sms : {}
     ) as RawSmsConfig
-    await tx
+    const next: RawSmsConfig = {
+      ...prev,
+      enabled: false,
+      keyCiphertext: undefined,
+      keyNonce: undefined,
+    }
+    validateSmsConfigForSave(next, false)
+    const updated = await tx
       .update(tenants)
       .set({
         settings: {
           ...settings,
-          sms: { ...prev, keyCiphertext: undefined, keyNonce: undefined },
+          sms: next,
         },
       })
       .where(eq(tenants.id, ctx.tenantId))
+      .returning({ id: tenants.id })
+    if (updated.length !== 1) throw new Error('The active tenant no longer exists.')
+    return describeSmsConfigChange(prev, next, false)
   })
 }
 
@@ -180,7 +282,10 @@ async function readPlatformSms(): Promise<PlatformSmsConfig> {
 
 export async function getPlatformSmsSettings(): Promise<PlatformSmsSettings> {
   const raw = await readPlatformSms()
-  return { ...toSettings(raw), mode: raw.mode ?? 'tenant_optional' }
+  if (raw.mode !== undefined && !isSmsPolicyMode(raw.mode)) {
+    throw new Error('The stored platform SMS policy is invalid and must be repaired.')
+  }
+  return { ...toSmsSettings(raw), mode: raw.mode ?? 'tenant_optional' }
 }
 
 export async function getPlatformSmsRaw(): Promise<PlatformSmsConfig> {
@@ -189,18 +294,40 @@ export async function getPlatformSmsRaw(): Promise<PlatformSmsConfig> {
 
 /** The current platform policy — used to decide whether a tenant may self-configure. */
 export async function getSmsPolicyMode(): Promise<SmsPolicyMode> {
-  return (await readPlatformSms()).mode ?? 'tenant_optional'
+  const raw = await readPlatformSms()
+  if (raw.mode !== undefined && !isSmsPolicyMode(raw.mode)) return 'disabled'
+  return raw.mode ?? 'tenant_optional'
 }
 
 export async function savePlatformSmsSettings(
   input: SmsSettingsInput & { mode: SmsPolicyMode },
-): Promise<void> {
-  const prev = await readPlatformSms()
-  const next: PlatformSmsConfig = { ...mergeRaw(prev, input), mode: input.mode }
-  await withSuperAdmin(db, async (tx) => {
+): Promise<SmsConfigChange> {
+  return withSuperAdmin(db, async (tx) => {
     await tx
       .insert(platformSettings)
-      .values({ id: PLATFORM_SETTINGS_ID, sms: next })
-      .onConflictDoUpdate({ target: platformSettings.id, set: { sms: next } })
+      .values({ id: PLATFORM_SETTINGS_ID })
+      .onConflictDoNothing({ target: platformSettings.id })
+    const [row] = await tx
+      .select({ sms: platformSettings.sms })
+      .from(platformSettings)
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .limit(1)
+      .for('update')
+    if (!row) throw new Error('Platform settings could not be initialized.')
+    const raw = row.sms
+    const prev = (raw && typeof raw === 'object' ? raw : {}) as PlatformSmsConfig
+    const next: PlatformSmsConfig = { ...mergeSmsConfig(prev, input), mode: input.mode }
+    const requireLive = input.mode !== 'disabled'
+    if (requireLive && next.enabled !== true) {
+      throw new Error('Enable the platform default provider or select Disable all SMS.')
+    }
+    validateSmsConfigForSave(next, requireLive)
+    const updated = await tx
+      .update(platformSettings)
+      .set({ sms: next, updatedAt: new Date() })
+      .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+      .returning({ id: platformSettings.id })
+    if (updated.length !== 1) throw new Error('Platform settings could not be updated.')
+    return describeSmsConfigChange(prev, next, Boolean(input.secret))
   })
 }

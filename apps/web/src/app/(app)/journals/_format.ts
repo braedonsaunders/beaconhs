@@ -2,8 +2,6 @@
 
 import type { JournalStatus } from './_types'
 
-const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 function parse(iso: string): Date {
   return new Date(`${iso}T00:00:00`)
 }
@@ -23,10 +21,6 @@ export function formatLongDate(iso: string): string {
     month: 'long',
     day: 'numeric',
   })
-}
-
-function weekdayShort(iso: string): string {
-  return WD[parse(iso).getDay()] ?? ''
 }
 
 /** A Date's YYYY-MM-DD in LOCAL time — never toISOString(), which is UTC and

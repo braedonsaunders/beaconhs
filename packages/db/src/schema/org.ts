@@ -4,8 +4,10 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -16,6 +18,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
+import { catalogNameIsNonblankSql, normalizedCatalogNameSql } from '../catalog-name'
 import { tenants, users } from './core'
 
 export const orgUnitLevel = pgEnum('org_unit_level', ['customer', 'project', 'site', 'area'])
@@ -27,7 +30,7 @@ export const orgUnits = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    parentId: uuid('parent_id').references((): any => orgUnits.id, { onDelete: 'cascade' }),
+    parentId: uuid('parent_id'),
     level: orgUnitLevel('level').notNull(),
     name: text('name').notNull(),
     code: text('code'), // tenant-defined short code
@@ -53,10 +56,16 @@ export const orgUnits = pgTable(
   },
   (t) => ({
     tenantIdx: index('org_units_tenant_idx').on(t.tenantId),
-    parentIdx: index('org_units_parent_idx').on(t.parentId),
+    tenantIdIdUx: uniqueIndex('org_units_tenant_id_id_ux').on(t.tenantId, t.id),
+    parentIdx: index('org_units_parent_idx').on(t.tenantId, t.parentId),
     tenantLevelIdx: index('org_units_tenant_level_idx').on(t.tenantId, t.level),
     tenantCodeUx: uniqueIndex('org_units_tenant_code_ux').on(t.tenantId, t.code),
     metadataGin: index('org_units_metadata_gin').using('gin', t.metadata),
+    parentFk: foreignKey({
+      name: 'org_units_tenant_parent_fk',
+      columns: [t.tenantId, t.parentId],
+      foreignColumns: [t.tenantId, t.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -74,7 +83,12 @@ export const departments = pgTable(
   },
   (t) => ({
     tenantIdx: index('departments_tenant_idx').on(t.tenantId),
-    tenantNameUx: uniqueIndex('departments_tenant_name_ux').on(t.tenantId, t.name),
+    tenantIdIdUx: uniqueIndex('departments_tenant_id_id_ux').on(t.tenantId, t.id),
+    tenantNormalizedNameUx: uniqueIndex('departments_tenant_normalized_name_ux').on(
+      t.tenantId,
+      normalizedCatalogNameSql(t.name),
+    ),
+    nameNonblank: check('departments_name_nonblank_ck', catalogNameIsNonblankSql(t.name)),
   }),
 )
 
@@ -91,6 +105,12 @@ export const trades = pgTable(
   },
   (t) => ({
     tenantIdx: index('trades_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('trades_tenant_id_id_ux').on(t.tenantId, t.id),
+    tenantNormalizedNameUx: uniqueIndex('trades_tenant_normalized_name_ux').on(
+      t.tenantId,
+      normalizedCatalogNameSql(t.name),
+    ),
+    nameNonblank: check('trades_name_nonblank_ck', catalogNameIsNonblankSql(t.name)),
   }),
 )
 
@@ -102,11 +122,16 @@ export const crews = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    foremanPersonId: uuid('foreman_person_id'),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('crews_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('crews_tenant_id_id_ux').on(t.tenantId, t.id),
+    tenantNormalizedNameUx: uniqueIndex('crews_tenant_normalized_name_ux').on(
+      t.tenantId,
+      normalizedCatalogNameSql(t.name),
+    ),
+    nameNonblank: check('crews_name_nonblank_ck', catalogNameIsNonblankSql(t.name)),
   }),
 )
 
@@ -129,22 +154,19 @@ export const people = pgTable(
     firstName: text('first_name').notNull(),
     lastName: text('last_name').notNull(),
     formalName: text('formal_name'),
-    jobTitle: text('job_title'),
     dateOfBirth: date('date_of_birth'),
     hireDate: date('hire_date'),
     terminationDate: date('termination_date'),
-    departmentId: uuid('department_id').references(() => departments.id),
-    tradeId: uuid('trade_id').references(() => trades.id),
-    crewId: uuid('crew_id').references(() => crews.id),
+    departmentId: uuid('department_id'),
+    tradeId: uuid('trade_id'),
+    crewId: uuid('crew_id'),
     email: text('email'),
     phone: text('phone'),
     photoAttachmentId: uuid('photo_attachment_id'),
     // Self-referential reporting line. Nullable for top-level reports
     // (executives, contractors without a manager). The org-chart page builds
     // a tree from this column with a simple in-memory cycle guard.
-    managerPersonId: uuid('manager_person_id').references((): any => people.id, {
-      onDelete: 'set null',
-    }),
+    managerPersonId: uuid('manager_person_id'),
     // User's saved signature image — referenced by inspection / form-sign-off
     // flows when this person is the signer. Stored as a regular attachment so
     // it benefits from the same upload + audit pipeline.
@@ -173,6 +195,10 @@ export const people = pgTable(
     tenantIdIdUx: uniqueIndex('people_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux').on(t.tenantId, t.employeeNo),
     nameIdx: index('people_name_idx').on(t.tenantId, t.lastName, t.firstName),
+    departmentIdx: index('people_department_idx').on(t.tenantId, t.departmentId),
+    tradeIdx: index('people_trade_idx').on(t.tenantId, t.tradeId),
+    crewIdx: index('people_crew_idx').on(t.tenantId, t.crewId),
+    managerIdx: index('people_manager_idx').on(t.tenantId, t.managerPersonId),
     // Reverse-lookup index for "user → person" resolution (compliance audience,
     // notification recipients, flows delivery) which join people by userId.
     userIdx: index('people_user_idx').on(t.userId),
@@ -189,6 +215,26 @@ export const people = pgTable(
     badgeTokenUx: uniqueIndex('people_badge_token_ux')
       .on(t.badgeToken)
       .where(sql`${t.badgeToken} is not null`),
+    departmentFk: foreignKey({
+      name: 'people_tenant_department_fk',
+      columns: [t.tenantId, t.departmentId],
+      foreignColumns: [departments.tenantId, departments.id],
+    }),
+    tradeFk: foreignKey({
+      name: 'people_tenant_trade_fk',
+      columns: [t.tenantId, t.tradeId],
+      foreignColumns: [trades.tenantId, trades.id],
+    }),
+    crewFk: foreignKey({
+      name: 'people_tenant_crew_fk',
+      columns: [t.tenantId, t.crewId],
+      foreignColumns: [crews.tenantId, crews.id],
+    }),
+    managerFk: foreignKey({
+      name: 'people_tenant_manager_fk',
+      columns: [t.tenantId, t.managerPersonId],
+      foreignColumns: [t.tenantId, t.id],
+    }),
   }),
 )
 
@@ -199,40 +245,70 @@ export const peopleAssignments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
-    orgUnitId: uuid('org_unit_id')
-      .notNull()
-      .references(() => orgUnits.id, { onDelete: 'cascade' }),
+    personId: uuid('person_id').notNull(),
+    orgUnitId: uuid('org_unit_id').notNull(),
     validFrom: date('valid_from').notNull(),
     validTo: date('valid_to'),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('people_assignments_tenant_idx').on(t.tenantId),
-    personIdx: index('people_assignments_person_idx').on(t.personId),
-    orgIdx: index('people_assignments_org_idx').on(t.orgUnitId),
+    personIdx: index('people_assignments_person_idx').on(t.tenantId, t.personId),
+    orgIdx: index('people_assignments_org_idx').on(t.tenantId, t.orgUnitId),
+    personFk: foreignKey({
+      name: 'people_assignments_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
+    orgFk: foreignKey({
+      name: 'people_assignments_tenant_org_fk',
+      columns: [t.tenantId, t.orgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }).onDelete('cascade'),
   }),
 )
 
 export const orgUnitsRelations = relations(orgUnits, ({ one, many }) => ({
   tenant: one(tenants, { fields: [orgUnits.tenantId], references: [tenants.id] }),
-  parent: one(orgUnits, { fields: [orgUnits.parentId], references: [orgUnits.id] }),
-  children: many(orgUnits),
+  parent: one(orgUnits, {
+    fields: [orgUnits.tenantId, orgUnits.parentId],
+    references: [orgUnits.tenantId, orgUnits.id],
+    relationName: 'orgUnitParent',
+  }),
+  children: many(orgUnits, { relationName: 'orgUnitParent' }),
 }))
 
 export const peopleRelations = relations(people, ({ one, many }) => ({
   tenant: one(tenants, { fields: [people.tenantId], references: [tenants.id] }),
   user: one(users, { fields: [people.userId], references: [users.id] }),
-  department: one(departments, { fields: [people.departmentId], references: [departments.id] }),
-  trade: one(trades, { fields: [people.tradeId], references: [trades.id] }),
-  crew: one(crews, { fields: [people.crewId], references: [crews.id] }),
+  department: one(departments, {
+    fields: [people.tenantId, people.departmentId],
+    references: [departments.tenantId, departments.id],
+  }),
+  trade: one(trades, {
+    fields: [people.tenantId, people.tradeId],
+    references: [trades.tenantId, trades.id],
+  }),
+  crew: one(crews, {
+    fields: [people.tenantId, people.crewId],
+    references: [crews.tenantId, crews.id],
+  }),
   manager: one(people, {
-    fields: [people.managerPersonId],
-    references: [people.id],
+    fields: [people.tenantId, people.managerPersonId],
+    references: [people.tenantId, people.id],
     relationName: 'manager',
   }),
   reports: many(people, { relationName: 'manager' }),
   assignments: many(peopleAssignments),
+}))
+
+export const peopleAssignmentsRelations = relations(peopleAssignments, ({ one }) => ({
+  person: one(people, {
+    fields: [peopleAssignments.tenantId, peopleAssignments.personId],
+    references: [people.tenantId, people.id],
+  }),
+  orgUnit: one(orgUnits, {
+    fields: [peopleAssignments.tenantId, peopleAssignments.orgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
+  }),
 }))

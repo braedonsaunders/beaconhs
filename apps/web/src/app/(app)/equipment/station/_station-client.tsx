@@ -12,7 +12,7 @@
 // an instant colour flash + beep. Mobile gets a camera scanner when the browser
 // supports BarcodeDetector.
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -32,7 +32,9 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
-import { Badge, Select } from '@beaconhs/ui'
+import { Badge } from '@beaconhs/ui'
+import { RemoteSearchSelect, type RemoteSearchLoader } from '@/components/remote-search-select'
+import type { PickerOption } from '@/lib/picker-options'
 import type {
   StationScanInput,
   StationScanResult,
@@ -40,7 +42,6 @@ import type {
 } from '@/lib/equipment-station'
 
 type Person = { id: string; name: string; employeeNo: string | null; jobTitle: string | null }
-type Location = { id: string; name: string; level: string; isBase: boolean }
 
 type LogEntry = {
   key: string
@@ -83,13 +84,14 @@ type StationClientProps = {
   soundEnabled: boolean
   requireConditionOnCheckin: boolean
   homeLocationName: string | null
-  people: Person[]
-  locations: Location[]
   availableCount: number
-  initialActivePersonId?: string | null
+  initialActivePerson?: Person | null
   initialScanCode?: string | null
   onSearch: (query: string) => Promise<StationSearchResults>
   onScan: (input: StationScanInput) => Promise<StationScanResult>
+  /** PIN-gated kiosk loaders. The authenticated app uses purpose-specific API lookups. */
+  holderOptionsLoader?: RemoteSearchLoader
+  locationOptionsLoader?: RemoteSearchLoader
   /** Called when the server rejects with a PIN error (kiosk re-locks). */
   onAuthError?: () => void
   /** Kiosk supplies a way back to the lock screen. */
@@ -145,22 +147,20 @@ export function StationClient(props: StationClientProps) {
     tenantName,
     scanMode,
     homeLocationName,
-    people,
-    locations,
     availableCount,
-    initialActivePersonId,
+    initialActivePerson,
     initialScanCode,
     onSearch,
     onScan,
+    holderOptionsLoader,
+    locationOptionsLoader,
     onAuthError,
     onExit,
   } = props
 
   const kiosk = surface === 'kiosk'
-  const [activePerson, setActivePerson] = useState<Person | null>(
-    () => people.find((p) => p.id === initialActivePersonId) ?? null,
-  )
-  const [destinationId, setDestinationId] = useState('')
+  const [activePerson, setActivePerson] = useState<Person | null>(initialActivePerson ?? null)
+  const [destination, setDestination] = useState<PickerOption | null>(null)
   const [direction, setDirection] = useState<'toggle' | 'out' | 'in'>(
     scanMode === 'explicit' ? 'out' : 'toggle',
   )
@@ -217,7 +217,7 @@ export function StationClient(props: StationClientProps) {
         const result = await onScan({
           code,
           activePersonId: activePerson?.id ?? null,
-          destinationOrgUnitId: destinationId || null,
+          destinationOrgUnitId: destination?.value ?? null,
           direction: dir,
         })
         if (!result.ok) {
@@ -239,14 +239,12 @@ export function StationClient(props: StationClientProps) {
           return
         }
         if (result.action === 'active_person') {
-          const person =
-            people.find((p) => p.id === result.personId) ??
-            ({
-              id: result.personId,
-              name: result.personName,
-              employeeNo: null,
-              jobTitle: result.jobTitle,
-            } as Person)
+          const person = {
+            id: result.personId,
+            name: result.personName,
+            employeeNo: null,
+            jobTitle: result.jobTitle,
+          }
           setActivePerson(person)
           beep('person')
           showFlash({ tone: 'person', title: result.personName, sub: 'Active holder set' })
@@ -285,12 +283,11 @@ export function StationClient(props: StationClientProps) {
       scanMode,
       direction,
       activePerson,
-      destinationId,
+      destination,
       onScan,
       onAuthError,
       beep,
       showFlash,
-      people,
       focusScan,
     ],
   )
@@ -319,20 +316,18 @@ export function StationClient(props: StationClientProps) {
     }
   }, [scanValue, onSearch])
 
-  function pickPerson(p: { id: string; name: string }) {
-    setActivePerson(
-      people.find((x) => x.id === p.id) ??
-        ({ id: p.id, name: p.name, employeeNo: null, jobTitle: null } as Person),
-    )
+  function pickPerson(p: StationSearchResults['people'][number]) {
+    setActivePerson({
+      id: p.id,
+      name: p.name,
+      employeeNo: p.employeeNo,
+      jobTitle: p.jobTitle,
+    })
     beep('person')
     showFlash({ tone: 'person', title: p.name, sub: 'Active holder set' })
     setScanValue('')
     setResults(null)
     setTimeout(focusScan, 0)
-  }
-
-  function selectActivePerson(id: string) {
-    setActivePerson(id ? (people.find((p) => p.id === id) ?? activePerson) : null)
   }
 
   function undo(entry: LogEntry) {
@@ -364,34 +359,6 @@ export function StationClient(props: StationClientProps) {
     document.addEventListener('fullscreenchange', onChange)
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
-
-  const personOptions = useMemo(() => {
-    const options = people.map((p) => ({
-      value: p.id,
-      label: p.name,
-      hint: p.employeeNo ?? undefined,
-    }))
-    if (activePerson && !options.some((option) => option.value === activePerson.id)) {
-      return [
-        {
-          value: activePerson.id,
-          label: activePerson.name,
-          hint: activePerson.employeeNo ?? undefined,
-        },
-        ...options,
-      ]
-    }
-    return options
-  }, [activePerson, people])
-  const locationOptions = useMemo(
-    () =>
-      locations.map((l) => ({
-        value: l.id,
-        label: l.name,
-        hint: l.isBase ? 'base' : l.level,
-      })),
-    [locations],
-  )
 
   const dark = kiosk || overlay
   const visibleResults = scanValue.trim().length > 0 ? results : null
@@ -497,41 +464,60 @@ export function StationClient(props: StationClientProps) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1">
             <Label dark={dark}>Active holder</Label>
-            <Select
+            <RemoteSearchSelect
+              lookup={surface === 'app' ? 'equipment-station-holders' : undefined}
+              loadOptions={surface === 'kiosk' ? holderOptionsLoader : undefined}
               value={activePerson?.id ?? ''}
-              onChange={(e) => selectActivePerson(e.currentTarget.value)}
+              onChange={(value) => {
+                if (!value) setActivePerson(null)
+              }}
+              onOptionChange={(person) =>
+                setActivePerson(
+                  person
+                    ? {
+                        id: person.value,
+                        name: person.label,
+                        employeeNo: person.hint ?? null,
+                        jobTitle: null,
+                      }
+                    : null,
+                )
+              }
+              initialOption={
+                activePerson
+                  ? {
+                      value: activePerson.id,
+                      label: activePerson.name,
+                      hint: activePerson.employeeNo ?? undefined,
+                    }
+                  : undefined
+              }
               placeholder="Scan a badge or pick..."
               searchPlaceholder="Search people..."
               sheetTitle="Active holder"
-              aria-label="Active holder"
-            >
-              <option value="">No active holder</option>
-              {personOptions.map((person) => (
-                <option key={person.value} value={person.value}>
-                  {person.hint ? `${person.label} (${person.hint})` : person.label}
-                </option>
-              ))}
-            </Select>
+              ariaLabel="Active holder"
+              clearable
+              emptyLabel="No active holder"
+              disabled={surface === 'kiosk' && !holderOptionsLoader}
+            />
           </div>
           <div className="space-y-1">
             <Label dark={dark}>Check-out destination</Label>
-            <Select
-              value={destinationId}
-              onChange={(e) => setDestinationId(e.currentTarget.value)}
+            <RemoteSearchSelect
+              lookup={surface === 'app' ? 'equipment-station-locations' : undefined}
+              loadOptions={surface === 'kiosk' ? locationOptionsLoader : undefined}
+              value={destination?.value ?? ''}
+              onChange={(value) => {
+                if (!value) setDestination(null)
+              }}
+              onOptionChange={(option) => setDestination(option ?? null)}
+              initialOption={destination ?? undefined}
               placeholder="Pick a destination..."
               searchPlaceholder="Search locations..."
               sheetTitle="Check-out destination"
-              aria-label="Destination"
-            >
-              <option value="" disabled>
-                Pick a destination...
-              </option>
-              {locationOptions.map((location) => (
-                <option key={location.value} value={location.value}>
-                  {location.hint ? `${location.label} (${location.hint})` : location.label}
-                </option>
-              ))}
-            </Select>
+              ariaLabel="Destination"
+              disabled={surface === 'kiosk' && !locationOptionsLoader}
+            />
           </div>
           <div className="space-y-1">
             <Label dark={dark}>Scan does</Label>
@@ -908,7 +894,7 @@ function MobileStationResultsSheet({
   onQueryChange: (value: string) => void
   onSubmitQuery: () => void
   onClose: () => void
-  onPickPerson: (person: { id: string; name: string }) => void
+  onPickPerson: (person: StationSearchResults['people'][number]) => void
   onPickEquipment: (assetTag: string) => void
 }) {
   if (typeof document === 'undefined') return null

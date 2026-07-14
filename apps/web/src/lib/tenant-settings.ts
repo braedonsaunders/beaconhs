@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { eq, sql } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
@@ -10,22 +11,32 @@ function encodeSetting(value: unknown): string {
   return encoded
 }
 
+/** Replace one top-level tenant setting inside an existing transaction. */
+export async function setTenantSettingInTransaction(
+  tx: Database,
+  tenantId: string,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  if (!key) throw new Error('Tenant setting key is required')
+  const encoded = encodeSetting(value)
+  const [updated] = await tx
+    .update(tenants)
+    .set({
+      settings: sql`jsonb_set(coalesce(${tenants.settings}, '{}'::jsonb), ARRAY[${key}]::text[], ${encoded}::jsonb, true)`,
+    })
+    .where(eq(tenants.id, tenantId))
+    .returning({ id: tenants.id })
+  if (!updated) throw new Error('Tenant setting workspace was not found')
+}
+
 /** Atomically replace one top-level tenant setting without overwriting peers. */
 export async function setTenantSetting(
   ctx: RequestContext,
   key: string,
   value: unknown,
 ): Promise<void> {
-  if (!key) throw new Error('Tenant setting key is required')
-  const encoded = encodeSetting(value)
-  await ctx.db((tx) =>
-    tx
-      .update(tenants)
-      .set({
-        settings: sql`jsonb_set(coalesce(${tenants.settings}, '{}'::jsonb), ARRAY[${key}]::text[], ${encoded}::jsonb, true)`,
-      })
-      .where(eq(tenants.id, ctx.tenantId)),
-  )
+  await ctx.db((tx) => setTenantSettingInTransaction(tx, ctx.tenantId, key, value))
 }
 
 /** Atomically remove one top-level tenant setting without overwriting peers. */

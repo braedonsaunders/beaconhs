@@ -32,7 +32,14 @@ describe('attachment tenant integrity manifest', () => {
           .filter((column) => column.name.endsWith('attachment_id'))
           .map((column) => `${table.name}.${column.name}`),
       )
-      .filter((key) => key !== 'attachments.attachment_id')
+      .filter(
+        (key) =>
+          key !== 'attachments.attachment_id' &&
+          // This immutable outbox snapshot is written only after the live
+          // attachment row is deleted, so an FK back to attachments would
+          // make the durable deletion trigger impossible by construction.
+          key !== 'storage_object_deletion_outbox.attachment_id',
+      )
       .sort()
     const declared = ATTACHMENT_TENANT_REFERENCES.map(
       (reference) => `${reference.table}.${reference.column}`,

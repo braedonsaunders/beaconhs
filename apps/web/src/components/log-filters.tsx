@@ -23,16 +23,43 @@ export function TextParamFilter({
   placeholder?: string
   className?: string
 }) {
+  const search = useSearchParams()
+  const initialValue = search.get(paramKey) ?? ''
+
+  // A URL value change remounts the controlled input. This keeps back/forward
+  // navigation authoritative without a cascading state-reset effect.
+  return (
+    <TextParamFilterControl
+      key={`${paramKey}:${initialValue}`}
+      paramKey={paramKey}
+      label={label}
+      type={type}
+      placeholder={placeholder}
+      className={className}
+      initialValue={initialValue}
+    />
+  )
+}
+
+function TextParamFilterControl({
+  paramKey,
+  label,
+  type,
+  placeholder,
+  className,
+  initialValue,
+}: {
+  paramKey: string
+  label: string
+  type: 'text' | 'tel'
+  placeholder?: string
+  className: string
+  initialValue: string
+}) {
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
-  const [value, setValue] = useState(search.get(paramKey) ?? '')
-
-  useEffect(() => {
-    // Re-sync the input when the URL changes externally (back/forward, chip clear).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setValue(search.get(paramKey) ?? '')
-  }, [search, paramKey])
+  const [value, setValue] = useState(initialValue)
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -48,8 +75,7 @@ export function TextParamFilter({
       router.replace(qs ? `${pathname}?${qs}` : pathname)
     }, 300)
     return () => clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
+  }, [paramKey, pathname, router, search, value])
 
   return (
     <div className="space-y-1.5">
@@ -72,16 +98,8 @@ export function DateRangeFilter() {
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
-  const [from, setFrom] = useState(search.get('from') ?? '')
-  const [to, setTo] = useState(search.get('to') ?? '')
-
-  useEffect(() => {
-    // Re-sync the inputs when the URL changes externally (back/forward, chip clear).
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setFrom(search.get('from') ?? '')
-    setTo(search.get('to') ?? '')
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [search])
+  const from = search.get('from') ?? ''
+  const to = search.get('to') ?? ''
 
   function apply(nextFrom: string, nextTo: string) {
     const next = new URLSearchParams(search.toString())
@@ -101,13 +119,13 @@ export function DateRangeFilter() {
           From
         </Label>
         <Input
+          key={`from:${from}`}
           id="from"
           type="date"
           className="h-8 w-44"
-          value={from}
+          defaultValue={from}
           onChange={(e) => {
             const v = e.target.value
-            setFrom(v)
             apply(v, to)
           }}
         />
@@ -117,13 +135,13 @@ export function DateRangeFilter() {
           To
         </Label>
         <Input
+          key={`to:${to}`}
           id="to"
           type="date"
           className="h-8 w-44"
-          value={to}
+          defaultValue={to}
           onChange={(e) => {
             const v = e.target.value
-            setTo(v)
             apply(from, v)
           }}
         />

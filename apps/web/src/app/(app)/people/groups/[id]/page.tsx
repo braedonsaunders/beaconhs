@@ -17,6 +17,7 @@ import {
 import { people, personGroupMemberships, personGroups } from '@beaconhs/db/schema'
 import { PageContainer } from '@/components/page-layout'
 import { requireModuleManage } from '@/lib/module-admin/guard'
+import { isUuid } from '@/lib/list-params'
 import { MemberPicker } from '../../_components/member-picker'
 import { deleteGroup, setGroupMembership, updateGroup } from '../../_actions/groups'
 
@@ -27,8 +28,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Group · ${id.slice(0, 8)}` }
 }
 
-export default async function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function GroupDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+  const sp = await searchParams
+  const errorMessage = typeof sp.error === 'string' ? sp.error : null
+
   const ctx = await requireModuleManage('people')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx.select().from(personGroups).where(eq(personGroups.id, id)).limit(1)
@@ -105,6 +116,12 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
             </form>
           }
         />
+
+        {errorMessage ? (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
           <Card>

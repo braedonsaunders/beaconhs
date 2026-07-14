@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react'
 import { Button, uploadReservedFile } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
@@ -27,17 +27,37 @@ export function FileUpload({
   onChange,
   accept,
   multiple = true,
+  maxFiles,
+  onUploadingChange,
   variant = 'file',
 }: {
   value: AttachedFile[]
   onChange: (files: AttachedFile[]) => void
   accept?: string
   multiple?: boolean
+  maxFiles?: number
+  onUploadingChange?: (uploading: boolean) => void
   variant?: 'photo' | 'file' | 'video' | 'audio'
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const onUploadingChangeRef = useRef(onUploadingChange)
+
+  useEffect(() => {
+    onUploadingChangeRef.current = onUploadingChange
+  }, [onUploadingChange])
+
+  useEffect(() => {
+    onUploadingChangeRef.current?.(pending)
+  }, [pending])
+
+  useEffect(
+    () => () => {
+      onUploadingChangeRef.current?.(false)
+    },
+    [],
+  )
 
   async function uploadOne(file: File): Promise<AttachedFile | null> {
     const kind = KIND_FROM_TYPE(file.type)
@@ -73,10 +93,15 @@ export function FileUpload({
 
   function onFiles(files: FileList | null) {
     if (!files || files.length === 0) return
+    const remaining = maxFiles === undefined ? files.length : Math.max(0, maxFiles - value.length)
+    if (remaining === 0) {
+      setError(`You can attach up to ${maxFiles} files`)
+      return
+    }
     setError(null)
     start(async () => {
       const next: AttachedFile[] = []
-      for (const f of Array.from(files)) {
+      for (const f of Array.from(files).slice(0, remaining)) {
         const uploaded = await uploadOne(f)
         if (uploaded) next.push(uploaded)
       }
@@ -109,7 +134,7 @@ export function FileUpload({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={pending}
+        disabled={pending || (maxFiles !== undefined && value.length >= maxFiles)}
         className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-sm text-slate-600 hover:border-teal-500 hover:bg-teal-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-teal-950/40"
       >
         {pending ? (
@@ -119,15 +144,17 @@ export function FileUpload({
         ) : (
           <FileUp size={16} />
         )}
-        {pending
-          ? 'Uploading…'
-          : variant === 'photo'
-            ? 'Take photo or upload'
-            : variant === 'video'
-              ? 'Record or upload video'
-              : variant === 'audio'
-                ? 'Record or upload audio'
-                : 'Upload file'}
+        {maxFiles !== undefined && value.length >= maxFiles
+          ? `Maximum ${maxFiles} files attached`
+          : pending
+            ? 'Uploading…'
+            : variant === 'photo'
+              ? 'Take photo or upload'
+              : variant === 'video'
+                ? 'Record or upload video'
+                : variant === 'audio'
+                  ? 'Record or upload audio'
+                  : 'Upload file'}
       </button>
 
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
@@ -144,6 +171,7 @@ export function FileUpload({
                   <RawImage
                     src={f.url}
                     alt=""
+                    optimizationReason="authenticated"
                     className="h-10 w-10 shrink-0 rounded object-cover"
                   />
                 ) : (

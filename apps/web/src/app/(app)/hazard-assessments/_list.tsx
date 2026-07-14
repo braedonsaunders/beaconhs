@@ -43,11 +43,12 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { HazidSubNav } from './_subnav'
@@ -55,6 +56,10 @@ import { formatDate, parseDatetimeLocal } from '@/lib/datetime'
 import { RiskScoreChip } from './_risk'
 import { NewAssessmentDrawer, type NewAssessmentType } from './_new-drawer'
 import { startAssessment } from './_actions'
+import {
+  loadHazardAssessmentSiteOptions,
+  loadMyHazardAssessmentSiteOptions,
+} from './_site-picker-actions'
 
 const SORTS = ['reference', 'occurred_at', 'site', 'supervisor', 'type'] as const
 
@@ -74,9 +79,12 @@ export async function AssessmentsListPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const typeFilter = pickString(sp.type)
-  const statusFilter = pickString(sp.status) // 'open' | 'locked'
-  const siteFilter = pickString(sp.site)
+  const typeParam = pickString(sp.type)
+  const typeFilter = typeParam && isUuid(typeParam) ? typeParam : undefined
+  const statusParam = pickString(sp.status)
+  const statusFilter = statusParam === 'open' || statusParam === 'locked' ? statusParam : undefined
+  const siteParam = pickString(sp.site)
+  const siteFilter = siteParam && isUuid(siteParam) ? siteParam : undefined
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
   const drawerKey = pickString(sp.drawer)
@@ -93,8 +101,12 @@ export async function AssessmentsListPage({
     })
     const filters: SQL<unknown>[] = [sql`${hazidAssessments.deletedAt} is null`]
     if (vis) filters.push(vis)
-    if (mineOnly && ctx.membership?.id) {
-      filters.push(eq(hazidAssessments.reportedByTenantUserId, ctx.membership.id))
+    if (mineOnly) {
+      filters.push(
+        ctx.membership?.id
+          ? eq(hazidAssessments.reportedByTenantUserId, ctx.membership.id)
+          : sql`false`,
+      )
     }
     if (params.q) {
       const term = `%${params.q}%`
@@ -192,31 +204,15 @@ export async function AssessmentsListPage({
       .where(sql`${hazidAssessmentTypes.deletedAt} is null`)
       .orderBy(asc(hazidAssessmentTypes.name))
 
-    // Same base scope as the list (not deleted, visibility, mineOnly) so the
-    // chips never offer a site that can only match hidden rows.
-    const siteScope: SQL<unknown>[] = [sql`${hazidAssessments.deletedAt} is null`]
-    if (vis) siteScope.push(vis)
-    if (mineOnly && ctx.membership?.id) {
-      siteScope.push(eq(hazidAssessments.reportedByTenantUserId, ctx.membership.id))
-    }
-    const siteOptions = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .innerJoin(hazidAssessments, eq(hazidAssessments.siteOrgUnitId, orgUnits.id))
-      .where(and(...siteScope))
-      .groupBy(orgUnits.id, orgUnits.name)
-      .orderBy(asc(orgUnits.name))
-
     return {
       rows,
       total: Number(tot?.c ?? 0),
       worstRisk,
       types: allTypes,
-      sites: siteOptions,
     }
   })
 
-  const { rows, total, worstRisk, types, sites } = data
+  const { rows, total, worstRisk, types } = data
   const sortProps = { basePath, currentParams: sp, dir: params.dir }
   const anyFilter = Boolean(params.q || typeFilter || statusFilter || siteFilter || dateFromRaw)
 
@@ -289,6 +285,18 @@ export async function AssessmentsListPage({
               <SearchInput placeholder="Search reference, scope, location…" />
               {/* Date range is a desk feature; phones get search + filter chips. */}
               <form className="hidden items-center gap-1 text-xs sm:flex">
+                {Object.entries({
+                  q: params.q,
+                  type: typeFilter,
+                  status: statusFilter,
+                  site: siteFilter,
+                  sort: params.sort !== 'occurred_at' ? params.sort : undefined,
+                  dir: params.dir !== 'desc' ? params.dir : undefined,
+                })
+                  .filter(([, value]) => value)
+                  .map(([key, value]) => (
+                    <input key={key} type="hidden" name={key} value={String(value)} />
+                  ))}
                 <label className="flex items-center gap-1 text-slate-500">
                   From
                   <input
@@ -331,15 +339,18 @@ export async function AssessmentsListPage({
                   { value: 'locked', label: 'Locked / complete' },
                 ]}
               />
-              {sites.length > 0 ? (
-                <FilterChips
-                  basePath={basePath}
-                  currentParams={sp}
-                  paramKey="site"
-                  label="Site"
-                  options={sites.slice(0, 12).map((s) => ({ value: s.id, label: s.name }))}
-                />
-              ) : null}
+              <RemoteSearchFilter
+                loadOptions={
+                  mineOnly ? loadMyHazardAssessmentSiteOptions : loadHazardAssessmentSiteOptions
+                }
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="site"
+                placeholder="All sites"
+                allLabel="All sites"
+                searchPlaceholder="Search sites used by assessments…"
+                ariaLabel="Filter hazard assessments by site"
+              />
             </TableToolbar>
           </>
         }

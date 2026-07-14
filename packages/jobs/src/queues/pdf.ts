@@ -1,5 +1,14 @@
+import { randomUUID } from 'node:crypto'
 import { Queue, QueueEvents, type JobsOptions } from 'bullmq'
-import { getConnection } from '../connection'
+import { getBlockingConnection, getConnection } from '../connection'
+import {
+  assertIdentifier,
+  assertJsonBytes,
+  assertOptionalString,
+  assertQueueJobId,
+  assertString,
+  assertUuid,
+} from '../validation'
 
 // When a PDF job carries an `email` payload, the worker emails the rendered PDF
 // as an attachment after rendering (used by the Flows send_email attachPdf path,
@@ -14,12 +23,9 @@ export type PdfEmailPayload = {
   tenantId?: string
 }
 
+export type PdfArtifactTarget = { kind: 'form_response'; responseId: string }
+
 export type PdfJobData =
-  | { kind: 'certificate'; tenantId: string; certificateId: string }
-  // Skill credential (training_skill_certificates) — renders the same
-  // certificate + wallet-card pair as 'certificate' but for an
-  // externally-authorised skill assignment.
-  | { kind: 'skill_certificate'; tenantId: string; skillCertificateId: string }
   // Generic branded "submission summary" PDF — a key-value table built from a
   // flow's field-map. The ONLY fallback when a record has no assigned PDF
   // document template. All data is inline (no DB load in the worker).
@@ -44,6 +50,7 @@ export type PdfJobData =
       // Photo attachments rendered as an image grid.
       photos?: { url: string; caption?: string }[]
       filename?: string
+      artifactTarget?: PdfArtifactTarget
       email?: PdfEmailPayload
     }
   // Tenant PDF DOCUMENT template (paper-size builder). The HTML is already
@@ -59,9 +66,10 @@ export type PdfJobData =
       marginMm: number
       headerHtml?: string | null
       footerHtml?: string | null
-      entityType?: string
-      entityId?: string
+      entityType: string
+      entityId: string
       filename?: string
+      artifactTarget?: PdfArtifactTarget
       email?: PdfEmailPayload
     }
   // Render a published document version's artifacts (DOCX snapshot → PDF +
@@ -92,7 +100,16 @@ export type PdfJobData =
       email?: PdfEmailPayload
     }
 
-export type OnDemandPdfJobData =
+export type RecordSummaryPdfJobData = Omit<
+  Extract<PdfJobData, { kind: 'record_summary' }>,
+  'artifactTarget' | 'email'
+>
+
+type WithoutPdfDelivery<T> = T extends unknown
+  ? Omit<T, 'artifactTarget' | 'email'> & { artifactTarget?: never; email?: never }
+  : never
+
+export type OnDemandPdfJobData = WithoutPdfDelivery<
   | Extract<PdfJobData, { kind: 'record_summary' }>
   // A tenant PDF template merged with a record's values (the configurable
   // per-record print template); the HTML is merged before enqueue.
@@ -100,12 +117,158 @@ export type OnDemandPdfJobData =
   | Extract<PdfJobData, { kind: 'document_master_pdf' }>
   | Extract<PdfJobData, { kind: 'document_book' }>
   | Extract<PdfJobData, { kind: 'document_bundle' }>
+>
 
 export type RenderedPdfArtifact = {
   attachmentId?: string | null
   r2Key: string
   sizeBytes: number
   filename: string
+}
+
+const MAX_PDF_JOB_BYTES = 8 * 1024 * 1024
+const MAX_HTML_BYTES = 2 * 1024 * 1024
+const MAX_RECORD_FIELDS = 500
+const MAX_RECORD_SECTIONS = 50
+const MAX_SECTION_COLUMNS = 20
+const MAX_SECTION_ROWS = 5_000
+const MAX_RECORD_PHOTOS = 100
+const MAX_BUNDLE_PARTS = 50
+
+function assertFilename(value: string | undefined, label: string): void {
+  if (value === undefined) return
+  assertString(value, label, { min: 1, max: 200 })
+  if (/[\\/\r\n\u0000]/.test(value)) throw new Error(`${label} contains unsafe characters.`)
+}
+
+function assertPageSetup(data: { paperSize: string; orientation: string; marginMm: number }): void {
+  if (!['letter', 'a4', 'legal'].includes(data.paperSize)) {
+    throw new Error('PDF paperSize is invalid.')
+  }
+  if (!['portrait', 'landscape'].includes(data.orientation)) {
+    throw new Error('PDF orientation is invalid.')
+  }
+  if (!Number.isFinite(data.marginMm) || data.marginMm < 0 || data.marginMm > 50) {
+    throw new Error('PDF marginMm must be between 0 and 50.')
+  }
+}
+
+function assertArtifactTarget(
+  data: Extract<PdfJobData, { kind: 'record_summary' | 'template_pdf' }>,
+): void {
+  const target = data.artifactTarget
+  if (!target) return
+  if (data.email) throw new Error('A PDF email job cannot also persist a durable artifact.')
+  if (target.kind !== 'form_response') throw new Error('PDF artifact target is invalid.')
+  assertUuid(target.responseId, 'PDF artifact target responseId')
+  const entityId = data.kind === 'record_summary' ? data.subjectId : data.entityId
+  if (data.entityType !== 'form_response' || entityId !== target.responseId) {
+    throw new Error('PDF artifact target identity does not match the rendered entity.')
+  }
+}
+
+export function assertPdfJobData(data: PdfJobData): void {
+  assertJsonBytes(data, 'PDF job', MAX_PDF_JOB_BYTES)
+  assertUuid(data.tenantId, 'PDF tenantId')
+  switch (data.kind) {
+    case 'record_summary': {
+      assertUuid(data.subjectId, 'PDF subjectId')
+      assertIdentifier(data.entityType, 'PDF entityType', 100)
+      assertString(data.heading, 'PDF heading', { min: 1, max: 300 })
+      if (data.reference !== null) assertOptionalString(data.reference, 'PDF reference', 300)
+      if (data.subtitle !== null) assertOptionalString(data.subtitle, 'PDF subtitle', 1_000)
+      assertFilename(data.filename, 'PDF filename')
+      if (!Array.isArray(data.fields) || data.fields.length > MAX_RECORD_FIELDS) {
+        throw new Error(`PDF fields may contain at most ${MAX_RECORD_FIELDS} entries.`)
+      }
+      for (const field of data.fields) {
+        assertString(field.label, 'PDF field label', { min: 1, max: 300 })
+        assertString(field.value, 'PDF field value', { max: 20_000 })
+      }
+      if ((data.sections?.length ?? 0) > MAX_RECORD_SECTIONS) {
+        throw new Error(`PDF sections may contain at most ${MAX_RECORD_SECTIONS} entries.`)
+      }
+      let rowCount = 0
+      for (const section of data.sections ?? []) {
+        assertString(section.label, 'PDF section label', { min: 1, max: 300 })
+        if (section.columns.length === 0 || section.columns.length > MAX_SECTION_COLUMNS) {
+          throw new Error(`PDF section columns must contain 1-${MAX_SECTION_COLUMNS} entries.`)
+        }
+        for (const column of section.columns) {
+          assertIdentifier(column.key, 'PDF section column key', 200)
+          assertString(column.label, 'PDF section column label', { min: 1, max: 300 })
+        }
+        rowCount += section.rows.length
+        if (rowCount > MAX_SECTION_ROWS) {
+          throw new Error(`PDF sections may contain at most ${MAX_SECTION_ROWS} total rows.`)
+        }
+        if (
+          section.moreRows !== undefined &&
+          (!Number.isSafeInteger(section.moreRows) || section.moreRows < 0)
+        ) {
+          throw new Error('PDF section moreRows is invalid.')
+        }
+        for (const row of section.rows) {
+          for (const value of Object.values(row)) {
+            assertString(value, 'PDF section cell', { max: 20_000 })
+          }
+        }
+      }
+      if ((data.photos?.length ?? 0) > MAX_RECORD_PHOTOS) {
+        throw new Error(`PDF photos may contain at most ${MAX_RECORD_PHOTOS} entries.`)
+      }
+      for (const photo of data.photos ?? []) {
+        assertString(photo.url, 'PDF photo URL', { min: 1, max: 4_096 })
+        assertOptionalString(photo.caption, 'PDF photo caption', 1_000)
+      }
+      assertArtifactTarget(data)
+      break
+    }
+    case 'template_pdf':
+      assertString(data.html, 'PDF HTML', { max: MAX_HTML_BYTES })
+      if (Buffer.byteLength(data.html) > MAX_HTML_BYTES) throw new Error('PDF HTML is too large.')
+      assertPageSetup(data)
+      if (data.headerHtml !== null)
+        assertOptionalString(data.headerHtml, 'PDF header HTML', 262_144)
+      if (data.footerHtml !== null)
+        assertOptionalString(data.footerHtml, 'PDF footer HTML', 262_144)
+      assertIdentifier(data.entityType, 'PDF entityType', 100)
+      assertUuid(data.entityId, 'PDF entityId')
+      assertFilename(data.filename, 'PDF filename')
+      assertArtifactTarget(data)
+      break
+    case 'document_version_render':
+      assertUuid(data.documentId, 'PDF documentId')
+      assertUuid(data.versionId, 'PDF versionId')
+      break
+    case 'document_master_pdf':
+      assertUuid(data.documentId, 'PDF documentId')
+      break
+    case 'document_book':
+      assertUuid(data.bookId, 'PDF bookId')
+      break
+    case 'document_bundle':
+      assertUuid(data.entityId, 'PDF entityId')
+      assertIdentifier(data.entityType, 'PDF entityType', 100)
+      assertFilename(data.filename, 'PDF filename')
+      if (data.parts.length === 0 || data.parts.length > MAX_BUNDLE_PARTS) {
+        throw new Error(`PDF bundle parts must contain 1-${MAX_BUNDLE_PARTS} entries.`)
+      }
+      for (const part of data.parts) {
+        assertString(part.html, 'PDF bundle HTML', { max: MAX_HTML_BYTES })
+        if (Buffer.byteLength(part.html) > MAX_HTML_BYTES) {
+          throw new Error('PDF bundle HTML is too large.')
+        }
+        assertPageSetup(part)
+        if (part.headerHtml !== null) {
+          assertOptionalString(part.headerHtml, 'PDF bundle header HTML', 262_144)
+        }
+        if (part.footerHtml !== null) {
+          assertOptionalString(part.footerHtml, 'PDF bundle footer HTML', 262_144)
+        }
+      }
+      break
+  }
 }
 
 let pdfQueue: Queue<PdfJobData, unknown> | undefined
@@ -125,14 +288,10 @@ function getPdfQueue(): Queue<PdfJobData, unknown> {
 
 function pdfJobId(data: PdfJobData): string {
   switch (data.kind) {
-    case 'certificate':
-      return `pdf|${data.tenantId}|certificate|${data.certificateId}`
-    case 'skill_certificate':
-      return `pdf|${data.tenantId}|skill_certificate|${data.skillCertificateId}`
     case 'record_summary':
       return `pdf|${data.tenantId}|record_summary|${data.subjectId}`
     case 'template_pdf':
-      return `pdf|${data.tenantId}|template_pdf|${data.entityId ?? 'doc'}`
+      return `pdf|${data.tenantId}|template_pdf|${data.entityId}`
     case 'document_version_render':
       return `pdf|${data.tenantId}|document_version_render|${data.versionId}`
     case 'document_master_pdf':
@@ -145,6 +304,7 @@ function pdfJobId(data: PdfJobData): string {
 }
 
 async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
+  assertPdfJobData(data)
   const pdfQueue = getPdfQueue()
   const jobId = pdfJobId(data)
   const existing = await pdfQueue.getJob(jobId)
@@ -161,10 +321,16 @@ async function addPdfJob(data: PdfJobData, opts?: JobsOptions) {
 }
 
 export async function enqueuePdf(data: PdfJobData, deterministicJobId?: string) {
+  assertPdfJobData(data)
+  assertQueueJobId(deterministicJobId, 'PDF deterministic jobId')
   const pdfQueue = getPdfQueue()
   if (deterministicJobId) {
     const existing = await pdfQueue.getJob(deterministicJobId)
-    if (existing) return
+    if (existing) {
+      const state = await existing.getState()
+      if (state !== 'failed') return
+      await existing.remove()
+    }
     await pdfQueue.add(data.kind, data, { jobId: deterministicJobId })
     return
   }
@@ -188,14 +354,23 @@ export async function renderPdfOnDemand(
   data: OnDemandPdfJobData,
   opts: { timeoutMs?: number } = {},
 ): Promise<RenderedPdfArtifact> {
+  if (data.artifactTarget || data.email) {
+    throw new Error('On-demand PDF jobs must use transient artifact delivery.')
+  }
+  if (
+    opts.timeoutMs !== undefined &&
+    (!Number.isSafeInteger(opts.timeoutMs) || opts.timeoutMs < 1_000 || opts.timeoutMs > 120_000)
+  ) {
+    throw new Error('On-demand PDF timeout must be between 1,000 and 120,000 milliseconds.')
+  }
   const job = await addPdfJob(data, {
     attempts: 1,
     removeOnComplete: { age: 3600 },
     removeOnFail: { age: 24 * 3600 },
   })
-  const events = new QueueEvents('pdfs', { connection: getConnection() })
-  await events.waitUntilReady()
+  const events = new QueueEvents('pdfs', { connection: getBlockingConnection() })
   try {
+    await events.waitUntilReady()
     const result = await job.waitUntilFinished(events, opts.timeoutMs ?? 60_000)
     if (!isRenderedPdfArtifact(result)) {
       throw new Error(`PDF job ${job.id} completed without a generated PDF artifact`)
@@ -212,9 +387,12 @@ export async function renderPdfOnDemand(
  * or vice-versa; the worker emails after rendering. Fire-and-forget — the caller
  * (a submit action) does not wait on Chromium.
  */
-export type PdfEmailableJobData = Extract<
-  PdfJobData,
-  { kind: 'record_summary' | 'template_pdf' | 'document_bundle' }
+type WithoutArtifactTarget<T> = T extends unknown
+  ? Omit<T, 'artifactTarget'> & { artifactTarget?: never }
+  : never
+
+export type PdfEmailableJobData = WithoutArtifactTarget<
+  Extract<PdfJobData, { kind: 'record_summary' | 'template_pdf' | 'document_bundle' }>
 >
 
 export async function enqueuePdfEmail(
@@ -222,10 +400,15 @@ export async function enqueuePdfEmail(
   email: PdfEmailPayload,
   deterministicJobId?: string,
 ) {
+  if ('artifactTarget' in pdf && pdf.artifactTarget) {
+    throw new Error('A PDF email job cannot also persist a durable artifact.')
+  }
   const pdfQueue = getPdfQueue()
-  const jobId =
-    deterministicJobId ?? `${pdfJobId(pdf)}|email|${Date.now()}-${Math.round(Math.random() * 1e6)}`
-  await pdfQueue.add(pdf.kind, { ...pdf, email }, { jobId, attempts: 2 })
+  const jobId = deterministicJobId ?? `${pdfJobId(pdf)}|email|${randomUUID()}`
+  assertQueueJobId(jobId, 'PDF email jobId')
+  const data = { ...pdf, email } as PdfJobData
+  assertPdfJobData(data)
+  await pdfQueue.add(pdf.kind, data, { jobId, attempts: 2 })
 }
 
 /** Render a just-published document version's PDF + text in the background. */

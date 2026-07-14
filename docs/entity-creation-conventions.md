@@ -37,7 +37,7 @@ investigation events, hazards, check-ins, expenses, signatures, complete-steps�
 ### Tier 3 — Small lookup / admin reference → **quick-create modal or inline-on-list**
 
 Short reference records (departments, groups, tags, classifications, injury types, equipment
-types/categories/rates, document books, report schedules…).
+types/categories, document books, report schedules…).
 
 - A lightweight modal (or inline row on the list) capturing the few fields; edit on the
   detail page or in the same row. **No full `/new` page.**
@@ -96,8 +96,9 @@ Legend — Current/Target: `page-form` (separate /new) · `instant-create` (draf
 
 ### Tier 2 — sub-entities & ledgers (all **keep**, already inline/drawer)
 
-Equipment: types, categories, rates, inspection types & criteria, log entries, expenses,
-check-in/out, truck-log. PPE: type criteria, inspections, issues, issue reports, annual records.
+Equipment: types, categories, inspection types and criteria, log entries, check-in/out, and truck
+log. Financial rates and expenses remain in the external financial system. PPE: type criteria,
+inspections, issues, issue reports, annual records.
 Incidents: events, contributing factors, root-cause whys, preventative steps, injuries,
 lost-time, attachments. CA: photos, complete-steps. Hazard assessment: tasks, hazards, PPE,
 questions, signatures, photos, app-responses; type PPE/questions/apps. Training: class attendees,
@@ -120,7 +121,7 @@ projects* (_currently page-form — see Tier 3). Journals: photos, tags_. Lone-w
 | Location: customer contact | page-form (nested /new) | → quick-create drawer on location detail       |
 
 Already good (inline/drawer): incident classifications, injury types, hours periods; equipment
-types/categories/rates; journal tags; api keys; job-title tasks.
+types/categories; journal tags; api keys; job-title tasks.
 
 ### Special — keep full-page / wizard (justified)
 
@@ -141,9 +142,11 @@ participants.
 
 ### Needs confirmation (agents couldn't fully trace)
 
-Inspection **assignments** creation flow; **skill assignments** (no create UI today — gap);
-**content items** (LMS library); hazard **sets** & **location tasks**; **atmospheric sensors /
-calibrations** (likely admin-only); tenant-user **invite** flow.
+**Skill assignments**; **content items** (LMS library); hazard **sets** & **location tasks**;
+**atmospheric sensors / calibrations** (likely admin-only); tenant-user **invite** flow.
+
+Inspection cadence is authored only through unified compliance obligations; there is no separate
+inspection-assignment creation flow.
 
 ---
 

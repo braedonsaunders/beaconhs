@@ -10,23 +10,20 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 type SaveResult = { ok: true } | { ok: false; error: string }
 
 type LevelOption = { value: string; label: string }
-type ParentOption = { value: string; label: string }
-
 export function OrgUnitDrawer({
   open,
   closeHref,
   levels,
-  parentOptions,
   saveAction,
 }: {
   open: boolean
   closeHref: string
   levels: LevelOption[]
-  parentOptions: ParentOption[]
   saveAction: (input: {
     name: string
     level: string
@@ -49,7 +46,6 @@ export function OrgUnitDrawer({
       <OrgUnitForm
         key={open ? 'open' : 'closed'}
         levels={levels}
-        parentOptions={parentOptions}
         saveAction={saveAction}
         onDone={close}
       />
@@ -59,12 +55,10 @@ export function OrgUnitDrawer({
 
 function OrgUnitForm({
   levels,
-  parentOptions,
   saveAction,
   onDone,
 }: {
   levels: LevelOption[]
-  parentOptions: ParentOption[]
   saveAction: (input: {
     name: string
     level: string
@@ -115,18 +109,16 @@ function OrgUnitForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="org-parent">Parent</Label>
-        <Select
+        <RemoteSearchSelect
+          lookup="location-parent-units"
           id="org-parent"
           value={parentId}
-          onChange={(e) => setParentId(e.currentTarget.value)}
-        >
-          <option value="">— top-level —</option>
-          {parentOptions.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </Select>
+          onChange={setParentId}
+          placeholder="— top-level —"
+          searchPlaceholder="Search org units…"
+          sheetTitle="Select parent org unit"
+          emptyLabel="— top-level —"
+        />
       </div>
 
       <div className="space-y-1.5">

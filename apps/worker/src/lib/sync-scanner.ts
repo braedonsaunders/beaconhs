@@ -7,14 +7,15 @@
 // that outlives the scan interval would look due again. Two guards prevent a
 // second concurrent run for the same connection: (1) a connection with an
 // in-flight sync_runs row (status='running', started within the stall window)
-// is not due; (2) the enqueue uses a deterministic per-connection jobId so
-// BullMQ dedupes while a run is queued or executing (the job removes itself on
-// completion/failure, freeing the id for the next cadence).
+// is not due; (2) the queue boundary gives every sync_run — scheduled or
+// manual — the same deterministic per-connection job id while it is queued or
+// executing.
 
 import { and, eq, gte, inArray, isNull } from 'drizzle-orm'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { syncConnections, syncRuns } from '@beaconhs/db/schema'
-import { enqueueScheduled, type ScheduledTick } from '@beaconhs/jobs'
+import { materializeTenant } from '@beaconhs/compliance'
+import { enqueueScheduled } from '@beaconhs/jobs'
 import { type RunSyncResult, runSync } from '@beaconhs/sync'
 
 // Friendly cadence keys (stored in sync_connections.schedule) → minutes.
@@ -73,21 +74,12 @@ export async function scanSyncConnections(now: Date = new Date()): Promise<SyncS
     if (inFlight.has(c.id)) continue
     const due = !c.lastRunAt || now.getTime() - c.lastRunAt.getTime() >= mins * 60_000
     if (!due) continue
-    await enqueueScheduled(
-      'sync_run',
-      {
-        kind: 'sync_run',
-        tenantId: c.tenantId,
-        connectionId: c.id,
-        trigger: 'scheduled',
-      } as ScheduledTick,
-      // Deterministic id: while a run for this connection is queued/active the
-      // add is a no-op. removeOnComplete/removeOnFail free the id afterwards
-      // (the sync_runs ledger is the durable history, not BullMQ).
-      // BullMQ rejects custom job ids containing a colon (except a legacy
-      // three-segment repeat-job shape). Use the platform's `|` delimiter.
-      { jobId: `sync-run|${c.id}`, removeOnComplete: true, removeOnFail: true },
-    )
+    await enqueueScheduled('sync_run', {
+      kind: 'sync_run',
+      tenantId: c.tenantId,
+      connectionId: c.id,
+      trigger: 'scheduled',
+    })
     result.enqueued += 1
   }
   return result
@@ -98,5 +90,12 @@ export async function runSyncConnection(
   connectionId: string,
   trigger: 'scheduled' | 'manual',
 ): Promise<RunSyncResult> {
-  return runSync({ db, tenantId, connectionId, trigger })
+  const result = await runSync({ db, tenantId, connectionId, trigger })
+  if (result.status !== 'error') {
+    // A people sync can add/remove canonical title assignments. Refresh the
+    // unified scoreboard before the worker reports completion so job-title
+    // sign-off status never waits for the next daily compliance scan.
+    await withTenant(db, tenantId, (tx) => materializeTenant(tx, tenantId))
+  }
+  return result
 }

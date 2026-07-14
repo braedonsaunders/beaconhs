@@ -3,7 +3,8 @@
 
 export type JournalStatus = 'draft' | 'submitted' | 'archived'
 export type JournalDefinition = 'worker' | 'supervisor'
-type JournalAssignmentFrequency = 'day' | 'week' | 'month' | 'quarter' | 'year'
+export const JOURNAL_ENTRY_TAG_LIMIT = 20
+export const JOURNAL_TAG_NAME_LIMIT = 80
 // The compose workspace is self-scoped (one author), so there is no "Person"
 // grouping — cross-person browsing lives in /journals/records.
 export type GroupBy = 'date' | 'site' | 'topic'
@@ -25,6 +26,21 @@ export type TreeNode = {
   entryDate?: string
   draft?: boolean
   badge?: string
+}
+
+/** One bounded page of journal-tree leaves. Branches are rebuilt per page and
+ * merged by key in the client as older entries are requested. */
+export type TreePage = {
+  nodes: TreeNode[]
+  hasMore: boolean
+  nextCursor: TreeCursor | null
+}
+
+export type TreeCursor = {
+  asOf: string
+  entryDate: string
+  createdAt: string
+  id: string
 }
 
 export type JournalListItem = {
@@ -82,8 +98,6 @@ export type OnThisDayItem = {
   yearsAgo: number
 }
 
-export type JournalOption = { id: string; name: string; hint?: string }
-
 /** Sort columns for the records list (URL `sort` param). */
 export type JournalSort = 'date' | 'author' | 'site' | 'status' | 'reference'
 
@@ -94,14 +108,9 @@ export type AuthorRef = {
   name?: string | null
 }
 
-/** A filter facet (site / author) with the count of entries in the caller's scope. */
-type JournalFacetOption = { id: string; name: string; count: number }
-
-/** Scoped facet options + status counts for the records list filter chips. */
+/** Scoped status counts for the records list filter controls. */
 export type JournalRecordsFacets = {
   statusCounts: Record<string, number>
-  sites: JournalFacetOption[]
-  people: JournalFacetOption[]
 }
 
 /** A tag offered in the entry picker — name + optional palette colour. */
@@ -115,11 +124,11 @@ type WorkspaceCounts = {
 
 export type WorkspaceData = {
   tree: TreeNode[]
+  treeHasMore: boolean
+  treeNextCursor: TreeCursor | null
   heatmap: HeatmapCell[]
   onThisDay: OnThisDayItem[]
   counts: WorkspaceCounts
-  sites: JournalOption[]
-  people: JournalOption[]
   /** Tenant tags (used most-first, then defined-but-unused) — feeds tag autocomplete. */
   tagSuggestions: TagSuggestion[]
   canReadAll: boolean
@@ -147,10 +156,10 @@ export type EntryMetaResult = {
 }
 
 export type EntryPatch = {
-  title?: string | null
   bodyHtml?: string
   definition?: JournalDefinition
   siteOrgUnitId?: string | null
   supervisorPersonId?: string | null
   entryDate?: string
+  tags?: string[]
 }

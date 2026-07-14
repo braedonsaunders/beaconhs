@@ -1,10 +1,5 @@
 export type PersistedJson =
-  | null
-  | boolean
-  | number
-  | string
-  | PersistedJson[]
-  | { [key: string]: PersistedJson }
+  null | boolean | number | string | PersistedJson[] | { [key: string]: PersistedJson }
 
 export type AttachmentReference =
   | {

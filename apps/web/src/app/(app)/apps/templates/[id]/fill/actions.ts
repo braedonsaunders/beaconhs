@@ -2,16 +2,25 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import { z } from 'zod'
+import { isFormResponseParentLockedError, lockFormResponseForMutation } from '@beaconhs/db'
 import {
   formResponses,
   formTemplateVersions,
+  formTemplates,
   orgUnits,
   type FormResponseDraftData,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import type { SafetyVisionAnalysis } from '@beaconhs/ai'
+import {
+  entityAttrPickerTypeForField,
+  formSchemaV1,
+  normalizeFormResponseData,
+  normalizeFormResponseDraftData,
+  validateResponse,
+} from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
@@ -27,9 +36,18 @@ import {
   canEditResponsePayload,
 } from '@/app/(app)/apps/_lib/access'
 import { parseBuilderReturnTo } from '@/app/(app)/apps/_lib/return-to'
+import { loadApplicableFormObligation } from '@/lib/forms/form-compliance-obligation'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 const uuidSchema = z.string().uuid()
+const entityAttrsInputSchema = z
+  .object({
+    templateId: uuidSchema,
+    fieldId: z.string().trim().min(1).max(256),
+    entityId: uuidSchema,
+  })
+  .strict()
+const ENTITY_ATTRS_ERROR = 'Unable to look up this selection'
 
 async function canFillTemplate(ctx: Ctx, templateId: string): Promise<boolean> {
   if (!uuidSchema.safeParse(templateId).success) return false
@@ -48,6 +66,7 @@ export async function submitFormResponse(args: {
   templateId: string
   data: Record<string, unknown>
   siteOrgUnitId?: string | null
+  complianceObligationId?: string | null
   // Optional: when present, finalize this existing draft row instead of
   // inserting a new one. Set by the filler client whenever it has been
   // autosaving against a known response id.
@@ -59,6 +78,8 @@ export async function submitFormResponse(args: {
   const ctx = await requireRequestContext()
   if (
     (args.responseId != null && !uuidSchema.safeParse(args.responseId).success) ||
+    (args.complianceObligationId != null &&
+      !uuidSchema.safeParse(args.complianceObligationId).success) ||
     !(await canFillTemplate(ctx, args.templateId))
   ) {
     return { ok: false, errors: [{ fieldId: '', message: 'You do not have access to this app' }] }
@@ -68,6 +89,7 @@ export async function submitFormResponse(args: {
     templateId: args.templateId,
     data: args.data,
     siteOrgUnitId: args.siteOrgUnitId,
+    complianceObligationId: args.complianceObligationId,
     responseId: args.responseId,
   })
 
@@ -87,22 +109,57 @@ export async function submitFormResponse(args: {
  *
  * Called by the filler client on picker-change so `entity_attr` formula
  * fields can re-render with the new selection before the next server
- * round-trip. RLS is enforced via the underlying `ctx.db(...)` so callers
- * cannot retrieve another tenant's rows. The loader's per-kind SELECT
- * lists are the security boundary — unallowlisted columns never leave
- * the database.
+ * round-trip. The client supplies only template/field/entity ids. This action
+ * re-authorizes the published template and derives the picker type from its
+ * trusted schema before the RLS-scoped entity query; unallowlisted columns
+ * never leave the database.
  */
 export async function fetchEntityAttrs(args: {
-  pickerFieldType: string
+  templateId: string
+  fieldId: string
   entityId: string
-}): Promise<{ ok: true; attrs: Record<string, unknown> | null } | { ok: false; error: string }> {
+}): Promise<{ ok: true; attrs: Record<string, unknown> } | { ok: false; error: string }> {
+  const parsed = entityAttrsInputSchema.safeParse(args)
+  if (!parsed.success) return { ok: false, error: ENTITY_ATTRS_ERROR }
+
   const ctx = await requireRequestContext()
+  if (!(await canFillTemplate(ctx, parsed.data.templateId))) {
+    return { ok: false, error: ENTITY_ATTRS_ERROR }
+  }
+
   try {
-    const attrs = await fetchSingleEntityAttrs(ctx, args.pickerFieldType, args.entityId)
+    const version = await ctx.db(async (tx) => {
+      const [row] = await tx
+        .select({ schema: formTemplateVersions.schema })
+        .from(formTemplateVersions)
+        .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+        .where(
+          and(
+            eq(formTemplateVersions.templateId, parsed.data.templateId),
+            eq(formTemplateVersions.tenantId, ctx.tenantId),
+            eq(formTemplates.tenantId, ctx.tenantId),
+            eq(formTemplates.status, 'published'),
+            isNull(formTemplates.deletedAt),
+            isNotNull(formTemplateVersions.publishedAt),
+          ),
+        )
+        .orderBy(desc(formTemplateVersions.version))
+        .limit(1)
+      return row ?? null
+    })
+    if (!version) return { ok: false, error: ENTITY_ATTRS_ERROR }
+
+    const schema = formSchemaV1.safeParse(version.schema)
+    if (!schema.success) return { ok: false, error: ENTITY_ATTRS_ERROR }
+    const pickerFieldType = entityAttrPickerTypeForField(schema.data, parsed.data.fieldId)
+    if (!pickerFieldType) return { ok: false, error: ENTITY_ATTRS_ERROR }
+
+    const attrs = await fetchSingleEntityAttrs(ctx, pickerFieldType, parsed.data.entityId)
+    if (!attrs) return { ok: false, error: ENTITY_ATTRS_ERROR }
     return { ok: true, attrs }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'fetch failed'
-    return { ok: false, error: message }
+    console.error('[forms] entity attribute lookup failed', err)
+    return { ok: false, error: ENTITY_ATTRS_ERROR }
   }
 }
 
@@ -164,8 +221,7 @@ const draftInputSchema = z.object({
 
 export type SaveDraftInput = z.infer<typeof draftInputSchema>
 type SaveDraftResult =
-  | { ok: true; savedAt: string; revision: number; sequence: number }
-  | { ok: false; error: string }
+  { ok: true; savedAt: string; revision: number; sequence: number } | { ok: false; error: string }
 
 export async function saveFormResponseDraft(input: SaveDraftInput): Promise<SaveDraftResult> {
   const ctx = await requireRequestContext()
@@ -192,6 +248,8 @@ export async function persistDraft(
 
   try {
     const result = await ctx.db(async (tx) => {
+      const mutable = await lockFormResponseForMutation(tx, ctx.tenantId, draft.responseId)
+      if (!mutable) return { ok: false as const, error: 'Response not found' }
       const [row] = await tx
         .select({
           id: formResponses.id,
@@ -200,8 +258,13 @@ export async function persistDraft(
           submittedBy: formResponses.submittedBy,
           draftData: formResponses.draftData,
           draftUpdatedAt: formResponses.draftUpdatedAt,
+          schema: formTemplateVersions.schema,
         })
         .from(formResponses)
+        .innerJoin(
+          formTemplateVersions,
+          eq(formResponses.templateVersionId, formTemplateVersions.id),
+        )
         .where(
           and(
             eq(formResponses.id, draft.responseId),
@@ -210,7 +273,6 @@ export async function persistDraft(
           ),
         )
         .limit(1)
-        .for('update')
 
       if (!row) {
         return { ok: false as const, error: 'Response not found' }
@@ -261,6 +323,30 @@ export async function persistDraft(
       }
 
       const wasFirstSave = row.draftUpdatedAt === null
+      const rawDraftErrors = validateResponse(
+        row.schema,
+        { ...draft.values, ...draft.rows },
+        'draft',
+      )
+      if (rawDraftErrors.length > 0) {
+        return {
+          ok: false as const,
+          error: rawDraftErrors[0]?.message ?? 'Invalid draft value',
+        }
+      }
+
+      const normalizedDraft = normalizeFormResponseDraftData(row.schema, draft.values, draft.rows)
+      const draftErrors = validateResponse(
+        row.schema,
+        { ...normalizedDraft.values, ...normalizedDraft.rows },
+        'draft',
+      )
+      if (draftErrors.length > 0) {
+        return {
+          ok: false as const,
+          error: draftErrors[0]?.message ?? 'Invalid draft value',
+        }
+      }
 
       const ownerUnchanged =
         row.submittedBy === null
@@ -270,8 +356,8 @@ export async function persistDraft(
         .update(formResponses)
         .set({
           draftData: {
-            values: draft.values,
-            rows: draft.rows,
+            values: normalizedDraft.values,
+            rows: normalizedDraft.rows,
             saveSessionId: draft.clientSessionId,
             saveSequence: draft.clientSequence,
             saveRevision: order.nextRevision,
@@ -337,6 +423,7 @@ export async function persistDraft(
     }
   } catch (err) {
     console.error('[forms] draft save failed', err)
+    if (isFormResponseParentLockedError(err)) return { ok: false, error: err.message }
     return { ok: false, error: 'Unable to save this draft right now' }
   }
 }
@@ -349,17 +436,40 @@ export async function persistDraft(
  */
 export async function createDraftResponse(args: {
   templateId: string
+  complianceObligationId?: string | null
 }): Promise<{ ok: true; responseId: string } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
-  if (!(await canFillTemplate(ctx, args.templateId))) {
+  if (
+    !uuidSchema.safeParse(args.templateId).success ||
+    (args.complianceObligationId != null &&
+      !uuidSchema.safeParse(args.complianceObligationId).success) ||
+    !(await canFillTemplate(ctx, args.templateId))
+  ) {
     return { ok: false, error: 'You do not have access to this app' }
   }
   try {
     const result = await ctx.db(async (tx) => {
+      const linkedObligation = args.complianceObligationId
+        ? await loadApplicableFormObligation(tx, {
+            tenantId: ctx.tenantId,
+            obligationId: args.complianceObligationId,
+            templateId: args.templateId,
+            personId: ctx.personId,
+          })
+        : null
+      if (args.complianceObligationId && !linkedObligation) {
+        return { ok: false as const, error: 'This compliance task is not assigned to you' }
+      }
       const [version] = await tx
         .select()
         .from(formTemplateVersions)
-        .where(eq(formTemplateVersions.templateId, args.templateId))
+        .where(
+          and(
+            eq(formTemplateVersions.templateId, args.templateId),
+            eq(formTemplateVersions.tenantId, ctx.tenantId),
+            isNotNull(formTemplateVersions.publishedAt),
+          ),
+        )
         .orderBy(desc(formTemplateVersions.version))
         .limit(1)
       if (!version) {
@@ -371,6 +481,7 @@ export async function createDraftResponse(args: {
           tenantId: ctx.tenantId,
           templateId: args.templateId,
           templateVersionId: version.id,
+          complianceObligationId: linkedObligation?.id ?? null,
           status: 'draft',
           submittedBy: ctx.membership?.id ?? null,
           data: {},
@@ -417,6 +528,8 @@ export async function updateResponseField(input: {
   }
   try {
     const result = await ctx.db(async (tx) => {
+      const mutable = await lockFormResponseForMutation(tx, ctx.tenantId, input.responseId)
+      if (!mutable) return { ok: false as const, error: 'Response not found' }
       const [row] = await tx
         .select({
           id: formResponses.id,
@@ -440,7 +553,6 @@ export async function updateResponseField(input: {
           ),
         )
         .limit(1)
-        .for('update', { of: formResponses })
 
       if (!row) return { ok: false as const, error: 'Response not found' }
       if (row.locked) return { ok: false as const, error: 'This record is locked' }
@@ -452,8 +564,8 @@ export async function updateResponseField(input: {
       // Validate the field id against the schema: a top-level field or a
       // repeating-section id (whose value is the whole row array).
       const schema = row.schema
-      const isTopLevelField = schema.sections.some((sec) =>
-        sec.fields.some((f) => f.id === input.fieldId),
+      const isTopLevelField = schema.sections.some(
+        (sec) => !sec.repeating && sec.fields.some((f) => f.id === input.fieldId),
       )
       const isSectionId = schema.sections.some((sec) => sec.id === input.fieldId && sec.repeating)
       if (!isTopLevelField && !isSectionId) {
@@ -465,7 +577,38 @@ export async function updateResponseField(input: {
         row.data ?? {},
         row.draftData as FormResponseDraftData | null,
       )
-      const newData = { ...existing, [input.fieldId]: input.value }
+      // Object.fromEntries defines every key as an own data property, so even
+      // a malformed legacy schema containing "__proto__" cannot alter the
+      // payload object's prototype. The field id was proven against the loaded
+      // schema immediately above.
+      const rawData = Object.fromEntries([
+        ...Object.entries(existing),
+        [input.fieldId, input.value],
+      ])
+      const validationStage =
+        row.status === 'draft' || row.status === 'in_progress' ? 'draft' : 'submit'
+      const isTargetError = (error: { fieldId: string; sectionId?: string }) =>
+        isSectionId
+          ? error.sectionId === input.fieldId || error.fieldId.startsWith(`${input.fieldId}.`)
+          : error.fieldId === input.fieldId
+      const rawFieldErrors = validateResponse(schema, rawData, validationStage).filter(
+        isTargetError,
+      )
+      if (rawFieldErrors.length > 0) {
+        return {
+          ok: false as const,
+          error: rawFieldErrors[0]?.message ?? 'Invalid field value',
+        }
+      }
+
+      const newData = normalizeFormResponseData(schema, rawData)
+      const fieldErrors = validateResponse(schema, newData, validationStage).filter(isTargetError)
+      if (fieldErrors.length > 0) {
+        return {
+          ok: false as const,
+          error: fieldErrors[0]?.message ?? 'Invalid field value',
+        }
+      }
 
       // Recompute compliance from the merged payload. Hoist repeating-section
       // rows so section-aware score operators resolve (same as submit).

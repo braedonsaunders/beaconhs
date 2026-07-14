@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { BadgeCheck, FileText, IdCard } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -20,6 +20,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
+import { FilterChips } from '@/components/filter-bar'
 import { PeopleSubNav } from '../_components/people-sub-nav'
 
 export const metadata = { title: 'People — Titles' }
@@ -35,6 +36,8 @@ export default async function TitlesPage({
 }) {
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
+  const status =
+    sp.status === 'archived' || sp.status === 'all' || sp.status === 'active' ? sp.status : 'active'
   const ctx = await requireModuleManage('people')
 
   const { rows, total } = await ctx.db(async (tx) => {
@@ -53,10 +56,13 @@ export default async function TitlesPage({
         c: count().as('task_count'),
       })
       .from(jobTitleTasks)
+      .where(isNull(jobTitleTasks.deletedAt))
       .groupBy(jobTitleTasks.titleId)
       .as('task_count')
 
-    const filters: SQL<unknown>[] = [isNull(personTitles.deletedAt)]
+    const filters: SQL<unknown>[] = []
+    if (status === 'active') filters.push(isNull(personTitles.deletedAt))
+    else if (status === 'archived') filters.push(isNotNull(personTitles.deletedAt))
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(personTitles.name, term), ilike(personTitles.description, term))
@@ -80,6 +86,7 @@ export default async function TitlesPage({
         id: personTitles.id,
         name: personTitles.name,
         description: personTitles.description,
+        deletedAt: personTitles.deletedAt,
         assignedCount: assignedExpr,
         taskCount: taskExpr,
       })
@@ -115,7 +122,21 @@ export default async function TitlesPage({
               </Link>
             }
           />
-          <SearchInput placeholder="Search by title or scope" />
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput placeholder="Search by title or scope" />
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="status"
+              label="Status"
+              defaultValue="active"
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+              allLabel="All"
+            />
+          </div>
         </>
       }
     >
@@ -126,7 +147,9 @@ export default async function TitlesPage({
           description={
             params.q
               ? 'Try a different search.'
-              : 'Define the formal job titles used in Job Description PDFs.'
+              : status === 'archived'
+                ? 'Archived titles stay available for audit and can be restored.'
+                : 'Define the formal job titles used in Job Description PDFs.'
           }
           action={
             params.q ? undefined : (
@@ -182,6 +205,11 @@ export default async function TitlesPage({
                     >
                       {t.name}
                     </Link>
+                    {t.deletedAt ? (
+                      <Badge variant="secondary" className="ml-2">
+                        Archived
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-300">
                     {t.description ? <span className="line-clamp-2">{t.description}</span> : '—'}
@@ -200,21 +228,25 @@ export default async function TitlesPage({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2 text-xs">
-                      <Link
-                        href={`/people/titles/${t.id}/tasks`}
-                        className="text-teal-700 hover:underline dark:text-teal-400"
-                      >
-                        Tasks
-                      </Link>
-                      <span className="text-slate-300 dark:text-slate-600">·</span>
-                      <Link
-                        href={`/people/titles/${t.id}/pdf`}
-                        className="text-teal-700 hover:underline dark:text-teal-400"
-                        target="_blank"
-                      >
-                        PDF
-                      </Link>
-                      <span className="text-slate-300 dark:text-slate-600">·</span>
+                      {t.deletedAt ? null : (
+                        <>
+                          <Link
+                            href={`/people/titles/${t.id}/tasks`}
+                            className="text-teal-700 hover:underline dark:text-teal-400"
+                          >
+                            Tasks
+                          </Link>
+                          <span className="text-slate-300 dark:text-slate-600">·</span>
+                          <Link
+                            href={`/people/titles/${t.id}/pdf`}
+                            className="text-teal-700 hover:underline dark:text-teal-400"
+                            target="_blank"
+                          >
+                            PDF
+                          </Link>
+                          <span className="text-slate-300 dark:text-slate-600">·</span>
+                        </>
+                      )}
                       <Link
                         href={`/people/titles/${t.id}`}
                         className="text-teal-700 hover:underline dark:text-teal-400"

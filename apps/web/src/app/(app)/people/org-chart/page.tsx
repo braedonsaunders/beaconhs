@@ -18,7 +18,7 @@ import Link from 'next/link'
 import { and, eq, isNull, asc } from 'drizzle-orm'
 import { Users } from 'lucide-react'
 import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { people } from '@beaconhs/db/schema'
+import { people, personTitleAssignments, personTitles } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
@@ -42,10 +42,21 @@ export default async function OrgChartPage({
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
-        jobTitle: people.jobTitle,
+        jobTitle: personTitles.name,
         managerPersonId: people.managerPersonId,
       })
       .from(people)
+      .leftJoin(
+        personTitleAssignments,
+        and(
+          eq(personTitleAssignments.personId, people.id),
+          eq(personTitleAssignments.isPrimary, true),
+        ),
+      )
+      .leftJoin(
+        personTitles,
+        and(eq(personTitles.id, personTitleAssignments.titleId), isNull(personTitles.deletedAt)),
+      )
       .where(and(isNull(people.deletedAt), eq(people.status, 'active')))
       .orderBy(asc(people.lastName), asc(people.firstName)),
   )

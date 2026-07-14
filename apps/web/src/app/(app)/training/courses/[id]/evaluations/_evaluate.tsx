@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
   Textarea,
+  cn,
 } from '@beaconhs/ui'
 import type { PracticalCriterion } from '@beaconhs/db/schema'
 import { toast } from '@/lib/toast'
@@ -47,16 +48,23 @@ export function EvaluationsGrid({
   courseId,
   lessons,
   rows,
+  bordered = true,
 }: {
   courseId: string
   lessons: EvalLesson[]
   rows: EvalRow[]
+  bordered?: boolean
 }) {
   const [target, setTarget] = useState<Target | null>(null)
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <div
+        className={cn(
+          'overflow-x-auto bg-white dark:bg-slate-900',
+          bordered && 'rounded-lg border border-slate-200 dark:border-slate-800',
+        )}
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -134,14 +142,20 @@ function EvaluateDrawer({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [results, setResults] = useState<Record<string, boolean>>(
-    target?.cell.criteriaResults ?? {},
+  const [results, setResults] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      (target?.lesson.criteria ?? []).map((criterion) => [
+        criterion.id,
+        target?.cell.criteriaResults?.[criterion.id] === true,
+      ]),
+    ),
   )
   const [notes, setNotes] = useState(target?.cell.notes ?? '')
   const [signature, setSignature] = useState<string | null>(null)
 
   if (!target) return null
   const { row, lesson, cell } = target
+  const readOnly = row.enrollmentStatus !== 'in_progress'
   const allCriteriaPassed =
     lesson.criteria.length === 0 || lesson.criteria.every((c) => results[c.id] === true)
 
@@ -180,30 +194,52 @@ function EvaluateDrawer({
       description={row.personName}
       size="md"
       footer={
-        <div className="flex justify-between gap-2">
-          <Button type="button" variant="outline" onClick={() => submit(false)} disabled={pending}>
-            <X size={14} className="text-rose-500" /> Not yet competent
-          </Button>
-          <Button
-            type="button"
-            onClick={() => submit(true)}
-            disabled={pending || !allCriteriaPassed || !signature}
-            title={
-              !allCriteriaPassed
-                ? 'Check every criterion to sign off'
-                : !signature
-                  ? 'Sign to confirm'
-                  : undefined
-            }
-          >
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Check size={14} />}
-            Sign off — competent
-          </Button>
-        </div>
+        readOnly ? (
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        ) : (
+          <div className="flex justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => submit(false)}
+              disabled={pending}
+            >
+              <X size={14} className="text-rose-500" /> Not yet competent
+            </Button>
+            <Button
+              type="button"
+              onClick={() => submit(true)}
+              disabled={pending || !allCriteriaPassed || !signature}
+              title={
+                !allCriteriaPassed
+                  ? 'Check every criterion to sign off'
+                  : !signature
+                    ? 'Sign to confirm'
+                    : undefined
+              }
+            >
+              {pending ? (
+                <Loader2 size={14} className="mr-1.5 animate-spin" />
+              ) : (
+                <Check size={14} />
+              )}
+              Sign off — competent
+            </Button>
+          </div>
+        )
       }
     >
       <div className="space-y-5">
-        {cell.status === 'completed' ? (
+        {readOnly ? (
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200">
+            This enrollment is {row.enrollmentStatus.replace('_', ' ')}. Its evaluation is
+            read-only.
+          </p>
+        ) : cell.status === 'completed' ? (
           <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
             Already signed off{cell.evaluatorName ? ` by ${cell.evaluatorName}` : ''}
             {cell.completedAt ? ` on ${new Date(cell.completedAt).toLocaleDateString()}` : ''}.
@@ -222,6 +258,7 @@ function EvaluateDrawer({
                 <input
                   type="checkbox"
                   checked={results[c.id] === true}
+                  disabled={readOnly}
                   onChange={(e) =>
                     setResults((prev) => ({ ...prev, [c.id]: e.currentTarget.checked }))
                   }
@@ -242,15 +279,18 @@ function EvaluateDrawer({
           <Textarea
             rows={2}
             value={notes}
+            disabled={readOnly}
             onChange={(e) => setNotes(e.currentTarget.value)}
             placeholder="Observations, conditions, equipment used…"
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label>Evaluator signature</Label>
-          <SignaturePad value={signature} onChange={setSignature} height={140} />
-        </div>
+        {!readOnly ? (
+          <div className="space-y-1.5">
+            <Label>Evaluator signature</Label>
+            <SignaturePad value={signature} onChange={setSignature} height={140} />
+          </div>
+        ) : null}
       </div>
     </Drawer>
   )

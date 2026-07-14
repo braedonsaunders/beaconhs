@@ -52,10 +52,10 @@ export default async function PlatformUserDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { id } = await params
   const sessionUserId = await getCurrentUserId()
   if (!sessionUserId) redirect('/login')
   const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
-  const { id } = await params
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const notice = typeof sp.notice === 'string' ? sp.notice : undefined

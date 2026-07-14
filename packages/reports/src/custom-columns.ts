@@ -106,6 +106,7 @@ export async function loadCustomFieldColumns(
       ),
     )
     .orderBy(asc(customFieldDefinitions.sortOrder), asc(customFieldDefinitions.label))
+    .for('key share')
   return buildCustomFieldColumns(table, rows)
 }
 

@@ -11,6 +11,7 @@ import { attachments, reportRuns } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { storedPdfArtifactResponse } from '@/lib/pdf-route'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string; runId: string }> },
 ): Promise<Response> {
   const { id, runId } = await params
+  if (!isUuid(id) || !isUuid(runId)) {
+    return NextResponse.json({ error: 'Run not found' }, { status: 404 })
+  }
+
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.read')
   if (!ctx.tenantId) {

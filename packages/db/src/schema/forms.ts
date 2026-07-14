@@ -6,7 +6,8 @@
 //          └─ form_responses (filled submissions, pinned to a version)
 //               └─ form_response_steps (multi-step workflow audit)
 //
-// form_assignments distribute a template (on-demand / scheduled / triggered / manual)
+// Compliance obligations distribute scheduled templates. On-demand entries and
+// event-driven Flows remain native form behavior rather than parallel assignments.
 
 import { relations } from 'drizzle-orm'
 import {
@@ -27,6 +28,7 @@ import {
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
 import { orgUnits, people } from './org'
+import { complianceObligations } from './compliance'
 
 export const formTemplateStatus = pgEnum('form_template_status', ['draft', 'published', 'archived'])
 
@@ -78,6 +80,7 @@ export const formTemplates = pgTable(
   },
   (t) => ({
     tenantKeyUx: uniqueIndex('form_templates_tenant_key_ux').on(t.tenantId, t.key),
+    tenantIdIdUx: uniqueIndex('form_templates_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantIdx: index('form_templates_tenant_idx').on(t.tenantId),
     categoryIdx: index('form_templates_category_idx').on(t.tenantId, t.category),
   }),
@@ -91,9 +94,7 @@ export const formTemplateVersions = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    templateId: uuid('template_id')
-      .notNull()
-      .references(() => formTemplates.id, { onDelete: 'cascade' }),
+    templateId: uuid('template_id').notNull(),
     version: integer('version').notNull(),
     schema: jsonb('schema').$type<FormSchemaV1>().notNull(),
     changelog: text('changelog'),
@@ -103,7 +104,17 @@ export const formTemplateVersions = pgTable(
   },
   (t) => ({
     templateVersionUx: uniqueIndex('form_template_versions_uniq').on(t.templateId, t.version),
+    tenantTemplateIdUx: uniqueIndex('form_template_versions_tenant_template_id_ux').on(
+      t.tenantId,
+      t.templateId,
+      t.id,
+    ),
     tenantIdx: index('form_template_versions_tenant_idx').on(t.tenantId),
+    templateFk: foreignKey({
+      name: 'form_template_versions_tenant_template_fk',
+      columns: [t.tenantId, t.templateId],
+      foreignColumns: [formTemplates.tenantId, formTemplates.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -178,50 +189,6 @@ export type FormResponseDraftData = {
   saveRevision?: number
 }
 
-// --- Assignments -----------------------------------------------------------
-
-export const formAssignmentMode = pgEnum('form_assignment_mode', [
-  'on_demand',
-  'scheduled',
-  'event_triggered',
-  'manual',
-])
-
-export const formAssignments = pgTable(
-  'form_assignments',
-  {
-    id: id(),
-    tenantId: uuid('tenant_id')
-      .notNull()
-      .references(() => tenants.id, { onDelete: 'cascade' }),
-    templateId: uuid('template_id')
-      .notNull()
-      .references(() => formTemplates.id, { onDelete: 'cascade' }),
-    mode: formAssignmentMode('mode').notNull(),
-    // Targeting (any subset can apply)
-    targetRoleKeys: jsonb('target_role_keys').$type<string[] | null>(),
-    targetOrgUnitIds: jsonb('target_org_unit_ids').$type<string[] | null>(),
-    targetPersonIds: jsonb('target_person_ids').$type<string[] | null>(),
-    // Schedule (mode = scheduled)
-    cron: text('cron'), // e.g. '0 8 * * 1' for Mon 8am
-    dueOffsetMinutes: integer('due_offset_minutes'), // due relative to scheduled fire
-    // Trigger (mode = event_triggered)
-    triggerEvent: text('trigger_event'), // e.g. 'incident.created'
-    triggerFilter: jsonb('trigger_filter').$type<Record<string, unknown> | null>(),
-    // Manual one-shot due date
-    dueAt: timestamp('due_at', { withTimezone: true }),
-    enabled: boolean('enabled').default(true).notNull(),
-    createdBy: text('created_by').references(() => users.id),
-    ...timestamps,
-  },
-  (t) => ({
-    tenantIdx: index('form_assignments_tenant_idx').on(t.tenantId),
-    tenantIdIdUx: uniqueIndex('form_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
-    templateIdx: index('form_assignments_template_idx').on(t.templateId),
-    modeIdx: index('form_assignments_mode_idx').on(t.tenantId, t.mode),
-  }),
-)
-
 // --- Responses -------------------------------------------------------------
 
 export const formResponseStatus = pgEnum('form_response_status', [
@@ -273,19 +240,18 @@ export const formResponses = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    templateId: uuid('template_id')
-      .notNull()
-      .references(() => formTemplates.id),
-    templateVersionId: uuid('template_version_id')
-      .notNull()
-      .references(() => formTemplateVersions.id),
-    assignmentId: uuid('assignment_id').references(() => formAssignments.id),
+    templateId: uuid('template_id').notNull(),
+    templateVersionId: uuid('template_version_id').notNull(),
+    // Exact scheduled obligation this response was opened for. A normal
+    // on-demand submission leaves this null and cannot satisfy an unrelated
+    // obligation that happens to target the same template.
+    complianceObligationId: uuid('compliance_obligation_id'),
     flowExecutionKey: text('flow_execution_key'),
     status: formResponseStatus('status').default('draft').notNull(),
     currentStep: text('current_step'),
     // Hot indexed columns for filtering
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
-    subjectPersonId: uuid('subject_person_id').references(() => people.id), // for forms about a specific person
+    siteOrgUnitId: uuid('site_org_unit_id'),
+    subjectPersonId: uuid('subject_person_id'), // for forms about a specific person
     submittedBy: uuid('submitted_by'),
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
@@ -347,9 +313,26 @@ export const formResponses = pgTable(
   },
   (t) => ({
     tenantIdx: index('form_responses_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('form_responses_tenant_id_id_ux').on(t.tenantId, t.id),
+    tenantTemplateIdUx: uniqueIndex('form_responses_tenant_template_id_ux').on(
+      t.tenantId,
+      t.templateId,
+      t.id,
+    ),
     templateIdx: index('form_responses_template_idx').on(t.tenantId, t.templateId),
+    versionIdx: index('form_responses_version_idx').on(
+      t.tenantId,
+      t.templateId,
+      t.templateVersionId,
+    ),
+    complianceObligationIdx: index('form_responses_compliance_obligation_idx').on(
+      t.tenantId,
+      t.complianceObligationId,
+      t.submittedAt,
+    ),
     statusIdx: index('form_responses_status_idx').on(t.tenantId, t.status),
     siteIdx: index('form_responses_site_idx').on(t.tenantId, t.siteOrgUnitId),
+    subjectPersonIdx: index('form_responses_subject_person_idx').on(t.tenantId, t.subjectPersonId),
     submittedIdx: index('form_responses_submitted_idx').on(t.tenantId, t.submittedAt),
     submittedByIdx: index('form_responses_submitted_by_idx').on(t.tenantId, t.submittedBy),
     lockedByIdx: index('form_responses_locked_by_idx').on(t.tenantId, t.lockedByTenantUserId),
@@ -364,6 +347,35 @@ export const formResponses = pgTable(
       t.tenantId,
       t.flowExecutionKey,
     ),
+    templateFk: foreignKey({
+      name: 'form_responses_tenant_template_fk',
+      columns: [t.tenantId, t.templateId],
+      foreignColumns: [formTemplates.tenantId, formTemplates.id],
+    }),
+    templateVersionFk: foreignKey({
+      name: 'form_responses_tenant_template_version_fk',
+      columns: [t.tenantId, t.templateId, t.templateVersionId],
+      foreignColumns: [
+        formTemplateVersions.tenantId,
+        formTemplateVersions.templateId,
+        formTemplateVersions.id,
+      ],
+    }),
+    complianceObligationFk: foreignKey({
+      name: 'form_responses_tenant_compliance_obligation_fk',
+      columns: [t.tenantId, t.complianceObligationId],
+      foreignColumns: [complianceObligations.tenantId, complianceObligations.id],
+    }),
+    siteOrgUnitFk: foreignKey({
+      name: 'form_responses_tenant_site_org_unit_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    subjectPersonFk: foreignKey({
+      name: 'form_responses_tenant_subject_person_fk',
+      columns: [t.tenantId, t.subjectPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
     submittedByFk: foreignKey({
       name: 'form_responses_tenant_submitted_by_fk',
       columns: [t.tenantId, t.submittedBy],
@@ -386,9 +398,7 @@ export const formResponseCheckins = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    responseId: uuid('response_id')
-      .notNull()
-      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id').notNull(),
     kind: formResponseCheckinKind('kind').notNull(),
     recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
     geoLat: doublePrecision('geo_lat'),
@@ -397,7 +407,11 @@ export const formResponseCheckins = pgTable(
     byTenantUserId: uuid('by_tenant_user_id'),
   },
   (t) => ({
-    responseIdx: index('form_response_checkins_response_idx').on(t.responseId, t.recordedAt),
+    responseIdx: index('form_response_checkins_response_idx').on(
+      t.tenantId,
+      t.responseId,
+      t.recordedAt,
+    ),
     tenantIdx: index('form_response_checkins_tenant_idx').on(t.tenantId),
     byTenantUserIdx: index('form_response_checkins_by_user_idx').on(t.tenantId, t.byTenantUserId),
     byTenantUserFk: foreignKey({
@@ -405,6 +419,11 @@ export const formResponseCheckins = pgTable(
       columns: [t.tenantId, t.byTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    responseFk: foreignKey({
+      name: 'form_response_checkins_tenant_response_fk',
+      columns: [t.tenantId, t.responseId],
+      foreignColumns: [formResponses.tenantId, formResponses.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -426,9 +445,7 @@ export const formResponseSteps = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    responseId: uuid('response_id')
-      .notNull()
-      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id').notNull(),
     stepKey: text('step_key').notNull(),
     sequence: integer('sequence').notNull(),
     assigneeTenantUserId: uuid('assignee_tenant_user_id'),
@@ -439,7 +456,7 @@ export const formResponseSteps = pgTable(
     // server actions in apps/web/src/app/(app)/apps/responses/[id]/_actions.ts.
     status: text('status').default('pending').notNull(),
     // Whose person record the signer represents (if internal).
-    signedByPersonId: uuid('signed_by_person_id').references(() => people.id),
+    signedByPersonId: uuid('signed_by_person_id'),
     // Which tenant_users row did the click — used by audit + assignee resolution.
     signedByTenantUserId: uuid('signed_by_tenant_user_id'),
     rejectionReason: text('rejection_reason'),
@@ -448,11 +465,15 @@ export const formResponseSteps = pgTable(
     ...timestamps,
   },
   (t) => ({
-    responseIdx: index('form_response_steps_response_idx').on(t.responseId, t.sequence),
+    responseIdx: index('form_response_steps_response_idx').on(t.tenantId, t.responseId, t.sequence),
     tenantIdx: index('form_response_steps_tenant_idx').on(t.tenantId),
     statusIdx: index('form_response_steps_status_idx').on(t.tenantId, t.status),
     assigneeIdx: index('form_response_steps_assignee_idx').on(t.tenantId, t.assigneeTenantUserId),
     signedByIdx: index('form_response_steps_signed_by_idx').on(t.tenantId, t.signedByTenantUserId),
+    signedByPersonIdx: index('form_response_steps_signed_by_person_idx').on(
+      t.tenantId,
+      t.signedByPersonId,
+    ),
     rejectedByIdx: index('form_response_steps_rejected_by_idx').on(
       t.tenantId,
       t.rejectedByTenantUserId,
@@ -472,6 +493,16 @@ export const formResponseSteps = pgTable(
       columns: [t.tenantId, t.rejectedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    responseFk: foreignKey({
+      name: 'form_response_steps_tenant_response_fk',
+      columns: [t.tenantId, t.responseId],
+      foreignColumns: [formResponses.tenantId, formResponses.id],
+    }).onDelete('cascade'),
+    signedByPersonFk: foreignKey({
+      name: 'form_response_steps_tenant_signed_by_person_fk',
+      columns: [t.tenantId, t.signedByPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
   }),
 )
 
@@ -484,15 +515,17 @@ export const formResponseComments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    responseId: uuid('response_id')
-      .notNull()
-      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id').notNull(),
     authorTenantUserId: uuid('author_tenant_user_id'),
     body: text('body').notNull(),
     ...timestamps,
   },
   (t) => ({
-    responseIdx: index('form_response_comments_response_idx').on(t.responseId, t.createdAt),
+    responseIdx: index('form_response_comments_response_idx').on(
+      t.tenantId,
+      t.responseId,
+      t.createdAt,
+    ),
     tenantIdx: index('form_response_comments_tenant_idx').on(t.tenantId),
     authorIdx: index('form_response_comments_author_idx').on(t.tenantId, t.authorTenantUserId),
     authorFk: foreignKey({
@@ -500,6 +533,11 @@ export const formResponseComments = pgTable(
       columns: [t.tenantId, t.authorTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    responseFk: foreignKey({
+      name: 'form_response_comments_tenant_response_fk',
+      columns: [t.tenantId, t.responseId],
+      foreignColumns: [formResponses.tenantId, formResponses.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -512,9 +550,7 @@ export const formResponseScores = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    responseId: uuid('response_id')
-      .notNull()
-      .references(() => formResponses.id, { onDelete: 'cascade' }),
+    responseId: uuid('response_id').notNull(),
     fieldId: text('field_id').notNull(),
     sectionId: text('section_id'),
     score: integer('score'), // 1=pass, 0=fail, null=n/a, or 1..5 for rating
@@ -522,8 +558,13 @@ export const formResponseScores = pgTable(
     weight: integer('weight').default(1).notNull(),
   },
   (t) => ({
-    responseIdx: index('form_response_scores_response_idx').on(t.responseId),
+    responseIdx: index('form_response_scores_response_idx').on(t.tenantId, t.responseId),
     tenantIdx: index('form_response_scores_tenant_idx').on(t.tenantId),
+    responseFk: foreignKey({
+      name: 'form_response_scores_tenant_response_fk',
+      columns: [t.tenantId, t.responseId],
+      foreignColumns: [formResponses.tenantId, formResponses.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -550,7 +591,7 @@ export const formAutomations = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     subjectType: flowSubjectType('subject_type').notNull().default('form_template'),
     subjectKey: text('subject_key'),
-    templateId: uuid('template_id').references(() => formTemplates.id, { onDelete: 'cascade' }),
+    templateId: uuid('template_id'),
     name: text('name').default('Flow').notNull(),
     enabled: boolean('enabled').default(true).notNull(),
     graph: jsonb('graph').$type<AutomationGraph>().notNull(),
@@ -561,9 +602,15 @@ export const formAutomations = pgTable(
   },
   (t) => ({
     // Many flows per subject (each independently enable/disable-able).
-    templateIdx: index('form_automations_template_idx').on(t.templateId),
+    templateIdx: index('form_automations_template_idx').on(t.tenantId, t.templateId),
     subjectIdx: index('form_automations_subject_idx').on(t.tenantId, t.subjectType, t.subjectKey),
     tenantIdx: index('form_automations_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('form_automations_tenant_id_id_ux').on(t.tenantId, t.id),
+    templateFk: foreignKey({
+      name: 'form_automations_tenant_template_fk',
+      columns: [t.tenantId, t.templateId],
+      foreignColumns: [formTemplates.tenantId, formTemplates.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -583,9 +630,7 @@ export const flowGates = pgTable(
     subjectType: flowSubjectType('subject_type').notNull(),
     subjectKey: text('subject_key'), // moduleKey | templateId
     subjectId: uuid('subject_id').notNull(), // record id (responseId, journalId, …)
-    flowId: uuid('flow_id')
-      .notNull()
-      .references(() => formAutomations.id, { onDelete: 'cascade' }),
+    flowId: uuid('flow_id').notNull(),
     nodeId: text('node_id').notNull(),
     executionId: uuid('execution_id'),
     title: text('title').notNull(),
@@ -607,7 +652,7 @@ export const flowGates = pgTable(
     ),
     assigneeIdx: index('flow_gates_assignee_idx').on(t.tenantId, t.assigneeTenantUserId, t.status),
     decidedByIdx: index('flow_gates_decided_by_idx').on(t.tenantId, t.decidedByTenantUserId),
-    flowIdx: index('flow_gates_flow_idx').on(t.flowId),
+    flowIdx: index('flow_gates_flow_idx').on(t.tenantId, t.flowId),
     executionUx: uniqueIndex('flow_gates_execution_ux').on(
       t.tenantId,
       t.executionId,
@@ -624,6 +669,11 @@ export const flowGates = pgTable(
       columns: [t.tenantId, t.decidedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    flowFk: foreignKey({
+      name: 'flow_gates_tenant_flow_fk',
+      columns: [t.tenantId, t.flowId],
+      foreignColumns: [formAutomations.tenantId, formAutomations.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -632,26 +682,33 @@ export const flowGates = pgTable(
 export const formTemplatesRelations = relations(formTemplates, ({ one, many }) => ({
   tenant: one(tenants, { fields: [formTemplates.tenantId], references: [tenants.id] }),
   versions: many(formTemplateVersions),
-  assignments: many(formAssignments),
   responses: many(formResponses),
 }))
 
 export const formTemplateVersionsRelations = relations(formTemplateVersions, ({ one }) => ({
   template: one(formTemplates, {
-    fields: [formTemplateVersions.templateId],
-    references: [formTemplates.id],
+    fields: [formTemplateVersions.tenantId, formTemplateVersions.templateId],
+    references: [formTemplates.tenantId, formTemplates.id],
   }),
 }))
 
 export const formResponsesRelations = relations(formResponses, ({ one, many }) => ({
   tenant: one(tenants, { fields: [formResponses.tenantId], references: [tenants.id] }),
   template: one(formTemplates, {
-    fields: [formResponses.templateId],
-    references: [formTemplates.id],
+    fields: [formResponses.tenantId, formResponses.templateId],
+    references: [formTemplates.tenantId, formTemplates.id],
   }),
   version: one(formTemplateVersions, {
-    fields: [formResponses.templateVersionId],
-    references: [formTemplateVersions.id],
+    fields: [formResponses.tenantId, formResponses.templateId, formResponses.templateVersionId],
+    references: [
+      formTemplateVersions.tenantId,
+      formTemplateVersions.templateId,
+      formTemplateVersions.id,
+    ],
+  }),
+  complianceObligation: one(complianceObligations, {
+    fields: [formResponses.tenantId, formResponses.complianceObligationId],
+    references: [complianceObligations.tenantId, complianceObligations.id],
   }),
   steps: many(formResponseSteps),
   scores: many(formResponseScores),
@@ -660,7 +717,7 @@ export const formResponsesRelations = relations(formResponses, ({ one, many }) =
 
 export const formResponseCheckinsRelations = relations(formResponseCheckins, ({ one }) => ({
   response: one(formResponses, {
-    fields: [formResponseCheckins.responseId],
-    references: [formResponses.id],
+    fields: [formResponseCheckins.tenantId, formResponseCheckins.responseId],
+    references: [formResponses.tenantId, formResponses.id],
   }),
 }))

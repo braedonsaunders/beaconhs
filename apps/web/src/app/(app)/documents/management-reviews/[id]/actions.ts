@@ -2,12 +2,18 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull } from 'drizzle-orm'
-import { documentManagementReviews } from '@beaconhs/db/schema'
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import {
+  documentManagementReviewDocuments,
+  documentManagementReviews,
+  documents,
+  documentVersions,
+} from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 /**
  * Instant-create a management review and land in its detail editor (the single
@@ -93,18 +99,112 @@ export async function updateReviewMeta(
 export async function updateDocumentsReviewed(id: string, docIds: string[]): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  await ctx.db((tx) =>
-    tx
-      .update(documentManagementReviews)
-      .set({ documentsReviewed: docIds })
-      .where(eq(documentManagementReviews.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'document_management_review',
-    entityId: id,
-    action: 'update',
-    summary: `Updated documents reviewed (${docIds.length})`,
-    after: { documentsReviewed: docIds },
+  if (!isUuid(id)) throw new Error('Management review not found')
+  if (docIds.some((documentId) => !isUuid(documentId))) {
+    throw new Error('A selected document is invalid')
+  }
+  const uniqueDocumentIds = [...new Set(docIds)]
+  if (uniqueDocumentIds.length !== docIds.length) {
+    throw new Error('The same document cannot be reviewed twice')
+  }
+
+  await ctx.db(async (tx) => {
+    const [review] = await tx
+      .select({ id: documentManagementReviews.id })
+      .from(documentManagementReviews)
+      .where(
+        and(
+          eq(documentManagementReviews.tenantId, ctx.tenantId),
+          eq(documentManagementReviews.id, id),
+          isNull(documentManagementReviews.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!review) throw new Error('Management review not found')
+
+    const sortedDocumentIds = [...uniqueDocumentIds].sort()
+    const lockedDocuments =
+      sortedDocumentIds.length > 0
+        ? await tx
+            .select({ id: documents.id })
+            .from(documents)
+            .where(
+              and(
+                eq(documents.tenantId, ctx.tenantId),
+                inArray(documents.id, sortedDocumentIds),
+                eq(documents.status, 'published'),
+                isNull(documents.deletedAt),
+              ),
+            )
+            .orderBy(asc(documents.id))
+            .for('update')
+        : []
+    if (lockedDocuments.length !== sortedDocumentIds.length) {
+      throw new Error('Every reviewed document must be active and published')
+    }
+
+    const versions =
+      sortedDocumentIds.length > 0
+        ? await tx
+            .select({
+              id: documentVersions.id,
+              documentId: documentVersions.documentId,
+              version: documentVersions.version,
+            })
+            .from(documentVersions)
+            .where(
+              and(
+                eq(documentVersions.tenantId, ctx.tenantId),
+                inArray(documentVersions.documentId, sortedDocumentIds),
+                isNotNull(documentVersions.publishedAt),
+              ),
+            )
+            .orderBy(asc(documentVersions.documentId), desc(documentVersions.version))
+        : []
+    const latestByDocument = new Map<string, { id: string; documentId: string; version: number }>()
+    for (const version of versions) {
+      if (!latestByDocument.has(version.documentId)) {
+        latestByDocument.set(version.documentId, version)
+      }
+    }
+    const pins = sortedDocumentIds.map((documentId) => {
+      const version = latestByDocument.get(documentId)
+      if (!version) throw new Error('A reviewed document has no published version')
+      return version
+    })
+
+    await tx
+      .delete(documentManagementReviewDocuments)
+      .where(
+        and(
+          eq(documentManagementReviewDocuments.tenantId, ctx.tenantId),
+          eq(documentManagementReviewDocuments.managementReviewId, id),
+        ),
+      )
+    if (pins.length > 0) {
+      await tx.insert(documentManagementReviewDocuments).values(
+        pins.map((pin) => ({
+          tenantId: ctx.tenantId,
+          managementReviewId: id,
+          documentId: pin.documentId,
+          documentVersionId: pin.id,
+        })),
+      )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document_management_review',
+      entityId: id,
+      action: 'update',
+      summary: `Updated documents reviewed (${pins.length})`,
+      after: {
+        reviewedDocuments: pins.map((pin) => ({
+          documentId: pin.documentId,
+          documentVersionId: pin.id,
+          version: pin.version,
+        })),
+      },
+    })
   })
   revalidatePath(`/documents/management-reviews/${id}`)
 }

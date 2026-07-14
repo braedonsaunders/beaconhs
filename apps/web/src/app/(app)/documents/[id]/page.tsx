@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import {
   Activity,
   BadgeCheck,
@@ -45,8 +45,14 @@ import { attachmentUrl } from '@/lib/attachment-url'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
-import { pickString } from '@/lib/list-params'
+import { activityPageForEntity, recordAuditInTransaction } from '@/lib/audit'
+import { assertUploadedDocumentPdf } from '@/lib/document-version-policy'
+import { assertDocumentNotInPublishedBook } from '@/lib/document-book-lifecycle'
+import {
+  assertComplianceTargetCanRetire,
+  materializeEvidenceTargetObligations,
+} from '@beaconhs/compliance'
+import { isUuid, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
 import { DetailGrid } from '@/components/detail-grid'
 import { DocumentOverview } from './_overview'
@@ -59,6 +65,10 @@ import { getTenantAiSettings } from '@/lib/ai-config'
 import { DocumentPane } from './_document-pane'
 import { AcknowledgmentsPanel, type AckRow } from './_acknowledgments-panel'
 import { DocumentCompliancePanel, loadDocumentObligations } from './_compliance-panel'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +81,11 @@ const TABS = [
   'activity',
 ] as const
 type Tab = (typeof TABS)[number]
+
+const VERSION_SORTS = ['recent', 'oldest'] as const
+const ACK_SORTS = ['recent', 'name'] as const
+const REVIEW_SORTS = ['recent', 'oldest'] as const
+const ACTIVITY_SORTS = ['recent', 'oldest'] as const
 
 // yyyy-mm-dd of an instant in the viewer's IANA timezone. Date columns are
 // entered as local dates, so "today" / auto-computed review dates must be
@@ -101,34 +116,62 @@ async function publishFileDocument(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await ctx.db(async (tx) => {
+  if (!isUuid(id)) throw new Error('Document not found')
+  const changed = await ctx.db(async (tx) => {
+    const [doc] = await tx
+      .select({ status: documents.status, sourceAttachmentId: documents.sourceAttachmentId })
+      .from(documents)
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+      .limit(1)
+      .for('update')
+    if (!doc) throw new Error('Document not found')
+    if (doc.sourceAttachmentId) {
+      throw new Error('Authored documents publish from the Write tab')
+    }
     const [version] = await tx
-      .select({ id: documentVersions.id })
+      .select({
+        id: documentVersions.id,
+        version: documentVersions.version,
+        contentAttachmentId: documentVersions.contentAttachmentId,
+        publishedAt: documentVersions.publishedAt,
+      })
       .from(documentVersions)
-      .where(
-        and(
-          eq(documentVersions.documentId, id),
-          sql`${documentVersions.contentAttachmentId} is not null`,
-        ),
-      )
+      .where(eq(documentVersions.documentId, id))
       .orderBy(desc(documentVersions.version))
       .limit(1)
-    if (!version) throw new Error('Upload a PDF before publishing')
+    if (!version?.contentAttachmentId) throw new Error('Upload a PDF before publishing')
+    const [attachment] = await tx
+      .select({ kind: attachments.kind, contentType: attachments.contentType })
+      .from(attachments)
+      .where(eq(attachments.id, version.contentAttachmentId))
+      .limit(1)
+    if (!attachment) throw new Error('The uploaded PDF is missing')
+    assertUploadedDocumentPdf(attachment)
+
+    if (version.publishedAt && doc.status === 'published') return false
+    const publishedAt = version.publishedAt ?? new Date()
     await tx
       .update(documentVersions)
-      .set({ publishedAt: new Date(), publishedBy: ctx.userId })
+      .set({ publishedAt, publishedBy: ctx.userId })
       .where(and(eq(documentVersions.id, version.id), isNull(documentVersions.publishedAt)))
     await tx.update(documents).set({ status: 'published' }).where(eq(documents.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document',
+      entityId: id,
+      action: 'publish',
+      summary: 'Published the uploaded document',
+      after: { versionId: version.id, version: version.version, publishedAt },
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'document',
+      targetRef: { documentId: id },
+    })
+    return true
   })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: 'publish',
-    summary: 'Published the uploaded document',
-  })
-  revalidatePath(`/documents/${id}`)
-  revalidatePath('/documents')
+  if (changed) {
+    revalidatePath(`/documents/${id}`)
+    revalidatePath('/documents')
+  }
 }
 
 async function unpublish(formData: FormData) {
@@ -136,13 +179,36 @@ async function unpublish(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   const id = String(formData.get('id') ?? '')
-  if (!id) return
-  await ctx.db((tx) => tx.update(documents).set({ status: 'draft' }).where(eq(documents.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: id,
-    action: 'update',
-    summary: 'Document unpublished (set to draft)',
+  if (!isUuid(id)) throw new Error('Document not found.')
+  await ctx.db(async (tx) => {
+    const [document] = await tx
+      .select({ status: documents.status })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.tenantId, ctx.tenantId),
+          eq(documents.id, id),
+          isNull(documents.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!document) throw new Error('Document not found.')
+    if (document.status === 'draft') return
+    await assertDocumentNotInPublishedBook(tx, ctx.tenantId, id)
+    await assertComplianceTargetCanRetire(tx, ctx.tenantId, 'document', id)
+    await tx
+      .update(documents)
+      .set({ status: 'draft' })
+      .where(and(eq(documents.tenantId, ctx.tenantId), eq(documents.id, id)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document',
+      entityId: id,
+      action: 'update',
+      summary: 'Document unpublished (set to draft)',
+      before: { status: document.status },
+      after: { status: 'draft' },
+    })
   })
   revalidatePath(`/documents/${id}`)
   revalidatePath('/documents')
@@ -164,10 +230,46 @@ async function recordReviewAction(input: {
   }
 
   await ctx.db(async (tx) => {
+    const [document] = await tx
+      .select({
+        id: documents.id,
+        reviewFrequencyMonths: documents.reviewFrequencyMonths,
+      })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.tenantId, ctx.tenantId),
+          eq(documents.id, documentId),
+          isNull(documents.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!document) throw new Error('Document not found.')
+    const [reviewedVersion] = await tx
+      .select({ id: documentVersions.id, version: documentVersions.version })
+      .from(documentVersions)
+      .where(
+        and(
+          eq(documentVersions.tenantId, ctx.tenantId),
+          eq(documentVersions.documentId, documentId),
+          isNotNull(documentVersions.publishedAt),
+        ),
+      )
+      .orderBy(desc(documentVersions.version), desc(documentVersions.id))
+      .limit(1)
+    if (!reviewedVersion) {
+      throw new Error('Publish the document before recording a periodic review.')
+    }
+    if (outcome === 'retired') {
+      await assertDocumentNotInPublishedBook(tx, ctx.tenantId, documentId)
+    }
     await tx.insert(documentReviews).values({
       tenantId: ctx.tenantId,
       documentId,
+      documentVersionId: reviewedVersion.id,
       reviewedByTenantUserId: ctx.membership!.id,
+      status: 'completed',
       outcome,
       notes,
       nextReviewOn: nextReviewOnRaw,
@@ -180,14 +282,9 @@ async function recordReviewAction(input: {
         .where(eq(documents.id, documentId))
     } else {
       // Auto-compute from reviewFrequencyMonths
-      const [doc] = await tx
-        .select({ months: documents.reviewFrequencyMonths })
-        .from(documents)
-        .where(eq(documents.id, documentId))
-        .limit(1)
-      if (doc?.months) {
+      if (document.reviewFrequencyMonths) {
         const next = new Date()
-        next.setMonth(next.getMonth() + doc.months)
+        next.setMonth(next.getMonth() + document.reviewFrequencyMonths)
         const dateStr = dateIsoInTz(next, ctx.timezone)
         await tx
           .update(documents)
@@ -196,15 +293,24 @@ async function recordReviewAction(input: {
       }
     }
     if (outcome === 'retired') {
-      await tx.update(documents).set({ status: 'archived' }).where(eq(documents.id, documentId))
+      await tx
+        .update(documents)
+        .set({ status: 'archived' })
+        .where(and(eq(documents.tenantId, ctx.tenantId), eq(documents.id, documentId)))
     }
-  })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: documentId,
-    action: 'update',
-    summary: `Review recorded: ${outcome.replace(/_/g, ' ')}`,
-    after: { outcome, notes, nextReviewOn: nextReviewOnRaw },
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document',
+      entityId: documentId,
+      action: 'update',
+      summary: `Review recorded: ${outcome.replace(/_/g, ' ')}`,
+      after: {
+        outcome,
+        notes,
+        nextReviewOn: nextReviewOnRaw,
+        documentVersionId: reviewedVersion.id,
+        documentVersion: reviewedVersion.version,
+      },
+    })
   })
   revalidatePath(`/documents/${documentId}`)
   return { ok: true }
@@ -247,8 +353,65 @@ export default async function DocumentDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const versionParams = parsePrefixedListParams(sp, 'version', {
+    sort: 'recent',
+    perPage: 12,
+    allowedSorts: VERSION_SORTS,
+  })
+  const ackParams = parsePrefixedListParams(sp, 'ack', {
+    sort: 'recent',
+    perPage: 12,
+    allowedSorts: ACK_SORTS,
+  })
+  const reviewParams = parsePrefixedListParams(sp, 'review', {
+    sort: 'recent',
+    perPage: 12,
+    allowedSorts: REVIEW_SORTS,
+  })
+  const complianceParams = parsePrefixedListParams(sp, 'compliance', {
+    sort: 'title',
+    dir: 'asc',
+    perPage: 12,
+    allowedSorts: ['title'] as const,
+  })
+  const activityParams = parsePrefixedListParams(sp, 'activity', {
+    sort: 'recent',
+    perPage: 15,
+    allowedSorts: ACTIVITY_SORTS,
+  })
+  const requestedVersionStatus = pickString(sp.versionStatus)
+  const versionStatus =
+    requestedVersionStatus === 'published' || requestedVersionStatus === 'draft'
+      ? requestedVersionStatus
+      : undefined
+  const requestedAckType = pickString(sp.ackType)
+  const ackType =
+    requestedAckType === 'individual' || requestedAckType === 'group' ? requestedAckType : undefined
+  const requestedReviewOutcome = pickString(sp.reviewOutcome)
+  const reviewOutcome =
+    requestedReviewOutcome === 'approved_no_change' ||
+    requestedReviewOutcome === 'updated' ||
+    requestedReviewOutcome === 'retired' ||
+    requestedReviewOutcome === 'not_recorded'
+      ? requestedReviewOutcome
+      : undefined
+  const requestedReviewStatus = pickString(sp.reviewStatus)
+  const reviewStatus =
+    requestedReviewStatus === 'in_progress' || requestedReviewStatus === 'completed'
+      ? requestedReviewStatus
+      : undefined
+  const requestedComplianceStatus = pickString(sp.complianceStatus)
+  const complianceStatus =
+    requestedComplianceStatus === 'active' ||
+    requestedComplianceStatus === 'paused' ||
+    requestedComplianceStatus === 'archived'
+      ? requestedComplianceStatus
+      : undefined
+  const activityAction = pickString(sp.activityAction)?.slice(0, 100) || undefined
 
   const ctx = await requireRequestContext()
   // Viewing a document requires documents.read; managers hold it implicitly via
@@ -266,41 +429,30 @@ export default async function DocumentDetailPage({
       .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
       .limit(1)
     if (!doc) return null
-    const [versions, acks, reviews, currentPerson, masterAtt] = await Promise.all([
+
+    const [
+      currentVersions,
+      publishedVersions,
+      currentPeople,
+      masterAttachments,
+      categories,
+      types,
+      versionTotalRows,
+      ackTotalRows,
+      reviewTotalRows,
+    ] = await Promise.all([
       tx
         .select()
         .from(documentVersions)
         .where(eq(documentVersions.documentId, id))
-        .orderBy(desc(documentVersions.version)),
+        .orderBy(desc(documentVersions.version))
+        .limit(1),
       tx
-        .select({
-          ackId: documentAcknowledgments.id,
-          personId: documentAcknowledgments.personId,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          acknowledgedAt: documentAcknowledgments.acknowledgedAt,
-          versionId: documentAcknowledgments.versionId,
-          sessionId: documentAcknowledgments.sessionId,
-          sessionTitle: documentAcknowledgmentSessions.title,
-          signatureAttachmentId: attachments.id,
-        })
-        .from(documentAcknowledgments)
-        .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
-        .leftJoin(
-          documentAcknowledgmentSessions,
-          eq(documentAcknowledgmentSessions.id, documentAcknowledgments.sessionId),
-        )
-        .leftJoin(attachments, eq(attachments.id, documentAcknowledgments.signatureAttachmentId))
-        .where(eq(documentAcknowledgments.documentId, id))
-        .orderBy(desc(documentAcknowledgments.acknowledgedAt))
-        .limit(2000),
-      tx
-        .select({ review: documentReviews, member: tenantUsers, account: user })
-        .from(documentReviews)
-        .leftJoin(tenantUsers, eq(tenantUsers.id, documentReviews.reviewedByTenantUserId))
-        .leftJoin(user, eq(user.id, tenantUsers.userId))
-        .where(eq(documentReviews.documentId, id))
-        .orderBy(desc(documentReviews.reviewedAt)),
+        .select()
+        .from(documentVersions)
+        .where(and(eq(documentVersions.documentId, id), isNotNull(documentVersions.publishedAt)))
+        .orderBy(desc(documentVersions.version))
+        .limit(1),
       tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1),
       doc.sourceAttachmentId
         ? tx
@@ -309,45 +461,257 @@ export default async function DocumentDetailPage({
             .where(eq(attachments.id, doc.sourceAttachmentId))
             .limit(1)
         : Promise.resolve([]),
+      tx
+        .select({ id: documentCategories.id, name: documentCategories.name })
+        .from(documentCategories)
+        .where(isNull(documentCategories.deletedAt))
+        .orderBy(asc(documentCategories.name)),
+      tx
+        .select({ id: documentTypes.id, name: documentTypes.name })
+        .from(documentTypes)
+        .where(isNull(documentTypes.deletedAt))
+        .orderBy(asc(documentTypes.name)),
+      tx
+        .select({ count: count() })
+        .from(documentVersions)
+        .where(eq(documentVersions.documentId, id)),
+      tx
+        .select({ count: count() })
+        .from(documentAcknowledgments)
+        .where(eq(documentAcknowledgments.documentId, id)),
+      tx.select({ count: count() }).from(documentReviews).where(eq(documentReviews.documentId, id)),
     ])
-    const categories = await tx
-      .select({ id: documentCategories.id, name: documentCategories.name })
-      .from(documentCategories)
-      .where(isNull(documentCategories.deletedAt))
-      .orderBy(asc(documentCategories.name))
-    const types = await tx
-      .select({ id: documentTypes.id, name: documentTypes.name })
-      .from(documentTypes)
-      .where(isNull(documentTypes.deletedAt))
-      .orderBy(asc(documentTypes.name))
+
+    const versionWhere = and(
+      eq(documentVersions.documentId, id),
+      versionParams.q
+        ? or(
+            ilike(documentVersions.changelog, `%${versionParams.q}%`),
+            sql`${documentVersions.version}::text ilike ${`%${versionParams.q}%`}`,
+          )
+        : undefined,
+      versionStatus === 'published'
+        ? isNotNull(documentVersions.publishedAt)
+        : versionStatus === 'draft'
+          ? isNull(documentVersions.publishedAt)
+          : undefined,
+    )
+    const [versionFilteredRows, versions] =
+      active === 'versions'
+        ? await Promise.all([
+            tx.select({ count: count() }).from(documentVersions).where(versionWhere),
+            tx
+              .select()
+              .from(documentVersions)
+              .where(versionWhere)
+              .orderBy(
+                versionParams.sort === 'oldest'
+                  ? asc(documentVersions.version)
+                  : desc(documentVersions.version),
+                versionParams.sort === 'oldest'
+                  ? asc(documentVersions.id)
+                  : desc(documentVersions.id),
+              )
+              .limit(versionParams.perPage)
+              .offset((versionParams.page - 1) * versionParams.perPage),
+          ])
+        : [[], []]
+
+    const ackSearch = ackParams.q
+      ? or(
+          ilike(people.firstName, `%${ackParams.q}%`),
+          ilike(people.lastName, `%${ackParams.q}%`),
+          ilike(people.employeeNo, `%${ackParams.q}%`),
+          ilike(documentAcknowledgmentSessions.title, `%${ackParams.q}%`),
+        )
+      : undefined
+    const ackWhere = and(
+      eq(documentAcknowledgments.documentId, id),
+      ackSearch,
+      ackType === 'group'
+        ? isNotNull(documentAcknowledgments.sessionId)
+        : ackType === 'individual'
+          ? isNull(documentAcknowledgments.sessionId)
+          : undefined,
+    )
+    const [ackFilteredRows, acks] =
+      active === 'acknowledgments'
+        ? await Promise.all([
+            tx
+              .select({ count: count() })
+              .from(documentAcknowledgments)
+              .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
+              .leftJoin(
+                documentAcknowledgmentSessions,
+                eq(documentAcknowledgmentSessions.id, documentAcknowledgments.sessionId),
+              )
+              .where(ackWhere),
+            tx
+              .select({
+                ackId: documentAcknowledgments.id,
+                personId: documentAcknowledgments.personId,
+                firstName: people.firstName,
+                lastName: people.lastName,
+                acknowledgedAt: documentAcknowledgments.acknowledgedAt,
+                sessionId: documentAcknowledgments.sessionId,
+                sessionTitle: documentAcknowledgmentSessions.title,
+                signatureAttachmentId: attachments.id,
+              })
+              .from(documentAcknowledgments)
+              .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
+              .leftJoin(
+                documentAcknowledgmentSessions,
+                eq(documentAcknowledgmentSessions.id, documentAcknowledgments.sessionId),
+              )
+              .leftJoin(
+                attachments,
+                eq(attachments.id, documentAcknowledgments.signatureAttachmentId),
+              )
+              .where(ackWhere)
+              .orderBy(
+                ...(ackParams.sort === 'name'
+                  ? [asc(people.lastName), asc(people.firstName)]
+                  : [desc(documentAcknowledgments.acknowledgedAt)]),
+                asc(documentAcknowledgments.id),
+              )
+              .limit(ackParams.perPage)
+              .offset((ackParams.page - 1) * ackParams.perPage),
+          ])
+        : [[], []]
+
+    const reviewWhere = and(
+      eq(documentReviews.documentId, id),
+      reviewParams.q
+        ? or(
+            ilike(documentReviews.notes, `%${reviewParams.q}%`),
+            ilike(user.name, `%${reviewParams.q}%`),
+            ilike(tenantUsers.displayName, `%${reviewParams.q}%`),
+            ilike(documentReviews.outcome, `%${reviewParams.q}%`),
+          )
+        : undefined,
+      reviewOutcome === 'not_recorded'
+        ? isNull(documentReviews.outcome)
+        : reviewOutcome
+          ? eq(documentReviews.outcome, reviewOutcome)
+          : undefined,
+      reviewStatus ? eq(documentReviews.status, reviewStatus) : undefined,
+    )
+    const [reviewFilteredRows, reviews] =
+      active === 'reviews'
+        ? await Promise.all([
+            tx
+              .select({ count: count() })
+              .from(documentReviews)
+              .leftJoin(tenantUsers, eq(tenantUsers.id, documentReviews.reviewedByTenantUserId))
+              .leftJoin(user, eq(user.id, tenantUsers.userId))
+              .where(reviewWhere),
+            tx
+              .select({
+                review: documentReviews,
+                member: tenantUsers,
+                account: user,
+                documentVersion: documentVersions.version,
+              })
+              .from(documentReviews)
+              .leftJoin(tenantUsers, eq(tenantUsers.id, documentReviews.reviewedByTenantUserId))
+              .leftJoin(user, eq(user.id, tenantUsers.userId))
+              .innerJoin(
+                documentVersions,
+                and(
+                  eq(documentVersions.id, documentReviews.documentVersionId),
+                  eq(documentVersions.documentId, documentReviews.documentId),
+                ),
+              )
+              .where(reviewWhere)
+              .orderBy(
+                reviewParams.sort === 'oldest'
+                  ? asc(documentReviews.reviewedAt)
+                  : desc(documentReviews.reviewedAt),
+                reviewParams.sort === 'oldest' ? asc(documentReviews.id) : desc(documentReviews.id),
+              )
+              .limit(reviewParams.perPage)
+              .offset((reviewParams.page - 1) * reviewParams.perPage),
+          ])
+        : [[], []]
+
+    const currentPerson = currentPeople[0] ?? null
+    const publishedVersion = publishedVersions[0] ?? null
+    const myAck =
+      currentPerson && publishedVersion
+        ? ((
+            await tx
+              .select({ acknowledgedAt: documentAcknowledgments.acknowledgedAt })
+              .from(documentAcknowledgments)
+              .where(
+                and(
+                  eq(documentAcknowledgments.documentId, id),
+                  eq(documentAcknowledgments.personId, currentPerson.id),
+                  eq(documentAcknowledgments.versionId, publishedVersion.id),
+                ),
+              )
+              .orderBy(desc(documentAcknowledgments.acknowledgedAt))
+              .limit(1)
+          )[0] ?? null)
+        : null
+
     return {
       doc,
+      currentVersion: currentVersions[0],
+      publishedVersion,
       versions,
+      versionTotal: Number(versionTotalRows[0]?.count ?? 0),
+      versionFilteredTotal: Number(versionFilteredRows[0]?.count ?? 0),
       acks,
+      ackTotal: Number(ackTotalRows[0]?.count ?? 0),
+      ackFilteredTotal: Number(ackFilteredRows[0]?.count ?? 0),
       reviews,
-      currentPerson: currentPerson[0] ?? null,
-      masterAtt: masterAtt[0] ?? null,
+      reviewTotal: Number(reviewTotalRows[0]?.count ?? 0),
+      reviewFilteredTotal: Number(reviewFilteredRows[0]?.count ?? 0),
+      currentPerson,
+      myAck,
+      masterAtt: masterAttachments[0] ?? null,
       categories,
       types,
     }
   })
 
   if (!data) notFound()
-  const { doc, versions, acks, reviews, currentPerson, masterAtt, categories, types } = data
+  const {
+    doc,
+    currentVersion,
+    publishedVersion,
+    versions,
+    versionTotal,
+    versionFilteredTotal,
+    acks,
+    ackTotal,
+    ackFilteredTotal,
+    reviews,
+    reviewTotal,
+    reviewFilteredTotal,
+    currentPerson,
+    myAck,
+    masterAtt,
+    categories,
+    types,
+  } = data
   const categoryName = doc.categoryId
     ? (categories.find((category) => category.id === doc.categoryId)?.name ?? null)
     : null
   // Non-managers may only view PUBLISHED documents — same rule the list page
   // applies via `eq(documents.status, 'published')`.
   if (!canManage && doc.status !== 'published') notFound()
-  const currentVersion = versions[0]
-  const publishedVersion = versions.find((v) => v.publishedAt) ?? null
   const basePath = `/documents/${id}`
 
   // Right pane: the inline Writer for authored docs, or the PDF for
   // uploaded-file docs and read-only users.
   const isFileDoc = !doc.sourceAttachmentId && !!currentVersion?.contentAttachmentId
+  const canEmailPublishedVersion =
+    doc.status === 'published' &&
+    Boolean(publishedVersion) &&
+    Boolean(publishedVersion?.contentAttachmentId || publishedVersion?.pdfAttachmentId)
   const canReview = can(ctx, 'documents.review')
+  const canRecordReview = canReview && Boolean(publishedVersion)
   const aiSettings = canManage ? await getTenantAiSettings(ctx) : null
   const aiEnabled = !!aiSettings && aiSettings.enabled && aiSettings.hasKey
 
@@ -361,13 +725,6 @@ export default async function DocumentDetailPage({
     sessionTitle: a.sessionTitle,
     signatureUrl: a.signatureAttachmentId ? attachmentUrl(a.signatureAttachmentId) : null,
   }))
-  const myAck = currentPerson
-    ? acks.find(
-        (a) =>
-          a.personId === currentPerson.id &&
-          (!publishedVersion || a.versionId === publishedVersion.id),
-      )
-    : null
   const selfStatus: 'can' | 'acked' | 'unpublished' | 'no-person' = !currentPerson
     ? 'no-person'
     : myAck
@@ -379,10 +736,26 @@ export default async function DocumentDetailPage({
 
   // Compliance tab: obligations that require this document.
   const canAssign = can(ctx, 'compliance.assign')
-  const obligations = active === 'compliance' ? await loadDocumentObligations(ctx, id) : []
+  const complianceData =
+    active === 'compliance'
+      ? await loadDocumentObligations(ctx, id, {
+          q: complianceParams.q,
+          status: complianceStatus,
+          page: complianceParams.page,
+          perPage: complianceParams.perPage,
+        })
+      : { rows: [], total: 0, filteredTotal: 0 }
 
-  const activity =
-    active === 'activity' ? await recentActivityForEntity(ctx, 'document', id, 50) : []
+  const activityData =
+    active === 'activity'
+      ? await activityPageForEntity(ctx, 'document', id, {
+          q: activityParams.q,
+          action: activityAction,
+          page: activityParams.page,
+          perPage: activityParams.perPage,
+          dir: activityParams.sort === 'oldest' ? 'asc' : 'desc',
+        })
+      : { rows: [], total: 0, filteredTotal: 0, actions: [] }
 
   const todayIso = dateIsoInTz(new Date(), ctx.timezone)
   const isOverdue = doc.nextReviewOn ? doc.nextReviewOn < todayIso : false
@@ -414,16 +787,22 @@ export default async function DocumentDetailPage({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {canManage ? (
             <>
-              <Link
-                href={
-                  `/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
-                }
-                scroll={false}
-              >
-                <Button variant="outline">
-                  <Mail size={14} /> Send email
+              {canEmailPublishedVersion ? (
+                <Link
+                  href={
+                    `/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                  }
+                  scroll={false}
+                >
+                  <Button variant="outline">
+                    <Mail size={14} /> Send email
+                  </Button>
+                </Link>
+              ) : doc.status === 'published' && publishedVersion ? (
+                <Button variant="outline" disabled title="The published PDF is still rendering">
+                  <Mail size={14} /> Preparing PDF…
                 </Button>
-              </Link>
+              ) : null}
               {doc.status === 'published' ? (
                 <form action={unpublish} className="inline">
                   <input type="hidden" name="id" value={id} />
@@ -470,19 +849,19 @@ export default async function DocumentDetailPage({
                 {
                   key: 'versions',
                   label: 'Versions',
-                  count: versions.length,
+                  count: versionTotal,
                   icon: <History size={16} />,
                 },
                 {
                   key: 'acknowledgments',
                   label: 'Acknowledgments',
-                  count: acks.length,
+                  count: ackTotal,
                   icon: <BadgeCheck size={16} />,
                 },
                 {
                   key: 'reviews',
                   label: 'Reviews',
-                  count: reviews.length,
+                  count: reviewTotal,
                   icon: <ClipboardCheck size={16} />,
                 },
                 { key: 'compliance', label: 'Compliance', icon: <ShieldCheck size={16} /> },
@@ -496,7 +875,7 @@ export default async function DocumentDetailPage({
                 <AlertTitle>Periodic review overdue</AlertTitle>
                 <AlertDescription>
                   Due on {doc.nextReviewOn}.
-                  {canReview ? (
+                  {canRecordReview ? (
                     <>
                       {' '}
                       <Link
@@ -561,14 +940,49 @@ export default async function DocumentDetailPage({
               <div className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Version history</CardTitle>
+                    <CardTitle>Version history ({versionTotal})</CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <TableToolbar className="mb-3">
+                      <SearchInput
+                        placeholder="Search versions or changes…"
+                        paramKey="versionQ"
+                        pageParamKey="versionPage"
+                      />
+                      <FilterChips
+                        basePath={basePath}
+                        currentParams={sp}
+                        paramKey="versionStatus"
+                        pageParamKey="versionPage"
+                        label="Status"
+                        options={[
+                          { value: 'published', label: 'Published' },
+                          { value: 'draft', label: 'Draft' },
+                        ]}
+                      />
+                      <FilterChips
+                        basePath={basePath}
+                        currentParams={sp}
+                        paramKey="versionSort"
+                        pageParamKey="versionPage"
+                        label="Order"
+                        defaultValue="recent"
+                        hideAll
+                        options={[
+                          { value: 'recent', label: 'Newest first' },
+                          { value: 'oldest', label: 'Oldest first' },
+                        ]}
+                      />
+                    </TableToolbar>
                     {versions.length === 0 ? (
                       <EmptyState
                         icon={<FileText size={24} />}
-                        title="No versions"
-                        description="Add a draft version below, then publish the document."
+                        title={versionTotal === 0 ? 'No versions' : 'No matching versions'}
+                        description={
+                          versionTotal === 0
+                            ? 'Add a draft version, then publish the document.'
+                            : 'Change the search or filters to see other versions.'
+                        }
                       />
                     ) : (
                       <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -638,6 +1052,14 @@ export default async function DocumentDetailPage({
                         ))}
                       </ul>
                     )}
+                    <Pagination
+                      basePath={basePath}
+                      currentParams={sp}
+                      total={versionFilteredTotal}
+                      page={versionParams.page}
+                      perPage={versionParams.perPage}
+                      pageParamKey="versionPage"
+                    />
                   </CardContent>
                 </Card>
               </div>
@@ -649,6 +1071,11 @@ export default async function DocumentDetailPage({
                 versionId={publishedVersion?.id ?? null}
                 signOffHref={`${basePath}/sign-off`}
                 acks={ackRows}
+                total={ackTotal}
+                filteredTotal={ackFilteredTotal}
+                page={ackParams.page}
+                perPage={ackParams.perPage}
+                currentParams={sp}
                 selfStatus={selfStatus}
                 selfAckedAt={selfAckedAt}
                 canManageSignOff={canManage}
@@ -658,7 +1085,12 @@ export default async function DocumentDetailPage({
             {active === 'compliance' ? (
               <DocumentCompliancePanel
                 documentId={id}
-                obligations={obligations}
+                obligations={complianceData.rows}
+                total={complianceData.total}
+                filteredTotal={complianceData.filteredTotal}
+                page={complianceParams.page}
+                perPage={complianceParams.perPage}
+                currentParams={sp}
                 canAssign={canAssign}
               />
             ) : null}
@@ -667,12 +1099,58 @@ export default async function DocumentDetailPage({
               <div className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Review history ({reviews.length})</CardTitle>
+                    <CardTitle>Review history ({reviewTotal})</CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <TableToolbar className="mb-3">
+                      <SearchInput
+                        placeholder="Search reviewers or notes…"
+                        paramKey="reviewQ"
+                        pageParamKey="reviewPage"
+                      />
+                      <FilterChips
+                        basePath={basePath}
+                        currentParams={sp}
+                        paramKey="reviewOutcome"
+                        pageParamKey="reviewPage"
+                        label="Outcome"
+                        options={[
+                          { value: 'approved_no_change', label: 'Approved, no change' },
+                          { value: 'updated', label: 'Updated' },
+                          { value: 'retired', label: 'Retired' },
+                          { value: 'not_recorded', label: 'Outcome not recorded' },
+                        ]}
+                      />
+                      <FilterChips
+                        basePath={basePath}
+                        currentParams={sp}
+                        paramKey="reviewStatus"
+                        pageParamKey="reviewPage"
+                        label="Status"
+                        options={[
+                          { value: 'completed', label: 'Completed' },
+                          { value: 'in_progress', label: 'In progress' },
+                        ]}
+                      />
+                      <FilterChips
+                        basePath={basePath}
+                        currentParams={sp}
+                        paramKey="reviewSort"
+                        pageParamKey="reviewPage"
+                        label="Order"
+                        defaultValue="recent"
+                        hideAll
+                        options={[
+                          { value: 'recent', label: 'Newest first' },
+                          { value: 'oldest', label: 'Oldest first' },
+                        ]}
+                      />
+                    </TableToolbar>
                     {reviews.length === 0 ? (
                       <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No reviews recorded.
+                        {reviewTotal === 0
+                          ? 'No reviews recorded.'
+                          : 'No reviews match these filters.'}
                       </p>
                     ) : (
                       <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -688,14 +1166,20 @@ export default async function DocumentDetailPage({
                                     ? 'success'
                                     : row.review.outcome === 'updated'
                                       ? 'warning'
-                                      : 'destructive'
+                                      : row.review.outcome === 'retired'
+                                        ? 'destructive'
+                                        : 'secondary'
                                 }
                               >
-                                {row.review.outcome.replace(/_/g, ' ')}
+                                {row.review.outcome
+                                  ? row.review.outcome.replace(/_/g, ' ')
+                                  : 'outcome not recorded'}
                               </Badge>
                             </div>
                             <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              {formatDate(new Date(row.review.reviewedAt), ctx.timezone)}
+                              v{row.documentVersion} ·{' '}
+                              {formatDate(new Date(row.review.reviewedAt), ctx.timezone)} ·{' '}
+                              {row.review.status.replace(/_/g, ' ')}
                               {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
                             </div>
                             {row.review.notes ? (
@@ -707,9 +1191,17 @@ export default async function DocumentDetailPage({
                         ))}
                       </ul>
                     )}
+                    <Pagination
+                      basePath={basePath}
+                      currentParams={sp}
+                      total={reviewFilteredTotal}
+                      page={reviewParams.page}
+                      perPage={reviewParams.perPage}
+                      pageParamKey="reviewPage"
+                    />
                   </CardContent>
                 </Card>
-                {canReview ? (
+                {canRecordReview ? (
                   <div className="flex justify-end">
                     <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
                       <Button type="button">
@@ -724,10 +1216,52 @@ export default async function DocumentDetailPage({
             {active === 'activity' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Activity</CardTitle>
+                  <CardTitle>Activity ({activityData.total})</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+                  <TableToolbar className="mb-3">
+                    <SearchInput
+                      placeholder="Search activity…"
+                      paramKey="activityQ"
+                      pageParamKey="activityPage"
+                    />
+                    <FilterChips
+                      basePath={basePath}
+                      currentParams={sp}
+                      paramKey="activityAction"
+                      pageParamKey="activityPage"
+                      label="Action"
+                      options={activityData.actions.map((row) => ({
+                        value: row.action,
+                        label: row.action
+                          .replace(/_/g, ' ')
+                          .replace(/\b\w/g, (character) => character.toUpperCase()),
+                        count: row.count,
+                      }))}
+                    />
+                    <FilterChips
+                      basePath={basePath}
+                      currentParams={sp}
+                      paramKey="activitySort"
+                      pageParamKey="activityPage"
+                      label="Order"
+                      defaultValue="recent"
+                      hideAll
+                      options={[
+                        { value: 'recent', label: 'Newest first' },
+                        { value: 'oldest', label: 'Oldest first' },
+                      ]}
+                    />
+                  </TableToolbar>
+                  <ActivityFeed entries={activityData.rows} timeZone={ctx.timezone} />
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={activityData.filteredTotal}
+                    page={activityParams.page}
+                    perPage={activityParams.perPage}
+                    pageParamKey="activityPage"
+                  />
                 </CardContent>
               </Card>
             ) : null}
@@ -759,7 +1293,7 @@ export default async function DocumentDetailPage({
         </div>
       </div>
 
-      {canManage ? (
+      {canManage && canEmailPublishedVersion ? (
         <GenericSendEmailDialog
           open={pickString(sp.send) === '1'}
           title="Send document"
@@ -773,7 +1307,7 @@ export default async function DocumentDetailPage({
           }}
         />
       ) : null}
-      {canReview ? (
+      {canRecordReview ? (
         <DocumentDrawers
           documentId={id}
           openDrawer={pickString(sp.drawer) === 'record-review' ? 'record-review' : null}

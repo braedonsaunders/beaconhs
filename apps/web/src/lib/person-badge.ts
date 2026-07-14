@@ -6,8 +6,9 @@
 // stable from then on (reprints keep the same QR).
 
 import { randomBytes } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import QRCode from 'qrcode'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import { attachments, departments, people, tenants } from '@beaconhs/db/schema'
 import { renderDesignDocumentPdf } from '@beaconhs/forms-pdf'
 import { presignGet } from '@beaconhs/storage'
@@ -26,8 +27,9 @@ async function ensurePersonBadgeToken(
     const [person] = await tx
       .select({ id: people.id, badgeToken: people.badgeToken })
       .from(people)
-      .where(eq(people.id, personId))
+      .where(and(eq(people.id, personId), isNull(people.deletedAt)))
       .limit(1)
+      .for('update')
     if (!person) return null
     if (person.badgeToken) return person.badgeToken
     const token = randomBytes(20).toString('hex')
@@ -52,6 +54,7 @@ export async function renderPersonBadgePdf(
         departmentName: departments.name,
         photoKey: attachments.r2Key,
         tenant: tenants,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
@@ -81,7 +84,7 @@ export async function renderPersonBadgePdf(
     recipientPhotoUrl: row.photoKey
       ? await presignGet({ key: row.photoKey, expiresInSeconds: 900 })
       : null,
-    personTitle: row.person.jobTitle,
+    personTitle: row.jobTitle,
     personDepartment: row.departmentName,
     verifyUrl,
     qrDataUrl,

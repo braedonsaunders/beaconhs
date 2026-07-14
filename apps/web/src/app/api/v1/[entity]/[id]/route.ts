@@ -28,8 +28,10 @@ export async function GET(
   { params }: { params: Promise<{ entity: string; id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { ctx, key } = await authenticateApiKey(req)
     const { entity: entityKey, id } = await params
+    if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
+
+    const { ctx, key } = await authenticateApiKey(req)
     const entity = REPORT_ENTITY_MAP[entityKey]
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
@@ -40,8 +42,6 @@ export async function GET(
         `This key cannot read "${entityKey}" — grant permission ${requiredPermission}.`,
       )
     }
-    if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
-
     const record = await getEntityRecord(ctx, entity, id)
     if (!record) throw ApiError.notFound(`No ${entityKey} with id ${id}`)
     return NextResponse.json(
@@ -59,14 +59,15 @@ export async function PATCH(
   { params }: { params: Promise<{ entity: string; id: string }> },
 ): Promise<NextResponse> {
   try {
+    const { entity: entityKey, id } = await params
+    if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
+
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
-    const { entity: entityKey, id } = await params
     const entity = REPORT_ENTITY_MAP[entityKey]
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
     }
-    if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
     if (!isPatchable(entityKey)) {
       throw ApiError.methodNotAllowed(`"${entityKey}" does not support PATCH updates.`)
     }
@@ -103,14 +104,15 @@ export async function DELETE(
   { params }: { params: Promise<{ entity: string; id: string }> },
 ): Promise<NextResponse> {
   try {
+    const { entity: entityKey, id } = await params
+    if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
+
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
-    const { entity: entityKey, id } = await params
     const entity = REPORT_ENTITY_MAP[entityKey]
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
     }
-    if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
     if (!isDeletable(entityKey)) {
       throw ApiError.methodNotAllowed(`"${entityKey}" does not support DELETE.`)
     }

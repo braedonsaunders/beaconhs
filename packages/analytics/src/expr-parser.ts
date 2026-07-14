@@ -344,8 +344,7 @@ class Parser {
 }
 
 export type ExprParseResult =
-  | { ok: true; expr: BhqlExpr }
-  | { ok: false; error: string; pos: number }
+  { ok: true; expr: BhqlExpr } | { ok: false; error: string; pos: number }
 
 /** Parse a formula string into a BhqlExpr. Never throws. */
 export function parseExpression(input: string, opts: ExprParseOpts): ExprParseResult {

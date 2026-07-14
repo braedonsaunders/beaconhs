@@ -5,6 +5,7 @@
 
 import { Briefcase, MapPin } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import { RawImage } from '@/components/raw-image'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { tagSwatch } from '../_tag-colors'
 import { formatLongDate, statusMeta, textToHtml } from '../_format'
@@ -150,10 +151,10 @@ export function JournalView({
             {entry.photos.map((p) =>
               p.url ? (
                 <figure key={p.id} className="overflow-hidden rounded-lg">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <RawImage
                     src={p.url}
                     alt={p.caption ?? ''}
+                    optimizationReason="authenticated"
                     loading="lazy"
                     className="h-32 w-full object-cover"
                   />

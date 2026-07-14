@@ -12,10 +12,12 @@
 // repeat interval re-spawns the next occurrence when the reminder is
 // completed. Surfaced alongside schedules on the maintenance cockpit.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -26,7 +28,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { id, timestamps } from './_helpers'
+import { durablePublication, id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { people } from './org'
 import { equipmentItems } from './equipment'
@@ -39,15 +41,11 @@ export const equipmentInspectionSchedules = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    equipmentItemId: uuid('equipment_item_id')
-      .notNull()
-      .references(() => equipmentItems.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull(),
     // The checklist to perform. Nullable so a due-date-only schedule (e.g. a
     // third-party certification with no in-app checklist) can still be
     // tracked; `label` names it in that case.
-    inspectionTypeId: uuid('inspection_type_id').references(() => equipmentInspectionTypes.id, {
-      onDelete: 'set null',
-    }),
+    inspectionTypeId: uuid('inspection_type_id'),
     // Display name when there is no inspection type (or to override its name).
     label: text('label'),
     // "Every {intervalValue} {intervalUnit}s" — e.g. 1/day, 3/month, 5/year.
@@ -61,7 +59,7 @@ export const equipmentInspectionSchedules = pgTable(
     dueNotifiedFor: date('due_notified_for'),
     isActive: boolean('is_active').default(true).notNull(),
     notes: text('notes'),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
   },
   (t) => ({
@@ -69,8 +67,22 @@ export const equipmentInspectionSchedules = pgTable(
       t.tenantId,
       t.nextDueOn,
     ),
-    itemIdx: index('equipment_inspection_schedules_item_idx').on(t.equipmentItemId),
+    itemIdx: index('equipment_inspection_schedules_item_idx').on(t.tenantId, t.equipmentItemId),
     typeIdx: index('equipment_inspection_schedules_type_idx').on(t.tenantId, t.inspectionTypeId),
+    createdByIdx: index('equipment_inspection_schedules_created_by_idx').on(
+      t.tenantId,
+      t.createdByTenantUserId,
+    ),
+    itemFk: foreignKey({
+      name: 'equipment_inspection_schedules_tenant_item_fk',
+      columns: [t.tenantId, t.equipmentItemId],
+      foreignColumns: [equipmentItems.tenantId, equipmentItems.id],
+    }).onDelete('cascade'),
+    createdByFk: foreignKey({
+      name: 'equipment_inspection_schedules_tenant_created_by_fk',
+      columns: [t.tenantId, t.createdByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -81,9 +93,7 @@ export const equipmentReminders = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    equipmentItemId: uuid('equipment_item_id')
-      .notNull()
-      .references(() => equipmentItems.id, { onDelete: 'cascade' }),
+    equipmentItemId: uuid('equipment_item_id').notNull(),
     title: text('title').notNull(),
     details: text('details'),
     dueOn: date('due_on').notNull(),
@@ -95,18 +105,43 @@ export const equipmentReminders = pgTable(
     // stamp on schedules). Editing the due date re-arms the alert; a repeat
     // spawns a fresh row, so each occurrence alerts once.
     dueNotifiedFor: date('due_notified_for'),
-    assignedToPersonId: uuid('assigned_to_person_id').references(() => people.id, {
-      onDelete: 'set null',
-    }),
+    assignedToPersonId: uuid('assigned_to_person_id'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
-    completedByTenantUserId: uuid('completed_by_tenant_user_id').references(() => tenantUsers.id),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id),
+    completedByTenantUserId: uuid('completed_by_tenant_user_id'),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
   },
   (t) => ({
     tenantDueIdx: index('equipment_reminders_tenant_due_idx').on(t.tenantId, t.dueOn),
-    itemIdx: index('equipment_reminders_item_idx').on(t.equipmentItemId),
+    itemIdx: index('equipment_reminders_item_idx').on(t.tenantId, t.equipmentItemId),
     openIdx: index('equipment_reminders_open_idx').on(t.tenantId, t.completedAt),
+    assignedToIdx: index('equipment_reminders_assigned_to_idx').on(
+      t.tenantId,
+      t.assignedToPersonId,
+    ),
+    completedByIdx: index('equipment_reminders_completed_by_idx').on(
+      t.tenantId,
+      t.completedByTenantUserId,
+    ),
+    createdByIdx: index('equipment_reminders_created_by_idx').on(
+      t.tenantId,
+      t.createdByTenantUserId,
+    ),
+    itemFk: foreignKey({
+      name: 'equipment_reminders_tenant_item_fk',
+      columns: [t.tenantId, t.equipmentItemId],
+      foreignColumns: [equipmentItems.tenantId, equipmentItems.id],
+    }).onDelete('cascade'),
+    completedByFk: foreignKey({
+      name: 'equipment_reminders_tenant_completed_by_fk',
+      columns: [t.tenantId, t.completedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    createdByFk: foreignKey({
+      name: 'equipment_reminders_tenant_created_by_fk',
+      columns: [t.tenantId, t.createdByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -147,6 +182,7 @@ export const equipmentMaintenanceDispatches = pgTable(
       .default([])
       .notNull(),
     error: text('error'),
+    ...durablePublication,
     ...timestamps,
   },
   (t) => ({
@@ -157,6 +193,30 @@ export const equipmentMaintenanceDispatches = pgTable(
     tenantDeliveryUx: uniqueIndex('equipment_maintenance_dispatches_tenant_delivery_ux').on(
       t.tenantId,
       t.deliveryKey,
+    ),
+    publishAvailableIdx: index('equipment_maintenance_dispatches_publish_available_idx').on(
+      t.status,
+      t.publishAvailableAt,
+    ),
+    publishClaimedIdx: index('equipment_maintenance_dispatches_publish_claimed_idx').on(
+      t.status,
+      t.publishClaimedAt,
+    ),
+    publishAttemptsCheck: check(
+      'equipment_maintenance_dispatches_publish_attempts_ck',
+      sql`${t.publishAttempts} >= 0`,
+    ),
+    publishLeaseStateCheck: check(
+      'equipment_maintenance_dispatches_publish_lease_state_ck',
+      sql`(
+        (${t.status} = 'queued' AND (
+          (${t.publishLeaseId} IS NULL AND ${t.publishClaimedAt} IS NULL)
+          OR
+          (${t.publishLeaseId} IS NOT NULL AND ${t.publishClaimedAt} IS NOT NULL)
+        ))
+        OR
+        (${t.status} <> 'queued' AND ${t.publishLeaseId} IS NULL AND ${t.publishClaimedAt} IS NULL)
+      )`,
     ),
   }),
 )
@@ -169,12 +229,15 @@ export const equipmentInspectionSchedulesRelations = relations(
       references: [tenants.id],
     }),
     item: one(equipmentItems, {
-      fields: [equipmentInspectionSchedules.equipmentItemId],
-      references: [equipmentItems.id],
+      fields: [equipmentInspectionSchedules.tenantId, equipmentInspectionSchedules.equipmentItemId],
+      references: [equipmentItems.tenantId, equipmentItems.id],
     }),
     inspectionType: one(equipmentInspectionTypes, {
-      fields: [equipmentInspectionSchedules.inspectionTypeId],
-      references: [equipmentInspectionTypes.id],
+      fields: [
+        equipmentInspectionSchedules.tenantId,
+        equipmentInspectionSchedules.inspectionTypeId,
+      ],
+      references: [equipmentInspectionTypes.tenantId, equipmentInspectionTypes.id],
     }),
   }),
 )
@@ -182,11 +245,11 @@ export const equipmentInspectionSchedulesRelations = relations(
 export const equipmentRemindersRelations = relations(equipmentReminders, ({ one }) => ({
   tenant: one(tenants, { fields: [equipmentReminders.tenantId], references: [tenants.id] }),
   item: one(equipmentItems, {
-    fields: [equipmentReminders.equipmentItemId],
-    references: [equipmentItems.id],
+    fields: [equipmentReminders.tenantId, equipmentReminders.equipmentItemId],
+    references: [equipmentItems.tenantId, equipmentItems.id],
   }),
   assignedTo: one(people, {
-    fields: [equipmentReminders.assignedToPersonId],
-    references: [people.id],
+    fields: [equipmentReminders.tenantId, equipmentReminders.assignedToPersonId],
+    references: [people.tenantId, people.id],
   }),
 }))

@@ -70,23 +70,16 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     sort: { column: 'next_review_on', direction: 'asc' },
   },
   document_compliance_snapshot: {
-    entity: 'document_assignments',
+    entity: 'documents',
     mode: 'rows',
-    columns: ['title', 'document_id', 'due_on'],
-    sort: { column: 'due_on', direction: 'asc' },
+    columns: ['key', 'title', 'status', 'next_review_on'],
+    sort: { column: 'title', direction: 'asc' },
   },
   training_expiring: {
     entity: 'report_training_matrix',
     mode: 'rows',
     columns: ['person_name', 'course_name', 'completed_on', 'expires_on', 'coverage_status'],
     sort: { column: 'expires_on', direction: 'asc' },
-  },
-  training_compliance_snapshot: {
-    entity: 'training_audience_assignment_records',
-    mode: 'summarize',
-    columns: [],
-    breakouts: [{ column: 'status' }],
-    measures: [{ fn: 'count' }],
   },
   inspections_completed: {
     entity: 'inspection_records',

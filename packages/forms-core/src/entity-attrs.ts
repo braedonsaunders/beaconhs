@@ -1,9 +1,9 @@
 // Entity-attribute registry for picker-bound formulas.
 //
-// Picker fields (`equipment_picker`, `person_picker`, …) only store an id in
+// Picker fields only store an id in
 // the response payload. Downstream form fields often want to surface a *live*
-// attribute from the picked entity — e.g. "Operator's current job title",
-// "Crane's current status", "Site's address". The `entity_attr` formula
+// attribute from the picked entity — e.g. "Operator's current job title" or
+// "Site's address". The `entity_attr` formula
 // operator (see schema.ts / evaluator.ts) reads from this registry to know
 // what columns are safe to surface.
 //
@@ -14,14 +14,10 @@
 // or attacker invents an attribute key.
 //
 // One EntityKind ↔ one picker FieldType:
-//   person   → person_picker / multi_person_picker
-//   equipment→ equipment_picker
+//   person   → person_picker
 //   site     → customer_picker / project_picker / site_picker / area_picker
 //              (all resolve to org_units rows; each constrains its OPTIONS
 //              query to the matching level)
-//   ppe      → ppe_picker
-//   document → document_picker
-//   course   → course_picker
 //
 // Designer UIs should render the operator picker UX in two steps:
 //   1. choose a picker field present in the template (we infer the kind)
@@ -30,9 +26,11 @@
 // **Adding a new attribute** is a 1-line addition here, plus a matching
 // column in the entity-loader's `select({ ... })` projection.
 
-export type EntityKind = 'person' | 'equipment' | 'site' | 'ppe' | 'document' | 'course'
+import type { FieldType, FormSchemaV1 } from './schema'
 
-export type EntityAttrValueType = 'string' | 'number' | 'date' | 'boolean'
+export type EntityKind = 'person' | 'site'
+
+export type EntityAttrValueType = 'string' | 'date'
 
 export type EntityAttrDef = {
   /** Stable machine key — matches the DB column or a small derived field. */
@@ -67,25 +65,6 @@ export const ENTITY_ATTRS: Record<EntityKind, EntityAttrDef[]> = {
     { key: 'status', label: 'Status', valueType: 'string' },
     { key: 'hireDate', label: 'Hire date', valueType: 'date' },
   ],
-  equipment: [
-    { key: 'name', label: 'Name', valueType: 'string' },
-    { key: 'assetTag', label: 'Asset tag', valueType: 'string' },
-    { key: 'serialNumber', label: 'Serial number', valueType: 'string' },
-    { key: 'manufacturer', label: 'Manufacturer', valueType: 'string' },
-    { key: 'model', label: 'Model', valueType: 'string' },
-    { key: 'status', label: 'Status', valueType: 'string' },
-    { key: 'typeName', label: 'Type', valueType: 'string' },
-    { key: 'currentSiteName', label: 'Current site', valueType: 'string' },
-    { key: 'currentHolderName', label: 'Current holder', valueType: 'string' },
-    { key: 'lastSeenAt', label: 'Last seen at', valueType: 'date' },
-    { key: 'lastPreUseInspectionAt', label: 'Last pre-use inspection', valueType: 'date' },
-    { key: 'nextInspectionDue', label: 'Next inspection due', valueType: 'date' },
-    { key: 'isMissing', label: 'Is missing', valueType: 'boolean' },
-    { key: 'isAvailableForCheckout', label: 'Available for checkout', valueType: 'boolean' },
-    { key: 'requiresOilChange', label: 'Requires oil change', valueType: 'boolean' },
-    { key: 'nextOilChangeDue', label: 'Next oil change due', valueType: 'date' },
-    { key: 'warrantyExpiresOn', label: 'Warranty expires on', valueType: 'date' },
-  ],
   site: [
     { key: 'name', label: 'Name', valueType: 'string' },
     { key: 'code', label: 'Code', valueType: 'string' },
@@ -95,32 +74,6 @@ export const ENTITY_ATTRS: Record<EntityKind, EntityAttrDef[]> = {
     { key: 'region', label: 'Region', valueType: 'string' },
     { key: 'postal', label: 'Postal code', valueType: 'string' },
     { key: 'country', label: 'Country', valueType: 'string' },
-  ],
-  ppe: [
-    { key: 'serialNumber', label: 'Serial number', valueType: 'string' },
-    { key: 'size', label: 'Size', valueType: 'string' },
-    { key: 'status', label: 'Status', valueType: 'string' },
-    { key: 'typeName', label: 'Type', valueType: 'string' },
-    { key: 'category', label: 'Category', valueType: 'string' },
-    { key: 'currentHolderName', label: 'Current holder', valueType: 'string' },
-    { key: 'expiresOn', label: 'Expires on', valueType: 'date' },
-    { key: 'lastInspectionOn', label: 'Last inspection', valueType: 'date' },
-    { key: 'nextInspectionDue', label: 'Next inspection due', valueType: 'date' },
-  ],
-  document: [
-    { key: 'key', label: 'Key', valueType: 'string' },
-    { key: 'title', label: 'Title', valueType: 'string' },
-    { key: 'category', label: 'Category', valueType: 'string' },
-    { key: 'status', label: 'Status', valueType: 'string' },
-    { key: 'nextReviewOn', label: 'Next review on', valueType: 'date' },
-  ],
-  course: [
-    { key: 'code', label: 'Code', valueType: 'string' },
-    { key: 'name', label: 'Name', valueType: 'string' },
-    { key: 'deliveryType', label: 'Delivery type', valueType: 'string' },
-    { key: 'durationMinutes', label: 'Duration (minutes)', valueType: 'number' },
-    { key: 'validForMonths', label: 'Valid for (months)', valueType: 'number' },
-    { key: 'requiresEvaluator', label: 'Requires evaluator', valueType: 'boolean' },
   ],
 }
 
@@ -132,7 +85,6 @@ export const ENTITY_ATTRS: Record<EntityKind, EntityAttrDef[]> = {
  */
 export const PICKER_TO_ENTITY_KIND: Record<string, EntityKind> = {
   person_picker: 'person',
-  equipment_picker: 'equipment',
   // Every org-unit picker (customer/project/site/area) resolves to an org_units
   // row; their attrs are identical (name/code/level/address), so they all reuse
   // the 'site' attr loader — only the OPTIONS query differs by level.
@@ -140,9 +92,6 @@ export const PICKER_TO_ENTITY_KIND: Record<string, EntityKind> = {
   project_picker: 'site',
   site_picker: 'site',
   area_picker: 'site',
-  ppe_picker: 'ppe',
-  document_picker: 'document',
-  course_picker: 'course',
 }
 
 /**
@@ -151,6 +100,26 @@ export const PICKER_TO_ENTITY_KIND: Record<string, EntityKind> = {
  */
 export function entityKindForPicker(fieldType: string): EntityKind | null {
   return PICKER_TO_ENTITY_KIND[fieldType] ?? null
+}
+
+/**
+ * Resolve a top-level picker field from a trusted template schema. Runtime
+ * entity-attribute fetches use this instead of accepting a client-supplied
+ * picker type. Repeating pickers are intentionally unreachable because the
+ * evaluator has no row-indexed entity context.
+ */
+export function entityAttrPickerTypeForField(
+  schema: FormSchemaV1,
+  fieldId: string,
+): FieldType | null {
+  const matches: FieldType[] = []
+  for (const section of schema.sections) {
+    if (section.repeating) continue
+    for (const field of section.fields) {
+      if (field.id === fieldId && entityKindForPicker(field.type)) matches.push(field.type)
+    }
+  }
+  return matches.length === 1 ? matches[0]! : null
 }
 
 /**
@@ -166,8 +135,8 @@ export function getEntityAttrDef(kind: EntityKind, attrKey: string): EntityAttrD
 
 /**
  * Pick the human label out of a loaded entity-attr map. The "name" column
- * varies by kind (person → displayName, site/equipment/course → name,
- * document → title, …) so we probe a fixed priority list. Shared by the
+ * varies by kind (person → displayName, org unit → name), so we probe a fixed
+ * priority list. Shared by the
  * response viewer and the PDF renderer so a picked entity reads the same in
  * both places. Returns null when no usable label is present.
  */
@@ -175,7 +144,7 @@ export function entityDisplayName(
   attrs: Record<string, unknown> | null | undefined,
 ): string | null {
   if (!attrs) return null
-  for (const k of ['displayName', 'name', 'title', 'serialNumber', 'assetTag', 'code']) {
+  for (const k of ['displayName', 'name', 'code']) {
     const v = attrs[k]
     if (typeof v === 'string' && v.trim()) return v
   }

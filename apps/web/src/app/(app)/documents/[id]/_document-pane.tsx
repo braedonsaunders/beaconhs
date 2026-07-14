@@ -20,8 +20,10 @@ import {
   X,
 } from 'lucide-react'
 import { Button, FileUploader, Textarea, cn } from '@beaconhs/ui'
+import { MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limits'
 import { toast } from '@/lib/toast'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
+import { MAX_DOCUMENT_VERSION_NOTE_CHARS } from '@/lib/document-authoring-policy'
 import { CollaboraEmbed, type CollaboraHandle } from '@/components/collabora-embed'
 import {
   createBlankDocumentMaster,
@@ -103,7 +105,8 @@ export function DocumentPane({
         requestUploadAction={requestUpload}
         finalizeUploadAction={finalizeUpload}
         kind="document"
-        accept=".docx,.doc"
+        accept=".docx"
+        maxSize={MAX_DOCX_CONVERSION_BYTES}
         onUploaded={(f) => {
           setShowReplace(false)
           void importDocumentMaster(documentId, f.attachmentId)
@@ -114,7 +117,7 @@ export function DocumentPane({
             .catch((err) => toast.error(err instanceof Error ? err.message : 'Import failed'))
         }}
         label="Drop a .docx or click to choose"
-        hint={master ? 'Replaces the current working document.' : undefined}
+        hint={master ? 'Replaces the current working document. Maximum 100 MB.' : 'Maximum 100 MB.'}
       />
     </div>
   )
@@ -204,6 +207,7 @@ export function DocumentPane({
               rows={2}
               value={changelog}
               onChange={(e) => setChangelog(e.currentTarget.value)}
+              maxLength={MAX_DOCUMENT_VERSION_NOTE_CHARS}
               placeholder="What changed in this version (optional)"
               className="flex-1"
             />

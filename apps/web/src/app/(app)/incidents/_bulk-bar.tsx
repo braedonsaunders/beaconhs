@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Archive, CheckSquare, Download, Square, Tag, X } from 'lucide-react'
+import { Archive, Download, Tag, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
 import {
@@ -185,56 +185,5 @@ export function BulkIncidentsBar({
         ) : null}
       </div>
     </div>
-  )
-}
-
-export function SelectionCheckbox({
-  id,
-  selected,
-  onToggle,
-}: {
-  id: string
-  selected: boolean
-  onToggle: (id: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        onToggle(id)
-      }}
-      aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-    >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
-  )
-}
-
-export function HeaderSelectAll({
-  allSelected,
-  onToggleAll,
-}: {
-  allSelected: boolean
-  onToggleAll: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggleAll}
-      aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-    >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
   )
 }

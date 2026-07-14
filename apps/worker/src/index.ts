@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq'
 import './instrument'
-import { getConnection } from '@beaconhs/jobs'
+import { closeJobConnections, getBlockingConnection } from '@beaconhs/jobs'
 import { processEmail } from './workers/email'
 import { processPdf } from './workers/pdf'
 import { processNotification } from './workers/notify'
@@ -12,7 +12,7 @@ import { captureWorkerFailure, flushObservability } from './instrument'
 
 console.log('[worker] starting beaconhs worker…')
 
-const connection = getConnection()
+const connection = getBlockingConnection()
 const workers = [
   new Worker('emails', processEmail, { connection, concurrency: 10 }),
   new Worker('pdfs', processPdf, { connection, concurrency: 3 }),
@@ -39,12 +39,39 @@ for (const w of workers) {
   })
 }
 
-const shutdown = async () => {
-  console.log('[worker] shutting down…')
-  await Promise.all(workers.map((w) => w.close()))
-  await flushObservability()
-  process.exit(0)
+let shutdownPromise: Promise<void> | null = null
+
+const shutdown = (signal: NodeJS.Signals) => {
+  if (shutdownPromise) return shutdownPromise
+  shutdownPromise = (async () => {
+    console.log(`[worker] ${signal} received; draining active jobs…`)
+    const closeResults = await Promise.allSettled(workers.map((worker) => worker.close()))
+    let exitCode = 0
+    for (let index = 0; index < closeResults.length; index++) {
+      const result = closeResults[index]!
+      if (result.status === 'fulfilled') continue
+      exitCode = 1
+      const worker = workers[index]!
+      captureWorkerFailure(result.reason, { queue: worker.name, jobName: 'shutdown' })
+      console.error(`[worker] ${worker.name} did not close cleanly:`, result.reason)
+    }
+    try {
+      await closeJobConnections()
+    } catch (error) {
+      exitCode = 1
+      captureWorkerFailure(error, { queue: 'redis', jobName: 'shutdown' })
+      console.error('[worker] Redis connections did not close cleanly:', error)
+    }
+    try {
+      await flushObservability()
+    } catch (error) {
+      exitCode = 1
+      console.error('[worker] observability flush failed during shutdown:', error)
+    }
+    process.exit(exitCode)
+  })()
+  return shutdownPromise
 }
 
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+process.once('SIGINT', () => void shutdown('SIGINT'))
+process.once('SIGTERM', () => void shutdown('SIGTERM'))

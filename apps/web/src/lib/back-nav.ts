@@ -92,33 +92,3 @@ export function backLabel(path: string, title?: string | null): string {
   const noun = cleanTitle(title) ?? labelForPath(path)
   return noun ? `Back to ${noun}` : 'Back'
 }
-
-/**
- * Tag a link into a record with where it's being opened from, so that record's
- * back link returns here even when the page also has a hardcoded fallback. The
- * history stack usually makes this unnecessary — reserve it for links that must
- * survive a fresh load / share (e.g. emailed deep links, print views).
- */
-function withFrom(href: string, from: { path: string; label?: string }): string {
-  const sep = href.includes('?') ? '&' : '?'
-  const parts = [`from=${encodeURIComponent(from.path)}`]
-  if (from.label) parts.push(`fromLabel=${encodeURIComponent(from.label)}`)
-  return `${href}${sep}${parts.join('&')}`
-}
-
-/**
- * Server-side resolution of a `?from` override against a fallback, for pages
- * that prefer to compute the back link during render (rather than the client
- * SmartBackLink). Ignores the history stack — that's client-only.
- */
-function resolveBack(
-  searchParams: Record<string, string | string[] | undefined>,
-  fallback: { href: string; label: string },
-): { href: string; label: string } {
-  const raw = searchParams.from
-  const from = sanitizeFrom(typeof raw === 'string' ? raw : undefined)
-  if (!from) return fallback
-  const rawLabel = searchParams.fromLabel
-  const label = typeof rawLabel === 'string' && rawLabel.trim() ? rawLabel : backLabel(from)
-  return { href: from, label }
-}

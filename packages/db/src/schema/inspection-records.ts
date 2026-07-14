@@ -6,9 +6,11 @@
 // actual criterion responses live in inspection_record_criteria, which is
 // materialised from the linked type+banks at record creation time.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
+  foreignKey,
   index,
   jsonb,
   pgEnum,
@@ -38,9 +40,7 @@ export const inspectionRecords = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     reference: text('reference').notNull(), // e.g. INS-2026-0001
-    typeId: uuid('type_id')
-      .notNull()
-      .references(() => inspectionTypes.id),
+    typeId: uuid('type_id').notNull(),
 
     status: inspectionRecordStatus('status').default('draft').notNull(),
     locked: boolean('locked').default(false).notNull(),
@@ -49,11 +49,11 @@ export const inspectionRecords = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
 
     // Site / location
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
+    siteOrgUnitId: uuid('site_org_unit_id'),
 
     // Who performed the inspection
-    inspectorTenantUserId: uuid('inspector_tenant_user_id').references(() => tenantUsers.id),
-    supervisorTenantUserId: uuid('supervisor_tenant_user_id').references(() => tenantUsers.id),
+    inspectorTenantUserId: uuid('inspector_tenant_user_id'),
+    supervisorTenantUserId: uuid('supervisor_tenant_user_id'),
 
     // Foreman — legacy stored a comma-separated list of person ids in a JSON
     // string. We keep both: a structured array of person ids AND a freeform
@@ -62,8 +62,8 @@ export const inspectionRecords = pgTable(
     foremanText: text('foreman_text'),
 
     // Customer context — legacy `Customer` (location) + `CustomerContact`
-    customerOrgUnitId: uuid('customer_org_unit_id').references(() => orgUnits.id),
-    customerContactPersonId: uuid('customer_contact_person_id').references(() => people.id),
+    customerOrgUnitId: uuid('customer_org_unit_id'),
+    customerContactPersonId: uuid('customer_contact_person_id'),
     customerContactName: text('customer_contact_name'),
 
     customerSignatureAttachmentId: uuid('customer_signature_attachment_id'),
@@ -75,9 +75,9 @@ export const inspectionRecords = pgTable(
 
     // Workflow milestones
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
-    submittedByTenantUserId: uuid('submitted_by_tenant_user_id').references(() => tenantUsers.id),
+    submittedByTenantUserId: uuid('submitted_by_tenant_user_id'),
     closedAt: timestamp('closed_at', { withTimezone: true }),
-    closedByTenantUserId: uuid('closed_by_tenant_user_id').references(() => tenantUsers.id),
+    closedByTenantUserId: uuid('closed_by_tenant_user_id'),
 
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
 
@@ -86,6 +86,7 @@ export const inspectionRecords = pgTable(
   },
   (t) => ({
     tenantIdx: index('inspection_records_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('inspection_records_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantReferenceUx: uniqueIndex('inspection_records_tenant_reference_ux').on(
       t.tenantId,
       t.reference,
@@ -95,6 +96,67 @@ export const inspectionRecords = pgTable(
     occurredIdx: index('inspection_records_occurred_idx').on(t.tenantId, t.occurredAt),
     siteIdx: index('inspection_records_site_idx').on(t.tenantId, t.siteOrgUnitId),
     inspectorIdx: index('inspection_records_inspector_idx').on(t.tenantId, t.inspectorTenantUserId),
+    supervisorIdx: index('inspection_records_supervisor_idx').on(
+      t.tenantId,
+      t.supervisorTenantUserId,
+    ),
+    customerOrgIdx: index('inspection_records_customer_org_idx').on(
+      t.tenantId,
+      t.customerOrgUnitId,
+    ),
+    customerContactIdx: index('inspection_records_customer_contact_idx').on(
+      t.tenantId,
+      t.customerContactPersonId,
+    ),
+    submittedByIdx: index('inspection_records_submitted_by_idx').on(
+      t.tenantId,
+      t.submittedByTenantUserId,
+    ),
+    closedByIdx: index('inspection_records_closed_by_idx').on(t.tenantId, t.closedByTenantUserId),
+    closedLockedCk: check(
+      'inspection_records_closed_locked_ck',
+      sql`${t.status} <> 'closed' OR ${t.locked}`,
+    ),
+    typeFk: foreignKey({
+      name: 'inspection_records_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [inspectionTypes.tenantId, inspectionTypes.id],
+    }),
+    siteFk: foreignKey({
+      name: 'inspection_records_tenant_site_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    inspectorFk: foreignKey({
+      name: 'inspection_records_tenant_inspector_fk',
+      columns: [t.tenantId, t.inspectorTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    supervisorFk: foreignKey({
+      name: 'inspection_records_tenant_supervisor_fk',
+      columns: [t.tenantId, t.supervisorTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    customerOrgFk: foreignKey({
+      name: 'inspection_records_tenant_customer_org_fk',
+      columns: [t.tenantId, t.customerOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    customerContactFk: foreignKey({
+      name: 'inspection_records_tenant_customer_contact_fk',
+      columns: [t.tenantId, t.customerContactPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+    submittedByFk: foreignKey({
+      name: 'inspection_records_tenant_submitted_by_fk',
+      columns: [t.tenantId, t.submittedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    closedByFk: foreignKey({
+      name: 'inspection_records_tenant_closed_by_fk',
+      columns: [t.tenantId, t.closedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -108,32 +170,38 @@ export const inspectionRecordAttachments = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    recordId: uuid('record_id')
-      .notNull()
-      .references(() => inspectionRecords.id, { onDelete: 'cascade' }),
+    recordId: uuid('record_id').notNull(),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
     ...timestamps,
   },
   (t) => ({
-    recordIdx: index('inspection_record_attachments_record_idx').on(t.recordId),
-    tenantIdx: index('inspection_record_attachments_tenant_idx').on(t.tenantId),
+    recordAttachmentUx: uniqueIndex('inspection_record_attachments_record_attachment_ux').on(
+      t.tenantId,
+      t.recordId,
+      t.attachmentId,
+    ),
+    recordFk: foreignKey({
+      name: 'inspection_record_attachments_tenant_record_fk',
+      columns: [t.tenantId, t.recordId],
+      foreignColumns: [inspectionRecords.tenantId, inspectionRecords.id],
+    }).onDelete('cascade'),
   }),
 )
 
 export const inspectionRecordsRelations = relations(inspectionRecords, ({ one, many }) => ({
   tenant: one(tenants, { fields: [inspectionRecords.tenantId], references: [tenants.id] }),
   type: one(inspectionTypes, {
-    fields: [inspectionRecords.typeId],
-    references: [inspectionTypes.id],
+    fields: [inspectionRecords.tenantId, inspectionRecords.typeId],
+    references: [inspectionTypes.tenantId, inspectionTypes.id],
   }),
   site: one(orgUnits, {
-    fields: [inspectionRecords.siteOrgUnitId],
-    references: [orgUnits.id],
+    fields: [inspectionRecords.tenantId, inspectionRecords.siteOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
   }),
   inspector: one(tenantUsers, {
-    fields: [inspectionRecords.inspectorTenantUserId],
-    references: [tenantUsers.id],
+    fields: [inspectionRecords.tenantId, inspectionRecords.inspectorTenantUserId],
+    references: [tenantUsers.tenantId, tenantUsers.id],
   }),
   attachments: many(inspectionRecordAttachments),
 }))
@@ -142,8 +210,8 @@ export const inspectionRecordAttachmentsRelations = relations(
   inspectionRecordAttachments,
   ({ one }) => ({
     record: one(inspectionRecords, {
-      fields: [inspectionRecordAttachments.recordId],
-      references: [inspectionRecords.id],
+      fields: [inspectionRecordAttachments.tenantId, inspectionRecordAttachments.recordId],
+      references: [inspectionRecords.tenantId, inspectionRecords.id],
     }),
   }),
 )

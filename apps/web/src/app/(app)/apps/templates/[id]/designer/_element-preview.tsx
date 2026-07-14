@@ -36,18 +36,6 @@ export function ElementPreview({
   if (t === 'heading') return <h3 className="text-base font-semibold text-slate-800">{label}</h3>
   if (t === 'paragraph') return <p className="text-sm leading-snug text-slate-500">{label}</p>
   if (t === 'divider') return <hr className="my-1 border-slate-200" />
-  if (t === 'image') {
-    const url = cfg(field).url as string | undefined
-    return url ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={url} alt={label} className="max-h-28 rounded object-contain" />
-    ) : (
-      <div className="flex h-20 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
-        image
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-1">
       <div className="text-xs font-medium text-slate-600">
@@ -91,10 +79,6 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
     case 'area_picker':
     case 'person_picker':
     case 'multi_person_picker':
-    case 'equipment_picker':
-    case 'ppe_picker':
-    case 'document_picker':
-    case 'course_picker':
       return (
         <Select disabled className="bg-white">
           <option>{labels[0] ?? 'Select…'}</option>

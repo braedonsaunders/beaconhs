@@ -4,7 +4,7 @@
 // customisable grid of built-in widgets AND saved Cards. View mode is locked;
 // Customise unlocks drag / resize / add / remove + Save.
 
-import { useMemo, useRef, useState, useTransition, type ReactNode } from 'react'
+import { useMemo, useState, useTransition, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Library, Loader2, Plus, Save, Settings, Trash2 } from 'lucide-react'
@@ -30,6 +30,7 @@ import {
 import type { CardRender, InsightDashboardRow } from './_data'
 import type { CardRow } from './cards/_data'
 import { confirmDialog } from '@/lib/confirm'
+import { INSIGHT_DASHBOARD_NAME_MAX_LENGTH } from '@/lib/persisted-text-policy'
 
 type Board = {
   id: string
@@ -79,8 +80,12 @@ export function InsightsWorkspace({
   const [paletteOpen, setPaletteOpen] = useState(true)
   const [saving, startSave] = useTransition()
   const [busy, startBusy] = useTransition()
+  const [renaming, startRename] = useTransition()
   const [baselines, setBaselines] = useState<Record<string, string>>(() =>
     Object.fromEntries(boards.map((b) => [b.id, JSON.stringify(b.widgets)])),
+  )
+  const [persistedNames, setPersistedNames] = useState<Record<string, string>>(() =>
+    Object.fromEntries(boards.map((board) => [board.id, board.name])),
   )
 
   const active = boards.find((b) => b.id === activeId) ?? null
@@ -209,6 +214,7 @@ export function InsightsWorkspace({
         },
       ])
       setBaselines((current) => ({ ...current, [r.id]: JSON.stringify([]) }))
+      setPersistedNames((current) => ({ ...current, [r.id]: 'New dashboard' }))
       setActiveId(r.id)
       setEditing(true)
       setPaletteOpen(true)
@@ -236,7 +242,27 @@ export function InsightsWorkspace({
   }
   function persistName() {
     if (!active) return
-    void renameDashboard(active.id, active.name)
+    const dashboard = active
+    startRename(async () => {
+      const result = await renameDashboard(dashboard.id, dashboard.name)
+      if (!result.ok) {
+        setBoards((current) =>
+          current.map((board) =>
+            board.id === dashboard.id
+              ? { ...board, name: persistedNames[dashboard.id] ?? board.name }
+              : board,
+          ),
+        )
+        toast.error(result.error)
+        return
+      }
+      setBoards((current) =>
+        current.map((board) =>
+          board.id === dashboard.id ? { ...board, name: result.name } : board,
+        ),
+      )
+      setPersistedNames((current) => ({ ...current, [dashboard.id]: result.name }))
+    })
   }
 
   async function del() {
@@ -261,6 +287,11 @@ export function InsightsWorkspace({
         return rest
       })
       setBaselines((current) => {
+        const next = { ...current }
+        delete next[id]
+        return next
+      })
+      setPersistedNames((current) => {
         const next = { ...current }
         delete next[id]
         return next
@@ -357,8 +388,11 @@ export function InsightsWorkspace({
           <>
             <input
               value={active.name}
+              maxLength={INSIGHT_DASHBOARD_NAME_MAX_LENGTH}
               onChange={(e) => renameLocal(e.target.value)}
               onBlur={persistName}
+              disabled={renaming}
+              aria-label="Dashboard name"
               className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 sm:max-w-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">

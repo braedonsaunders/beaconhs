@@ -35,6 +35,7 @@ import {
   Wand2,
 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import { MAX_JOURNAL_AI_SOURCE_LENGTH } from '@/lib/journal-ai-policy'
 import { VoiceButton } from './_voice-button'
 
 type WritingMode = 'tidy' | 'expand' | 'continue' | 'fix' | 'bulletize' | 'summarize'
@@ -55,7 +56,11 @@ async function* streamAI(mode: WritingMode, text: string): AsyncGenerator<string
     body: JSON.stringify({ mode, text }),
   })
   if (res.status === 503) throw new Error('AI isn’t configured. Add an API key to enable it.')
-  if (!res.ok || !res.body) throw new Error('AI request failed.')
+  if (!res.ok) {
+    const message = (await res.text()).trim()
+    throw new Error(message || 'AI request failed.')
+  }
+  if (!res.body) throw new Error('AI request failed.')
   const reader = res.body.getReader()
   const dec = new TextDecoder()
   for (;;) {
@@ -120,8 +125,7 @@ export function JournalEditor({
     if (editor && initialHtml !== editor.getHTML()) {
       editor.commands.setContent(initialHtml, { emitUpdate: false })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialHtml])
+  }, [editor, initialHtml])
 
   useEffect(() => {
     if (editor) editor.setEditable(editable)
@@ -148,26 +152,38 @@ export function JournalEditor({
       toast.error('Write something first, then ask AI.')
       return
     }
+    if (source.length > MAX_JOURNAL_AI_SOURCE_LENGTH) {
+      toast.error(
+        `Select ${MAX_JOURNAL_AI_SOURCE_LENGTH.toLocaleString()} characters or fewer for AI assist.`,
+      )
+      return
+    }
     setAiBusy(mode)
+    editor.setEditable(false)
     try {
+      let generated = ''
+      for await (const chunk of streamAI(mode, source)) generated += chunk
+      if (!generated.trim())
+        throw new Error('AI returned an empty response. Your journal was not changed.')
+      if (editor.isDestroyed) return
+
       if (mode === 'continue') {
-        editor.commands.focus('end')
+        editor.chain().focus('end').insertContent(` ${generated}`).run()
       } else if (hasSelection) {
-        editor.chain().focus().deleteSelection().run()
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: sel.from, to: sel.to })
+          .insertContent(generated)
+          .run()
       } else {
-        editor.chain().focus().selectAll().deleteSelection().run()
-      }
-      let pos = editor.state.selection.from
-      if (mode === 'continue') editor.commands.insertContentAt(pos, ' ')
-      pos = editor.state.selection.from
-      for await (const chunk of streamAI(mode, source)) {
-        editor.commands.insertContentAt(pos, chunk)
-        pos += chunk.length
+        editor.chain().focus().selectAll().insertContent(generated).run()
       }
       editor.commands.focus()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'AI request failed.')
     } finally {
+      if (!editor.isDestroyed) editor.setEditable(editable)
       setAiBusy(null)
     }
   }

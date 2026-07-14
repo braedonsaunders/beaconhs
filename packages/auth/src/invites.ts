@@ -2,6 +2,7 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { auditLog, tenants, tenantUsers, users } from '@beaconhs/db/schema'
+import { materializeUserIdentityAudienceObligations } from '@beaconhs/compliance'
 
 const INVITE_GRANT_VERSION = 1
 const INVITE_HKDF_INFO = 'beaconhs.invite.v1'
@@ -29,17 +30,10 @@ export type InviteGrantPayload = {
 }
 
 export type InviteGrantVerification =
-  | { ok: true; payload: InviteGrantPayload }
-  | { ok: false; reason: 'invalid' | 'expired' }
+  { ok: true; payload: InviteGrantPayload } | { ok: false; reason: 'invalid' | 'expired' }
 
 export type InviteAccessState =
-  | 'active'
-  | 'pending'
-  | 'suspended'
-  | 'tenant_unavailable'
-  | 'unverified'
-  | 'invalid'
-  | 'expired'
+  'active' | 'pending' | 'suspended' | 'tenant_unavailable' | 'unverified' | 'invalid' | 'expired'
 
 type InviteRecord = {
   membershipId: string
@@ -273,6 +267,10 @@ export async function acceptInviteAfterMagicLink(
       const current = await loadInviteRecord(tx, verified.payload.membershipId, false)
       return evaluateInviteAccess(verified.payload, sessionUserId, current)
     }
+
+    await materializeUserIdentityAudienceObligations(tx, verified.payload.tenantId, [
+      verified.payload.userId,
+    ])
 
     await tx.insert(auditLog).values({
       tenantId: verified.payload.tenantId,

@@ -335,6 +335,21 @@ The Assistant can also read this user guide, so it can walk you through app task
 
 Your past conversations are saved in a list on the left so you can come back to them.
 
+## Find an older conversation
+
+1. Type part of its title in **Search chats**.
+2. Click **Load more** at the bottom of **Your chats** or **Shared with you** when the conversation is not in the first results.
+3. After you open a long conversation, click **Load older messages** at the top to read its earlier messages.
+
+## Share a conversation
+
+1. Open the conversation and click **Share**.
+2. Choose **Person** or **Role**, then search by name.
+3. Pick the person or role and click **Add**.
+4. To remove access, click the remove button beside that person or role under **Shared with**.
+
+Shared conversations are read-only for everyone except the owner.
+
 ## Letting it create records for you
 
 The Assistant can draft records — for example, a corrective action. It never creates anything on its own:

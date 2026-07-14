@@ -7,7 +7,6 @@ import {
   formTemplates,
   roles as rolesTable,
 } from '@beaconhs/db/schema'
-import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { isTemplateBuilder } from '@/app/(app)/apps/_lib/access'
 import { isUuid } from '@/lib/list-params'
@@ -24,29 +23,6 @@ export const dynamic = 'force-dynamic'
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Designer · ${id.slice(0, 8)}` }
-}
-
-function bootstrapSchema(name: string): FormSchemaV1 {
-  return {
-    schemaVersion: 1,
-    title: { en: name },
-    sections: [
-      {
-        id: 'sec_intro',
-        title: { en: 'Section 1' },
-        fields: [{ id: 'field_notes', type: 'long_text', label: { en: 'Notes' }, required: false }],
-      },
-    ],
-    workflow: {
-      steps: [
-        {
-          key: 'submit',
-          title: { en: 'Submit' },
-          assignee: { type: 'expression', expr: '$submitter' },
-        },
-      ],
-    },
-  }
 }
 
 export default async function FormDesignerPage({
@@ -110,35 +86,34 @@ export default async function FormDesignerPage({
   })
 
   if (!data) notFound()
+  // Every canonical creation path inserts version 1 in the same transaction as
+  // the template. A template without a version is corrupt; a GET must not hide
+  // that invariant breach by creating unaudited state or racing another GET.
+  const latestVersion = data.latestVersion
+  if (!latestVersion) notFound()
   const emailTemplateOptions = await listActiveEmailTemplatesForSubject(ctx, 'form_template', id)
   const pdfTemplateOptions = await listActivePdfTemplatesForSubject(ctx, 'form_template', id)
   const recipientOptions = await loadRecipientOptions(ctx)
-  let latestSchema: FormSchemaV1
-  let currentVersion: number
-  if (!data.latestVersion) {
-    const schema = bootstrapSchema(data.tmpl.name)
-    await ctx.db(async (tx) => {
-      await tx.insert(formTemplateVersions).values({
-        tenantId: ctx.tenantId,
-        templateId: id,
-        version: 1,
-        schema,
-      })
-    })
-    latestSchema = schema
-    currentVersion = 1
-  } else {
-    latestSchema = data.latestVersion.schema
-    currentVersion = data.latestVersion.version
-  }
-
+  const targetAppOptions = await ctx.db((tx) =>
+    tx
+      .select({ id: formTemplates.id, name: formTemplates.name })
+      .from(formTemplates)
+      .where(
+        and(
+          eq(formTemplates.tenantId, ctx.tenantId),
+          eq(formTemplates.status, 'published'),
+          isNull(formTemplates.deletedAt),
+        ),
+      )
+      .orderBy(asc(formTemplates.name)),
+  )
   return (
     <FormDesigner
       templateId={id}
       templateName={data.tmpl.name}
       templateKind={data.tmpl.kind}
-      initialSchema={latestSchema}
-      currentVersion={currentVersion}
+      initialSchema={latestVersion.schema}
+      currentVersion={latestVersion.version}
       initialSurface={initialSurface}
       overview={{
         description: data.tmpl.description,
@@ -153,6 +128,7 @@ export default async function FormDesignerPage({
       flows={data.flows as FlowSummary[]}
       emailTemplates={emailTemplateOptions}
       pdfTemplates={pdfTemplateOptions}
+      targetApps={targetAppOptions}
       recipientOptions={recipientOptions}
       canGenerate={can(ctx, 'forms.ai.generate')}
       canPin={canPin}

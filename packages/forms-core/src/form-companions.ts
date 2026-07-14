@@ -17,7 +17,7 @@ import { entityKindForPicker } from './entity-attrs'
 import type { I18nString } from './schema'
 
 /** Content-only field types that carry no mergeable value. */
-export const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
+export const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'metric'])
 
 /** Resolve an i18n label to plain text (en-first), falling back to the id. */
 export function labelText(l: I18nString | undefined, fallback: string): string {

@@ -16,12 +16,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Button, Input, Label, Select } from '@beaconhs/ui'
 import { ExternalLink, MousePointerClick, Plus, Trash2 } from 'lucide-react'
-import {
-  FORM_TEMPLATE_ACTIONS,
-  type ActionData,
-  type AutomationGraph,
-  type TriggerData,
-} from '@beaconhs/forms-core'
+import { type ActionData, type AutomationGraph, type TriggerData } from '@beaconhs/forms-core'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { createFlow, deleteFlow, saveFlow, setFlowEnabled } from '@/lib/flows/flow-crud'
@@ -54,28 +49,20 @@ const VARIANTS: { value: ButtonVariant; label: string }[] = [
   { value: 'destructive', label: 'Destructive' },
 ]
 
+const QUICK_ACTIONS = [
+  'flag_non_compliant',
+  'start_monitored_session',
+  'duplicate_record',
+  'export_pdf',
+] as const satisfies readonly ActionData['action'][]
+type QuickAction = (typeof QUICK_ACTIONS)[number]
+
 // Minimal valid action object for each kind — mirrors the Flows canvas
 // `defaultAction`. The author refines it on the full canvas.
-function defaultAction(kind: ActionData['action']): ActionData {
+function defaultAction(kind: QuickAction): ActionData {
   switch (kind) {
-    case 'send_email':
-      return { action: 'send_email', to: [{ type: 'submitter' }], subject: '', bodyTemplate: '' }
-    case 'create_capa':
-      return { action: 'create_capa', titleTemplate: '', severity: 'medium' }
-    case 'create_incident':
-      return { action: 'create_incident', titleTemplate: '' }
-    case 'notify_role':
-      return { action: 'notify_role', role: '', message: '' }
-    case 'set_field':
-      return { action: 'set_field', field: '', value: { kind: 'literal', value: '' } }
     case 'flag_non_compliant':
       return { action: 'flag_non_compliant' }
-    case 'webhook':
-      return { action: 'webhook', url: '', method: 'POST' }
-    case 'create_response':
-      return { action: 'create_response', templateId: '' }
-    case 'analyze_photos':
-      return { action: 'analyze_photos', fieldId: '' }
     case 'start_monitored_session':
       return {
         action: 'start_monitored_session',
@@ -84,8 +71,6 @@ function defaultAction(kind: ActionData['action']): ActionData {
         durationMinutes: 120,
         requireGeo: false,
       }
-    case 'change_status':
-      return { action: 'change_status', to: '' }
     case 'duplicate_record':
       return { action: 'duplicate_record' }
     case 'export_pdf':
@@ -96,7 +81,7 @@ function defaultAction(kind: ActionData['action']): ActionData {
 // A url-safe, stable button id derived from the label.
 function buttonIdFromLabel(label: string): string {
   const base = slugify(label)
-  return `btn_${base || Math.random().toString(36).slice(2, 8)}`
+  return `btn_${base || globalThis.crypto.randomUUID().slice(0, 8)}`
 }
 
 // Pull the (single) manual trigger out of a flow graph, if any.
@@ -118,7 +103,7 @@ function buildButtonGraph(input: {
   label: string
   icon?: string
   variant: ButtonVariant
-  actionKind: ActionData['action']
+  actionKind: QuickAction
   order: number
 }): AutomationGraph {
   const trigger: TriggerData = {
@@ -192,7 +177,7 @@ function ButtonList({
       const res = await setFlowEnabled(id, enabled)
       setBusyId(null)
       if (!res.ok) {
-        toast.error('Could not update the button')
+        toast.error(res.error ?? 'Could not update the button')
         return
       }
       toast.success(enabled ? 'Button enabled' : 'Button disabled')
@@ -283,7 +268,7 @@ function ButtonList({
 
 function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrder: number }) {
   const [label, setLabel] = useState('')
-  const [actionKind, setActionKind] = useState<ActionData['action']>('change_status')
+  const [actionKind, setActionKind] = useState<QuickAction>('export_pdf')
   const [icon, setIcon] = useState('')
   const [variant, setVariant] = useState<ButtonVariant>('default')
   const [pending, start] = useTransition()
@@ -309,12 +294,13 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
       })
       const saved = await saveFlow(created.id, graph)
       if (!saved.ok) {
+        await deleteFlow(created.id)
         toast.error(saved.error ?? 'Could not save the button')
         return
       }
       const enabled = await setFlowEnabled(created.id, true)
       if (!enabled.ok) {
-        toast.error('The button was saved but could not be enabled')
+        toast.error(enabled.error ?? 'The button was saved but could not be enabled')
         return
       }
       toast.success('Button added')
@@ -337,11 +323,8 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
       </div>
       <div className="space-y-1">
         <Label className="text-xs">Runs</Label>
-        <Select
-          value={actionKind}
-          onChange={(e) => setActionKind(e.target.value as ActionData['action'])}
-        >
-          {FORM_TEMPLATE_ACTIONS.map((k) => (
+        <Select value={actionKind} onChange={(e) => setActionKind(e.target.value as QuickAction)}>
+          {QUICK_ACTIONS.map((k) => (
             <option key={k} value={k}>
               {ACTION_LABEL[k]}
             </option>
@@ -369,8 +352,9 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
         </div>
       </div>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        Icon names follow lucide (e.g. <span className="font-mono">check</span>,{' '}
-        <span className="font-mono">file-text</span>). The action&apos;s details are set in Flows.
+        These choices are ready immediately. Add actions that need recipients, fields, statuses, or
+        target apps on the full **Flows** surface. Icon names follow lucide (for example{' '}
+        <span className="font-mono">check</span>).
       </p>
       <Button onClick={add} disabled={pending} className="w-full">
         <Plus size={14} /> {pending ? 'Adding…' : 'Add button'}

@@ -3,6 +3,8 @@
 // markdown-lite that is HTML-escaped FIRST, so only the tags we emit survive.
 
 import type { LessonBlock } from '@beaconhs/db/schema'
+import { RawImage } from '@/components/raw-image'
+import { safeTrainingExternalUrl, trainingFrameSandbox } from '@/lib/training-external-url'
 
 function escapeHtml(s: string): string {
   return s
@@ -53,14 +55,6 @@ function renderMd(md: string): string {
   }
   closeList()
   return out.join('\n')
-}
-
-export function toEmbedUrl(url: string): string {
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
-  if (yt) return `https://www.youtube.com/embed/${yt[1]}`
-  const vm = url.match(/vimeo\.com\/(\d+)/)
-  if (vm) return `https://player.vimeo.com/video/${vm[1]}`
-  return url
 }
 
 const UNAVAILABLE =
@@ -123,10 +117,10 @@ export function LessonBlocksView({
             const url = attachmentUrls[b.attachmentId]
             return url ? (
               <figure key={b.id} className="space-y-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <RawImage
                   src={url}
                   alt={b.alt ?? ''}
+                  optimizationReason="authenticated"
                   className="max-w-full rounded-lg border border-slate-200 dark:border-slate-800"
                 />
                 {b.caption ? (
@@ -142,22 +136,23 @@ export function LessonBlocksView({
             )
           }
           case 'video': {
-            const url = b.url ?? (b.attachmentId ? attachmentUrls[b.attachmentId] : null)
+            const external = safeTrainingExternalUrl(b.url)
+            const url = external?.url ?? (b.attachmentId ? attachmentUrls[b.attachmentId] : null)
             if (!url)
               return (
                 <div key={b.id} className={UNAVAILABLE}>
                   Video unavailable
                 </div>
               )
-            const isHosted = /youtube|youtu\.be|vimeo/.test(url)
-            return isHosted ? (
+            return external?.provider ? (
               <div
                 key={b.id}
                 className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
               >
                 <iframe
-                  src={toEmbedUrl(url)}
+                  src={url}
                   className="h-full w-full"
+                  sandbox={trainingFrameSandbox(external.provider)}
                   allowFullScreen
                   title={b.caption ?? 'Video'}
                 />
@@ -186,20 +181,30 @@ export function LessonBlocksView({
               </a>
             )
           }
-          case 'embed':
+          case 'embed': {
+            const external = safeTrainingExternalUrl(b.url)
+            if (!external) {
+              return (
+                <div key={b.id} className={UNAVAILABLE}>
+                  Embedded content unavailable
+                </div>
+              )
+            }
             return (
               <div
                 key={b.id}
                 className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
               >
                 <iframe
-                  src={toEmbedUrl(b.url)}
+                  src={external.url}
                   className="h-full w-full"
+                  sandbox={trainingFrameSandbox(external.provider)}
                   allowFullScreen
                   title={b.caption ?? 'Embedded content'}
                 />
               </div>
             )
+          }
           case 'divider':
             return <hr key={b.id} className="border-slate-200 dark:border-slate-800" />
           default:

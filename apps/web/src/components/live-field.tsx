@@ -11,7 +11,7 @@
 // canonical single-page-form recipe.
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
+import { normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   Input,
   RichTextEditor,
@@ -22,6 +22,9 @@ import {
   type SelectOption,
 } from '@beaconhs/ui'
 import { useLazyRecord } from './lazy-record'
+import { RemoteSearchSelect } from './remote-search-select'
+import { toast } from '@/lib/toast'
+import type { PickerLookup } from '@/lib/picker-options'
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -194,6 +197,9 @@ export function LiveField({
   rows = 3,
   type = 'text',
   placeholder,
+  maxLength,
+  min,
+  max,
   disabled,
   updateAction,
 }: {
@@ -206,6 +212,9 @@ export function LiveField({
   /** Input type for single-line fields. Ignored when `multiline`. */
   type?: 'text' | 'number' | 'date'
   placeholder?: string
+  maxLength?: number
+  min?: number | string
+  max?: number | string
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
@@ -257,6 +266,9 @@ export function LiveField({
   const shared = {
     value,
     placeholder,
+    maxLength,
+    min,
+    max,
     disabled,
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       onChange(e.target.value),
@@ -332,6 +344,75 @@ export function LiveSelect({
           </option>
         ))}
       </Select>
+    </div>
+  )
+}
+
+/** Remote-search counterpart for high-cardinality reference tables. */
+export function LiveRemoteSelect({
+  id,
+  field,
+  label,
+  initialValue,
+  initialOption,
+  lookup,
+  contextId,
+  emptyLabel = '—',
+  allowEmpty = true,
+  disabled,
+  updateAction,
+}: {
+  id?: string
+  field: string
+  label: string
+  initialValue: string | null
+  initialOption?: SelectOption
+  lookup: PickerLookup
+  contextId?: string
+  emptyLabel?: string
+  allowEmpty?: boolean
+  disabled?: boolean
+  updateAction: (formData: FormData) => Promise<void>
+}) {
+  const [value, setValue] = useState(initialValue ?? '')
+  const baseline = useRef(initialValue ?? '')
+  const { state, save, retry } = useFieldAutoSave({
+    id,
+    field,
+    updateAction,
+    onSaved: (next) => {
+      baseline.current = next
+    },
+  })
+
+  useEffect(() => {
+    const next = initialValue ?? ''
+    if (state === 'idle' && next !== baseline.current) {
+      baseline.current = next
+      setValue(next)
+    }
+  }, [initialValue, state])
+
+  return (
+    <div className="space-y-1">
+      <FieldLabel label={label} state={state} onRetry={retry} />
+      <RemoteSearchSelect
+        lookup={lookup}
+        contextId={contextId}
+        value={value}
+        onChange={(next) => {
+          setValue(next)
+          save(next)
+        }}
+        initialOption={initialOption}
+        placeholder={emptyLabel}
+        searchPlaceholder={`Search ${label.toLowerCase()}…`}
+        sheetTitle={`Select ${label.toLowerCase()}`}
+        ariaLabel={label}
+        clearable={allowEmpty}
+        emptyLabel={emptyLabel}
+        disabled={disabled}
+      />
     </div>
   )
 }
@@ -767,6 +848,8 @@ export function LiveRichText({
           placeholder={placeholder}
           disabled={disabled}
           minHeight="120px"
+          normalizeLink={normalizeDocumentHref}
+          onInvalidLink={() => toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')}
         />
       ) : (
         <div

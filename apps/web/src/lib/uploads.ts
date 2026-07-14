@@ -1,7 +1,7 @@
 'use server'
 
 import { randomBytes, randomUUID } from 'node:crypto'
-import { and, count, eq, gt, isNull, lte } from 'drizzle-orm'
+import { and, count, eq, gt, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { attachments, attachmentUploadReservations } from '@beaconhs/db/schema'
 import {
@@ -86,33 +86,43 @@ function ensureStorageReady(): Promise<void> {
   return storageReady
 }
 
-async function discardExpiredUploads(
+async function compensateUncommittedFinal(
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
+  uploadId: string,
 ): Promise<void> {
-  const expired = await ctx.db((tx) =>
-    tx
-      .select({ id: attachmentUploadReservations.id, key: attachmentUploadReservations.stagingKey })
+  await ctx.db(async (tx) => {
+    const [reservation] = await tx
+      .select()
       .from(attachmentUploadReservations)
-      .where(
-        and(
-          eq(attachmentUploadReservations.requestedBy, ctx.userId),
-          isNull(attachmentUploadReservations.consumedAt),
-          lte(attachmentUploadReservations.expiresAt, new Date()),
-        ),
-      )
-      .limit(10),
-  )
-
-  for (const row of expired) {
-    try {
-      await deleteObject({ key: row.key })
-      await ctx.db((tx) =>
-        tx.delete(attachmentUploadReservations).where(eq(attachmentUploadReservations.id, row.id)),
-      )
-    } catch (error) {
-      console.warn('[uploads] expired staging object cleanup failed', { uploadId: row.id, error })
+      .where(eq(attachmentUploadReservations.id, uploadId))
+      .for('update')
+      .limit(1)
+    if (
+      !reservation ||
+      reservation.requestedBy !== ctx.userId ||
+      reservation.attachmentId ||
+      reservation.consumedAt
+    ) {
+      return
     }
-  }
+
+    const [liveAttachment] = await tx
+      .select({ id: attachments.id })
+      .from(attachments)
+      .where(eq(attachments.r2Key, reservation.r2Key))
+      .limit(1)
+    if (liveAttachment) {
+      await tx
+        .update(attachmentUploadReservations)
+        .set({ attachmentId: liveAttachment.id, consumedAt: new Date() })
+        .where(eq(attachmentUploadReservations.id, reservation.id))
+      return
+    }
+
+    // Reacquiring the reservation lock after a failed commit prevents a
+    // waiting finalizer from linking this key while compensation removes it.
+    await deleteObject({ key: reservation.r2Key })
+  })
 }
 
 export async function requestUpload(input: z.infer<typeof requestSchema>): Promise<
@@ -134,7 +144,6 @@ export async function requestUpload(input: z.infer<typeof requestSchema>): Promi
 
   try {
     await ensureStorageReady()
-    await discardExpiredUploads(ctx)
 
     const [pending] = await ctx.db((tx) =>
       tx
@@ -246,7 +255,7 @@ export async function finalizeUpload(
   try {
     await ensureStorageReady()
     if (parsed.data.multipartUploadId) {
-      const [multipartReservation] = await ctx.db((tx) =>
+      const [reservation] = await ctx.db((tx) =>
         tx
           .select({
             attachmentId: attachmentUploadReservations.attachmentId,
@@ -257,124 +266,155 @@ export async function finalizeUpload(
           .where(eq(attachmentUploadReservations.id, parsed.data.uploadId))
           .limit(1),
       )
-      if (!multipartReservation || multipartReservation.requestedBy !== ctx.userId) {
+      if (!reservation || reservation.requestedBy !== ctx.userId) {
         return { ok: false, error: 'Upload reservation not found' }
       }
-      if (!multipartReservation.attachmentId) {
+      if (!reservation.attachmentId) {
         try {
           await completeMultipartUpload({
-            key: multipartReservation.stagingKey,
+            key: reservation.stagingKey,
             uploadId: parsed.data.multipartUploadId,
           })
         } catch (error) {
-          const completedObject = await headObject({ key: multipartReservation.stagingKey })
+          const completedObject = await headObject({ key: reservation.stagingKey })
           if (!completedObject) throw error
         }
       }
     }
-    const reservation = await ctx.db(async (tx) => {
-      const [row] = await tx
+    const outcome = await ctx.db(async (tx) => {
+      const [reservation] = await tx
         .select()
         .from(attachmentUploadReservations)
         .where(eq(attachmentUploadReservations.id, parsed.data.uploadId))
-        .limit(1)
-      return row ?? null
-    })
-
-    if (!reservation || reservation.requestedBy !== ctx.userId) {
-      return { ok: false, error: 'Upload reservation not found' }
-    }
-    if (reservation.attachmentId) {
-      return {
-        ok: true,
-        attachmentId: reservation.attachmentId,
-        url: attachmentUrl(reservation.attachmentId),
-      }
-    }
-    if (reservation.expiresAt.getTime() <= Date.now()) {
-      return { ok: false, error: 'Upload reservation expired' }
-    }
-
-    const staged = await headObject({ key: reservation.stagingKey })
-    if (!staged) return { ok: false, error: 'Uploaded object was not found' }
-    const stagedError = validateReservedUpload(staged, {
-      tokenHash: reservation.verificationTokenHash,
-      sizeBytes: reservation.sizeBytes,
-      contentType: reservation.contentType,
-    })
-    if (stagedError) return { ok: false, error: stagedError }
-    const header = await getObjectRange({
-      key: reservation.stagingKey,
-      start: 0,
-      end: Math.min(reservation.sizeBytes - 1, 511),
-    })
-    const headerError = uploadedFileHeaderError(reservation.kind, reservation.contentType, header)
-    if (headerError) return { ok: false, error: headerError }
-
-    const contentDisposition = uploadContentDisposition(reservation.kind, reservation.contentType)
-    const existingFinal = await headObject({ key: reservation.r2Key })
-    if (!existingFinal) {
-      await promoteObject({
-        sourceKey: reservation.stagingKey,
-        destinationKey: reservation.r2Key,
-        contentType: reservation.contentType,
-        contentDisposition,
-      })
-    }
-    const finalObject = existingFinal ?? (await headObject({ key: reservation.r2Key }))
-    if (
-      !finalObject ||
-      finalObject.contentLength !== reservation.sizeBytes ||
-      normalizedContentType(finalObject.contentType) !==
-        normalizedContentType(reservation.contentType) ||
-      finalObject.contentDisposition !== contentDisposition
-    ) {
-      return { ok: false, error: 'Finalized object could not be verified' }
-    }
-
-    const attachmentId = await ctx.db(async (tx) => {
-      const [locked] = await tx
-        .select()
-        .from(attachmentUploadReservations)
-        .where(eq(attachmentUploadReservations.id, reservation.id))
         .for('update')
         .limit(1)
-      if (!locked || locked.requestedBy !== ctx.userId) throw new Error('reservation disappeared')
-      if (locked.attachmentId) return locked.attachmentId
-      if (locked.expiresAt.getTime() <= Date.now()) throw new Error('reservation expired')
+      if (!reservation || reservation.requestedBy !== ctx.userId) {
+        return { ok: false as const, error: 'Upload reservation not found' }
+      }
+      if (reservation.attachmentId) {
+        return {
+          ok: true as const,
+          attachmentId: reservation.attachmentId,
+          stagingKey: reservation.stagingKey,
+        }
+      }
+      if (reservation.expiresAt.getTime() <= Date.now()) {
+        return { ok: false as const, error: 'Upload reservation expired' }
+      }
 
-      const [created] = await tx
-        .insert(attachments)
-        .values({
-          tenantId: ctx.tenantId,
-          uploadedBy: ctx.userId,
-          kind: locked.kind,
-          r2Key: locked.r2Key,
-          contentType: locked.contentType,
-          sizeBytes: locked.sizeBytes,
-          filename: locked.filename,
-        })
-        .returning({ id: attachments.id })
-      if (!created) throw new Error('attachment insert failed')
+      const staged = await headObject({ key: reservation.stagingKey })
+      if (!staged) return { ok: false as const, error: 'Uploaded object was not found' }
+      const stagedError = validateReservedUpload(staged, {
+        tokenHash: reservation.verificationTokenHash,
+        sizeBytes: reservation.sizeBytes,
+        contentType: reservation.contentType,
+      })
+      if (stagedError) return { ok: false as const, error: stagedError }
+      if (!staged.etag) {
+        return { ok: false as const, error: 'Uploaded object could not be version-verified' }
+      }
+      const header = await getObjectRange({
+        key: reservation.stagingKey,
+        start: 0,
+        end: Math.min(reservation.sizeBytes - 1, 511),
+        ifMatch: staged.etag,
+      })
+      const headerError = uploadedFileHeaderError(reservation.kind, reservation.contentType, header)
+      if (headerError) return { ok: false as const, error: headerError }
 
-      await tx
-        .update(attachmentUploadReservations)
-        .set({ attachmentId: created.id, consumedAt: new Date() })
-        .where(eq(attachmentUploadReservations.id, locked.id))
-      return created.id
+      const contentDisposition = uploadContentDisposition(reservation.kind, reservation.contentType)
+      const existingFinal = await headObject({ key: reservation.r2Key })
+      let promoted = false
+      try {
+        if (!existingFinal) {
+          await promoteObject({
+            sourceKey: reservation.stagingKey,
+            sourceEtag: staged.etag,
+            destinationKey: reservation.r2Key,
+            contentType: reservation.contentType,
+            contentDisposition,
+          })
+          promoted = true
+        }
+        const finalObject = existingFinal ?? (await headObject({ key: reservation.r2Key }))
+        if (
+          !finalObject ||
+          finalObject.contentLength !== reservation.sizeBytes ||
+          normalizedContentType(finalObject.contentType) !==
+            normalizedContentType(reservation.contentType) ||
+          finalObject.contentDisposition !== contentDisposition
+        ) {
+          if (promoted) await deleteObject({ key: reservation.r2Key })
+          return { ok: false as const, error: 'Finalized object could not be verified' }
+        }
+
+        const [created] = await tx
+          .insert(attachments)
+          .values({
+            tenantId: ctx.tenantId,
+            uploadedBy: ctx.userId,
+            kind: reservation.kind,
+            r2Key: reservation.r2Key,
+            contentType: reservation.contentType,
+            sizeBytes: reservation.sizeBytes,
+            filename: reservation.filename,
+          })
+          .returning({ id: attachments.id })
+        if (!created) throw new Error('attachment insert failed')
+
+        const [consumed] = await tx
+          .update(attachmentUploadReservations)
+          .set({ attachmentId: created.id, consumedAt: new Date() })
+          .where(eq(attachmentUploadReservations.id, reservation.id))
+          .returning({ id: attachmentUploadReservations.id })
+        if (!consumed) throw new Error('upload reservation could not be consumed')
+        return {
+          ok: true as const,
+          attachmentId: created.id,
+          stagingKey: reservation.stagingKey,
+        }
+      } catch (error) {
+        // The row lock prevents another finalizer from linking this key before
+        // compensation completes. Existing finals are retained for a safe
+        // retry; only a copy created by this attempt is removed.
+        if (promoted) {
+          try {
+            await deleteObject({ key: reservation.r2Key })
+          } catch (cleanupError) {
+            console.error('[uploads] final-object compensation failed', {
+              uploadId: reservation.id,
+              cleanupError,
+            })
+          }
+        }
+        throw error
+      }
     })
 
+    if (!outcome.ok) return outcome
     try {
-      await deleteObject({ key: reservation.stagingKey })
+      await deleteObject({ key: outcome.stagingKey })
     } catch (error) {
       console.warn('[uploads] finalized staging object cleanup failed', {
-        uploadId: reservation.id,
+        uploadId: parsed.data.uploadId,
         error,
       })
     }
 
-    return { ok: true, attachmentId, url: attachmentUrl(attachmentId) }
+    return {
+      ok: true,
+      attachmentId: outcome.attachmentId,
+      url: attachmentUrl(outcome.attachmentId),
+    }
   } catch (error) {
+    try {
+      await compensateUncommittedFinal(ctx, parsed.data.uploadId)
+    } catch (cleanupError) {
+      console.error('[uploads] uncommitted final-object reconciliation failed', {
+        uploadId: parsed.data.uploadId,
+        cleanupError,
+      })
+    }
     console.error('[uploads] upload finalization failed', {
       uploadId: parsed.data.uploadId,
       error,

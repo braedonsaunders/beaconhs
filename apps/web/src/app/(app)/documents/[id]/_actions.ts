@@ -8,31 +8,32 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
-import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
+import {
+  attachments,
+  documentCategories,
+  documentTypes,
+  documentVersions,
+  documents,
+} from '@beaconhs/db/schema'
 import { presignExistingGet } from '@beaconhs/storage'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
-
-type SaveDraftResult = { ok: true; updatedAt: string } | { ok: false; error: string }
-
-// ---- Document metadata -----------------------------------------------------
-
-async function renameDocument(input: {
-  documentId: string
-  title: string
-}): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  const title = input.title.trim()
-  if (!input.documentId) return { ok: false, error: 'Missing document id' }
-  if (!title) return { ok: false, error: 'Title is required' }
-  await ctx.db((tx) =>
-    tx.update(documents).set({ title }).where(eq(documents.id, input.documentId)),
-  )
-  revalidatePath(`/documents/${input.documentId}`)
-  return { ok: true }
-}
+import { recordAuditInTransaction } from '@/lib/audit'
+import { isDocumentKeyConflict, parseDocumentKey } from '@/lib/document-key-policy'
+import { DOCUMENT_METADATA_LIMITS } from '@/lib/document-metadata-limits'
+import {
+  assertUploadedDocumentPdf,
+  documentVersionVisibilityWhere,
+} from '@/lib/document-version-policy'
+import {
+  optionalDateInput,
+  optionalNumberInput,
+  optionalTextInput,
+  optionalUuidInput,
+  requiredTextInput,
+  requireRecordInput,
+  requireUuidInput,
+} from '@/lib/mutation-input'
 
 type DocumentPdfUrlResult =
   | { ok: true; url: string }
@@ -51,11 +52,12 @@ export async function getDocumentPdfUrl(
   assertCan(ctx, 'documents.read')
   if (!documentId) return { ok: false, error: 'Missing document id' }
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
 
   // Managers previewing an authored document get a FRESH render of the
   // current working master (the /pdf route dispatches the worker job).
   if (opts.draft) {
-    if (!can(ctx, 'documents.manage')) return { ok: false, error: 'Not allowed' }
+    if (!canManage) return { ok: false, error: 'Not allowed' }
     const [doc] = await ctx.db((tx) =>
       tx
         .select({ sourceAttachmentId: documents.sourceAttachmentId })
@@ -80,64 +82,69 @@ export async function getDocumentPdfUrl(
       .limit(1),
   )
   if (!doc) return { ok: false, error: 'Document not found.' }
-  if (doc.status !== 'published' && !can(ctx, 'documents.manage')) {
+  if (doc.status !== 'published' && !canManage) {
     return { ok: false, error: 'This document is not published.' }
   }
 
-  // 1. Uploaded-PDF document — the latest version that points at a PDF
-  //    attachment (published or not, so a just-uploaded source shows at once).
-  const [uploaded] = await ctx.db((tx) =>
+  // Resolve one version first. Managers may preview a replacement; readers
+  // stay on the last published version until the manager presses Publish.
+  // Selecting the version once also prevents an old uploaded PDF from
+  // shadowing a newer authored version.
+  const [version] = await ctx.db((tx) =>
     tx
-      .select({ key: attachments.r2Key, contentType: attachments.contentType })
+      .select({
+        contentAttachmentId: documentVersions.contentAttachmentId,
+        pdfAttachmentId: documentVersions.pdfAttachmentId,
+        renderStatus: documentVersions.renderStatus,
+        renderError: documentVersions.renderError,
+      })
       .from(documentVersions)
-      .innerJoin(attachments, eq(attachments.id, documentVersions.contentAttachmentId))
-      .where(eq(documentVersions.documentId, documentId))
+      .where(documentVersionVisibilityWhere(documentId, canManage))
       .orderBy(desc(documentVersions.version))
       .limit(1),
   )
-  if (uploaded?.contentType === 'application/pdf') {
+  if (!version) {
+    return {
+      ok: false,
+      error: canManage
+        ? 'This document has no file version yet.'
+        : 'This document has no published version yet.',
+      reason: 'no_source',
+    }
+  }
+
+  if (version.contentAttachmentId) {
+    const [uploaded] = await ctx.db((tx) =>
+      tx
+        .select({ key: attachments.r2Key, contentType: attachments.contentType })
+        .from(attachments)
+        .where(eq(attachments.id, version.contentAttachmentId!))
+        .limit(1),
+    )
+    if (!uploaded || uploaded.contentType !== 'application/pdf') {
+      return { ok: false, error: 'The uploaded PDF version is invalid or missing.' }
+    }
     const url = await presignExistingGet({ key: uploaded.key, expiresInSeconds: 300 })
     if (!url) return { ok: false, error: 'Uploaded PDF is missing from storage.' }
     return { ok: true, url }
   }
 
-  // 2. Authored document — the latest published version's rendered PDF (the
-  //    worker snapshots it from the DOCX master at publish time).
-  const [published] = await ctx.db((tx) =>
-    tx
-      .select({
-        renderStatus: documentVersions.renderStatus,
-        renderError: documentVersions.renderError,
-        pdfAttachmentId: documentVersions.pdfAttachmentId,
-      })
-      .from(documentVersions)
-      .where(
-        and(eq(documentVersions.documentId, documentId), isNotNull(documentVersions.publishedAt)),
-      )
-      .orderBy(desc(documentVersions.version))
-      .limit(1),
-  )
-  if (!published) {
-    return {
-      ok: false,
-      error: 'This document has no published version yet.',
-      reason: 'no_source',
+  // Authored document — the selected version's worker-rendered PDF.
+  if (!version.pdfAttachmentId) {
+    if (version.renderStatus === 'failed') {
+      return { ok: false, error: version.renderError || 'The PDF render failed.' }
     }
-  }
-  if (!published.pdfAttachmentId) {
-    if (published.renderStatus === 'failed') {
-      return { ok: false, error: published.renderError || 'The PDF render failed.' }
-    }
-    if (published.renderStatus === 'pending' || published.renderStatus === 'processing') {
+    if (version.renderStatus === 'pending' || version.renderStatus === 'processing') {
       return { ok: false, error: 'The PDF is being prepared — try again in a moment.' }
     }
     return { ok: false, error: 'This version has no PDF file.' }
   }
+  const pdfAttachmentId = version.pdfAttachmentId
   const [pdfAtt] = await ctx.db((tx) =>
     tx
       .select({ key: attachments.r2Key })
       .from(attachments)
-      .where(eq(attachments.id, published.pdfAttachmentId!))
+      .where(eq(attachments.id, pdfAttachmentId))
       .limit(1),
   )
   if (!pdfAtt) return { ok: false, error: 'The rendered PDF is missing from storage.' }
@@ -146,102 +153,196 @@ export async function getDocumentPdfUrl(
   return { ok: true, url }
 }
 
-function slugify(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_\-\s]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
-}
-
 // Edit all document "header" metadata from the manage page (incl. first-time fill-in).
-export async function updateDocumentMeta(input: {
-  documentId: string
-  title?: string
-  key?: string
-  categoryId?: string | null
-  typeId?: string | null
-  description?: string | null
-  reviewFrequencyMonths?: number | null
-  nextReviewOn?: string | null
-}): Promise<{ ok: boolean; error?: string }> {
+export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  if (!input.documentId) return { ok: false, error: 'Missing document id' }
-  const patch: Record<string, unknown> = {}
-  if (input.title !== undefined) {
-    const t = input.title.trim()
-    if (!t) return { ok: false, error: 'Title is required' }
-    patch.title = t
-  }
-  if (input.key !== undefined) {
-    const k = slugify(input.key)
-    if (k) patch.key = k
-  }
-  if (input.categoryId !== undefined) patch.categoryId = input.categoryId || null
-  if (input.typeId !== undefined) patch.typeId = input.typeId || null
-  if (input.description !== undefined) patch.description = input.description?.trim() || null
-  if (input.reviewFrequencyMonths !== undefined)
-    patch.reviewFrequencyMonths = input.reviewFrequencyMonths
-  if (input.nextReviewOn !== undefined) patch.nextReviewOn = input.nextReviewOn || null
-  if (Object.keys(patch).length === 0) return { ok: true }
-  await ctx.db((tx) => tx.update(documents).set(patch).where(eq(documents.id, input.documentId)))
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: input.documentId,
-    action: 'update',
-    summary: 'Updated document details',
-  })
-  revalidatePath(`/documents/${input.documentId}`)
-  revalidatePath('/documents')
-  return { ok: true }
-}
+  try {
+    const values = requireRecordInput(input, 'Document details')
+    const documentId = requireUuidInput(values.documentId, 'Document')
+    const title = requiredTextInput(values.title, 'Title', DOCUMENT_METADATA_LIMITS.title)
+    const parsedKey = parseDocumentKey(values.key)
+    if (!parsedKey.ok) return parsedKey
+    const categoryId = optionalUuidInput(values.categoryId, 'Category')
+    const typeId = optionalUuidInput(values.typeId, 'Type')
+    const description = optionalTextInput(
+      values.description,
+      'Description',
+      DOCUMENT_METADATA_LIMITS.description,
+    )
+    const reviewFrequencyMonths = optionalNumberInput(
+      values.reviewFrequencyMonths,
+      'Review frequency',
+      { min: 1, max: DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths, integer: true },
+    )
+    const nextReviewOn = optionalDateInput(values.nextReviewOn, 'Next review date')
 
-// Attach an uploaded file (e.g. a PDF) as a new file version of the document.
-export async function attachFileVersion(input: {
-  documentId: string
-  attachmentId: string
-}): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.manage')
-  if (!input.documentId || !input.attachmentId) return { ok: false, error: 'Missing fields' }
-  await ctx.db(async (tx) => {
-    const [latest] = await tx
-      .select({ version: documentVersions.version })
-      .from(documentVersions)
-      .where(eq(documentVersions.documentId, input.documentId))
-      .orderBy(desc(documentVersions.version))
-      .limit(1)
-    const next = (latest?.version ?? 0) + 1
-    await tx.insert(documentVersions).values({
-      tenantId: ctx.tenantId,
-      documentId: input.documentId,
-      version: next,
-      contentAttachmentId: input.attachmentId,
+    const updated = await ctx.db(async (tx) => {
+      const [before] = await tx
+        .select()
+        .from(documents)
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!before) return false
+
+      if (categoryId) {
+        const [category] = await tx
+          .select({ id: documentCategories.id })
+          .from(documentCategories)
+          .where(and(eq(documentCategories.id, categoryId), isNull(documentCategories.deletedAt)))
+          .limit(1)
+        if (!category) throw new Error('The selected category no longer exists.')
+      }
+      if (typeId) {
+        const [type] = await tx
+          .select({ id: documentTypes.id })
+          .from(documentTypes)
+          .where(and(eq(documentTypes.id, typeId), isNull(documentTypes.deletedAt)))
+          .limit(1)
+        if (!type) throw new Error('The selected type no longer exists.')
+      }
+
+      await tx
+        .update(documents)
+        .set({
+          title,
+          key: parsedKey.key,
+          categoryId,
+          typeId,
+          description,
+          reviewFrequencyMonths,
+          nextReviewOn,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document',
+        entityId: documentId,
+        action: 'update',
+        summary: 'Updated document details',
+        before: {
+          title: before.title,
+          key: before.key,
+          categoryId: before.categoryId,
+          typeId: before.typeId,
+          description: before.description,
+          reviewFrequencyMonths: before.reviewFrequencyMonths,
+          nextReviewOn: before.nextReviewOn,
+        },
+        after: {
+          title,
+          key: parsedKey.key,
+          categoryId,
+          typeId,
+          description,
+          reviewFrequencyMonths,
+          nextReviewOn,
+        },
+      })
+      return true
     })
-  })
-  await recordAudit(ctx, {
-    entityType: 'document',
-    entityId: input.documentId,
-    action: 'update',
-    summary: 'Attached a file version',
-  })
-  revalidatePath(`/documents/${input.documentId}`)
-  return { ok: true }
+    if (!updated) return { ok: false, error: 'Document not found.' }
+    revalidatePath(`/documents/${documentId}`)
+    revalidatePath('/documents')
+    return { ok: true }
+  } catch (error) {
+    if (isDocumentKeyConflict(error)) {
+      return { ok: false, error: 'A live document already uses that key.' }
+    }
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Document details could not be saved.',
+    }
+  }
 }
 
-// ---- Comments --------------------------------------------------------------
+// Attach an uploaded PDF as a new unpublished file version. The document row
+// is the version-allocation mutex, and a replay with the same attachment is
+// idempotent.
+export async function attachFileVersion(input: unknown): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
+  try {
+    const values = requireRecordInput(input, 'Uploaded document')
+    const documentId = requireUuidInput(values.documentId, 'Document')
+    const attachmentId = requireUuidInput(values.attachmentId, 'PDF')
+    await ctx.db(async (tx) => {
+      const [doc] = await tx
+        .select({ id: documents.id, sourceAttachmentId: documents.sourceAttachmentId })
+        .from(documents)
+        .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!doc) throw new Error('Document not found.')
+      if (doc.sourceAttachmentId) {
+        throw new Error('Authored documents publish from their Word working file.')
+      }
 
-type DocumentCommentRow = {
-  id: string
-  anchorId: string | null
-  quotedText: string | null
-  body: string
-  threadId: string | null
-  resolvedAt: string | null
-  createdAt: string
-  authorTenantUserId: string
-  authorName: string
+      const [attachment] = await tx
+        .select({ kind: attachments.kind, contentType: attachments.contentType })
+        .from(attachments)
+        .where(eq(attachments.id, attachmentId))
+        .limit(1)
+      if (!attachment) throw new Error('Uploaded PDF not found.')
+      assertUploadedDocumentPdf(attachment)
+
+      const [existingUse] = await tx
+        .select({ documentId: documentVersions.documentId })
+        .from(documentVersions)
+        .where(eq(documentVersions.contentAttachmentId, attachmentId))
+        .limit(1)
+      if (existingUse) {
+        if (existingUse.documentId === documentId) return
+        throw new Error('This uploaded PDF already belongs to another document.')
+      }
+
+      const [authoredVersion] = await tx
+        .select({ id: documentVersions.id })
+        .from(documentVersions)
+        .where(
+          and(
+            eq(documentVersions.documentId, documentId),
+            isNotNull(documentVersions.docxAttachmentId),
+          ),
+        )
+        .limit(1)
+      if (authoredVersion) {
+        throw new Error('Authored documents cannot also use uploaded-PDF versions.')
+      }
+
+      const [latest] = await tx
+        .select({ version: documentVersions.version })
+        .from(documentVersions)
+        .where(eq(documentVersions.documentId, documentId))
+        .orderBy(desc(documentVersions.version))
+        .limit(1)
+      const next = (latest?.version ?? 0) + 1
+      const [created] = await tx
+        .insert(documentVersions)
+        .values({
+          tenantId: ctx.tenantId,
+          documentId,
+          version: next,
+          contentAttachmentId: attachmentId,
+        })
+        .returning({ id: documentVersions.id })
+      if (!created) throw new Error('The PDF version could not be created.')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document',
+        entityId: documentId,
+        action: 'update',
+        summary: 'Uploaded a draft PDF version',
+        after: { versionId: created.id, version: next, attachmentId },
+      })
+    })
+    revalidatePath(`/documents/${documentId}`)
+    revalidatePath('/documents')
+    return { ok: true }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'The PDF could not be attached.',
+    }
+  }
 }

@@ -5,47 +5,54 @@
 // rename, merge, and delete tags. All mutations go through server actions that
 // rewrite journal_entry_tags + the per-entry cache, and return the fresh list.
 
-import { useMemo, useState, useTransition } from 'react'
-import {
-  Check,
-  GitMerge,
-  Pencil,
-  Plus,
-  Search,
-  Sparkles,
-  Tag as TagIcon,
-  Trash2,
-} from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { Check, GitMerge, Pencil, Plus, Sparkles, Tag as TagIcon, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, EmptyState, Input, SearchSelect, Textarea, cn } from '@beaconhs/ui'
+import { Button, EmptyState, Input, Textarea, cn } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
 import { TAG_COLOR_KEYS, tagSwatch } from '../_tag-colors'
 import { mergeTag, removeTag, saveTag, type TagActionResult } from './_actions'
 import type { ManagedTag } from './_data'
 
-export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
-  const [tags, setTags] = useState(initialTags)
-  const [query, setQuery] = useState('')
+const STATUS_OPTIONS = [
+  { value: 'defined', label: 'Governed' },
+  { value: 'ad_hoc', label: 'Ad-hoc' },
+] as const
+
+export function TagsAdmin({
+  initialTags: tags,
+  total,
+  allTotal,
+  totalUses,
+  page,
+  perPage,
+  currentParams,
+}: {
+  initialTags: ManagedTag[]
+  total: number
+  allTotal: number
+  totalUses: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
+}) {
+  const router = useRouter()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const [merging, setMerging] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
-  const q = query.trim().toLowerCase()
-  const filtered = useMemo(
-    () =>
-      q ? tags.filter((t) => t.name.includes(q) || t.description?.toLowerCase().includes(q)) : tags,
-    [tags, q],
-  )
-  const totalUses = useMemo(() => tags.reduce((n, t) => n + t.usage, 0), [tags])
-
   function apply(res: TagActionResult, okMsg: string) {
     if (res.ok) {
-      setTags(res.tags)
       setCreating(false)
       setEditing(null)
       setMerging(null)
       toast.success(okMsg)
+      router.refresh()
     } else {
       toast.error(res.error)
     }
@@ -78,20 +85,16 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search
-            size={15}
-            className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-          />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tags…"
-            className="pl-9"
-          />
-        </div>
+        <SearchInput placeholder="Search tags…" />
+        <FilterChips
+          basePath="/journals/tags"
+          currentParams={currentParams}
+          paramKey="status"
+          label="Type"
+          options={[...STATUS_OPTIONS]}
+        />
         <div className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">
-          {tags.length} {tags.length === 1 ? 'tag' : 'tags'} · {totalUses} use
+          {allTotal} {allTotal === 1 ? 'tag' : 'tags'} · {totalUses} use
           {totalUses === 1 ? '' : 's'}
         </div>
         <Button
@@ -119,59 +122,80 @@ export function TagsAdmin({ initialTags }: { initialTags: ManagedTag[] }) {
       ) : null}
 
       {/* List */}
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={<TagIcon size={30} />}
-          title={q ? 'No tags match' : 'No tags'}
-          description={
-            q
-              ? 'Try a different search.'
-              : 'Tags appear here as entries are tagged manually or by AI. Create one to predefine the vocabulary.'
-          }
-        />
+      {tags.length === 0 ? (
+        <>
+          <EmptyState
+            icon={<TagIcon size={30} />}
+            title={total > 0 ? 'No tags on this page' : allTotal > 0 ? 'No tags match' : 'No tags'}
+            description={
+              total > 0
+                ? 'Return to the last available page to continue.'
+                : allTotal > 0
+                  ? 'Try a different search or tag type.'
+                  : 'Tags appear here as entries are tagged manually or by AI. Create one to predefine the vocabulary.'
+            }
+          />
+          {total > 0 ? (
+            <Pagination
+              basePath="/journals/tags"
+              currentParams={currentParams}
+              total={total}
+              page={page}
+              perPage={perPage}
+            />
+          ) : null}
+        </>
       ) : (
-        <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-          {filtered.map((t) =>
-            editing === t.name ? (
-              <li key={t.name} className="bg-slate-50/60 p-4 dark:bg-slate-800/40">
-                <TagForm
-                  submitLabel="Save changes"
-                  pending={pending}
-                  initial={{ name: t.name, color: t.color, description: t.description ?? '' }}
-                  onSubmit={(v) => onEdit(t.name, v)}
-                  onCancel={() => setEditing(null)}
-                />
-              </li>
-            ) : merging === t.name ? (
-              <li key={t.name} className="bg-slate-50/60 p-4 dark:bg-slate-800/40">
-                <MergeRow
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {tags.map((t) =>
+              editing === t.name ? (
+                <li key={t.name} className="bg-slate-50/60 p-4 dark:bg-slate-800/40">
+                  <TagForm
+                    submitLabel="Save changes"
+                    pending={pending}
+                    initial={{ name: t.name, color: t.color, description: t.description ?? '' }}
+                    onSubmit={(v) => onEdit(t.name, v)}
+                    onCancel={() => setEditing(null)}
+                  />
+                </li>
+              ) : merging === t.name ? (
+                <li key={t.name} className="bg-slate-50/60 p-4 dark:bg-slate-800/40">
+                  <MergeRow
+                    tag={t}
+                    pending={pending}
+                    onMerge={(target) => onMerge(t.name, target)}
+                    onCancel={() => setMerging(null)}
+                  />
+                </li>
+              ) : (
+                <TagRow
+                  key={t.name}
                   tag={t}
-                  others={tags.filter((x) => x.name !== t.name)}
-                  pending={pending}
-                  onMerge={(target) => onMerge(t.name, target)}
-                  onCancel={() => setMerging(null)}
+                  disabled={pending}
+                  onEdit={() => {
+                    setEditing(t.name)
+                    setMerging(null)
+                    setCreating(false)
+                  }}
+                  onMerge={() => {
+                    setMerging(t.name)
+                    setEditing(null)
+                    setCreating(false)
+                  }}
+                  onDelete={() => onDelete(t.name, t.usage)}
                 />
-              </li>
-            ) : (
-              <TagRow
-                key={t.name}
-                tag={t}
-                disabled={pending}
-                onEdit={() => {
-                  setEditing(t.name)
-                  setMerging(null)
-                  setCreating(false)
-                }}
-                onMerge={() => {
-                  setMerging(t.name)
-                  setEditing(null)
-                  setCreating(false)
-                }}
-                onDelete={() => onDelete(t.name, t.usage)}
-              />
-            ),
-          )}
-        </ul>
+              ),
+            )}
+          </ul>
+          <Pagination
+            basePath="/journals/tags"
+            currentParams={currentParams}
+            total={total}
+            page={page}
+            perPage={perPage}
+          />
+        </div>
       )}
     </div>
   )
@@ -245,13 +269,11 @@ function UsageMeter({ tag }: { tag: ManagedTag }) {
 
 function MergeRow({
   tag,
-  others,
   pending,
   onMerge,
   onCancel,
 }: {
   tag: ManagedTag
-  others: ManagedTag[]
   pending: boolean
   onMerge: (target: string) => void
   onCancel: () => void
@@ -263,21 +285,17 @@ function MergeRow({
         <span>Merge</span>
         <Chip name={tag.name} color={tag.color} />
         <span>into</span>
-        <div className="min-w-[12rem] flex-1">
-          <SearchSelect
-            value={target}
-            onChange={setTarget}
-            ariaLabel="Target tag"
-            sheetTitle="Merge into"
-            placeholder="Choose a tag…"
-            searchPlaceholder="Search tags…"
-            options={others.map((o) => ({ value: o.name, label: o.name }))}
-          />
-        </div>
+        <Input
+          value={target}
+          onChange={(event) => setTarget(event.target.value.toLowerCase())}
+          aria-label="Existing target tag name"
+          placeholder="Existing tag name…"
+          className="min-w-[12rem] flex-1"
+        />
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Every entry tagged <strong>{tag.name}</strong> will be re-tagged to the target, and{' '}
-        <strong>{tag.name}</strong> will be removed.
+        Enter an existing tag exactly. Every entry tagged <strong>{tag.name}</strong> will be
+        re-tagged to the target, and <strong>{tag.name}</strong> will be removed.
       </p>
       <div className="flex items-center gap-2">
         <Button

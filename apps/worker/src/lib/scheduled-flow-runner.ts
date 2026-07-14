@@ -7,7 +7,7 @@
 // single catch-up run). Actions are the worker-safe subset (notify_role /
 // send_email) — the same execution surface the session-overdue scan uses.
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { formAutomations, tenants } from '@beaconhs/db/schema'
@@ -19,9 +19,8 @@ import { renderEmail } from '@beaconhs/email-render'
 
 type ScheduledFlowScanResult = { flows: number; ran: number; errors: number }
 
-export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
+export async function scanScheduledFlows(now: Date = new Date()): Promise<ScheduledFlowScanResult> {
   const result: ScheduledFlowScanResult = { flows: 0, ran: 0, errors: 0 }
-  const now = new Date()
   const tenantRows = await withSuperAdmin(db, (tx) => tx.select({ id: tenants.id }).from(tenants))
 
   for (const t of tenantRows) {
@@ -146,7 +145,15 @@ export async function scanScheduledFlows(): Promise<ScheduledFlowScanResult> {
           await tx
             .update(formAutomations)
             .set({ lastScheduledRunAt: latestOccurrence })
-            .where(eq(formAutomations.id, flow.id))
+            .where(
+              and(
+                eq(formAutomations.id, flow.id),
+                or(
+                  isNull(formAutomations.lastScheduledRunAt),
+                  lt(formAutomations.lastScheduledRunAt, latestOccurrence),
+                ),
+              ),
+            )
         } catch (err) {
           result.errors += 1
           console.warn(

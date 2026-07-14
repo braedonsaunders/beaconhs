@@ -12,8 +12,6 @@ import { tenants } from '@beaconhs/db/schema'
  */
 type OrgLevel = 'customer' | 'project' | 'site' | 'area'
 
-const ORG_LEVELS = ['customer', 'project', 'site', 'area'] as const
-
 export type TenantHierarchy = Record<OrgLevel, boolean>
 
 /** Mirrors the column default in `tenants.hierarchy`. */

@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { lockFormResponseForMutation } from '@beaconhs/db'
 import {
   formResponses,
   formTemplateVersions,
@@ -18,7 +19,7 @@ import {
   people,
   type FormResponseDraftData,
 } from '@beaconhs/db/schema'
-import { validateResponse } from '@beaconhs/forms-core'
+import { normalizeFormResponseData, validateResponse } from '@beaconhs/forms-core'
 import { can } from '@beaconhs/tenant'
 import { domainEventActor, recordDomainEvent } from '@beaconhs/events'
 import { formSubmittedEvent } from '@beaconhs/integrations'
@@ -30,6 +31,7 @@ import { canAccessTemplate } from '@/app/(app)/apps/_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
+import { materializeFormResponseEvidenceChange } from '@/lib/forms/form-response-evidence'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -136,13 +138,16 @@ export async function lockResponse(formData: FormData) {
   if (!rec) return
   const roleKeys = await getEffectiveRoleKeys(ctx)
   if (!canLockRecord(ctx, rec, roleKeys)) return
-  const [locked] = await ctx.db((tx) =>
-    tx
+  const locked = await ctx.db(async (tx) => {
+    const before = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+    if (!before) return null
+    const [updated] = await tx
       .update(formResponses)
       .set({ locked: true, lockedAt: new Date(), lockedByTenantUserId: ctx.membership?.id ?? null })
       .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, false)))
-      .returning({ id: formResponses.id }),
-  )
+      .returning({ id: formResponses.id })
+    return updated ?? null
+  })
   if (!locked) return
   await recordAudit(ctx, {
     entityType: 'form_response',
@@ -161,13 +166,16 @@ export async function unlockResponse(formData: FormData) {
   if (!rec) return
   const roleKeys = await getEffectiveRoleKeys(ctx)
   if (!canUnlockRecord(ctx, rec, roleKeys)) return
-  const [unlocked] = await ctx.db((tx) =>
-    tx
+  const unlocked = await ctx.db(async (tx) => {
+    const before = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+    if (!before) return null
+    const [updated] = await tx
       .update(formResponses)
       .set({ locked: false, lockedAt: null, lockedByTenantUserId: null })
       .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, true)))
-      .returning({ id: formResponses.id }),
-  )
+      .returning({ id: formResponses.id })
+    return updated ?? null
+  })
   if (!unlocked) return
   await recordAudit(ctx, {
     entityType: 'form_response',
@@ -193,12 +201,18 @@ export async function finalizeResponse(formData: FormData) {
   // and re-fire the on-submit flows (duplicate CAPAs / emails).
   if (rec.status !== 'draft' && rec.status !== 'in_progress') return
 
-  const data = responsePayload(rec.data ?? {}, rec.draftData as FormResponseDraftData | null)
+  const rawData = responsePayload(rec.data ?? {}, rec.draftData as FormResponseDraftData | null)
 
   // Enforce required fields exactly like the guided wizard's submit path —
   // Finalize must never commit a record whose status says "submitted" while
   // required signatures/fields are empty. Errors bounce back to the record
   // page as a banner.
+  const rawValidationErrors = validateResponse(rec.schema, rawData, 'submit')
+  if (rawValidationErrors.length > 0) {
+    redirect(`/apps/responses/${responseId}?finalizeError=${rawValidationErrors.length}`)
+  }
+
+  const data = normalizeFormResponseData(rec.schema, rawData)
   const validationErrors = validateResponse(rec.schema, data, 'submit')
   if (validationErrors.length > 0) {
     redirect(`/apps/responses/${responseId}?finalizeError=${validationErrors.length}`)
@@ -227,6 +241,8 @@ export async function finalizeResponse(formData: FormData) {
 
   const submittedAt = rec.submittedAt ?? new Date()
   const finalized = await ctx.db(async (tx) => {
+    const before = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+    if (!before) return false
     const [claimed] = await tx
       .update(formResponses)
       .set({
@@ -249,7 +265,7 @@ export async function finalizeResponse(formData: FormData) {
           inArray(formResponses.status, ['draft', 'in_progress']),
         ),
       )
-      .returning({ id: formResponses.id })
+      .returning()
     if (!claimed) return false
     await repopulateParticipants(tx, {
       tenantId: ctx.tenantId,
@@ -288,6 +304,7 @@ export async function finalizeResponse(formData: FormData) {
         },
       },
     })
+    await materializeFormResponseEvidenceChange(tx, ctx.tenantId, before, claimed)
     return true
   })
   if (!finalized) return
@@ -309,8 +326,10 @@ export async function reopenResponse(formData: FormData) {
   if (!rec) return
   const roleKeys = await getEffectiveRoleKeys(ctx)
   if (!canUnlockRecord(ctx, rec, roleKeys)) return
-  const [reopened] = await ctx.db((tx) =>
-    tx
+  const reopened = await ctx.db(async (tx) => {
+    const before = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+    if (!before) return null
+    const [updated] = await tx
       .update(formResponses)
       .set({
         status: 'in_progress',
@@ -325,8 +344,11 @@ export async function reopenResponse(formData: FormData) {
           inArray(formResponses.status, ['closed', 'rejected']),
         ),
       )
-      .returning({ id: formResponses.id }),
-  )
+      .returning()
+    if (!updated) return null
+    await materializeFormResponseEvidenceChange(tx, ctx.tenantId, before, updated)
+    return updated
+  })
   if (!reopened) return
   await recordAudit(ctx, {
     entityType: 'form_response',

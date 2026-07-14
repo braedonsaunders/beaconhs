@@ -12,13 +12,15 @@
 // domain-event outbox in the same transaction. This module publishes those
 // effects only from retryable worker paths with deterministic queue job IDs.
 
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { db as defaultDb, withSuperAdmin, type Database } from '@beaconhs/db'
 import { caAssignedEmail, caCompletedEmail, incidentReportedEmail } from '@beaconhs/emails'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import { resolveNotificationAudienceUserIds } from './recipients'
+import { complianceRollupEmailHtml, maintenanceRollupEmailHtml } from './email-html'
 import {
+  complianceDispatches,
   complianceObligations,
   correctiveActions,
   incidents,
@@ -449,22 +451,71 @@ export async function emitComplianceTransitions(
   obligationId: string,
   transitions: ComplianceTransitionEvent[],
   dispatchId: string,
-): Promise<void> {
-  const actionable = transitions.filter((t) => t.to === 'overdue' || t.to === 'expiring')
-  if (actionable.length === 0) return
-  const ctx = workerEventCtx(tenantId)
+  publishLeaseId: string,
+  publicationTx?: Database,
+): Promise<boolean> {
+  // The compliance publisher supplies its existing transaction so all reads
+  // share the obligation/dispatch locks held through queue publication. The
+  // fallback keeps direct callers and focused tests backwards compatible.
+  const ctx: EventCtx = publicationTx
+    ? {
+        tenantId,
+        userId: 'system',
+        membership: null,
+        db: (run) => run(publicationTx),
+      }
+    : workerEventCtx(tenantId)
   const ob = await ctx.db(async (tx) => {
     const [o] = await tx
-      .select()
+      .select({
+        id: complianceObligations.id,
+        title: complianceObligations.title,
+        sourceModule: complianceObligations.sourceModule,
+        targetRef: complianceObligations.targetRef,
+      })
       .from(complianceObligations)
-      .where(eq(complianceObligations.id, obligationId))
+      .innerJoin(
+        complianceDispatches,
+        and(
+          eq(complianceDispatches.tenantId, complianceObligations.tenantId),
+          eq(complianceDispatches.obligationId, complianceObligations.id),
+        ),
+      )
+      .where(
+        and(
+          eq(complianceObligations.tenantId, tenantId),
+          eq(complianceObligations.id, obligationId),
+          eq(complianceObligations.status, 'active'),
+          isNull(complianceObligations.deletedAt),
+          eq(complianceDispatches.tenantId, tenantId),
+          eq(complianceDispatches.id, dispatchId),
+          eq(complianceDispatches.obligationId, obligationId),
+          eq(complianceDispatches.status, 'queued'),
+          eq(complianceDispatches.publishLeaseId, publishLeaseId),
+        ),
+      )
       .limit(1)
     return o ?? null
   })
-  if (!ob) return
+  if (!ob) return false
+
+  const actionable = transitions.filter(
+    (transition) =>
+      transition.to === 'overdue' ||
+      transition.to === 'expiring' ||
+      (ob.sourceModule === 'form' && transition.to === 'pending'),
+  )
+  if (actionable.length === 0) return false
+  const managerActionable = actionable.filter(
+    (transition) => transition.to === 'overdue' || transition.to === 'expiring',
+  )
 
   const linkPath = `/compliance/obligations/${ob.id}`
   const url = appUrl(linkPath)
+  const selfLinkPath =
+    ob.sourceModule === 'form' && ob.targetRef?.formTemplateId
+      ? `/apps/templates/${ob.targetRef.formTemplateId}/fill?obligationId=${ob.id}`
+      : linkPath
 
   // Map the affected persons → their login user id, for self-targeting.
   const personIds = [...new Set(actionable.map((t) => t.personId).filter(Boolean))] as string[]
@@ -485,7 +536,7 @@ export async function emitComplianceTransitions(
   for (const t of actionable) {
     const userId = t.userId ?? (t.personId ? personUser.get(t.personId) : null)
     if (!userId) continue
-    const verb = t.to === 'overdue' ? 'is overdue' : 'is due soon'
+    const verb = t.to === 'overdue' ? 'is overdue' : t.to === 'pending' ? 'is ready' : 'is due soon'
     await enqueueNotification(
       {
         tenantId,
@@ -494,7 +545,7 @@ export async function emitComplianceTransitions(
         type: `compliance.${t.to}`,
         title: `${ob.title} ${verb}`,
         body: t.dueOn ? `Due ${t.dueOn}.` : 'Action required.',
-        linkPath,
+        linkPath: selfLinkPath,
         data: { obligationId: ob.id, subjectKey: t.subjectKey, status: t.to, self: true },
       },
       { jobId: stableJobId('compliance-self', `${dispatchId}\0${t.subjectKey}\0${t.to}`) },
@@ -503,9 +554,9 @@ export async function emitComplianceTransitions(
 
   // 2. Single rollup to the obligation's audience (managers/admins).
   const audience = await resolveAudience(ctx, tenantId, 'compliance', [])
-  if (audience.length > 0) {
-    const overdue = actionable.filter((t) => t.to === 'overdue').length
-    const expiring = actionable.filter((t) => t.to === 'expiring').length
+  if (audience.length > 0 && managerActionable.length > 0) {
+    const overdue = managerActionable.filter((t) => t.to === 'overdue').length
+    const expiring = managerActionable.filter((t) => t.to === 'expiring').length
     const parts: string[] = []
     if (overdue) parts.push(`${overdue} newly overdue`)
     if (expiring) parts.push(`${expiring} newly due soon`)
@@ -526,15 +577,11 @@ export async function emitComplianceTransitions(
     )
     const recipients = await emailsForUserIds(ctx, tenantId, audience)
     if (recipients.length > 0) {
-      const list = actionable
-        .slice(0, 25)
-        .map((t) => `<li>${t.label} — ${t.to}${t.dueOn ? ` (due ${t.dueOn})` : ''}</li>`)
-        .join('')
       await enqueueEmail(
         {
           to: recipients,
           subject: title,
-          html: `<p>${body}</p><ul>${list}</ul><p><a href="${url}">View obligation</a></p>`,
+          html: complianceRollupEmailHtml({ body, entries: managerActionable, url }),
           text: `${body}\n${url}`,
           meta: { tenantId, category: 'compliance' },
         },
@@ -542,6 +589,7 @@ export async function emitComplianceTransitions(
       )
     }
   }
+  return true
 }
 
 // --- Equipment maintenance -------------------------------------------------
@@ -636,16 +684,11 @@ export async function emitEquipmentMaintenanceDue(
     )
     const recipients = await emailsForUserIds(ctx, tenantId, audience)
     if (recipients.length > 0) {
-      const list = entries
-        .slice(0, 25)
-        .map((e) => `<li>${e.itemName} (${e.assetTag}) — ${e.title}, due ${e.dueOn}</li>`)
-        .join('')
-      const more = entries.length > 25 ? `<p>…and ${entries.length - 25} more.</p>` : ''
       await enqueueEmail(
         {
           to: recipients,
           subject: title,
-          html: `<p>${title}.</p><ul>${list}</ul>${more}<p><a href="${url}">Open the maintenance cockpit</a></p>`,
+          html: maintenanceRollupEmailHtml({ title, entries, url }),
           text: `${title}.\n${url}`,
           meta: { tenantId, category: 'equipment' },
         },

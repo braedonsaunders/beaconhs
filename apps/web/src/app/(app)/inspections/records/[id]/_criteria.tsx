@@ -7,148 +7,37 @@
 // no edit drawer — the input on the page IS the field, matching the
 // hazard-assessment recipe (see @/components/live-field).
 
-import { useRef, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import Link from 'next/link'
+import { Badge, Input, Label, Select, Textarea, cn } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
+import { AlertOctagon, Camera } from 'lucide-react'
+import type { InspectionSeverity } from '@/components/builder/inspection-severity'
 import {
-  Badge,
-  Button,
-  Input,
-  Label,
-  SearchSelect,
-  Textarea,
-  cn,
-  type SelectOption,
-} from '@beaconhs/ui'
-import { AlertOctagon, Camera, CheckCircle2 } from 'lucide-react'
-import { FileUpload, type AttachedFile } from '@/components/file-upload'
-import { RawImage } from '@/components/raw-image'
+  MAX_INSPECTION_TEXT_ANSWER_LENGTH,
+  inspectionCriterionIsAnswered,
+  isInspectionOutcomeResponseType,
+  type InspectionResponseType,
+} from '@/lib/inspection-response-config'
+import {
+  AutosaveTextarea as AutoTextarea,
+  CRITERION_SEVERITY_OPTIONS as SEVERITY_OPTS,
+  CriterionPhotosPanel,
+  CriterionSaveIndicator as SaveDot,
+  CriterionSeverityPicker,
+  useCriterionAutosave as useAutosave,
+} from '@/components/inspection/criterion-controls'
 
 type CriterionAnswer = 'pass' | 'fail' | 'n_a'
-export type CriterionSeverity = 'low' | 'medium' | 'high' | 'critical'
-export type CriterionResponseType = 'pass_fail_na' | 'rating' | 'yes_no'
-
-type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-
-// One save channel per card — every field funnels through it, so the card shows
-// a single "Saving…/Saved ✓" affordance (the live-field convention).
-function useAutosave() {
-  const [state, setState] = useState<SaveState>('idle')
-  const [, start] = useTransition()
-  const router = useRouter()
-
-  function save(action: (fd: FormData) => Promise<void>, fields: Record<string, string>) {
-    setState('saving')
-    start(async () => {
-      try {
-        const fd = new FormData()
-        for (const [k, v] of Object.entries(fields)) fd.set(k, v)
-        await action(fd)
-        setState('saved')
-        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 1500)
-      } catch {
-        setState('error')
-      }
-    })
-  }
-
-  return { state, save, refresh: () => router.refresh() }
-}
-
-function SaveDot({ state }: { state: SaveState }) {
-  if (state === 'idle') return null
-  return (
-    <span
-      className={cn(
-        'text-[11px] font-medium',
-        state === 'saving' && 'text-slate-400',
-        state === 'saved' && 'text-emerald-600',
-        state === 'error' && 'text-red-600',
-      )}
-    >
-      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : 'Not saved — retry'}
-    </span>
-  )
-}
-
-// Debounced textarea that commits on blur + after a typing pause.
-function AutoTextarea({
-  label,
-  initial,
-  placeholder,
-  rows = 2,
-  disabled,
-  onCommit,
-}: {
-  label: string
-  initial: string | null
-  placeholder?: string
-  rows?: number
-  disabled?: boolean
-  onCommit: (value: string) => void
-}) {
-  const [value, setValue] = useState(initial ?? '')
-  const baseline = useRef(initial ?? '')
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function commit(next: string) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
-    if (next === baseline.current) return
-    baseline.current = next
-    onCommit(next)
-  }
-
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <Textarea
-        rows={rows}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        onChange={(e) => {
-          setValue(e.target.value)
-          if (timer.current) clearTimeout(timer.current)
-          timer.current = setTimeout(() => commit(e.target.value), 1000)
-        }}
-        onBlur={() => commit(value)}
-      />
-    </div>
-  )
-}
-
-const SEVERITY_OPTS: { value: CriterionSeverity; label: string; active: string }[] = [
-  {
-    value: 'low',
-    label: 'Low',
-    active: 'border-slate-400 bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
-  },
-  {
-    value: 'medium',
-    label: 'Medium',
-    active:
-      'border-amber-400 bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700',
-  },
-  {
-    value: 'high',
-    label: 'High',
-    active:
-      'border-orange-400 bg-orange-100 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200 dark:border-orange-700',
-  },
-  {
-    value: 'critical',
-    label: 'Critical',
-    active:
-      'border-rose-400 bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200 dark:border-rose-700',
-  },
-]
+export type CriterionSeverity = InspectionSeverity
+export type CriterionResponseType = InspectionResponseType
 
 // Answer labels vary by the criterion's response type — yes/no questions read
 // "Yes / No" while keeping the underlying pass/fail/n_a enum.
-const ANSWER_LABELS: Record<CriterionResponseType, Record<CriterionAnswer, string>> = {
+const ANSWER_LABELS: Record<
+  'pass_fail_na' | 'rating' | 'yes_no',
+  Record<CriterionAnswer, string>
+> = {
   pass_fail_na: { pass: 'Pass', fail: 'Fail', n_a: 'N/A' },
   rating: { pass: 'Pass', fail: 'Fail', n_a: 'N/A' },
   yes_no: { pass: 'Yes', fail: 'No', n_a: 'N/A' },
@@ -156,6 +45,8 @@ const ANSWER_LABELS: Record<CriterionResponseType, Record<CriterionAnswer, strin
 
 type CriterionActions = {
   setAnswer: (fd: FormData) => Promise<void>
+  setChoiceAnswer: (fd: FormData) => Promise<void>
+  setValueAnswer: (fd: FormData) => Promise<void>
   setSeverity: (fd: FormData) => Promise<void>
   setNonCompliance: (fd: FormData) => Promise<void>
   setActionTaken: (fd: FormData) => Promise<void>
@@ -172,6 +63,10 @@ export function CriterionCard({
   question,
   subtext,
   responseType,
+  choiceOptions,
+  choiceAnswer: initialChoiceAnswer,
+  textAnswer: initialTextAnswer,
+  numberAnswer: initialNumberAnswer,
   requiresPhoto,
   requiresComment,
   answer: initialAnswer,
@@ -186,7 +81,6 @@ export function CriterionCard({
   photoPreviews,
   correctiveActionRef,
   correctiveActionId,
-  peopleOptions,
   locked,
   allowCompliantNotes,
   actions,
@@ -198,6 +92,10 @@ export function CriterionCard({
   /** Optional guidance/help line shown under the question. */
   subtext?: string | null
   responseType: CriterionResponseType
+  choiceOptions: string[]
+  choiceAnswer: string | null
+  textAnswer: string | null
+  numberAnswer: string | null
   requiresPhoto: boolean
   requiresComment: boolean
   answer: CriterionAnswer | null
@@ -212,7 +110,6 @@ export function CriterionCard({
   photoPreviews: { id: string; url: string; filename: string }[]
   correctiveActionRef: string | null
   correctiveActionId: string | null
-  peopleOptions: SelectOption[]
   locked: boolean
   allowCompliantNotes: boolean
   actions: CriterionActions
@@ -220,12 +117,22 @@ export function CriterionCard({
   const { state, save, refresh } = useAutosave()
   // Optimistic local state for the values that drive what's shown.
   const [answer, setAnswerState] = useState<CriterionAnswer | null>(initialAnswer)
+  const [choiceAnswer, setChoiceAnswerState] = useState(initialChoiceAnswer ?? '')
+  const [textAnswer, setTextAnswerState] = useState(initialTextAnswer ?? '')
+  const [numberAnswer, setNumberAnswerState] = useState(initialNumberAnswer ?? '')
   const [severity, setSeverityState] = useState<CriterionSeverity | null>(initialSeverity)
   const [assignee, setAssignee] = useState(assignedToPersonId ?? '')
   const [due, setDue] = useState(assignedDueDate ?? '')
   const [corrected, setCorrected] = useState(correctedOn ?? '')
 
-  const labels = ANSWER_LABELS[responseType] ?? ANSWER_LABELS.pass_fail_na
+  const labels = isInspectionOutcomeResponseType(responseType) ? ANSWER_LABELS[responseType] : null
+  const responseAnswered = inspectionCriterionIsAnswered({
+    responseType,
+    outcomeAnswer: answer,
+    choiceAnswer: choiceAnswer || null,
+    textAnswer: textAnswer || null,
+    numberAnswer: numberAnswer || null,
+  })
 
   function pickAnswer(next: CriterionAnswer) {
     setAnswerState(next)
@@ -237,6 +144,17 @@ export function CriterionCard({
       setCorrected('')
     }
     save(actions.setAnswer, { recordId, rowId, answer: next })
+  }
+
+  function pickChoiceAnswer(next: string) {
+    setChoiceAnswerState(next)
+    save(actions.setChoiceAnswer, { recordId, rowId, choiceAnswer: next })
+  }
+
+  function saveValueAnswer(next: string) {
+    if (responseType === 'number') setNumberAnswerState(next)
+    else setTextAnswerState(next)
+    save(actions.setValueAnswer, { recordId, rowId, value: next })
   }
 
   function pickSeverity(next: CriterionSeverity) {
@@ -261,7 +179,9 @@ export function CriterionCard({
         ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/60 dark:bg-emerald-950/20'
         : answer === 'n_a'
           ? 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-800/30'
-          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+          : responseAnswered
+            ? 'border-teal-200 bg-teal-50/40 dark:border-teal-900/60 dark:bg-teal-950/20'
+            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
 
   const hasBadges =
     requiresPhoto ||
@@ -329,7 +249,60 @@ export function CriterionCard({
         <div className="flex shrink-0 flex-col items-end gap-1">
           <SaveDot state={state} />
           {locked ? (
-            <Badge variant="outline">{answer ? labels[answer] : '—'}</Badge>
+            <Badge variant="outline">
+              {responseType === 'choice'
+                ? choiceAnswer || '—'
+                : responseType === 'text' || responseType === 'long_text'
+                  ? textAnswer || '—'
+                  : responseType === 'number'
+                    ? numberAnswer || '—'
+                    : answer
+                      ? labels![answer]
+                      : '—'}
+            </Badge>
+          ) : responseType === 'choice' ? (
+            <Select
+              value={choiceAnswer}
+              onChange={(event) => pickChoiceAnswer(event.target.value)}
+              aria-label={`Answer ${question}`}
+              className="max-w-64 min-w-40"
+            >
+              <option value="">Select one…</option>
+              {choiceOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </Select>
+          ) : responseType === 'text' ? (
+            <Input
+              value={textAnswer}
+              maxLength={MAX_INSPECTION_TEXT_ANSWER_LENGTH}
+              onChange={(event) => setTextAnswerState(event.target.value)}
+              onBlur={(event) => saveValueAnswer(event.target.value)}
+              aria-label={`Answer ${question}`}
+              className="w-64 max-w-[45vw]"
+            />
+          ) : responseType === 'long_text' ? (
+            <Textarea
+              value={textAnswer}
+              maxLength={MAX_INSPECTION_TEXT_ANSWER_LENGTH}
+              rows={3}
+              onChange={(event) => setTextAnswerState(event.target.value)}
+              onBlur={(event) => saveValueAnswer(event.target.value)}
+              aria-label={`Answer ${question}`}
+              className="w-80 max-w-[50vw]"
+            />
+          ) : responseType === 'number' ? (
+            <Input
+              type="number"
+              step="any"
+              value={numberAnswer}
+              onChange={(event) => setNumberAnswerState(event.target.value)}
+              onBlur={(event) => saveValueAnswer(event.target.value)}
+              aria-label={`Answer ${question}`}
+              className="w-40 max-w-[40vw]"
+            />
           ) : (
             <div className="flex items-center gap-1">
               {(['pass', 'fail', 'n_a'] as const).map((opt) => {
@@ -351,7 +324,7 @@ export function CriterionCard({
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
                     )}
                   >
-                    {labels[opt]}
+                    {labels![opt]}
                   </button>
                 )
               })}
@@ -363,33 +336,15 @@ export function CriterionCard({
       {/* Failure metadata — only when failed and editable. */}
       {answer === 'fail' && !locked ? (
         <div className="mt-3 space-y-3 border-t border-red-200/70 pt-3 dark:border-red-900/50">
-          <div className="space-y-1">
-            <Label className="text-xs">Severity</Label>
-            <div className="flex items-center gap-1.5">
-              {SEVERITY_OPTS.map((o) => {
-                const active = severity === o.value
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => pickSeverity(o.value)}
-                    aria-pressed={active}
-                    className={cn(
-                      'min-h-10 flex-1 rounded-lg border text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5',
-                      active
-                        ? o.active
-                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
-                    )}
-                  >
-                    {o.label}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              High or Critical spawns a corrective action automatically.
-            </p>
-          </div>
+          <CriterionSeverityPicker
+            severity={severity}
+            onPick={pickSeverity}
+            helper={
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                High or Critical spawns a corrective action automatically.
+              </p>
+            }
+          />
 
           <AutoTextarea
             label="Reason for non-compliance"
@@ -407,13 +362,13 @@ export function CriterionCard({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1 sm:col-span-1">
               <Label className="text-xs">Assigned to</Label>
-              <SearchSelect
+              <RemoteSearchSelect
+                lookup="inspection-people"
                 value={assignee}
                 onChange={(next) => {
                   setAssignee(next)
                   saveAssignment(next, due)
                 }}
-                options={peopleOptions}
                 placeholder="— unassigned —"
                 searchPlaceholder="Search active people…"
                 sheetTitle="Assign finding"
@@ -450,7 +405,10 @@ export function CriterionCard({
 
       {/* Compliant note — pass / N-A, when the type allows it. Criteria that
           require a comment always get the field (the submit gate enforces it). */}
-      {(allowCompliantNotes || requiresComment) && answer && answer !== 'fail' && !locked ? (
+      {(allowCompliantNotes || requiresComment) &&
+      responseAnswered &&
+      answer !== 'fail' &&
+      !locked ? (
         <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           <AutoTextarea
             label={requiresComment ? 'Comment (required)' : 'Notes (optional)'}
@@ -465,31 +423,14 @@ export function CriterionCard({
       {/* Photos — always offered on fails and on photo-required criteria (the
           submit gate refuses photo-required rows with no attachment). */}
       {photoPreviews.length > 0 || (!locked && (answer === 'fail' || requiresPhoto)) ? (
-        <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-          {photoPreviews.length > 0 ? (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {photoPreviews.map((p) => (
-                <a
-                  key={p.id}
-                  href={p.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                >
-                  <RawImage src={p.url} alt={p.filename} className="h-full w-full object-cover" />
-                </a>
-              ))}
-            </div>
-          ) : null}
-          {!locked ? (
-            <CriterionPhotoUploader
-              recordId={recordId}
-              rowId={rowId}
-              addPhotos={actions.addPhotos}
-              onDone={refresh}
-            />
-          ) : null}
-        </div>
+        <CriterionPhotosPanel
+          photoPreviews={photoPreviews}
+          editable={!locked}
+          recordId={recordId}
+          rowId={rowId}
+          addPhotos={actions.addPhotos}
+          onDone={refresh}
+        />
       ) : null}
 
       {/* Locked read-only summary */}
@@ -503,52 +444,6 @@ export function CriterionCard({
           {corrected ? <div>Corrected on: {corrected}</div> : null}
           {compliantNote ? <div>Notes: {compliantNote}</div> : null}
         </div>
-      ) : null}
-    </div>
-  )
-}
-
-function CriterionPhotoUploader({
-  recordId,
-  rowId,
-  addPhotos,
-  onDone,
-}: {
-  recordId: string
-  rowId: string
-  addPhotos: (fd: FormData) => Promise<void>
-  onDone: () => void
-}) {
-  const [pending, start] = useTransition()
-  const [staged, setStaged] = useState<AttachedFile[]>([])
-
-  function attach() {
-    if (staged.length === 0) return
-    const fd = new FormData()
-    fd.set('recordId', recordId)
-    fd.set('rowId', rowId)
-    fd.set('attachmentIds', staged.map((s) => s.attachmentId).join(','))
-    start(async () => {
-      await addPhotos(fd)
-      setStaged([])
-      onDone()
-    })
-  }
-
-  return (
-    <div className="space-y-2">
-      <FileUpload variant="photo" value={staged} onChange={setStaged} />
-      {staged.length > 0 ? (
-        <Button type="button" size="sm" onClick={attach} disabled={pending}>
-          {pending ? (
-            'Attaching…'
-          ) : (
-            <>
-              <CheckCircle2 size={14} /> Attach {staged.length} photo
-              {staged.length === 1 ? '' : 's'}
-            </>
-          )}
-        </Button>
       ) : null}
     </div>
   )

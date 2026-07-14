@@ -105,8 +105,12 @@ export function RecurrencePicker({
                   id="rec-qty"
                   type="number"
                   min={1}
+                  step={1}
                   value={value.quantity ?? 1}
-                  onChange={(e) => set({ quantity: Math.max(1, Number(e.target.value) || 1) })}
+                  onChange={(e) => {
+                    const next = Number(e.target.value)
+                    set({ quantity: Number.isFinite(next) ? Math.max(1, Math.trunc(next)) : 1 })
+                  }}
                 />
               </div>
             ) : null}
@@ -118,15 +122,16 @@ export function RecurrencePicker({
                   type="number"
                   min={0}
                   max={100}
+                  step={1}
                   value={value.compliantPercentage ?? 100}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const next = Number(e.target.value)
                     set({
-                      compliantPercentage: Math.max(
-                        0,
-                        Math.min(100, Number(e.target.value) || 100),
-                      ),
+                      compliantPercentage: Number.isFinite(next)
+                        ? Math.max(0, Math.min(100, next))
+                        : 100,
                     })
-                  }
+                  }}
                 />
               </div>
             ) : null}
@@ -136,6 +141,8 @@ export function RecurrencePicker({
                 <Input
                   id="rec-off"
                   type="number"
+                  min={0}
+                  step={1}
                   value={value.dueOffsetMinutes ?? ''}
                   onChange={(e) =>
                     set({

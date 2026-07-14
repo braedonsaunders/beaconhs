@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq'
 import { getConnection } from '../connection'
+import { assertUuid } from '../validation'
 
 // Scheduled-report run queue. Producer is the scheduler tick (every 5 min);
 // consumer lives in apps/worker/src/workers/reports.ts.
@@ -11,6 +12,12 @@ export type ReportRunJobData = {
 }
 
 let reportsQueue: Queue<ReportRunJobData> | undefined
+
+export function assertReportRunJobData(data: ReportRunJobData): void {
+  assertUuid(data.tenantId, 'Report tenantId')
+  assertUuid(data.scheduleId, 'Report scheduleId')
+  assertUuid(data.runId, 'Report runId')
+}
 
 function getReportsQueue(): Queue<ReportRunJobData> {
   reportsQueue ??= new Queue<ReportRunJobData>('reports', {
@@ -26,5 +33,6 @@ function getReportsQueue(): Queue<ReportRunJobData> {
 }
 
 export async function enqueueReportRun(data: ReportRunJobData) {
+  assertReportRunJobData(data)
   return getReportsQueue().add('run', data, { jobId: `report-run|${data.runId}` })
 }

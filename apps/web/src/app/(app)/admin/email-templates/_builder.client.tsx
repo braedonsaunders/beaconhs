@@ -19,6 +19,13 @@ import { useState, type CSSProperties } from 'react'
 import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'
 import grapesjs, { type Editor } from 'grapesjs'
 import 'grapesjs/dist/css/grapes.min.css'
+import { TemplateBuilderBlockPalette } from '@/components/template-builder-block-palette'
+import {
+  collectionTableBlockHtml,
+  mergeFieldBlockHtml,
+  type TemplateCollection,
+  type TemplateMergeField,
+} from '@/lib/template-builder-html'
 import { TableToolbar } from '../_table-tools'
 
 const STARTER_HTML =
@@ -36,33 +43,6 @@ const LIGHT_THEME: CSSProperties & Record<string, string> = {
   '--gjs-font-color': '#334155',
   '--gjs-font-color-active': '#0f172a',
   '--gjs-main-dark-color': '#e2e8f0',
-}
-
-const TOKEN_SVG =
-  '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>'
-const TABLE_SVG =
-  '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 14h18M9 4v16"/></svg>'
-
-const TH =
-  'text-align:left;border-bottom:2px solid #e2e8f0;padding:6px 8px;font-size:11px;color:#475569;font-weight:700;text-transform:uppercase'
-const TD =
-  'border-bottom:1px solid #eef2f7;padding:6px 8px;font-size:13px;color:#0f172a;vertical-align:top'
-
-type MergeField = { key: string; label?: string }
-type Collection = { key: string; label: string; fields: { key: string; label: string }[] }
-
-// An EDITABLE record table: a real <table> with a header row + ONE body row
-// carrying `data-each="<collection>"`. The marker (invisible in the canvas) is
-// expanded to {{#each}} at compile, so the single editable row repeats per item.
-function collectionTableHtml(c: Collection): string {
-  const head = c.fields.map((f) => `<th style="${TH}">${f.label}</th>`).join('')
-  const body = c.fields.map((f) => `<td style="${TD}">{{${f.key}}}</td>`).join('')
-  return (
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 8px;">` +
-    `<tr>${head}</tr>` +
-    `<tr data-each="${c.key}">${body}</tr>` +
-    `</table>`
-  )
 }
 
 // Standard email content/layout blocks (inline-styled, email-safe).
@@ -122,18 +102,16 @@ const BASE_BLOCKS: { id: string; label: string; content: string }[] = [
 ]
 
 export default function EmailBuilder({
-  initialDesign,
-  initialMjml,
+  initialHtml,
   onReady,
   mergeFields = [],
   collections = [],
 }: {
-  initialDesign: Record<string, unknown> | null
   /** Inline-styled HTML to seed the canvas when there is no saved design yet. */
-  initialMjml?: string | null
+  initialHtml?: string | null
   onReady: (editor: Editor) => void
-  mergeFields?: MergeField[]
-  collections?: Collection[]
+  mergeFields?: TemplateMergeField[]
+  collections?: TemplateCollection[]
 }) {
   const [editor, setEditor] = useState<Editor | null>(null)
   return (
@@ -156,28 +134,28 @@ export default function EmailBuilder({
           }
           // Record tokens → draggable blocks (category "Record fields").
           for (const f of mergeFields) {
+            const content = mergeFieldBlockHtml(f)
+            if (!content) continue
             bm.add(`token:${f.key}`, {
               label: f.label || f.key,
               category: 'Record fields',
-              content: `<span style="color:#0f172a;">{{${f.key}}}</span>`,
-              media: TOKEN_SVG,
+              content,
             })
           }
           // Each collection → a drag-in editable table (category "Tables").
           for (const c of collections) {
+            const content = collectionTableBlockHtml(c)
+            if (!content) continue
             bm.add(`table:${c.key}`, {
               label: `${c.label} table`,
               category: 'Tables',
-              content: collectionTableHtml(c),
-              media: TABLE_SVG,
+              content,
             })
           }
-          // Saved design wins; else seed from the template's HTML; else starter.
+          // Sanitized HTML+CSS is the sole editable source; else use the starter.
           try {
-            if (initialDesign && Object.keys(initialDesign).length > 0) {
-              editor.loadProjectData(initialDesign)
-            } else if (initialMjml && initialMjml.trim()) {
-              editor.setComponents(initialMjml)
+            if (initialHtml && initialHtml.trim()) {
+              editor.setComponents(initialHtml)
             } else {
               editor.setComponents(STARTER_HTML)
             }
@@ -195,39 +173,7 @@ export default function EmailBuilder({
         <div className="grid h-full min-h-0 grid-cols-3 grid-rows-1">
           {/* LEFT 1/3 — palette */}
           <aside className="col-span-1 min-h-0 overflow-y-auto border-r border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
-            <BlocksProvider>
-              {({ mapCategoryBlocks, dragStart, dragStop }) => (
-                <div className="space-y-4 pb-6">
-                  {Array.from(mapCategoryBlocks.entries()).map(([category, blocks]) => (
-                    <div key={category || 'general'}>
-                      <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-                        {category || 'Elements'}
-                      </p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {blocks.map((block) => (
-                          <div
-                            key={block.getId()}
-                            draggable
-                            onDragStart={(e) => dragStart(block, e.nativeEvent)}
-                            onDragEnd={() => dragStop()}
-                            title={block.getLabel()}
-                            className="flex cursor-grab flex-col items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-2 text-center text-[10px] leading-tight text-slate-600 shadow-sm transition hover:border-teal-400 hover:text-teal-700 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                          >
-                            {block.getMedia() ? (
-                              <span
-                                className="text-slate-500 dark:text-slate-400"
-                                dangerouslySetInnerHTML={{ __html: block.getMedia() as string }}
-                              />
-                            ) : null}
-                            <span dangerouslySetInnerHTML={{ __html: block.getLabel() }} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </BlocksProvider>
+            <BlocksProvider>{(props) => <TemplateBuilderBlockPalette {...props} />}</BlocksProvider>
           </aside>
 
           {/* RIGHT 2/3 — the canvas */}

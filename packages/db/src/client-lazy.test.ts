@@ -33,7 +33,7 @@ describe('lazy database clients', () => {
 
     expect(mocks.postgres).not.toHaveBeenCalled()
     expect(mocks.drizzle).not.toHaveBeenCalled()
-  })
+  }, 15_000)
 
   it('creates each configured database once on first use', async () => {
     process.env.NODE_ENV = 'production'

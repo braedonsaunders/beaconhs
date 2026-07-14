@@ -6,12 +6,13 @@
 // concatenates the per-document bodies into a single letterheaded PDF and we
 // stream the fresh artifact back to the browser.
 
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { documentBooks } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params
+  if (!isUuid(id)) return Response.json({ error: 'Book not found' }, { status: 404 })
+
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
@@ -34,7 +37,7 @@ export async function GET(
     tx
       .select({ status: documentBooks.status })
       .from(documentBooks)
-      .where(eq(documentBooks.id, id))
+      .where(and(eq(documentBooks.tenantId, ctx.tenantId), eq(documentBooks.id, id)))
       .limit(1),
   )
   if (!book) return Response.json({ error: 'Book not found' }, { status: 404 })

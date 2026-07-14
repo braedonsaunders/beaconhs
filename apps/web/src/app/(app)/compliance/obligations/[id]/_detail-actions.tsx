@@ -3,6 +3,7 @@
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Button } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { deleteObligation, setObligationEnabled } from '../_actions'
@@ -41,8 +42,16 @@ export function ObligationDetailActions({
         disabled={pending}
         onClick={() =>
           start(async () => {
-            await setObligationEnabled(id, !enabled)
-            router.refresh()
+            try {
+              const result = await setObligationEnabled(id, !enabled)
+              if (!result.ok) {
+                toast.error(result.error)
+                return
+              }
+              router.refresh()
+            } catch {
+              toast.error(`Could not ${enabled ? 'disable' : 'enable'} the obligation`)
+            }
           })
         }
       >
@@ -60,8 +69,16 @@ export function ObligationDetailActions({
           )
             return
           start(async () => {
-            const res = await deleteObligation(id)
-            if (res.ok) router.push('/compliance/obligations')
+            try {
+              const result = await deleteObligation(id)
+              if (!result.ok) {
+                toast.error(result.error)
+                return
+              }
+              router.push('/compliance/obligations')
+            } catch {
+              toast.error('Could not delete the obligation')
+            }
           })
         }}
       >

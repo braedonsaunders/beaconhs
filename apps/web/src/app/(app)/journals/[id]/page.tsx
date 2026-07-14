@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
 import { getEntry, getWorkspaceData, listEntries } from '../_data'
-import { isUuid } from '../_lib'
+import { isUuid } from '@/lib/list-params'
 import { JournalWorkspace } from '../_workspace'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
@@ -11,9 +11,10 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Journal entry' }
 
 export default async function JournalEntryPage({ params }: { params: Promise<{ id: string }> }) {
-  const ctx = await requireRequestContext()
   const { id } = await params
   if (!isUuid(id)) notFound()
+
+  const ctx = await requireRequestContext()
   const groupBy = 'date' as const
 
   const [data, deepEntry, pendingGates] = await Promise.all([

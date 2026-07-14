@@ -1,8 +1,9 @@
 // Resolve the effective SMS transport for a send, applying the platform →
-// tenant → environment policy. The decision logic itself is the pure
+// tenant policy. The decision logic itself is the pure
 // `resolveEffectiveSmsTransport` in @beaconhs/sms; this module only fetches the
 // two stored configs (platform singleton + the tenant's settings.sms) from the
-// database. The platform row is cached briefly since it changes rarely.
+// database. The platform row is read for every job so kill-switch and policy
+// changes take effect immediately.
 // Mirrors ./resolve-email-transport.
 
 import { eq } from 'drizzle-orm'
@@ -15,13 +16,8 @@ import {
   type RawSmsConfig,
 } from '@beaconhs/sms'
 
-let platformCache: { value: PlatformSmsConfig | null; at: number } | null = null
-const PLATFORM_TTL_MS = 30_000
-
 async function readPlatformSms(): Promise<PlatformSmsConfig | null> {
-  const now = Date.now()
-  if (platformCache && now - platformCache.at < PLATFORM_TTL_MS) return platformCache.value
-  const value = await withSuperAdmin(db, async (tx) => {
+  return withSuperAdmin(db, async (tx) => {
     const [row] = await tx
       .select({ sms: platformSettings.sms })
       .from(platformSettings)
@@ -30,8 +26,6 @@ async function readPlatformSms(): Promise<PlatformSmsConfig | null> {
     const raw = row?.sms
     return raw && typeof raw === 'object' ? (raw as PlatformSmsConfig) : null
   })
-  platformCache = { value, at: now }
-  return value
 }
 
 async function readTenantSms(tenantId: string): Promise<RawSmsConfig | null> {
@@ -51,9 +45,4 @@ export async function resolveSmsDelivery(tenantId: string | null): Promise<Effec
   const platform = await readPlatformSms()
   const tenant = tenantId ? await readTenantSms(tenantId) : null
   return resolveEffectiveSmsTransport(platform, tenant, { tenantScoped: Boolean(tenantId) })
-}
-
-/** Test seam: drop the cached platform row (used after a config save in-process). */
-function clearPlatformSmsCache(): void {
-  platformCache = null
 }

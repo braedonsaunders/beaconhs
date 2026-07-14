@@ -6,6 +6,7 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
+import { isUuid } from '@/lib/list-params'
 import { InspectionBankBuilder } from './_bank-builder'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,8 @@ export default async function InspectionBankDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('inspections')
 
   const data = await ctx.db(async (tx) => {
@@ -36,6 +39,7 @@ export default async function InspectionBankDetailPage({
         sequence: inspectionBankCriteria.sequence,
         text: inspectionBankCriteria.text,
         responseType: inspectionBankCriteria.responseType,
+        choiceOptions: inspectionBankCriteria.choiceOptions,
         requiresPhoto: inspectionBankCriteria.requiresPhoto,
         requiresComment: inspectionBankCriteria.requiresComment,
       })

@@ -57,7 +57,8 @@ backup-role credentials in web, worker, or scheduler service environments.
 The reusable deployment validates required secret names before it builds an
 image or touches the self-hosted runner. It checks presence, URL schemes,
 minimum signing-secret lengths, separation of database roles and signing keys,
-and, for a Cloudflare R2 endpoint, requires
+and rejects CR/LF in every value that crosses the line-oriented Dokploy
+environment contract. For a Cloudflare R2 endpoint, it requires
 `R2_PRIVATE_BUCKET_CONFIRMED=true`. That confirmation may only be set after an
 operator has disabled and independently verified every R2 public development
 URL and custom domain. Other S3-compatible endpoints do not need the manual
@@ -75,7 +76,7 @@ DEV_MIGRATION_DATABASE_URL
 DEV_REDIS_URL
 DEV_SUPERADMIN_DATABASE_URL
 DOKPLOY_COMPOSE_ID
-DOKPLOY_REGISTRY_ID
+DOKPLOY_RESOLVE_IP
 DOKPLOY_TOKEN
 DOKPLOY_URL
 R2_ACCESS_KEY_ID
@@ -104,15 +105,29 @@ an externally resolvable public DNS hostname and a certificate that validates
 for that hostname. BeaconHS blocks private, local, reserved, and IP-literal
 SMTP targets and requires verified implicit TLS or STARTTLS.
 
+The deploy job uses its job-scoped `GITHUB_TOKEN` with `packages: read` only to
+pre-pull the exact new digest into a temporary Docker configuration before
+database downtime. It never stores that short-lived token in Dokploy. Each
+compose update round-trips the exact live `registryId` returned by Dokploy and
+verifies that it did not change. Maintain and rotate the working GHCR login in
+Dokploy itself; do not replace it with an Actions token, which expires after the
+job.
+
 `SENTRY_DSN` is warning-only for the dev deployment so a monitoring-provider
 outage does not block schema recovery, but it remains mandatory before
-production traffic is accepted. `GITHUB_TOKEN` is created by Actions and is
-scoped per job: package write for image build, package read for deployment, and
-no permissions for the maintenance/preflight jobs.
+production traffic is accepted. `GITHUB_TOKEN` remains scoped per job: package
+write for image publication, package read plus repository read for the
+deployment's exact-digest pull and stale-main guard, and no permissions for the
+preflight job. Validation and refresh-token rotation receive repository read
+only so they can run the audited, checked-in safeguards.
 
-`DEV_DIRECT_DATABASE_URL` and `R2_PUBLIC_URL` are retired names and are not
-consumed by the workflow or containers. Remove stale repository entries rather
-than reintroducing either variable.
+All Dokploy API calls load `DOKPLOY_TOKEN` from a mode-`0600` temporary header
+file. The helper removes that file on success, failure, or interruption and
+never places the API key in curl's process arguments.
+
+`DEV_DIRECT_DATABASE_URL`, `DOKPLOY_REGISTRY_ID`, and `R2_PUBLIC_URL` are
+retired names and are not consumed by the workflow or containers. Remove stale
+repository entries rather than reintroducing any of them.
 
 ## PostgreSQL backup and recovery
 
@@ -189,8 +204,12 @@ backup-tool changes.
 - The bucket must reject anonymous `GetObject` and list operations.
 - Application reads use short-lived signed URLs; application uploads use
   single-use database reservations and verified pending-object promotion.
-- Enable bucket encryption and versioning. Keep the pending-upload lifecycle
-  rule at one day so abandoned uploads do not accumulate.
+- Enable bucket encryption and versioning. The one-shot storage initializer
+  idempotently installs one-day expiry rules for objects tagged
+  `beaconhs-state=pending` (abandoned uploads) and
+  `beaconhs-state=transient` (on-demand render hand-offs). Do not remove or
+  broaden those two tag-scoped rules; durable attachments are intentionally
+  untagged and are never selected by them.
 - Run a daily referenced-key inventory. Alert on missing referenced objects and
   age unreferenced objects through a quarantine window before deletion.
 - Back up or replicate irreplaceable objects to a separate account/region.
@@ -233,27 +252,118 @@ the synthetic path or job.
 2. Run all local gates under the pinned Node/pnpm versions:
    `format:check`, `typecheck`, `lint`, `test`, and `build`.
 3. Push an atomic commit to protected `main`.
-4. CI must test the real migration path twice before building the immutable SHA
-   image.
-5. The deploy job pre-pulls the exact SHA, discovers the current BeaconHS Swarm
-   web, worker, and one-shot scheduler services, records their desired replicas
-   in a runner-private temporary file, and drains them before migrating with the
-   migration-only login. If the drain fails, or the migration command fails and
-   the migration ledger proves its schema transaction rolled back, it restores
-   the prior replica counts and verifies the persistent writers return.
-6. As soon as the migration ledger advances, recovery is forward-only even if a
-   later migration phase or deployment step fails. The old writer services
-   remain stopped until Dokploy deploys the new SHA. Repair by redeploying that
-   SHA or by an explicit database restore/cutover; never point the old image at
-   the migrated schema.
-7. The job verifies web, worker, scheduler, readiness, login, and Collabora
-   discovery before declaring the deployment healthy.
-8. Roll application code back by exact image SHA only when the database change
-   is backward-safe. Database migrations are forward-only; otherwise restore to
-   a new database from the pre-change backup and perform an explicit cutover.
+4. CI must test the real migration path twice before building and publishing the
+   commit-tagged image. The deployment captures the registry-returned
+   `sha256` content digest and uses only `IMAGE_NAME@sha256:...` from that
+   point forward; the commit tag is never used as a deployment identity. The
+   reusable deployment rejects a run unless its full SHA is still
+   the current remote `main` tip, checks again before publishing the image,
+   before the first deployment-host mutation, and immediately before downtime.
+   Never rerun a stale workflow attempt after `main` has advanced; dispatch the
+   latest commit instead. Repository workflows retain read-only contents
+   permission so they cannot advance `main` behind an in-flight release; CI
+   enforces that invariant. No mutable `dev` image tag participates in deploys.
+5. Before any writer metadata or downtime change, the deploy job rejects an
+   unsupported multi-node dev Swarm, a Dokploy compose assigned to a remote
+   server, competing app-host Traefik routes, outside BeaconHS writers, and
+   outside containers or services using any target database role. It fails
+   closed on route matchers it cannot audit,
+   fingerprints the normalized raw router rules and labels, reconciles the
+   reviewed Collabora routes, and persists the compose with
+   `WRITER_REPLICAS=0`. That update also disables Dokploy auto-deploy, custom
+   compose commands, service randomization, and isolated-deployment rewrites;
+   only the audited raw Swarm-stack command may materialize the compose. The
+   fenced metadata already points at the new immutable app and Collabora
+   digests, so an unexpected zero-writer deploy cannot start an unreviewed
+   one-shot image. The dev compose is also limited to exactly the primary app
+   domain plus `/browser`, `/cool`, and `/hosting`; stale alternate hosts or
+   path records block the cutover. The job then proves the exact persisted
+   state, an empty target deployment queue, and no running target deployment.
+6. The deploy job pre-pulls the exact build digest with its job-scoped,
+   read-only GHCR token, without mutating Dokploy's existing registry login. It
+   derives the compose's registry identity from `compose.one`, round-trips that
+   exact value in both updates, and includes it in every later compose
+   fingerprint. It requires the target stack to contain exactly the reviewed
+   five services, and pauses scheduling on every active
+   Swarm node before it drains the web, worker, and one-shot scheduler. Existing
+   unrelated tasks keep running. It rejects BeaconHS writers or exact target-DB
+   credentials in any outside Swarm service or standalone container. Immediately
+   before migration, it re-enumerates every current node (including newly joined
+   nodes), service, and container, then re-proves the scheduler fence, terminal
+   old writer tasks, exact compose fingerprint, empty queue, routes, and no
+   running target deployment.
+7. Recovery is forward-only as soon as the migration runner starts. It commits
+   independent schema, RLS, grant, authorization-data, statistics, and
+   reporting-view phases, so an unchanged Drizzle ledger is not rollback proof.
+   During the optional one-time data cutover, the job re-proves the Swarm
+   scheduler and outside-writer isolation immediately before and after every
+   mutating pass. After the initial drain, that proof also inspects target-stack
+   task containers and fails if any database writer is still running; a changed
+   fence stops the remaining cutover scripts.
+   The workflow never automatically restores old writers after a migration
+   failure. Repair by rerunning the exact SHA or by an explicit database
+   restore/cutover; never point the old image at partially or fully converged
+   current-code database state.
+8. After schema and optional data cutover, the workflow restores
+   `WRITER_REPLICAS=1` only alongside the exact new image, pinned Collabora
+   digest, and complete reviewed environment. While every current node is still
+   unavailable for new scheduling, it posts one uniquely marked Dokploy
+   deployment, reconciles an ambiguous API response through the deployment
+   ledger without re-posting, and requires a timestamped successful terminal
+   state. It then re-reads the exact compose fingerprint, verifies all five
+   materialized service specs, exact and unique environment key sets and values,
+   placement, roles, digest-pinned images, replicas, and pending writer tasks.
+   The pre-cutover audit accepts the currently running Collabora release only
+   when it is digest-pinned, so a reviewed Collabora digest upgrade cannot
+   deadlock the cutover; the post-deploy audit requires the newly configured
+   digest exactly. Only after that final proof does it reactivate the nodes it
+   paused.
+9. The job requires exactly one target-stack web, worker, scheduler,
+   storage-initializer, and Collabora service on their expected images. It then
+   verifies task health/completion, exact-SHA external readiness, an exact HTML
+   `200` from login, and strict PPTX/DOCX Collabora discovery before declaring
+   the deployment healthy.
+10. Roll application code back by exact image digest only when the database change
+    is backward-safe. Database migrations are forward-only; otherwise restore to
+    a new database from the pre-change backup and perform an explicit cutover.
+
+The one-time dev data cutover must be dispatched from the **CI** workflow with
+`operation=deploy-and-cutover`. That run executes every gate for the selected
+`main` SHA before calling the reusable deploy workflow. The deploy workflow's
+direct manual entrypoint is reserved for compose refresh-token rotation.
+
+The scheduler fence is not a PostgreSQL login fence and cannot make an
+administrator or a non-Docker external client participate in the transaction.
+For every cutover window, suspend other Dokploy/UI/API deployment authority and
+confirm no external process uses the BeaconHS runtime or cross-tenant database
+credentials. A production cluster should add a dedicated cutover-only data role
+and an admin-provisioned database fence that blocks and drains runtime sessions;
+do not claim the Swarm-only dev procedure provides that stronger guarantee.
+
+The dev compose currently serves Collabora on the BeaconHS app origin through
+`/browser`, `/cool`, and `/hosting`. That topology is for the private dev
+environment only: a compromised editor would share the app origin, cookies,
+and browser storage. Before production traffic, give Collabora a dedicated
+HTTPS origin with its own DNS/certificate and no parent-domain auth cookies;
+set `COLLABORA_URL` to that origin while keeping `COLLABORA_WOPI_URL` on the app
+origin. Keep that exact editor origin in `form-action`; `frame-src` also permits
+HTTPS tenant-authored training embeds, which must remain sandboxed without form,
+pop-up, or top-navigation privileges. Retain exact `event.origin` **and**
+iframe-window source validation for every Collabora `postMessage`. Do not
+approve the same-origin dev route set as a production exception.
 
 Never disable a gate, edit a migration ledger, mark a failed migration as
 applied, or point old code at a schema it does not understand.
+
+If a failed run reports a retained Swarm scheduler fence, leave it in place
+until the failed migration/data state is understood. Before changing node
+availability manually, prefer dispatching the latest audited workflow. The
+workflow records its claim in namespaced labels on the sole Swarm manager; a
+later run reclaims the pause only when the repository, stack, node identity,
+and complete label set still match. A manager paused without that exact claim,
+or one changed to `drain`, fails closed as operator-owned state. The successful
+release restores only the node that the workflow originally observed as
+active, verifies it, and then removes only those namespaced claim labels.
 
 ## Private ETL cutover
 

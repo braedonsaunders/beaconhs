@@ -4,11 +4,12 @@ import 'server-only'
 // [token] placeholders). Picks the most recently created record of the subject;
 // the caller then runs the subject's FlowSubjectAdapter.loadValues() on it.
 
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core'
 import {
   correctiveActions,
   documentManagementReviews,
+  equipmentInspectionRecords,
   equipmentItems,
   equipmentWorkOrders,
   formResponses,
@@ -21,27 +22,49 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
-type SampleTable = PgTable & { id: PgColumn; createdAt: PgColumn }
+type SampleTable = PgTable & { id: PgColumn; tenantId: PgColumn; createdAt: PgColumn }
+type SampleSource = { table: SampleTable; liveWhere?: SQL }
 
-async function latestId(ctx: RequestContext, table: SampleTable): Promise<string | null> {
+async function latestId(ctx: RequestContext, source: SampleSource): Promise<string | null> {
   const rows = await ctx.db((tx) =>
-    tx.select({ id: table.id }).from(table).orderBy(desc(table.createdAt)).limit(1),
+    tx
+      .select({ id: source.table.id })
+      .from(source.table)
+      .where(and(eq(source.table.tenantId, ctx.tenantId), source.liveWhere))
+      .orderBy(desc(source.table.createdAt))
+      .limit(1),
   )
   return (rows[0]?.id as string | undefined) ?? null
 }
 
 // moduleKey → the table whose latest row is a representative preview record.
-const MODULE_SAMPLE_TABLE: Record<string, SampleTable> = {
-  journals: journalEntries,
-  hazid: hazidAssessments,
-  incidents: incidents,
-  'corrective-actions': correctiveActions,
-  inspections: inspectionRecords,
-  training: trainingAssessments,
-  equipment: equipmentWorkOrders,
-  'equipment-assets': equipmentItems,
-  'vehicle-log': truckLogEntries,
-  documents: documentManagementReviews,
+const MODULE_SAMPLE_TABLE: Record<string, SampleSource> = {
+  journals: { table: journalEntries, liveWhere: isNull(journalEntries.deletedAt) },
+  hazid: { table: hazidAssessments, liveWhere: isNull(hazidAssessments.deletedAt) },
+  incidents: { table: incidents, liveWhere: isNull(incidents.deletedAt) },
+  'corrective-actions': {
+    table: correctiveActions,
+    liveWhere: isNull(correctiveActions.deletedAt),
+  },
+  inspections: {
+    table: inspectionRecords,
+    liveWhere: isNull(inspectionRecords.deletedAt),
+  },
+  training: { table: trainingAssessments, liveWhere: isNull(trainingAssessments.deletedAt) },
+  equipment: { table: equipmentWorkOrders },
+  'equipment-assets': {
+    table: equipmentItems,
+    liveWhere: isNull(equipmentItems.deletedAt),
+  },
+  'equipment-inspections': {
+    table: equipmentInspectionRecords,
+    liveWhere: isNull(equipmentInspectionRecords.deletedAt),
+  },
+  'vehicle-log': { table: truckLogEntries },
+  documents: {
+    table: documentManagementReviews,
+    liveWhere: isNull(documentManagementReviews.deletedAt),
+  },
 }
 
 /** The most recent record id for a subject, or null if the tenant has none. */
@@ -60,7 +83,13 @@ export async function findSampleSubjectId(
       tx
         .select({ id: formResponses.id })
         .from(formResponses)
-        .where(eq(formResponses.templateId, subjectKey))
+        .where(
+          and(
+            eq(formResponses.tenantId, ctx.tenantId),
+            eq(formResponses.templateId, subjectKey),
+            isNull(formResponses.deletedAt),
+          ),
+        )
         .orderBy(desc(formResponses.createdAt))
         .limit(1),
     )

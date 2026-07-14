@@ -119,8 +119,10 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     // edits to the template propagate to every flow that uses it).
     templateId: z.string().optional(),
     subjectOverride: z.string().optional(),
-    // mode 'design' — a one-off drag-and-drop design authored on this node.
-    design: z.record(z.string(), z.unknown()).optional(),
+    // mode 'design' — sanitized editable HTML is the single authoring source;
+    // compiledHtml is the delivery artifact. GrapesJS project JSON is not stored
+    // because it can retain unsafe/obsolete component state outside that source.
+    sourceHtml: z.string().max(512_000).optional(),
     compiledHtml: z.string().optional(),
     subjectTemplate: z.string().optional(),
     // Attach a PDF of the record. `pdfTemplateId` pins a specific tenant PDF
@@ -163,15 +165,11 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     action: z.literal('webhook'),
     url: z.string(),
     method: z.enum(['POST', 'PUT']).default('POST'),
-    headers: z.record(z.string(), z.string()).optional(),
-    bodyTemplate: z.string().optional(),
-    secretRef: z.string().optional(),
   }),
   z.object({
     action: z.literal('create_response'),
     templateId: z.string(),
     prefill: z.record(z.string(), defaultValueExpressionSchema).optional(),
-    assignee: assigneeTargetSchema.optional(),
   }),
   z.object({
     action: z.literal('analyze_photos'),
@@ -278,16 +276,32 @@ export function lintAutomationGraph(
   if (profile) {
     const okTriggers = new Set<string>(profile.triggers)
     const okActions = new Set<string>(profile.actions)
+    const okStatuses = new Set(profile.statusValues ?? [])
     for (const n of graph.nodes) {
       if (n.data.kind === 'trigger' && !okTriggers.has(n.data.trigger.trigger)) {
         errors.push(
           `Trigger ${n.id}: "${n.data.trigger.trigger}" is not available for ${profile.label}.`,
         )
       }
+      if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'status_change') {
+        if (!okStatuses.has(n.data.trigger.to)) {
+          errors.push(`Trigger ${n.id}: unknown destination status "${n.data.trigger.to}".`)
+        }
+        if (n.data.trigger.from && !okStatuses.has(n.data.trigger.from)) {
+          errors.push(`Trigger ${n.id}: unknown source status "${n.data.trigger.from}".`)
+        }
+      }
       if (n.data.kind === 'action' && !okActions.has(n.data.action.action)) {
         errors.push(
           `Action ${n.id}: "${n.data.action.action}" is not available for ${profile.label}.`,
         )
+      }
+      if (
+        n.data.kind === 'action' &&
+        n.data.action.action === 'change_status' &&
+        !okStatuses.has(n.data.action.to)
+      ) {
+        errors.push(`Action ${n.id}: unknown destination status "${n.data.action.to}".`)
       }
     }
   }
@@ -364,7 +378,7 @@ export function lintWorkerTriggerCompatibility(graph: AutomationGraph): string[]
             action.attachPdf ||
             action.templateId ||
             action.pdfTemplateId ||
-            action.design ||
+            action.sourceHtml ||
             action.compiledHtml)
         ) {
           errors.push(

@@ -4,7 +4,7 @@
 // tool-use cards + composer. Streams via the UI-message protocol (readUIMessageStream)
 // so the SAME parts[] renderer serves live tokens and reloaded transcripts.
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
@@ -15,11 +15,13 @@ import {
 } from 'ai'
 import {
   MoreHorizontal,
+  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
   Plus,
   Send,
+  Search,
   Share2,
   Sparkles,
   Square,
@@ -28,6 +30,20 @@ import {
 } from 'lucide-react'
 import { Button, EmptyState, cn } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { MAX_ASSISTANT_PROMPT_CHARS } from '@/lib/assistant/limits'
+import {
+  AI_CONVERSATION_SEARCH_MAX_CHARS,
+  AI_CONVERSATION_TITLE_MAX_CHARS,
+} from '@/lib/ai-conversation-pagination'
+import {
+  getConversationMessagePage,
+  listConversationPage,
+  listSharedConversationPage,
+  type AiChatMessage,
+  type AiConversationPage,
+  type AiConversationSummary,
+} from '@/lib/ai-conversations'
+import { toast } from '@/lib/toast'
 import { deleteAssistantConversation, renameAssistantConversation } from '../_actions'
 import { MessageParts } from './message-parts'
 import { ShareDrawer } from './share-drawer'
@@ -35,23 +51,72 @@ import { DocumentReaderProvider } from './document-reader'
 
 type Role = 'user' | 'assistant' | 'system'
 type ChatMessage = { id: string; role: Role; parts: unknown[] }
-type Convo = { id: string; title: string; updatedAt: string; shared?: boolean }
+type Convo = AiConversationSummary
+
+function toChatMessage(message: AiChatMessage): ChatMessage {
+  const storedParts = message.data && (message.data as { parts?: unknown }).parts
+  return {
+    id: message.id,
+    role: message.role,
+    parts:
+      Array.isArray(storedParts) && storedParts.length > 0
+        ? storedParts
+        : [{ type: 'text', text: message.content }],
+  }
+}
+
+function mergeConversations(
+  current: AiConversationSummary[],
+  incoming: AiConversationSummary[],
+): AiConversationSummary[] {
+  const seen = new Set(current.map((item) => item.id))
+  return [...current, ...incoming.filter((item) => !seen.has(item.id))]
+}
+
+function withPinnedConversation(
+  page: AiConversationPage,
+  pinned: AiConversationSummary | null,
+  shared: boolean,
+): AiConversationPage {
+  if (
+    !pinned ||
+    Boolean(pinned.shared) !== shared ||
+    page.items.some((item) => item.id === pinned.id)
+  ) {
+    return page
+  }
+  return { ...page, items: [pinned, ...page.items] }
+}
+
+function withLastAssistantParts(list: ChatMessage[], parts: unknown[]): ChatMessage[] {
+  const copy = list.slice()
+  for (let index = copy.length - 1; index >= 0; index -= 1) {
+    const message = copy[index]
+    if (message && message.role === 'assistant') {
+      copy[index] = { ...message, parts }
+      break
+    }
+  }
+  return copy
+}
 
 export function AssistantApp({
   ownConversations,
   sharedConversations,
   activeId,
   initialMessages,
+  initialOlderCursor,
   access,
   canWrite,
   aiEnabled,
   initialPrompt,
   defaultSidebarCollapsed = false,
 }: {
-  ownConversations: Convo[]
-  sharedConversations: Convo[]
+  ownConversations: AiConversationPage
+  sharedConversations: AiConversationPage
   activeId: string | null
   initialMessages: ChatMessage[]
+  initialOlderCursor: string | null
   access: 'owner' | 'shared' | 'none'
   canWrite: boolean
   aiEnabled: boolean
@@ -60,6 +125,15 @@ export function AssistantApp({
 }) {
   const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [olderCursor, setOlderCursor] = useState(initialOlderCursor)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [ownPage, setOwnPage] = useState(ownConversations)
+  const [sharedPage, setSharedPage] = useState(sharedConversations)
+  const [chatQuery, setChatQuery] = useState('')
+  const [searchingChats, setSearchingChats] = useState(false)
+  const [loadingOwn, setLoadingOwn] = useState(false)
+  const [loadingShared, setLoadingShared] = useState(false)
+  const [sidebarError, setSidebarError] = useState<string | null>(null)
   const [currentId, setCurrentId] = useState<string | null>(activeId)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -72,102 +146,250 @@ export function AssistantApp({
   const [, startTransition] = useTransition()
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const autoSent = useRef(false)
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [messages])
-
-  // Auto-send a prompt passed via ?q= (from the ⌘K launcher), exactly once.
-  useEffect(() => {
-    if (initialPrompt && !autoSent.current && aiEnabled && access !== 'shared') {
-      autoSent.current = true
-      send(initialPrompt)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
+  const threadRef = useRef<HTMLDivElement>(null)
+  const searchRequestRef = useRef(0)
+  const skippedInitialSearch = useRef(false)
+  const pinnedConversationRef = useRef<AiConversationSummary | null>(
+    [...ownConversations.items, ...sharedConversations.items].find(
+      (item) => item.id === activeId,
+    ) ?? null,
+  )
+  const autoSentPrompt = useRef<string | null>(null)
   const readOnly = access === 'shared'
   const canSend = aiEnabled && !readOnly
 
-  function withLastAssistantParts(list: ChatMessage[], parts: unknown[]): ChatMessage[] {
-    const copy = list.slice()
-    for (let i = copy.length - 1; i >= 0; i--) {
-      const m = copy[i]
-      if (m && m.role === 'assistant') {
-        copy[i] = { ...m, parts }
-        break
-      }
-    }
-    return copy
-  }
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [activeId])
 
-  async function send(textArg?: string) {
-    const text = (typeof textArg === 'string' ? textArg : input).trim()
-    if (!text || streaming || !canSend) return
-    setError(null)
-    setInput('')
-    setSidebarOpen(false)
-    const stamp = Date.now()
-    setMessages((prev) => [
-      ...prev,
-      { id: `u-${stamp}`, role: 'user', parts: [{ type: 'text', text }] },
-      { id: `a-${stamp}`, role: 'assistant', parts: [] },
-    ])
-    setStreaming(true)
-    const ac = new AbortController()
-    abortRef.current = ac
-    try {
-      const res = await fetch('/assistant/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId: currentId, prompt: text }),
-        signal: ac.signal,
-      })
-      if (!res.ok || !res.body) {
+  useEffect(() => {
+    if (!skippedInitialSearch.current) {
+      skippedInitialSearch.current = true
+      return
+    }
+    const requestId = ++searchRequestRef.current
+    const timer = window.setTimeout(() => {
+      setSearchingChats(true)
+      setSidebarError(null)
+      void Promise.all([
+        listConversationPage({ scope: 'assistant', query: chatQuery }),
+        listSharedConversationPage({ scope: 'assistant', query: chatQuery }),
+      ])
+        .then(([own, shared]) => {
+          if (searchRequestRef.current !== requestId) return
+          const pin = chatQuery.trim() ? null : pinnedConversationRef.current
+          setOwnPage(withPinnedConversation(own, pin, false))
+          setSharedPage(withPinnedConversation(shared, pin, true))
+        })
+        .catch(() => {
+          if (searchRequestRef.current === requestId) {
+            setSidebarError('Conversation search failed. Try again.')
+          }
+        })
+        .finally(() => {
+          if (searchRequestRef.current === requestId) setSearchingChats(false)
+        })
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [chatQuery])
+
+  const scrollToBottom = useCallback(() => {
+    window.requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' }))
+  }, [])
+
+  const reconcileMessages = useCallback(async (conversationId: string) => {
+    const page = await getConversationMessagePage({ conversationId })
+    setMessages(page.items.map(toChatMessage))
+    setOlderCursor(page.olderCursor)
+  }, [])
+
+  const send = useCallback(
+    async (rawText: string) => {
+      const text = rawText.trim()
+      if (!text || abortRef.current || !canSend) return
+      if (text.length > MAX_ASSISTANT_PROMPT_CHARS) {
         setError(
-          res.status === 503
-            ? "The assistant isn't configured for this workspace yet. An admin can enable it under Admin → AI."
-            : res.status === 403
-              ? 'You can only continue conversations you own.'
-              : 'The assistant could not respond. Please try again.',
+          `Messages must be ${MAX_ASSISTANT_PROMPT_CHARS.toLocaleString()} characters or fewer.`,
         )
-        setMessages((prev) => prev.filter((m) => m.id !== `a-${stamp}`))
         return
       }
-      const newId = res.headers.get('x-conversation-id')
-      if (newId && !currentId) {
-        setCurrentId(newId)
-        window.history.replaceState(null, '', `/assistant/${newId}`)
+
+      const conversationId = currentId
+      let resolvedConversationId = conversationId
+      const ac = new AbortController()
+      abortRef.current = ac
+      setError(null)
+      setInput('')
+      setSidebarOpen(false)
+      const stamp = Date.now()
+      setMessages((prev) => [
+        ...prev,
+        { id: `u-${stamp}`, role: 'user', parts: [{ type: 'text', text }] },
+        { id: `a-${stamp}`, role: 'assistant', parts: [] },
+      ])
+      scrollToBottom()
+      setStreaming(true)
+      try {
+        const res = await fetch('/assistant/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ conversationId, prompt: text }),
+          signal: ac.signal,
+        })
+        const responseConversationId = res.headers.get('x-conversation-id')
+        if (responseConversationId) {
+          resolvedConversationId = responseConversationId
+          setCurrentId(responseConversationId)
+          if (!conversationId) {
+            window.history.replaceState(null, '', `/assistant/${responseConversationId}`)
+          }
+        }
+        if (!res.ok || !res.body) {
+          setError(
+            res.status === 503
+              ? "The assistant isn't configured for this workspace yet. An admin can enable it under Admin → AI."
+              : res.status === 403
+                ? 'You can only continue conversations you own.'
+                : 'The assistant could not respond. Please try again.',
+          )
+          return
+        }
+        // The HTTP body is an SSE byte stream — parse it into UIMessageChunks
+        // before handing it to readUIMessageStream (matches the SDK transport).
+        const chunkStream = parseJsonEventStream({
+          stream: res.body,
+          schema: uiMessageChunkSchema,
+        }).pipeThrough(
+          new TransformStream<{ success: boolean; value?: UIMessageChunk }, UIMessageChunk>({
+            transform(part, controller) {
+              if (part.success && part.value) controller.enqueue(part.value)
+            },
+          }),
+        )
+        for await (const message of readUIMessageStream({ stream: chunkStream })) {
+          setMessages((prev) => withLastAssistantParts(prev, message.parts as unknown[]))
+          scrollToBottom()
+        }
+      } catch (e) {
+        if ((e as Error)?.name !== 'AbortError') {
+          setError('The assistant could not respond. Please try again.')
+        }
+      } finally {
+        if ((ac.signal.aborted || !resolvedConversationId) && !resolvedConversationId) {
+          setMessages((prev) =>
+            prev.filter((message) => message.id !== `u-${stamp}` && message.id !== `a-${stamp}`),
+          )
+        } else if (resolvedConversationId) {
+          if (ac.signal.aborted) {
+            await new Promise((resolve) => window.setTimeout(resolve, 150))
+          }
+          try {
+            await reconcileMessages(resolvedConversationId)
+            setOwnPage((page) => {
+              const current = page.items.find((item) => item.id === resolvedConversationId)
+              if (!current) return page
+              return {
+                ...page,
+                items: [
+                  current,
+                  ...page.items.filter((item) => item.id !== resolvedConversationId),
+                ],
+              }
+            })
+          } catch {
+            setMessages((prev) => prev.filter((message) => message.id !== `a-${stamp}`))
+            setError((current) => current ?? 'The saved conversation could not be refreshed.')
+          }
+        }
+        setStreaming(false)
+        if (abortRef.current === ac) abortRef.current = null
+        if (resolvedConversationId && !conversationId) {
+          router.replace(`/assistant/${resolvedConversationId}`, { scroll: false })
+        } else {
+          startTransition(() => router.refresh())
+        }
       }
-      // The HTTP body is an SSE byte stream — parse it into UIMessageChunks
-      // before handing it to readUIMessageStream (matches the SDK transport).
-      const chunkStream = parseJsonEventStream({
-        stream: res.body,
-        schema: uiMessageChunkSchema,
-      }).pipeThrough(
-        new TransformStream<{ success: boolean; value?: UIMessageChunk }, UIMessageChunk>({
-          transform(part, controller) {
-            if (part.success && part.value) controller.enqueue(part.value)
-          },
-        }),
-      )
-      for await (const message of readUIMessageStream({ stream: chunkStream })) {
-        setMessages((prev) => withLastAssistantParts(prev, message.parts as unknown[]))
-      }
-    } catch (e) {
-      if ((e as Error)?.name !== 'AbortError') {
-        setError('The assistant could not respond. Please try again.')
-      }
-    } finally {
-      setStreaming(false)
-      abortRef.current = null
-      startTransition(() => router.refresh())
+    },
+    [canSend, currentId, reconcileMessages, router, scrollToBottom],
+  )
+
+  // Auto-send a prompt passed via ?q= (from the ⌘K launcher) once per distinct
+  // query. Wait for any active turn to finish so navigation cannot drop it.
+  useEffect(() => {
+    const prompt = initialPrompt?.trim()
+    if (!prompt || !canSend || streaming || abortRef.current || autoSentPrompt.current === prompt) {
+      return
     }
-  }
+    autoSentPrompt.current = prompt
+    void send(prompt)
+  }, [canSend, initialPrompt, send, streaming])
 
   function stop() {
     abortRef.current?.abort()
+  }
+
+  async function loadOlderMessages() {
+    if (!currentId || !olderCursor || loadingOlder) return
+    const scroller = threadRef.current
+    const previousHeight = scroller?.scrollHeight ?? 0
+    const previousTop = scroller?.scrollTop ?? 0
+    setLoadingOlder(true)
+    try {
+      const page = await getConversationMessagePage({
+        conversationId: currentId,
+        cursor: olderCursor,
+      })
+      setMessages((current) => {
+        const ids = new Set(page.items.map((message) => message.id))
+        return [
+          ...page.items.map(toChatMessage),
+          ...current.filter((message) => !ids.has(message.id)),
+        ]
+      })
+      setOlderCursor(page.olderCursor)
+      window.requestAnimationFrame(() => {
+        if (scroller) scroller.scrollTop = previousTop + scroller.scrollHeight - previousHeight
+      })
+    } catch {
+      toast.error('Older messages could not be loaded.')
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
+  async function loadMoreConversations(kind: 'own' | 'shared') {
+    const page = kind === 'own' ? ownPage : sharedPage
+    if (!page.nextCursor || (kind === 'own' ? loadingOwn : loadingShared)) return
+    if (kind === 'own') setLoadingOwn(true)
+    else setLoadingShared(true)
+    setSidebarError(null)
+    try {
+      const requestId = searchRequestRef.current
+      const next =
+        kind === 'own'
+          ? await listConversationPage({
+              scope: 'assistant',
+              query: chatQuery,
+              cursor: page.nextCursor,
+            })
+          : await listSharedConversationPage({
+              scope: 'assistant',
+              query: chatQuery,
+              cursor: page.nextCursor,
+            })
+      if (searchRequestRef.current !== requestId) return
+      const update = (current: AiConversationPage): AiConversationPage => ({
+        items: mergeConversations(current.items, next.items),
+        nextCursor: next.nextCursor,
+      })
+      if (kind === 'own') setOwnPage(update)
+      else setSharedPage(update)
+    } catch {
+      setSidebarError('More conversations could not be loaded.')
+    } finally {
+      if (kind === 'own') setLoadingOwn(false)
+      else setLoadingShared(false)
+    }
   }
 
   function toggleSidebar() {
@@ -183,15 +405,26 @@ export function AssistantApp({
   function onComposerKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if ((e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
       e.preventDefault()
-      send()
+      void send(input)
     }
   }
 
   async function doRename(id: string, title: string) {
     setRenamingId(null)
     if (!title.trim()) return
-    await renameAssistantConversation(id, title.trim())
-    startTransition(() => router.refresh())
+    try {
+      await renameAssistantConversation(id, title.trim())
+      if (pinnedConversationRef.current?.id === id) {
+        pinnedConversationRef.current = { ...pinnedConversationRef.current, title: title.trim() }
+      }
+      setOwnPage((page) => ({
+        ...page,
+        items: page.items.map((item) => (item.id === id ? { ...item, title: title.trim() } : item)),
+      }))
+      startTransition(() => router.refresh())
+    } catch {
+      toast.error(`Chat titles must be ${AI_CONVERSATION_TITLE_MAX_CHARS} characters or fewer.`)
+    }
   }
 
   async function doDelete(id: string) {
@@ -204,6 +437,10 @@ export function AssistantApp({
     )
       return
     await deleteAssistantConversation(id)
+    setOwnPage((page) => ({
+      ...page,
+      items: page.items.filter((item) => item.id !== id),
+    }))
     if (id === currentId) router.push('/assistant')
     else startTransition(() => router.refresh())
   }
@@ -227,10 +464,32 @@ export function AssistantApp({
           <PanelLeftClose className="h-4 w-4" />
         </button>
       </div>
+      <div className="px-3 pb-2">
+        <label className="relative block">
+          <span className="sr-only">Search chats</span>
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={chatQuery}
+            maxLength={AI_CONVERSATION_SEARCH_MAX_CHARS}
+            onChange={(event) => setChatQuery(event.target.value)}
+            placeholder="Search chats"
+            className="h-9 w-full rounded-md border border-slate-200 bg-white pr-8 pl-8 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          />
+          {searchingChats ? (
+            <Loader2 className="absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-400" />
+          ) : null}
+        </label>
+      </div>
       <div className="app-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-2 pb-3">
+        {sidebarError ? (
+          <p role="alert" className="px-2 text-xs text-red-600 dark:text-red-400">
+            {sidebarError}
+          </p>
+        ) : null}
         <ConvoSection
           label="Your chats"
-          convos={ownConversations}
+          convos={ownPage.items}
           currentId={currentId}
           menuFor={menuFor}
           setMenuFor={setMenuFor}
@@ -242,13 +501,20 @@ export function AssistantApp({
             setShareFor(id)
           }}
           onDelete={doDelete}
+          hasMore={ownPage.nextCursor !== null}
+          loadingMore={loadingOwn}
+          onLoadMore={() => void loadMoreConversations('own')}
+          emptyLabel={chatQuery ? 'No matching chats.' : 'No conversations yet.'}
         />
-        {sharedConversations.length > 0 ? (
+        {sharedPage.items.length > 0 ? (
           <ConvoSection
             label="Shared with you"
-            convos={sharedConversations}
+            convos={sharedPage.items}
             currentId={currentId}
             shared
+            hasMore={sharedPage.nextCursor !== null}
+            loadingMore={loadingShared}
+            onLoadMore={() => void loadMoreConversations('shared')}
           />
         ) : null}
       </div>
@@ -329,8 +595,22 @@ export function AssistantApp({
             ) : null}
           </header>
 
-          <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+          <div ref={threadRef} className="app-scroll min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-4 py-6">
+              {olderCursor && messages.length > 0 ? (
+                <div className="mb-5 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={loadingOlder}
+                    onClick={() => void loadOlderMessages()}
+                  >
+                    {loadingOlder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Load older messages
+                  </Button>
+                </div>
+              ) : null}
               {messages.length === 0 ? (
                 <Welcome onPick={(t) => setInput(t)} canSend={canSend} />
               ) : (
@@ -340,13 +620,16 @@ export function AssistantApp({
                       <MessageRow key={m.id} message={m} streaming={streaming} />
                     ),
                   )}
-                  {error ? (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-                      {error}
-                    </div>
-                  ) : null}
                 </div>
               )}
+              {error ? (
+                <div
+                  role="alert"
+                  className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  {error}
+                </div>
+              ) : null}
               <div ref={bottomRef} />
             </div>
           </div>
@@ -369,6 +652,7 @@ export function AssistantApp({
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={onComposerKey}
+                    maxLength={MAX_ASSISTANT_PROMPT_CHARS}
                     rows={1}
                     placeholder="Ask about incidents, corrective actions, training, documents…"
                     className="max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
@@ -387,7 +671,7 @@ export function AssistantApp({
                     <Button
                       type="button"
                       size="icon"
-                      onClick={() => send()}
+                      onClick={() => void send(input)}
                       disabled={!input.trim()}
                       aria-label="Send"
                     >
@@ -420,8 +704,7 @@ function MessageRow({ message, streaming }: { message: ChatMessage; streaming: b
   if (message.role === 'user') {
     const text = (
       message.parts.find((p) => (p as { type?: string })?.type === 'text') as
-        | { text?: string }
-        | undefined
+        { text?: string } | undefined
     )?.text
     return (
       <div className="flex justify-end">
@@ -503,6 +786,10 @@ function ConvoSection({
   onRename,
   onShare,
   onDelete,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  emptyLabel = 'No conversations yet.',
 }: {
   label: string
   convos: Convo[]
@@ -515,14 +802,16 @@ function ConvoSection({
   onRename?: (id: string, title: string) => void
   onShare?: (id: string) => void
   onDelete?: (id: string) => void
+  hasMore?: boolean
+  loadingMore?: boolean
+  onLoadMore?: () => void
+  emptyLabel?: string
 }) {
   if (convos.length === 0 && !shared) {
     return (
       <div>
         <SectionLabel>{label}</SectionLabel>
-        <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">
-          No conversations yet.
-        </p>
+        <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">{emptyLabel}</p>
       </div>
     )
   }
@@ -538,6 +827,7 @@ function ConvoSection({
                 <input
                   autoFocus
                   defaultValue={c.title}
+                  maxLength={AI_CONVERSATION_TITLE_MAX_CHARS}
                   onBlur={(e) => onRename?.(c.id, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') onRename?.(c.id, (e.target as HTMLInputElement).value)
@@ -605,6 +895,19 @@ function ConvoSection({
           )
         })}
       </ul>
+      {hasMore ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="mt-1 w-full justify-center text-xs"
+          disabled={loadingMore}
+          onClick={onLoadMore}
+        >
+          {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          Load more
+        </Button>
+      ) : null}
     </div>
   )
 }

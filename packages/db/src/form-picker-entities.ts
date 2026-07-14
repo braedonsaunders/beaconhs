@@ -14,21 +14,16 @@
 // attribute requires editing both ENTITY_ATTRS (forms-core) and the matching
 // projection here. SELECT * is never used.
 
-import { eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database } from './client'
 import {
   crews,
   departments,
-  documentCategories,
-  documents,
-  equipmentItems,
-  equipmentTypes,
   orgUnits,
   people,
-  ppeItems,
-  ppeTypes,
+  personTitleAssignments,
+  personTitles,
   trades,
-  trainingCourses,
 } from './schema'
 import { entityKindForPicker, type EntityKind, type FormSchemaV1 } from '@beaconhs/forms-core'
 
@@ -52,7 +47,7 @@ export async function loadEntitiesForFormPickers(
 ): Promise<EntitiesByField> {
   // Step 1: collect (pickerFieldKey, entityKind, id) triples for every
   // top-level single-entity picker with a value.
-  type Triple = { fieldKey: string; kind: EntityKind; id: string }
+  type Triple = { fieldKey: string; fieldType: string; kind: EntityKind; id: string }
   const triples: Triple[] = []
   const pickerFieldKinds = new Map<string, EntityKind>()
   for (const sec of schema.sections) {
@@ -63,7 +58,7 @@ export async function loadEntitiesForFormPickers(
       pickerFieldKinds.set(field.id, kind)
       const raw = values[field.id]
       if (typeof raw === 'string' && raw.length > 0) {
-        triples.push({ fieldKey: field.id, kind, id: raw })
+        triples.push({ fieldKey: field.id, fieldType: field.type, kind, id: raw })
       }
     }
   }
@@ -89,11 +84,7 @@ export async function loadEntitiesForFormPickers(
   // Step 3: one batched query per kind.
   const result: Record<EntityKind, Map<string, Record<string, unknown>>> = {
     person: new Map(),
-    equipment: new Map(),
     site: new Map(),
-    ppe: new Map(),
-    document: new Map(),
-    course: new Map(),
   }
 
   const personIds = idsByKind.get('person')
@@ -103,7 +94,6 @@ export async function loadEntitiesForFormPickers(
         id: people.id,
         firstName: people.firstName,
         lastName: people.lastName,
-        jobTitle: people.jobTitle,
         employeeNo: people.employeeNo,
         email: people.email,
         phone: people.phone,
@@ -115,14 +105,20 @@ export async function loadEntitiesForFormPickers(
         crewId: people.crewId,
       })
       .from(people)
-      .where(inArray(people.id, [...personIds]))
+      .where(
+        and(
+          inArray(people.id, [...personIds]),
+          eq(people.status, 'active'),
+          isNull(people.deletedAt),
+        ),
+      )
 
     const managerIds = rows.map((r) => r.managerPersonId).filter((x): x is string => !!x)
     const deptIds = rows.map((r) => r.departmentId).filter((x): x is string => !!x)
     const tradeIds = rows.map((r) => r.tradeId).filter((x): x is string => !!x)
     const crewIds = rows.map((r) => r.crewId).filter((x): x is string => !!x)
 
-    const [managers, depts, trs, crs] = await Promise.all([
+    const [managers, depts, trs, crs, primaryTitles] = await Promise.all([
       managerIds.length > 0
         ? db
             .select({
@@ -151,19 +147,42 @@ export async function loadEntitiesForFormPickers(
             .from(crews)
             .where(inArray(crews.id, crewIds))
         : Promise.resolve([] as { id: string; name: string }[]),
+      db
+        .select({ personId: personTitleAssignments.personId, name: personTitles.name })
+        .from(personTitleAssignments)
+        .innerJoin(
+          personTitles,
+          and(
+            eq(personTitles.tenantId, personTitleAssignments.tenantId),
+            eq(personTitles.id, personTitleAssignments.titleId),
+          ),
+        )
+        .where(
+          and(
+            inArray(
+              personTitleAssignments.personId,
+              rows.map((row) => row.id),
+            ),
+            eq(personTitleAssignments.isPrimary, true),
+            isNull(personTitles.deletedAt),
+          ),
+        ),
     ])
 
     const managerById = new Map(managers.map((m) => [m.id, `${m.firstName} ${m.lastName}`]))
     const deptById = new Map(depts.map((d) => [d.id, d.name]))
     const tradeById = new Map(trs.map((t) => [t.id, t.name]))
     const crewById = new Map(crs.map((c) => [c.id, c.name]))
+    const primaryTitleByPersonId = new Map(
+      primaryTitles.map((title) => [title.personId, title.name]),
+    )
 
     for (const r of rows) {
       result.person.set(r.id, {
         displayName: `${r.firstName} ${r.lastName}`,
         firstName: r.firstName,
         lastName: r.lastName,
-        jobTitle: r.jobTitle ?? null,
+        jobTitle: primaryTitleByPersonId.get(r.id) ?? null,
         employeeNo: r.employeeNo ?? null,
         email: r.email ?? null,
         phone: r.phone ?? null,
@@ -173,99 +192,6 @@ export async function loadEntitiesForFormPickers(
         departmentName: r.departmentId ? (deptById.get(r.departmentId) ?? null) : null,
         tradeName: r.tradeId ? (tradeById.get(r.tradeId) ?? null) : null,
         crewName: r.crewId ? (crewById.get(r.crewId) ?? null) : null,
-      })
-    }
-  }
-
-  const equipmentIds = idsByKind.get('equipment')
-  if (equipmentIds && equipmentIds.size > 0) {
-    const rows = await db
-      .select({
-        id: equipmentItems.id,
-        name: equipmentItems.name,
-        assetTag: equipmentItems.assetTag,
-        serialNumber: equipmentItems.serialNumber,
-        manufacturer: equipmentItems.manufacturer,
-        model: equipmentItems.model,
-        status: equipmentItems.status,
-        typeId: equipmentItems.typeId,
-        currentSiteOrgUnitId: equipmentItems.currentSiteOrgUnitId,
-        currentHolderPersonId: equipmentItems.currentHolderPersonId,
-        lastSeenAt: equipmentItems.lastSeenAt,
-        lastPreUseInspectionAt: equipmentItems.lastPreUseInspectionAt,
-        // Soonest next_due_on across the item's ACTIVE recurring inspection
-        // schedules; null when nothing is scheduled.
-        nextInspectionDue: sql<string | null>`(
-          select min(s.next_due_on)
-          from equipment_inspection_schedules s
-          where s.equipment_item_id = ${equipmentItems.id}
-            and s.is_active = true
-        )`,
-        isMissing: equipmentItems.isMissing,
-        isAvailableForCheckout: equipmentItems.isAvailableForCheckout,
-        requiresOilChange: equipmentItems.requiresOilChange,
-        nextOilChangeDue: equipmentItems.nextOilChangeDue,
-        warrantyExpiresOn: equipmentItems.warrantyExpiresOn,
-      })
-      .from(equipmentItems)
-      .where(inArray(equipmentItems.id, [...equipmentIds]))
-
-    const typeIds = rows.map((r) => r.typeId).filter((x): x is string => !!x)
-    const siteIds = rows.map((r) => r.currentSiteOrgUnitId).filter((x): x is string => !!x)
-    const holderIds = rows.map((r) => r.currentHolderPersonId).filter((x): x is string => !!x)
-
-    const [types, sites, holders] = await Promise.all([
-      typeIds.length > 0
-        ? db
-            .select({ id: equipmentTypes.id, name: equipmentTypes.name })
-            .from(equipmentTypes)
-            .where(inArray(equipmentTypes.id, typeIds))
-        : Promise.resolve([] as { id: string; name: string }[]),
-      siteIds.length > 0
-        ? db
-            .select({ id: orgUnits.id, name: orgUnits.name })
-            .from(orgUnits)
-            .where(inArray(orgUnits.id, siteIds))
-        : Promise.resolve([] as { id: string; name: string }[]),
-      holderIds.length > 0
-        ? db
-            .select({
-              id: people.id,
-              firstName: people.firstName,
-              lastName: people.lastName,
-            })
-            .from(people)
-            .where(inArray(people.id, holderIds))
-        : Promise.resolve([] as { id: string; firstName: string; lastName: string }[]),
-    ])
-
-    const typeNameById = new Map(types.map((t) => [t.id, t.name]))
-    const siteNameById = new Map(sites.map((s) => [s.id, s.name]))
-    const holderNameById = new Map(holders.map((h) => [h.id, `${h.firstName} ${h.lastName}`]))
-
-    for (const r of rows) {
-      result.equipment.set(r.id, {
-        name: r.name,
-        assetTag: r.assetTag,
-        serialNumber: r.serialNumber ?? null,
-        manufacturer: r.manufacturer ?? null,
-        model: r.model ?? null,
-        status: r.status,
-        typeName: r.typeId ? (typeNameById.get(r.typeId) ?? null) : null,
-        currentSiteName: r.currentSiteOrgUnitId
-          ? (siteNameById.get(r.currentSiteOrgUnitId) ?? null)
-          : null,
-        currentHolderName: r.currentHolderPersonId
-          ? (holderNameById.get(r.currentHolderPersonId) ?? null)
-          : null,
-        lastSeenAt: r.lastSeenAt ?? null,
-        lastPreUseInspectionAt: r.lastPreUseInspectionAt ?? null,
-        nextInspectionDue: r.nextInspectionDue ?? null,
-        isMissing: r.isMissing,
-        isAvailableForCheckout: r.isAvailableForCheckout,
-        requiresOilChange: r.requiresOilChange,
-        nextOilChangeDue: r.nextOilChangeDue ?? null,
-        warrantyExpiresOn: r.warrantyExpiresOn ?? null,
       })
     }
   }
@@ -281,7 +207,7 @@ export async function loadEntitiesForFormPickers(
         address: orgUnits.address,
       })
       .from(orgUnits)
-      .where(inArray(orgUnits.id, [...siteRowIds]))
+      .where(and(inArray(orgUnits.id, [...siteRowIds]), isNull(orgUnits.deletedAt)))
     for (const r of rows) {
       const addr = (r.address ?? {}) as {
         line1?: string
@@ -314,124 +240,23 @@ export async function loadEntitiesForFormPickers(
     }
   }
 
-  const ppeIds = idsByKind.get('ppe')
-  if (ppeIds && ppeIds.size > 0) {
-    const rows = await db
-      .select({
-        id: ppeItems.id,
-        serialNumber: ppeItems.serialNumber,
-        size: ppeItems.size,
-        status: ppeItems.status,
-        typeId: ppeItems.typeId,
-        currentHolderPersonId: ppeItems.currentHolderPersonId,
-        expiresOn: ppeItems.expiresOn,
-        lastInspectionOn: ppeItems.lastInspectionOn,
-        nextInspectionDue: ppeItems.nextInspectionDue,
-      })
-      .from(ppeItems)
-      .where(inArray(ppeItems.id, [...ppeIds]))
-
-    const typeIds = rows.map((r) => r.typeId).filter((x): x is string => !!x)
-    const holderIds = rows.map((r) => r.currentHolderPersonId).filter((x): x is string => !!x)
-    const [types, holders] = await Promise.all([
-      typeIds.length > 0
-        ? db
-            .select({
-              id: ppeTypes.id,
-              name: ppeTypes.name,
-              category: ppeTypes.category,
-            })
-            .from(ppeTypes)
-            .where(inArray(ppeTypes.id, typeIds))
-        : Promise.resolve([] as { id: string; name: string; category: string | null }[]),
-      holderIds.length > 0
-        ? db
-            .select({
-              id: people.id,
-              firstName: people.firstName,
-              lastName: people.lastName,
-            })
-            .from(people)
-            .where(inArray(people.id, holderIds))
-        : Promise.resolve([] as { id: string; firstName: string; lastName: string }[]),
-    ])
-    const typeById = new Map(types.map((t) => [t.id, t]))
-    const holderNameById = new Map(holders.map((h) => [h.id, `${h.firstName} ${h.lastName}`]))
-    for (const r of rows) {
-      const tp = r.typeId ? typeById.get(r.typeId) : undefined
-      result.ppe.set(r.id, {
-        serialNumber: r.serialNumber ?? null,
-        size: r.size ?? null,
-        status: r.status,
-        typeName: tp?.name ?? null,
-        category: tp?.category ?? null,
-        currentHolderName: r.currentHolderPersonId
-          ? (holderNameById.get(r.currentHolderPersonId) ?? null)
-          : null,
-        expiresOn: r.expiresOn ?? null,
-        lastInspectionOn: r.lastInspectionOn ?? null,
-        nextInspectionDue: r.nextInspectionDue ?? null,
-      })
-    }
-  }
-
-  const documentIds = idsByKind.get('document')
-  if (documentIds && documentIds.size > 0) {
-    const rows = await db
-      .select({
-        id: documents.id,
-        key: documents.key,
-        title: documents.title,
-        category: documentCategories.name,
-        status: documents.status,
-        nextReviewOn: documents.nextReviewOn,
-      })
-      .from(documents)
-      .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
-      .where(inArray(documents.id, [...documentIds]))
-    for (const r of rows) {
-      result.document.set(r.id, {
-        key: r.key,
-        title: r.title,
-        category: r.category ?? null,
-        status: r.status,
-        nextReviewOn: r.nextReviewOn ?? null,
-      })
-    }
-  }
-
-  const courseIds = idsByKind.get('course')
-  if (courseIds && courseIds.size > 0) {
-    const rows = await db
-      .select({
-        id: trainingCourses.id,
-        code: trainingCourses.code,
-        name: trainingCourses.name,
-        deliveryType: trainingCourses.deliveryType,
-        durationMinutes: trainingCourses.durationMinutes,
-        validForMonths: trainingCourses.validForMonths,
-        requiresEvaluator: trainingCourses.requiresEvaluator,
-      })
-      .from(trainingCourses)
-      .where(inArray(trainingCourses.id, [...courseIds]))
-    for (const r of rows) {
-      result.course.set(r.id, {
-        code: r.code,
-        name: r.name,
-        deliveryType: r.deliveryType,
-        durationMinutes: r.durationMinutes ?? null,
-        validForMonths: r.validForMonths ?? null,
-        requiresEvaluator: r.requiresEvaluator,
-      })
-    }
-  }
-
   // Step 4: stitch the per-kind results back onto each picker field key.
   // Stamp `__entityKind` on every entry so the evaluator can resolve the
   // EntityAttrDef from the registry.
+  const orgUnitLevelByPicker: Record<string, string> = {
+    customer_picker: 'customer',
+    project_picker: 'project',
+    site_picker: 'site',
+    area_picker: 'area',
+  }
   for (const t of triples) {
     const entity = result[t.kind].get(t.id)
-    if (entity) {
+    const expectedOrgUnitLevel = orgUnitLevelByPicker[t.fieldType]
+    if (
+      entity &&
+      (t.kind !== 'site' ||
+        (expectedOrgUnitLevel !== undefined && entity.level === expectedOrgUnitLevel))
+    ) {
       out[t.fieldKey] = { ...entity, __entityKind: t.kind }
     }
   }

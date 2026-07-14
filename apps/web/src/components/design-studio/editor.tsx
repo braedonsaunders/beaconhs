@@ -35,6 +35,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import {
+  DESIGN_DOCUMENT_LIMITS,
   PRINT_PROVIDERS,
   slugId,
   type DesignArtboard,
@@ -112,18 +113,19 @@ export function useDesignZoom({
   const [zoom, setZoom] = useState(1)
   const [fitMode, setFitMode] = useState(true) // recompute zoom to fit on resize
   const [fullscreen, setFullscreen] = useState(false)
+  const artboardWidth = artboard?.width
+  const artboardHeight = artboard?.height
 
   // Fit the artboard to the visible viewport (the chrome around the canvas —
   // outer p-5 + checkered p-8 — is ~120px per axis). ResizeObserver fires once
   // on observe, so switching artboards/fullscreen re-fits immediately.
   const computeFit = useCallback(() => {
     const vp = viewportRef.current
-    if (!vp || !artboard) return 1
+    if (!vp || !artboardWidth || !artboardHeight) return 1
     const availW = Math.max(vp.clientWidth - 120, 80)
     const availH = Math.max(vp.clientHeight - 120, 80)
-    return clampZoom(Math.min(availW / (artboard.width * PPI), availH / (artboard.height * PPI)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artboard?.width, artboard?.height])
+    return clampZoom(Math.min(availW / (artboardWidth * PPI), availH / (artboardHeight * PPI)))
+  }, [artboardHeight, artboardWidth])
 
   useEffect(() => {
     if (!fitMode) return
@@ -292,29 +294,43 @@ export function ArtboardCanvas({
     return undefined
   }, [])
 
+  // Fabric listeners must remain attached for the lifetime of one artboard,
+  // while their callbacks and the async initial render must observe the latest
+  // React props. Refs provide that separation without stale closures or canvas
+  // teardown on every parent render.
+  const onSelectRef = useRef(onSelect)
+  const onModifyRef = useRef(onModify)
+  const initialRenderRef = useRef({ artboard, sample, selectedElementId, getImage })
+  useEffect(() => {
+    onSelectRef.current = onSelect
+    onModifyRef.current = onModify
+    initialRenderRef.current = { artboard, sample, selectedElementId, getImage }
+  }, [artboard, getImage, onModify, onSelect, sample, selectedElementId])
+
   useEffect(() => {
     let disposed = false
     loadFabric().then((fabric) => {
       if (disposed || !canvasRef.current) return
       fabricRef.current = fabric
+      const initial = initialRenderRef.current
       const canvas = new fabric.Canvas(canvasRef.current, {
         preserveObjectStacking: true,
-        backgroundColor: artboard.background,
+        backgroundColor: initial.artboard.background,
         selection: true,
       })
       canvasInstanceRef.current = canvas
       canvas.on('selection:created', (event: any) =>
-        onSelect(idForObject(event.selected?.[0]), !!event.e),
+        onSelectRef.current(idForObject(event.selected?.[0]), !!event.e),
       )
       canvas.on('selection:updated', (event: any) =>
-        onSelect(idForObject(event.selected?.[0]), !!event.e),
+        onSelectRef.current(idForObject(event.selected?.[0]), !!event.e),
       )
-      canvas.on('selection:cleared', (event: any) => onSelect(null, !!event.e))
+      canvas.on('selection:cleared', (event: any) => onSelectRef.current(null, !!event.e))
       canvas.on('object:modified', (event: any) => {
         const object = event.target
         const id = idForObject(object)
         if (!id || !object) return
-        onModify(id, objectPatch(object, PPI * zoomRef.current))
+        onModifyRef.current(id, objectPatch(object, PPI * zoomRef.current))
       })
       // Inline canvas text editing (double-click on a text box) — persist the
       // typed text back into the element, or it reverts on the next rebuild.
@@ -322,7 +338,7 @@ export function ArtboardCanvas({
         const object = event.target
         const id = idForObject(object)
         if (!id || !object) return
-        onModify(id, {
+        onModifyRef.current(id, {
           ...objectPatch(object, PPI * zoomRef.current),
           text: object.text ?? '',
         } as Partial<DesignElement>)
@@ -330,11 +346,11 @@ export function ArtboardCanvas({
       renderFabricArtboard(
         fabric,
         canvas,
-        artboard,
-        sample,
-        selectedElementId,
+        initial.artboard,
+        initial.sample,
+        initial.selectedElementId,
         zoomRef.current,
-        getImage,
+        initial.getImage,
       )
     })
     return () => {
@@ -342,7 +358,6 @@ export function ArtboardCanvas({
       canvasInstanceRef.current?.dispose()
       canvasInstanceRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artboard.id])
 
   useEffect(() => {
@@ -699,6 +714,7 @@ export function InspectorPanel({
         <Field label="Name">
           <Input
             value={artboard.name}
+            maxLength={DESIGN_DOCUMENT_LIMITS.artboardNameLength}
             onChange={(e) => onPatchArtboard({ name: e.currentTarget.value })}
           />
         </Field>
@@ -753,6 +769,7 @@ export function InspectorPanel({
       <Field label="Layer name">
         <Input
           value={selectedElement.name}
+          maxLength={DESIGN_DOCUMENT_LIMITS.elementNameLength}
           onChange={(e) => onPatchElement({ name: e.currentTarget.value })}
         />
       </Field>
@@ -762,6 +779,7 @@ export function InspectorPanel({
           <Textarea
             rows={3}
             value={selectedElement.text}
+            maxLength={DESIGN_DOCUMENT_LIMITS.textLength}
             onChange={(e) =>
               onPatchElement({ text: e.currentTarget.value } as Partial<DesignElement>)
             }
@@ -799,6 +817,7 @@ export function InspectorPanel({
             <Field label="Prefix">
               <Input
                 value={selectedElement.prefix ?? ''}
+                maxLength={DESIGN_DOCUMENT_LIMITS.fieldAffixLength}
                 onChange={(e) =>
                   onPatchElement({ prefix: e.currentTarget.value } as Partial<DesignElement>)
                 }
@@ -807,6 +826,7 @@ export function InspectorPanel({
             <Field label="Suffix">
               <Input
                 value={selectedElement.suffix ?? ''}
+                maxLength={DESIGN_DOCUMENT_LIMITS.fieldAffixLength}
                 onChange={(e) =>
                   onPatchElement({ suffix: e.currentTarget.value } as Partial<DesignElement>)
                 }
@@ -815,6 +835,7 @@ export function InspectorPanel({
             <Field label="If empty, show">
               <Input
                 value={selectedElement.fallback ?? ''}
+                maxLength={DESIGN_DOCUMENT_LIMITS.fieldFallbackLength}
                 placeholder="leave blank to hide"
                 onChange={(e) =>
                   onPatchElement({ fallback: e.currentTarget.value } as Partial<DesignElement>)
@@ -827,10 +848,7 @@ export function InspectorPanel({
                 onChange={(e) =>
                   onPatchElement({
                     transform: e.currentTarget.value as
-                      | 'none'
-                      | 'uppercase'
-                      | 'date-long'
-                      | 'date-short',
+                      'none' | 'uppercase' | 'date-long' | 'date-short',
                   } as Partial<DesignElement>)
                 }
               >
@@ -864,6 +882,7 @@ export function InspectorPanel({
             <Field label="Image URL">
               <Input
                 value={selectedElement.url ?? ''}
+                maxLength={DESIGN_DOCUMENT_LIMITS.imageUrlLength}
                 placeholder="https://…"
                 onChange={(e) =>
                   onPatchElement({ url: e.currentTarget.value } as Partial<DesignElement>)
@@ -878,6 +897,7 @@ export function InspectorPanel({
         <Field label="Seal text">
           <Input
             value={selectedElement.text ?? ''}
+            maxLength={DESIGN_DOCUMENT_LIMITS.sealTextLength}
             placeholder="Issuer initials when blank"
             onChange={(e) =>
               onPatchElement({ text: e.currentTarget.value } as Partial<DesignElement>)
@@ -1110,7 +1130,7 @@ export function RailLabel({ icon, label }: { icon: ReactNode; label: string }) {
   )
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
       <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
@@ -1140,7 +1160,7 @@ function ElementButton({
   )
 }
 
-function LayerToggle({
+export function LayerToggle({
   checked,
   label,
   onChange,
@@ -1185,7 +1205,12 @@ function ColorField({
         onChange={(e) => onChange(e.currentTarget.value)}
         className="h-8 w-10 rounded border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-900"
       />
-      <Input value={value} onChange={(e) => onChange(e.currentTarget.value)} className="h-8" />
+      <Input
+        value={value}
+        maxLength={11}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        className="h-8"
+      />
     </label>
   )
 }
@@ -1292,11 +1317,12 @@ export function newElement(
 
 export function uniqueElementId(base: string, elements: DesignElement[]) {
   const used = new Set(elements.map((element) => element.id))
-  const clean = slugId(base, 'element')
+  const clean = slugId(base, 'element').slice(0, DESIGN_DOCUMENT_LIMITS.idLength)
   let id = clean
   let i = 2
   while (used.has(id)) {
-    id = `${clean}-${i}`
+    const suffix = `-${i}`
+    id = `${clean.slice(0, DESIGN_DOCUMENT_LIMITS.idLength - suffix.length)}${suffix}`
     i += 1
   }
   return id

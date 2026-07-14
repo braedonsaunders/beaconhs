@@ -6,6 +6,7 @@ import { isWritingMode, streamWritingAssist, AIDisabledError } from '@beaconhs/a
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
+import { parseJournalAiTextInput } from '@/lib/journal-ai-policy'
 import {
   readBoundedJsonBody,
   RequestBodyLengthError,
@@ -16,7 +17,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
-const MAX_REQUEST_BYTES = 16 * 1024
+const MAX_REQUEST_BYTES = 64 * 1024
 const REQUEST_TIMEOUT_MS = 15_000
 
 export async function POST(req: Request): Promise<Response> {
@@ -55,16 +56,13 @@ export async function POST(req: Request): Promise<Response> {
   }
   const b = body as Record<string, unknown>
   const mode = typeof b.mode === 'string' ? b.mode : ''
-  const text = typeof b.text === 'string' ? b.text : ''
-  const tone = typeof b.tone === 'string' ? b.tone.slice(0, 100) : undefined
-  const context = typeof b.context === 'string' ? b.context.slice(0, 2000) : undefined
-
   if (!isWritingMode(mode)) return new Response('Invalid mode', { status: 400 })
-  if (!text.trim()) return new Response('Nothing to work with', { status: 400 })
+  const parsed = parseJournalAiTextInput(body)
+  if (!parsed.ok) return new Response(parsed.error, { status: 400 })
 
   const aiConfig = await getTenantAiConfig(ctx)
   try {
-    return streamWritingAssist(aiConfig, { mode, text: text.slice(0, 8000), tone, context })
+    return streamWritingAssist(aiConfig, { mode, ...parsed.value })
   } catch (err) {
     if (err instanceof AIDisabledError) return new Response('AI is not configured', { status: 503 })
     return new Response('AI request failed', { status: 500 })

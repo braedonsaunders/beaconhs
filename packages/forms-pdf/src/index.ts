@@ -30,7 +30,7 @@ import type {
   CredentialDesignTemplateId,
   CredentialDesignTypeface,
 } from './templates/credential-theme'
-import { getBrowser as browser, escapeHtml } from './util'
+import { escapeHtml, getBrowser as browser, newPdfPage, setPdfContent } from './util'
 
 export type {
   CertificateRenderInput,
@@ -73,10 +73,9 @@ async function printDesignHtmlPdf(
   first: { width: number; height: number } | undefined,
 ): Promise<Buffer> {
   const b = await browser()
-  const page = await b.newPage()
+  const page = await newPdfPage(b)
   try {
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
-    await page.evaluateHandle('document.fonts.ready')
+    await setPdfContent(page, html, { waitForFonts: true })
     const pdf = await page.pdf({
       width: first ? `${first.width}in` : '11in',
       height: first ? `${first.height}in` : '8.5in',
@@ -90,18 +89,7 @@ async function printDesignHtmlPdf(
   }
 }
 
-// --- Certificate + wallet card PDF ---------------------------------------
-
-export async function renderCertificatePdf(
-  input: CertificateRenderInput & { wallet?: WalletRenderInput },
-): Promise<{ certificate: Buffer; wallet: Buffer }> {
-  const wallet = input.wallet ?? walletFromCertificate(input)
-  const [certificate, walletPdf] = await Promise.all([
-    renderCertificatePagePdf(input),
-    renderWalletCardPdf(wallet),
-  ])
-  return { certificate, wallet: walletPdf }
-}
+// --- Certificate and on-demand wallet-card PDFs --------------------------
 
 export async function renderCertificatePagePdf(input: CertificateRenderInput): Promise<Buffer> {
   const body = renderCertificateHtml(input)
@@ -111,10 +99,9 @@ export async function renderCertificatePagePdf(input: CertificateRenderInput): P
   // print, hence the explicit document.fonts.ready wait.
   const html = wrapDocument(body, 'Certificate')
   const b = await browser()
-  const page = await b.newPage()
+  const page = await newPdfPage(b)
   try {
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
-    await page.evaluateHandle('document.fonts.ready')
+    await setPdfContent(page, html, { waitForFonts: true })
     const portrait = input.design?.format === 'letter-portrait'
     const pdf = await page.pdf({
       width: portrait ? '8.5in' : '11in',
@@ -133,10 +120,9 @@ export async function renderWalletCardPdf(input: WalletRenderInput): Promise<Buf
   const body = renderWalletHtml(input)
   const html = wrapDocument(body, 'Wallet Card')
   const b = await browser()
-  const page = await b.newPage()
+  const page = await newPdfPage(b)
   try {
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
-    await page.evaluateHandle('document.fonts.ready')
+    await setPdfContent(page, html, { waitForFonts: true })
     // CR80 credit-card size; two pages (front + back).
     const pdf = await page.pdf({
       width: '3.375in',
@@ -148,28 +134,6 @@ export async function renderWalletCardPdf(input: WalletRenderInput): Promise<Buf
     return Buffer.from(pdf)
   } finally {
     await page.close()
-  }
-}
-
-function walletFromCertificate(input: CertificateRenderInput): WalletRenderInput {
-  return {
-    tenantName: input.tenantName,
-    tenantLogoUrl: input.tenantLogoUrl,
-    primaryColor: input.primaryColor,
-    design: input.design,
-    variant: input.variant,
-    recipient: {
-      fullName: input.recipient.fullName,
-      employeeNo: input.recipient.employeeNo,
-    },
-    credential: input.credential,
-    authorityName: input.authorityName,
-    completedOn: input.completedOn,
-    expiresOn: input.expiresOn,
-    verifyUrl: input.verifyUrl,
-    verifyToken: input.verifyToken,
-    qrDataUrl: input.qrDataUrl,
-    cardId: input.certificateId,
   }
 }
 
@@ -199,9 +163,9 @@ export async function renderReportPdf(
   })}</body></html>`
   const m = `${layout.marginMm}mm`
   const b = await browser()
-  const page = await b.newPage()
+  const page = await newPdfPage(b)
   try {
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await setPdfContent(page, html)
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
@@ -238,9 +202,9 @@ async function printLetterheadPdf(args: {
 }): Promise<Buffer> {
   const html = wrapDocument(args.body, args.title)
   const b = await browser()
-  const page = await b.newPage()
+  const page = await newPdfPage(b)
   try {
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await setPdfContent(page, html)
     const showFooter = args.showFooter !== false
     const pdf = await page.pdf({
       format: args.pageSize ?? 'Letter',
@@ -294,9 +258,9 @@ export async function renderHtmlDocumentPdf(input: {
     ? `<div style="font-size:8px;width:100%;padding:0 ${m};color:#94a3b8;text-align:center;">${pageCounters(input.footerHtml)}</div>`
     : `<div></div>`
   const b = await browser()
-  const page = await b.newPage()
+  const page = await newPdfPage(b)
   try {
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    await setPdfContent(page, html)
     const pdf = await page.pdf({
       format: formatMap[input.paperSize] ?? 'Letter',
       landscape: input.orientation === 'landscape',

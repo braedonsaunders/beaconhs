@@ -5,6 +5,7 @@ import { relations } from 'drizzle-orm'
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -18,6 +19,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
+import { formResponses } from './forms'
 import { orgUnits } from './org'
 
 export const correctiveActionSeverity = pgEnum('corrective_action_severity', [
@@ -100,6 +102,7 @@ export const correctiveActions = pgTable(
   },
   (t) => ({
     tenantIdx: index('corrective_actions_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('corrective_actions_tenant_id_id_ux').on(t.tenantId, t.id),
     statusIdx: index('corrective_actions_status_idx').on(t.tenantId, t.status),
     dueIdx: index('corrective_actions_due_idx').on(t.tenantId, t.dueOn),
     sourceIdx: index('corrective_actions_source_idx').on(
@@ -107,7 +110,16 @@ export const correctiveActions = pgTable(
       t.sourceEntityType,
       t.sourceEntityId,
     ),
+    sourceResponseIdx: index('corrective_actions_source_response_idx').on(
+      t.tenantId,
+      t.sourceFormResponseId,
+    ),
     ownerIdx: index('corrective_actions_owner_idx').on(t.tenantId, t.ownerTenantUserId),
+    sourceResponseFk: foreignKey({
+      name: 'corrective_actions_tenant_source_response_fk',
+      columns: [t.tenantId, t.sourceFormResponseId],
+      foreignColumns: [formResponses.tenantId, formResponses.id],
+    }),
     flowExecutionUx: uniqueIndex('corrective_actions_flow_execution_ux').on(
       t.tenantId,
       t.flowExecutionKey,
@@ -176,6 +188,10 @@ export const correctiveActionsRelations = relations(correctiveActions, ({ one, m
   verifier: one(tenantUsers, {
     fields: [correctiveActions.verifiedByTenantUserId],
     references: [tenantUsers.id],
+  }),
+  sourceResponse: one(formResponses, {
+    fields: [correctiveActions.tenantId, correctiveActions.sourceFormResponseId],
+    references: [formResponses.tenantId, formResponses.id],
   }),
   photos: many(caPhotos),
   completeSteps: many(caCompleteSteps),

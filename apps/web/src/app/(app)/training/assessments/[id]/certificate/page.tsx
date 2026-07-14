@@ -11,6 +11,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { PrintButton } from './print-button'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,8 @@ export default async function AssessmentCertificatePage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   // Proctors run attempts for other people; either staff permission sees any
   // attempt's certificate. Everyone else is scoped by canSeeRecord (read.all →

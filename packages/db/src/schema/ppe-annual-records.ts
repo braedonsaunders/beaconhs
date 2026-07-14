@@ -13,7 +13,16 @@
 // from the day-to-day pre-use log.
 
 import { relations } from 'drizzle-orm'
-import { date, index, pgEnum, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  date,
+  foreignKey,
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants } from './core'
@@ -33,9 +42,7 @@ export const ppeAnnualRecords = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    itemId: uuid('item_id')
-      .notNull()
-      .references(() => ppeItems.id, { onDelete: 'cascade' }),
+    itemId: uuid('item_id').notNull(),
     // Year-of-record — used by the per-item history rollup so the same item
     // can't have two annual certs for the same year (data-entry guard).
     year: text('year').notNull(),
@@ -43,7 +50,7 @@ export const ppeAnnualRecords = pgTable(
     nextDueOn: date('next_due_on'),
     // The competent person who performed the inspection. Optional — sometimes
     // only a company name is recorded and we capture it in `notes`.
-    inspectedByPersonId: uuid('inspected_by_person_id').references(() => people.id),
+    inspectedByPersonId: uuid('inspected_by_person_id'),
     inspectorName: text('inspector_name'),
     inspectorCompany: text('inspector_company'),
     certificateAttachmentId: uuid('certificate_attachment_id'),
@@ -53,20 +60,37 @@ export const ppeAnnualRecords = pgTable(
   },
   (t) => ({
     tenantIdx: index('ppe_annual_records_tenant_idx').on(t.tenantId),
-    itemIdx: index('ppe_annual_records_item_idx').on(t.itemId, t.inspectedOn),
-    itemYearUx: uniqueIndex('ppe_annual_records_item_year_ux').on(t.itemId, t.year),
+    itemIdx: index('ppe_annual_records_item_idx').on(t.tenantId, t.itemId, t.inspectedOn),
+    itemYearUx: uniqueIndex('ppe_annual_records_item_year_ux').on(t.tenantId, t.itemId, t.year),
+    inspectedByIdx: index('ppe_annual_records_inspected_by_idx').on(
+      t.tenantId,
+      t.inspectedByPersonId,
+    ),
+    itemFk: foreignKey({
+      name: 'ppe_annual_records_tenant_item_fk',
+      columns: [t.tenantId, t.itemId],
+      foreignColumns: [ppeItems.tenantId, ppeItems.id],
+    }).onDelete('cascade'),
+    inspectedByFk: foreignKey({
+      name: 'ppe_annual_records_tenant_inspected_by_fk',
+      columns: [t.tenantId, t.inspectedByPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
   }),
 )
 
 export const ppeAnnualRecordsRelations = relations(ppeAnnualRecords, ({ one }) => ({
   tenant: one(tenants, { fields: [ppeAnnualRecords.tenantId], references: [tenants.id] }),
-  item: one(ppeItems, { fields: [ppeAnnualRecords.itemId], references: [ppeItems.id] }),
+  item: one(ppeItems, {
+    fields: [ppeAnnualRecords.tenantId, ppeAnnualRecords.itemId],
+    references: [ppeItems.tenantId, ppeItems.id],
+  }),
   inspectedByPerson: one(people, {
-    fields: [ppeAnnualRecords.inspectedByPersonId],
-    references: [people.id],
+    fields: [ppeAnnualRecords.tenantId, ppeAnnualRecords.inspectedByPersonId],
+    references: [people.tenantId, people.id],
   }),
   certificate: one(attachments, {
-    fields: [ppeAnnualRecords.certificateAttachmentId],
-    references: [attachments.id],
+    fields: [ppeAnnualRecords.tenantId, ppeAnnualRecords.certificateAttachmentId],
+    references: [attachments.tenantId, attachments.id],
   }),
 }))

@@ -10,6 +10,7 @@
 
 import { and, eq } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
+import type { Database } from '@beaconhs/db'
 import { planAutomation, type EmailTarget } from '@beaconhs/forms-core'
 import { formAutomations, roleAssignments, roles, tenantUsers, users } from '@beaconhs/db/schema'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
@@ -22,8 +23,7 @@ export function interpolate(tpl: string, values: Record<string, unknown>): strin
   })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function roleUserIds(tx: any, tenantId: string, roleKey: string) {
+export async function roleUserIds(tx: Database, tenantId: string, roleKey: string) {
   if (!roleKey) return [] as { userId: string; email: string | null }[]
   return tx
     .select({ userId: tenantUsers.userId, email: users.email })
@@ -41,8 +41,7 @@ export async function roleUserIds(tx: any, tenantId: string, roleKey: string) {
 }
 
 export async function resolveEmails(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tx: any,
+  tx: Database,
   tenantId: string,
   targets: EmailTarget[],
   submitterEmail: string | null,
@@ -71,7 +70,7 @@ export async function resolveEmails(
  * deterministic job ids make a partial publication safe to retry.
  */
 export async function runSessionOverdueFlows(args: {
-  tx: any
+  tx: Database
   tenantId: string
   responseId: string
   templateId: string
@@ -83,7 +82,13 @@ export async function runSessionOverdueFlows(args: {
   const flows = await tx
     .select({ id: formAutomations.id, graph: formAutomations.graph })
     .from(formAutomations)
-    .where(and(eq(formAutomations.templateId, templateId), eq(formAutomations.enabled, true)))
+    .where(
+      and(
+        eq(formAutomations.tenantId, tenantId),
+        eq(formAutomations.templateId, templateId),
+        eq(formAutomations.enabled, true),
+      ),
+    )
   for (const flow of flows) {
     const plan = planAutomation(flow.graph, 'session_overdue', {
       values: data,

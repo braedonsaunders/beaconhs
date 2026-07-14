@@ -6,7 +6,7 @@
 // re-used by other entities).
 
 import { relations } from 'drizzle-orm'
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { foreignKey, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
 import { people } from './org'
@@ -19,9 +19,7 @@ export const personFiles = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
+    personId: uuid('person_id').notNull(),
     attachmentId: uuid('attachment_id'),
     // Free-form display label e.g. "2024 forklift cert", "Drivers license".
     label: text('label').notNull(),
@@ -34,17 +32,25 @@ export const personFiles = pgTable(
   },
   (t) => ({
     tenantIdx: index('person_files_tenant_idx').on(t.tenantId),
-    personIdx: index('person_files_person_idx').on(t.personId),
+    personIdx: index('person_files_person_idx').on(t.tenantId, t.personId),
     kindIdx: index('person_files_kind_idx').on(t.tenantId, t.kind),
+    personFk: foreignKey({
+      name: 'person_files_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
   }),
 )
 
 export const personFilesRelations = relations(personFiles, ({ one }) => ({
   tenant: one(tenants, { fields: [personFiles.tenantId], references: [tenants.id] }),
-  person: one(people, { fields: [personFiles.personId], references: [people.id] }),
+  person: one(people, {
+    fields: [personFiles.tenantId, personFiles.personId],
+    references: [people.tenantId, people.id],
+  }),
   attachment: one(attachments, {
-    fields: [personFiles.attachmentId],
-    references: [attachments.id],
+    fields: [personFiles.tenantId, personFiles.attachmentId],
+    references: [attachments.tenantId, attachments.id],
   }),
   uploader: one(users, { fields: [personFiles.uploadedBy], references: [users.id] }),
 }))

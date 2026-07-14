@@ -23,6 +23,11 @@ import type { LifecycleRule } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'node:crypto'
 import {
+  storageObjectTagging,
+  withManagedStorageLifecycleRules,
+  type StorageObjectLifecycle,
+} from './lifecycle'
+import {
   MULTIPART_UPLOAD_PART_SIZE_BYTES,
   multipartPartCount,
   shouldUseMultipartUpload,
@@ -51,7 +56,18 @@ const client = new S3Client({
 
 export const BUCKET = bucket
 
-const isR2 = endpoint.includes('r2.cloudflarestorage.com')
+function isCloudflareR2Endpoint(value: string): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new Error('R2_ENDPOINT must be an absolute HTTP(S) URL')
+  }
+  const hostname = parsed.hostname.toLowerCase()
+  return hostname === 'r2.cloudflarestorage.com' || hostname.endsWith('.r2.cloudflarestorage.com')
+}
+
+const isR2 = isCloudflareR2Endpoint(endpoint)
 
 function storageErrorCode(error: unknown): string | undefined {
   const value = error as { name?: string; code?: string; Code?: string }
@@ -103,7 +119,7 @@ export async function ensureBucket(): Promise<void> {
   await ensurePrivateBucketReady()
 }
 
-/** Remove anonymous access, configure pending-upload expiry, and prove privacy. */
+/** Remove anonymous access, configure managed object expiry, and prove privacy. */
 export async function ensurePrivateBucketReady(): Promise<void> {
   if (process.env.R2_PUBLIC_URL) {
     throw new Error(
@@ -139,16 +155,7 @@ export async function ensurePrivateBucketReady(): Promise<void> {
     new PutBucketLifecycleConfigurationCommand({
       Bucket: bucket,
       LifecycleConfiguration: {
-        Rules: [
-          ...existingRules.filter((rule) => rule.ID !== 'expire-unfinalized-uploads'),
-          {
-            ID: 'expire-unfinalized-uploads',
-            Status: 'Enabled',
-            Filter: { Tag: { Key: 'beaconhs-state', Value: 'pending' } },
-            Expiration: { Days: 1 },
-            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
-          },
-        ],
+        Rules: withManagedStorageLifecycleRules(existingRules),
       },
     }),
   )
@@ -164,11 +171,16 @@ export async function ensurePrivateBucketReady(): Promise<void> {
       method: 'GET',
       redirect: 'manual',
       cache: 'no-store',
+      signal: AbortSignal.timeout(15_000),
     })
-    if (response.status >= 200 && response.status < 400) {
-      throw new Error(
-        `Storage privacy verification failed: anonymous read returned HTTP ${response.status}`,
-      )
+    try {
+      if (response.status >= 200 && response.status < 400) {
+        throw new Error(
+          `Storage privacy verification failed: anonymous read returned HTTP ${response.status}`,
+        )
+      }
+    } finally {
+      await response.body?.cancel()
     }
   } finally {
     await deleteObject({ key: probeKey })
@@ -196,6 +208,7 @@ export async function createMultipartUpload(args: {
   contentType: string
   contentDisposition?: 'inline' | 'attachment'
   uploadToken?: string
+  lifecycle?: StorageObjectLifecycle
 }): Promise<string> {
   const result = await client.send(
     new CreateMultipartUploadCommand({
@@ -204,7 +217,7 @@ export async function createMultipartUpload(args: {
       ContentType: args.contentType,
       ContentDisposition: args.contentDisposition ?? 'attachment',
       Metadata: args.uploadToken ? { 'upload-token': args.uploadToken } : undefined,
-      Tagging: args.uploadToken ? 'beaconhs-state=pending' : undefined,
+      Tagging: args.uploadToken ? 'beaconhs-state=pending' : storageObjectTagging(args.lifecycle),
     }),
   )
   if (!result.UploadId) throw new Error('Storage did not create a multipart upload')
@@ -287,12 +300,14 @@ export async function putObject(args: {
   body: Buffer | Uint8Array
   contentType: string
   contentDisposition?: 'inline' | 'attachment'
+  lifecycle?: StorageObjectLifecycle
 }): Promise<void> {
   if (shouldUseMultipartUpload(args.body.byteLength)) {
     const uploadId = await createMultipartUpload({
       key: args.key,
       contentType: args.contentType,
       contentDisposition: args.contentDisposition,
+      lifecycle: args.lifecycle,
     })
     try {
       const parts: Array<{ ETag: string; PartNumber: number }> = []
@@ -335,6 +350,7 @@ export async function putObject(args: {
       Body: args.body,
       ContentType: args.contentType,
       ContentDisposition: args.contentDisposition ?? 'attachment',
+      Tagging: storageObjectTagging(args.lifecycle),
     }),
   )
 }
@@ -377,10 +393,12 @@ export async function headObject(args: { key: string }): Promise<StoredObjectMet
  */
 export async function promoteObject(args: {
   sourceKey: string
+  sourceEtag: string
   destinationKey: string
   contentType: string
   contentDisposition: 'inline' | 'attachment'
 }): Promise<void> {
+  if (!args.sourceEtag.trim()) throw new Error('Verified source ETag is required')
   const source = `${bucket}/${args.sourceKey}`
     .split('/')
     .map((part) => encodeURIComponent(part))
@@ -390,6 +408,7 @@ export async function promoteObject(args: {
       Bucket: bucket,
       Key: args.destinationKey,
       CopySource: source,
+      CopySourceIfMatch: args.sourceEtag,
       ContentType: args.contentType,
       ContentDisposition: args.contentDisposition,
       MetadataDirective: 'REPLACE',
@@ -404,6 +423,7 @@ export async function getObjectRange(args: {
   key: string
   start: number
   end: number
+  ifMatch?: string
 }): Promise<Buffer> {
   if (args.start < 0 || args.end < args.start) throw new Error('Invalid object byte range')
   const result = await client.send(
@@ -411,6 +431,7 @@ export async function getObjectRange(args: {
       Bucket: bucket,
       Key: args.key,
       Range: `bytes=${args.start}-${args.end}`,
+      IfMatch: args.ifMatch,
     }),
   )
   if (!result.Body) throw new Error(`Object not found: ${args.key}`)
@@ -499,6 +520,24 @@ export function newPendingUploadKey(args: { tenantId: string; uploadId: string }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SCOPE_RE = /^[a-z0-9_](?:[a-z0-9_/-]*[a-z0-9_])?$/
+const OBJECT_KEY_PART_RE = /^[a-zA-Z0-9._-]+$/
+
+/** Refuse to delete a key that is not canonically owned by the supplied tenant. */
+export function assertTenantObjectKey(args: { tenantId: string; key: string }): void {
+  if (!UUID_RE.test(args.tenantId)) throw new Error('Tenant id must be a UUID')
+  if (!args.key || args.key.length > 1_024 || args.key.includes('\\')) {
+    throw new Error('Storage object key is invalid')
+  }
+  const parts = args.key.split('/')
+  if (
+    parts.length < 4 ||
+    parts[0] !== 't' ||
+    parts[1] !== args.tenantId.toLowerCase() ||
+    parts.slice(2).some((part) => !OBJECT_KEY_PART_RE.test(part) || part === '.' || part === '..')
+  ) {
+    throw new Error('Storage object key does not belong to the tenant')
+  }
+}
 
 export function newTenantObjectKey(args: {
   tenantId: string

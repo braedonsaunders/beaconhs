@@ -4,7 +4,7 @@
 // Every row opens the rendered wallet card for that credential.
 
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { db, withSuperAdmin } from '@beaconhs/db'
+import { db, primaryPersonTitleName, withSuperAdmin } from '@beaconhs/db'
 import {
   attachments,
   departments,
@@ -16,6 +16,7 @@ import {
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { presignGet } from '@beaconhs/storage'
+import { RawImage } from '@/components/raw-image'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { activeTenantPredicate } from '@/lib/active-tenant'
 import { EXPIRING_DAYS, formatDay, isoDaysFromNow, standingFor, todayIsoDate } from './_format'
@@ -53,6 +54,7 @@ async function resolveToken(token: string): Promise<Resolved | null> {
         tenant: tenants,
         departmentName: departments.name,
         photoKey: attachments.r2Key,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
@@ -106,7 +108,7 @@ async function resolveToken(token: string): Promise<Resolved | null> {
     return {
       personName: `${row.person.firstName} ${row.person.lastName}`,
       employeeNo: row.person.employeeNo,
-      jobTitle: row.person.jobTitle,
+      jobTitle: row.jobTitle,
       departmentName: row.departmentName,
       personActive: row.person.status === 'active',
       photoUrl: row.photoKey
@@ -179,10 +181,10 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
           </div>
           <div className="mt-5 flex items-center gap-4">
             {result.photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <RawImage
                 src={result.photoUrl}
                 alt=""
+                optimizationReason="ephemeral"
                 className="h-20 w-20 shrink-0 rounded-2xl border-2 border-white/20 object-cover"
               />
             ) : (
@@ -215,10 +217,10 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
           </div>
           <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
             {result.tenantLogoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <RawImage
                 src={result.tenantLogoUrl}
                 alt=""
+                optimizationReason="tenant-origin"
                 className="h-6 max-w-28 rounded bg-white object-contain px-1 py-0.5"
               />
             ) : null}

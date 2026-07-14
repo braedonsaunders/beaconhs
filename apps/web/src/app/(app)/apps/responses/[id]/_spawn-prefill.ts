@@ -7,7 +7,7 @@
 // which it then passes as plain props into the client drawers.
 
 import type { FormSchemaV1 } from '@beaconhs/db/schema'
-import { severityFromScore } from '@/app/(app)/apps/_lib/score-router'
+import { severityFromScore } from '../../_lib/score-router'
 
 export function labelForField(schema: FormSchemaV1, fieldKey: string): string {
   for (const sec of schema.sections) {
@@ -16,6 +16,49 @@ export function labelForField(schema: FormSchemaV1, fieldKey: string): string {
     }
   }
   return fieldKey
+}
+
+function displayRawValue(raw: unknown): string {
+  if (raw == null) return '—'
+  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+    return String(raw)
+  }
+  if (typeof raw === 'object' && 'answer' in raw) {
+    const answer = String((raw as { answer?: unknown }).answer ?? '—')
+    const comment = (raw as { comment?: unknown }).comment
+    return typeof comment === 'string' && comment ? `${answer} — ${comment}` : answer
+  }
+  return JSON.stringify(raw)
+}
+
+/**
+ * Resolve a failed field's response value from the canonical payload shape.
+ * Repeating fields live under their section id, so a plain `values[fieldKey]`
+ * lookup would lose the evidence shown in the response viewer and CAPA prefill.
+ */
+export function displayValueForField(
+  schema: FormSchemaV1,
+  values: Record<string, unknown>,
+  fieldKey: string,
+): string {
+  const section = schema.sections.find((candidate) =>
+    candidate.fields.some((field) => field.id === fieldKey),
+  )
+  if (!section?.repeating) return displayRawValue(values[fieldKey])
+
+  const rows = values[section.id]
+  if (!Array.isArray(rows)) return '—'
+  const answers = rows.flatMap((row, rowIndex) => {
+    if (typeof row !== 'object' || row === null || Array.isArray(row) || !(fieldKey in row)) {
+      return []
+    }
+    return [`Row ${rowIndex + 1}: ${displayRawValue((row as Record<string, unknown>)[fieldKey])}`]
+  })
+  if (answers.length === 0) return '—'
+
+  const visible = answers.slice(0, 5)
+  const remainder = answers.length - visible.length
+  return `${visible.join('; ')}${remainder > 0 ? `; … (+${remainder} more)` : ''}`
 }
 
 function failedFieldSummary(
@@ -27,20 +70,8 @@ function failedFieldSummary(
   return failedKeys
     .map((k) => {
       const label = labelForField(schema, k)
-      const raw = values[k]
-      const display =
-        raw == null
-          ? ''
-          : typeof raw === 'string'
-            ? raw
-            : typeof raw === 'object' && raw && 'answer' in raw
-              ? `${(raw as { answer?: string }).answer ?? ''}${
-                  (raw as { comment?: string }).comment
-                    ? ` — ${(raw as { comment?: string }).comment}`
-                    : ''
-                }`
-              : JSON.stringify(raw)
-      return `• ${label}${display ? ` — ${display}` : ''}`
+      const display = displayValueForField(schema, values, k)
+      return `• ${label}${display === '—' ? '' : ` — ${display}`}`
     })
     .join('\n')
 }

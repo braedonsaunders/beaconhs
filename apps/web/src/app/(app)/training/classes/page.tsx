@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { CalendarCheck, CalendarDays } from 'lucide-react'
-import { and, asc, count, desc, eq, gte, lt, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, ilike, lt, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -26,6 +26,8 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../_components/training-sub-nav'
 import { startClass } from './_actions'
@@ -63,6 +65,16 @@ export default async function TrainingClassesPage({
 
   const { rows, total, attendeeCounts, whenCounts } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
+    if (params.q) {
+      const term = `%${params.q}%`
+      const search = or(
+        ilike(trainingClasses.title, term),
+        ilike(trainingCourses.name, term),
+        ilike(trainingCourses.code, term),
+        ilike(orgUnits.name, term),
+      )
+      if (search) filters.push(search)
+    }
     if (whenFilter === 'upcoming') filters.push(gte(trainingClasses.startsAt, now))
     else if (whenFilter === 'past') filters.push(lt(trainingClasses.startsAt, now))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
@@ -74,7 +86,12 @@ export default async function TrainingClassesPage({
           ? [params.dir === 'asc' ? asc(trainingClasses.title) : desc(trainingClasses.title)]
           : [params.dir === 'asc' ? asc(trainingClasses.startsAt) : desc(trainingClasses.startsAt)]
 
-    const [tot] = await tx.select({ c: count() }).from(trainingClasses).where(whereClause)
+    const [tot] = await tx
+      .select({ c: count() })
+      .from(trainingClasses)
+      .innerJoin(trainingCourses, eq(trainingCourses.id, trainingClasses.courseId))
+      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.siteOrgUnitId))
+      .where(whereClause)
     const data = await tx
       .select({
         cls: trainingClasses,
@@ -146,24 +163,37 @@ export default async function TrainingClassesPage({
             }
           />
           <TrainingSubNav active="classes" />
-          <FilterChips
-            basePath="/training/classes"
-            currentParams={sp}
-            paramKey="when"
-            label="When"
-            options={WHEN_OPTIONS.map((o) => ({
-              ...o,
-              count: whenCounts[o.value as keyof typeof whenCounts],
-            }))}
-          />
+          <TableToolbar>
+            <SearchInput placeholder="Search class, course, code, or site…" />
+            <FilterChips
+              basePath="/training/classes"
+              currentParams={sp}
+              paramKey="when"
+              label="When"
+              options={WHEN_OPTIONS.map((o) => ({
+                ...o,
+                count: whenCounts[o.value as keyof typeof whenCounts],
+              }))}
+            />
+          </TableToolbar>
         </>
       }
     >
       {rows.length === 0 ? (
         <EmptyState
           icon={<CalendarCheck size={32} />}
-          title={whenFilter === 'past' ? 'No past classes' : 'No classes scheduled'}
-          description="Schedule a class for any course in the catalogue."
+          title={
+            params.q
+              ? 'No classes match your search'
+              : whenFilter === 'past'
+                ? 'No past classes'
+                : 'No classes scheduled'
+          }
+          description={
+            params.q
+              ? 'Clear the search to see other classes.'
+              : 'Schedule a class for any course in the catalogue.'
+          }
           action={
             canManageClasses ? (
               <form action={startClass}>

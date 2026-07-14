@@ -11,6 +11,9 @@ const DEFAULT_TIMEOUT_MS = 3_000
  */
 export async function assertRedisReady(options?: { url?: string; timeoutMs?: number }) {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30_000) {
+    throw new Error('Redis readiness timeout must be between 100 and 30000 ms')
+  }
   const client = new Redis(options?.url ?? getRedisUrl(), {
     lazyConnect: true,
     connectTimeout: timeoutMs,

@@ -14,14 +14,13 @@ import {
   EmptyState,
   UrlDrawer,
 } from '@beaconhs/ui'
-import { pickString } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import {
   attachments,
   caCompleteSteps,
   caPhotos,
   correctiveActions,
   incidents,
-  orgUnits,
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
@@ -30,7 +29,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { assertCan } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity, recordAuditInTransaction } from '@/lib/audit'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -40,13 +39,14 @@ import { PremiumSection as Section } from '@/components/premium-section'
 import { SectionNav, type SectionNavItem } from '@/components/section-nav'
 import {
   LiveField,
-  LivePersonSelect,
+  LiveRemoteSelect,
   LiveRichText,
   LiveSelect,
   LiveToggle,
 } from '@/components/live-field'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
-import { listTenantOwners, reopenCorrectiveAction } from '../_actions'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
+import { reopenCorrectiveAction } from '../_actions'
 import { CaHeaderActions } from './_header-actions'
 import { CloseBody } from './_close-button'
 import { AddStepBody, CompleteStepsTimeline, type CompleteStep } from './_complete-steps-panel'
@@ -79,32 +79,25 @@ async function updateStatus(formData: FormData) {
   // the header status dropdown is for non-terminal transitions only.
   if (status === 'closed') return
   assertCan(ctx, 'ca.update')
-  // Re-scope: a self/site-tier user must be able to see the action they edit.
-  const visible = await ctx.db(async (tx) => {
-    const [row] = await tx
+  const changed = await ctx.db(async (tx) => {
+    const [current] = await tx
       .select({
+        status: correctiveActions.status,
+        locked: correctiveActions.locked,
         ownerTenantUserId: correctiveActions.ownerTenantUserId,
         siteOrgUnitId: correctiveActions.siteOrgUnitId,
       })
       .from(correctiveActions)
       .where(eq(correctiveActions.id, id))
       .limit(1)
-    if (!row) return false
-    return canSeeRecord(ctx, tx, {
-      prefix: 'ca',
-      ownerIds: [row.ownerTenantUserId],
-      siteId: row.siteOrgUnitId,
-    })
-  })
-  if (!visible) return
-  const changed = await ctx.db(async (tx) => {
-    const [current] = await tx
-      .select({ status: correctiveActions.status })
-      .from(correctiveActions)
-      .where(eq(correctiveActions.id, id))
-      .limit(1)
       .for('update')
-    if (!current || current.status === status) return false
+    if (!current || current.locked || current.status === status) return false
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'ca',
+      ownerIds: [current.ownerTenantUserId],
+      siteId: current.siteOrgUnitId,
+    })
+    if (!visible) return false
     await tx
       .update(correctiveActions)
       .set({ status, closedAt: null, locked: false })
@@ -130,16 +123,20 @@ async function updateStatus(formData: FormData) {
         },
       })
     }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: id,
+      action: 'update',
+      summary: `Status moved to "${status.replace(/_/g, ' ')}"`,
+      after: { status },
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'corrective_action',
+      targetRef: {},
+    })
     return true
   })
   if (!changed) return
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: id,
-    action: 'update',
-    summary: `Status moved to "${status.replace(/_/g, ' ')}"`,
-    after: { status },
-  })
   revalidatePath(`/corrective-actions/${id}`)
   revalidatePath('/corrective-actions')
 }
@@ -185,28 +182,6 @@ async function updateTextField(formData: FormData) {
     TEXT.has(field)
   if (!allowed) throw new Error('Field not allowed')
 
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx
-      .select({
-        locked: correctiveActions.locked,
-        ownerTenantUserId: correctiveActions.ownerTenantUserId,
-        siteOrgUnitId: correctiveActions.siteOrgUnitId,
-      })
-      .from(correctiveActions)
-      .where(eq(correctiveActions.id, id))
-      .limit(1)
-    if (!row) return null
-    // Re-scope so a self/site-tier user can't edit an action they cannot see.
-    const visible = await canSeeRecord(ctx, tx, {
-      prefix: 'ca',
-      ownerIds: [row.ownerTenantUserId],
-      siteId: row.siteOrgUnitId,
-    })
-    return visible ? row : null
-  })
-  if (!before) throw new Error('Corrective action not found')
-  if (before.locked) throw new Error('This action is locked')
-
   let val: unknown
   if (field in ENUMS_NOTNULL) {
     if (!ENUMS_NOTNULL[field]!.includes(value)) throw new Error('Invalid value')
@@ -235,18 +210,42 @@ async function updateTextField(formData: FormData) {
     val = trimmed === '' ? null : value
   }
 
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({
+        locked: correctiveActions.locked,
+        ownerTenantUserId: correctiveActions.ownerTenantUserId,
+        siteOrgUnitId: correctiveActions.siteOrgUnitId,
+      })
+      .from(correctiveActions)
+      .where(eq(correctiveActions.id, id))
+      .limit(1)
+      .for('update')
+    if (!current) throw new Error('Corrective action not found')
+    const visible = await canSeeRecord(ctx, tx, {
+      prefix: 'ca',
+      ownerIds: [current.ownerTenantUserId],
+      siteId: current.siteOrgUnitId,
+    })
+    if (!visible) throw new Error('Corrective action not found')
+    if (current.locked) throw new Error('This action is locked')
+    await tx
       .update(correctiveActions)
       .set({ [field]: val } as any)
-      .where(eq(correctiveActions.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: id,
-    action: 'update',
-    summary: `Updated ${field}`,
-    after: { [field]: val },
+      .where(eq(correctiveActions.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${field}`,
+      after: { [field]: val },
+    })
+    if (field === 'dueOn' || field === 'ownerTenantUserId') {
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
+      })
+    }
   })
   revalidatePath(`/corrective-actions/${id}`)
   revalidatePath('/corrective-actions')
@@ -265,6 +264,8 @@ export default async function CorrectiveActionPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const drawer = pickString(sp.drawer)
   const ctx = await requireRequestContext()
@@ -323,13 +324,7 @@ export default async function CorrectiveActionPage({
       verifierName = vRow?.u?.name ?? vRow?.tu?.displayName ?? null
     }
 
-    const siteOptions = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
-      .orderBy(asc(orgUnits.name))
-
-    return { ca, source, photoRows, stepsRaw, verifierName, siteOptions }
+    return { ca, source, photoRows, stepsRaw, verifierName }
   })
   if (!data) notFound()
   // Per-user record visibility: read.all → any; read.site → my sites; else → ones I own.
@@ -343,9 +338,8 @@ export default async function CorrectiveActionPage({
     ))
   )
     notFound()
-  const { ca, source, photoRows, stepsRaw, verifierName, siteOptions } = data
+  const { ca, source, photoRows, stepsRaw, verifierName } = data
 
-  const owners = await listTenantOwners()
   const activity = await recentActivityForEntity(ctx, 'corrective_action', id, 25)
   const locked = ca.locked
 
@@ -366,12 +360,6 @@ export default async function CorrectiveActionPage({
       ? attachmentUrl(s.step.signatureAttachmentId)
       : null,
     entityOrder: s.step.entityOrder,
-  }))
-
-  const ownerOpts = owners.map((o) => ({
-    value: o.id,
-    label: o.name,
-    hint: o.email ?? undefined,
   }))
 
   // Progress milestones — the overview hero ring + checklist.
@@ -582,24 +570,21 @@ export default async function CorrectiveActionPage({
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              <LiveSelect
+              <LiveRemoteSelect
                 id={id}
                 field="siteOrgUnitId"
                 label="Site"
                 initialValue={ca.siteOrgUnitId}
-                options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
+                lookup="corrective-action-sites"
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              <LivePersonSelect
+              <LiveRemoteSelect
                 id={id}
                 field="ownerTenantUserId"
                 label="Owner"
                 initialValue={ca.ownerTenantUserId}
-                options={ownerOpts}
-                sheetTitle="Select owner"
-                placeholder="Select an owner…"
-                searchPlaceholder="Search owners…"
+                lookup="corrective-action-owners"
                 disabled={locked}
                 updateAction={updateTextField}
               />

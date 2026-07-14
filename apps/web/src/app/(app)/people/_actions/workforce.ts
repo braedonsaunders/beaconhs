@@ -8,20 +8,27 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, count, eq, isNull } from 'drizzle-orm'
+import { normalizeCatalogDisplayName } from '@beaconhs/db'
 import { crews, people, trades } from '@beaconhs/db/schema'
+import { countComplianceAudienceTargetUses } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 
 type SaveResult = { ok: true } | { ok: false; error: string }
 
 const TRADES_BASE = '/people/trades'
 const CREWS_BASE = '/people/crews'
 
+function isNormalizedNameConflict(error: unknown, indexName: string): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes(indexName)
+}
+
 export async function saveTrade(input: { id?: string; name: string }): Promise<SaveResult> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  const name = input.name.trim()
+  const name = normalizeCatalogDisplayName(input.name)
   if (!name) return { ok: false, error: 'Name is required.' }
 
   if (input.id) {
@@ -30,7 +37,14 @@ export async function saveTrade(input: { id?: string; name: string }): Promise<S
       return row ?? null
     })
     if (!before) return { ok: false, error: 'Trade not found.' }
-    await ctx.db((tx) => tx.update(trades).set({ name }).where(eq(trades.id, input.id!)))
+    try {
+      await ctx.db((tx) => tx.update(trades).set({ name }).where(eq(trades.id, input.id!)))
+    } catch (error) {
+      if (isNormalizedNameConflict(error, 'trades_tenant_normalized_name_ux')) {
+        return { ok: false, error: 'A trade with that name already exists.' }
+      }
+      throw error
+    }
     await recordAudit(ctx, {
       entityType: 'trade',
       entityId: input.id,
@@ -43,9 +57,17 @@ export async function saveTrade(input: { id?: string; name: string }): Promise<S
     return { ok: true }
   }
 
-  const [row] = await ctx.db((tx) =>
-    tx.insert(trades).values({ tenantId: ctx.tenantId, name }).returning(),
-  )
+  let row: typeof trades.$inferSelect | undefined
+  try {
+    ;[row] = await ctx.db((tx) =>
+      tx.insert(trades).values({ tenantId: ctx.tenantId, name }).returning(),
+    )
+  } catch (error) {
+    if (isNormalizedNameConflict(error, 'trades_tenant_normalized_name_ux')) {
+      return { ok: false, error: 'A trade with that name already exists.' }
+    }
+    throw error
+  }
   if (row) {
     await recordAudit(ctx, {
       entityType: 'trade',
@@ -64,31 +86,58 @@ export async function deleteTrade(formData: FormData): Promise<void> {
   assertCanManageModule(ctx, 'people')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const { row, usage } = await ctx.db(async (tx) => {
-    const [r] = await tx.select().from(trades).where(eq(trades.id, id)).limit(1)
+  const result = await ctx.db(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(trades)
+      .where(and(eq(trades.tenantId, ctx.tenantId), eq(trades.id, id)))
+      .limit(1)
+      .for('update')
+    if (!row) return { state: 'missing' as const }
     const [u] = await tx
       .select({ c: count() })
       .from(people)
-      .where(and(eq(people.tradeId, id), isNull(people.deletedAt)))
-    return { row: r ?? null, usage: Number(u?.c ?? 0) }
+      .where(and(eq(people.tenantId, ctx.tenantId), eq(people.tradeId, id)))
+    const usage = Number(u?.c ?? 0)
+    if (usage > 0) return { state: 'assigned' as const, row, usage }
+
+    const requirements = await countComplianceAudienceTargetUses(tx, ctx.tenantId, {
+      kind: 'trade',
+      entityKey: id,
+    })
+    if (requirements > 0) return { state: 'required' as const, row, requirements }
+
+    const [deleted] = await tx
+      .delete(trades)
+      .where(and(eq(trades.tenantId, ctx.tenantId), eq(trades.id, id)))
+      .returning({ id: trades.id })
+    if (!deleted) return { state: 'missing' as const }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'trade',
+      entityId: id,
+      action: 'delete',
+      summary: `Deleted trade "${row.name}"`,
+      before: { name: row.name },
+    })
+    return { state: 'deleted' as const }
   })
-  if (!row) return
-  if (usage > 0) {
+  if (result.state === 'missing') return
+  if (result.state === 'assigned') {
     revalidatePath(TRADES_BASE)
     redirect(
       `${TRADES_BASE}?error=${encodeURIComponent(
-        `"${row.name}" is assigned to ${usage} ${usage === 1 ? 'person' : 'people'}. Reassign them before deleting.`,
+        `"${result.row.name}" is assigned to ${result.usage} ${result.usage === 1 ? 'person' : 'people'}. Reassign them before deleting.`,
       )}`,
     )
   }
-  await ctx.db((tx) => tx.delete(trades).where(eq(trades.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'trade',
-    entityId: id,
-    action: 'delete',
-    summary: `Deleted trade "${row.name}"`,
-    before: { name: row.name },
-  })
+  if (result.state === 'required') {
+    revalidatePath(TRADES_BASE)
+    redirect(
+      `${TRADES_BASE}?error=${encodeURIComponent(
+        `"${result.row.name}" is used by ${result.requirements} compliance ${result.requirements === 1 ? 'requirement' : 'requirements'}. Change those audiences before deleting.`,
+      )}`,
+    )
+  }
   revalidatePath(TRADES_BASE)
   redirect(TRADES_BASE)
 }
@@ -96,7 +145,7 @@ export async function deleteTrade(formData: FormData): Promise<void> {
 export async function saveCrew(input: { id?: string; name: string }): Promise<SaveResult> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
-  const name = input.name.trim()
+  const name = normalizeCatalogDisplayName(input.name)
   if (!name) return { ok: false, error: 'Name is required.' }
 
   if (input.id) {
@@ -105,7 +154,14 @@ export async function saveCrew(input: { id?: string; name: string }): Promise<Sa
       return row ?? null
     })
     if (!before) return { ok: false, error: 'Crew not found.' }
-    await ctx.db((tx) => tx.update(crews).set({ name }).where(eq(crews.id, input.id!)))
+    try {
+      await ctx.db((tx) => tx.update(crews).set({ name }).where(eq(crews.id, input.id!)))
+    } catch (error) {
+      if (isNormalizedNameConflict(error, 'crews_tenant_normalized_name_ux')) {
+        return { ok: false, error: 'A crew with that name already exists.' }
+      }
+      throw error
+    }
     await recordAudit(ctx, {
       entityType: 'crew',
       entityId: input.id,
@@ -118,9 +174,17 @@ export async function saveCrew(input: { id?: string; name: string }): Promise<Sa
     return { ok: true }
   }
 
-  const [row] = await ctx.db((tx) =>
-    tx.insert(crews).values({ tenantId: ctx.tenantId, name }).returning(),
-  )
+  let row: typeof crews.$inferSelect | undefined
+  try {
+    ;[row] = await ctx.db((tx) =>
+      tx.insert(crews).values({ tenantId: ctx.tenantId, name }).returning(),
+    )
+  } catch (error) {
+    if (isNormalizedNameConflict(error, 'crews_tenant_normalized_name_ux')) {
+      return { ok: false, error: 'A crew with that name already exists.' }
+    }
+    throw error
+  }
   if (row) {
     await recordAudit(ctx, {
       entityType: 'crew',

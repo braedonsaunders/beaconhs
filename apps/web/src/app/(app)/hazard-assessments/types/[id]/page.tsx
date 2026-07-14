@@ -12,6 +12,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailPageLayout } from '@/components/page-layout'
+import { isUuid } from '@/lib/list-params'
 import { HazardTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,8 @@ export default async function AssessmentTypeDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('hazid')
   const data = await ctx.db(async (tx) => {
     const [type] = await tx

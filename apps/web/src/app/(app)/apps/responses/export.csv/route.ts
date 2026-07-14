@@ -17,7 +17,12 @@ import { requireExportContext } from '@/lib/auth'
 import { responsePayload } from '../../_lib/response-payload'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
-import { csvFilename, csvResponse } from '@/lib/csv'
+import {
+  CSV_EXPORT_QUERY_LIMIT,
+  csvExportOverflowResponse,
+  csvFilename,
+  csvResponse,
+} from '@/lib/csv'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { selectCsvColumns } from '@/lib/export-columns'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
@@ -59,13 +64,11 @@ export async function GET(req: NextRequest) {
   const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   // Read-tier floor: a caller with no forms.response read permission can never
   // export the response set (mirrors the list page's per-user visibility).
-  if (
-    !(
-      can(ctx, 'forms.response.read.all') ||
-      can(ctx, 'forms.response.read.site') ||
-      can(ctx, 'forms.response.read.self')
-    )
-  ) {
+  if (!(
+    can(ctx, 'forms.response.read.all') ||
+    can(ctx, 'forms.response.read.site') ||
+    can(ctx, 'forms.response.read.self')
+  )) {
     notFound()
   }
 
@@ -121,7 +124,7 @@ export async function GET(req: NextRequest) {
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .where(whereClause)
       .orderBy(...orderBy)
-      .limit(10_000)
+      .limit(CSV_EXPORT_QUERY_LIMIT)
 
     const schemas = templateFilter
       ? await tx
@@ -137,6 +140,9 @@ export async function GET(req: NextRequest) {
       columns: buildResponseExportColumns(schemas.map((row) => row.schema as FormSchemaV1)),
     }
   })
+
+  const overflow = csvExportOverflowResponse(rows.rows.length)
+  if (overflow) return overflow
 
   await recordAudit(ctx, {
     entityType: 'form_response',

@@ -8,15 +8,13 @@ import 'server-only'
 
 import { inArray } from 'drizzle-orm'
 import { attachments } from '@beaconhs/db/schema'
-import { getObject } from '@beaconhs/storage'
-import { runVisionAnalysis, type SafetyVisionAnalysis } from '@beaconhs/ai'
+import { getObject, headObject } from '@beaconhs/storage'
+import { AI_VISION_LIMITS, runVisionAnalysis, type SafetyVisionAnalysis } from '@beaconhs/ai'
 import type { RequestContext } from '@beaconhs/tenant'
 import { getTenantAiConfig } from '@/lib/ai-config'
+import { isUuid } from '@/lib/list-params'
 
 // Cost / latency bounds — analyse at most a handful of images, skip huge files.
-const MAX_IMAGES = 4
-const MAX_BYTES = 8 * 1024 * 1024
-
 /**
  * Run the construction-safety vision analysis over the given attachment ids.
  * Returns null when AI is unconfigured, no ids are image attachments, or every
@@ -27,7 +25,9 @@ export async function analyzePhotoAttachments(
   attachmentIds: string[],
   opts?: { prompt?: string },
 ): Promise<SafetyVisionAnalysis | null> {
-  const ids = (attachmentIds ?? []).filter(Boolean).slice(0, MAX_IMAGES)
+  const ids = [...new Set(attachmentIds ?? [])]
+    .filter((id) => isUuid(id))
+    .slice(0, AI_VISION_LIMITS.images)
   if (ids.length === 0) return null
 
   const aiConfig = await getTenantAiConfig(ctx)
@@ -46,12 +46,23 @@ export async function analyzePhotoAttachments(
   )
 
   const images: Uint8Array[] = []
+  let totalBytes = 0
   for (const r of rows) {
     if (r.kind !== 'image') continue
-    if (r.sizeBytes && r.sizeBytes > MAX_BYTES) continue
+    if (
+      r.sizeBytes <= 0 ||
+      r.sizeBytes > AI_VISION_LIMITS.imageBytes ||
+      totalBytes > AI_VISION_LIMITS.totalImageBytes - r.sizeBytes
+    ) {
+      continue
+    }
     try {
+      const metadata = await headObject({ key: r.r2Key })
+      if (!metadata || metadata.contentLength !== r.sizeBytes) continue
       const buf = await getObject({ key: r.r2Key })
+      if (buf.length !== r.sizeBytes) continue
       images.push(new Uint8Array(buf))
+      totalBytes += buf.length
     } catch {
       // Skip an unreadable object rather than failing the whole analysis.
     }

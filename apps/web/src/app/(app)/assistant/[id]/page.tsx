@@ -1,21 +1,19 @@
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
+import { isUuid } from '@/lib/list-params'
 import {
-  getConversationMessages,
-  listConversations,
-  listSharedConversations,
+  getConversationMessagePage,
+  getConversationSummary,
+  listConversationPage,
+  listSharedConversationPage,
   resolveConversationAccess,
 } from '@/lib/ai-conversations'
 import { AssistantApp } from '../_components/assistant-app'
 
 export const dynamic = 'force-dynamic'
-
-// Conversation ids are uuid PKs — reject malformed ids before they reach a
-// uuid-typed column comparison (Postgres errors on invalid uuid input).
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export default async function AssistantConversationPage({
   params,
@@ -23,22 +21,24 @@ export default async function AssistantConversationPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!can(ctx, 'assistant.use')) redirect('/dashboard')
-  if (!UUID.test(id)) redirect('/assistant')
 
-  const access = await resolveConversationAccess(id)
+  const access = await resolveConversationAccess(id, 'assistant')
   if (access === 'none') redirect('/assistant')
 
-  const [own, shared, msgs, ai, cookieStore] = await Promise.all([
-    listConversations('assistant'),
-    listSharedConversations('assistant'),
-    getConversationMessages(id),
+  const [ownPage, sharedPage, messagePage, activeSummary, ai, cookieStore] = await Promise.all([
+    listConversationPage({ scope: 'assistant' }),
+    listSharedConversationPage({ scope: 'assistant' }),
+    getConversationMessagePage({ conversationId: id }),
+    getConversationSummary(id, 'assistant'),
     getTenantAiSettings(ctx),
     cookies(),
   ])
 
-  const initialMessages = msgs.map((m) => ({
+  const initialMessages = messagePage.items.map((m) => ({
     id: m.id,
     role: m.role,
     parts:
@@ -46,6 +46,14 @@ export default async function AssistantConversationPage({
         ? ((m.data as { parts: unknown[] }).parts as unknown[])
         : [{ type: 'text', text: m.content }],
   }))
+  const own =
+    activeSummary && !activeSummary.shared && !ownPage.items.some((item) => item.id === id)
+      ? { ...ownPage, items: [activeSummary, ...ownPage.items] }
+      : ownPage
+  const shared =
+    activeSummary?.shared && !sharedPage.items.some((item) => item.id === id)
+      ? { ...sharedPage, items: [activeSummary, ...sharedPage.items] }
+      : sharedPage
 
   return (
     <AssistantApp
@@ -54,6 +62,7 @@ export default async function AssistantConversationPage({
       sharedConversations={shared}
       activeId={id}
       initialMessages={initialMessages}
+      initialOlderCursor={messagePage.olderCursor}
       access={access}
       canWrite={can(ctx, 'assistant.write')}
       aiEnabled={ai.enabled && ai.hasKey}

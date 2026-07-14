@@ -1,4 +1,6 @@
+import { notFound } from 'next/navigation'
 import { SmsLogDetailView } from '@/components/sms-log/detail-view'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +15,8 @@ export default async function PlatformSmsLogDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   return (
     <SmsLogDetailView
       id={id}

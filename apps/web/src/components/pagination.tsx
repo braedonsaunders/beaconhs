@@ -19,6 +19,7 @@ export function Pagination({
   pageParamKey?: string
 }) {
   const pageCount = Math.max(1, Math.ceil(total / perPage))
+  const isOutOfRange = total > 0 && page > pageCount
   const from = total === 0 ? 0 : (page - 1) * perPage + 1
   const to = Math.min(total, page * perPage)
 
@@ -28,11 +29,16 @@ export function Pagination({
   const nextHref = mergeHref(basePath, currentParams, {
     [pageParamKey]: Math.min(pageCount, page + 1),
   })
+  const lastPageHref = mergeHref(basePath, currentParams, {
+    [pageParamKey]: pageCount,
+  })
 
   return (
     <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300">
       <span>
-        {total === 0 ? (
+        {isOutOfRange ? (
+          <>Page {page.toLocaleString()} is past the end of these results.</>
+        ) : total === 0 ? (
           <>No results</>
         ) : (
           <>
@@ -51,7 +57,12 @@ export function Pagination({
           </>
         )}
       </span>
-      {pageCount > 1 ? (
+      {isOutOfRange ? (
+        <PageButton href={lastPageHref} aria-label={`Go to last page, page ${pageCount}`}>
+          <ChevronLeft size={14} />
+          Go to page {pageCount.toLocaleString()}
+        </PageButton>
+      ) : pageCount > 1 ? (
         <div className="flex items-center gap-1">
           <PageButton href={prevHref} disabled={page <= 1} aria-label="Previous page">
             <ChevronLeft size={14} />

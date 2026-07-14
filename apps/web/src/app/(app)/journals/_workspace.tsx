@@ -26,6 +26,7 @@ import type {
   JournalFilters,
   WorkspaceData,
 } from './_types'
+import { mergeTreePages } from './_tree-pages'
 
 export function JournalWorkspace({
   initialData,
@@ -47,8 +48,10 @@ export function JournalWorkspace({
   const [filters, setFilters] = useState<JournalFilters>({})
   const [treeOpen, setTreeOpen] = useState(false)
   const [treeLoading, setTreeLoading] = useState(false)
+  const [treeLoadingMore, setTreeLoadingMore] = useState(false)
   const [, startNav] = useTransition()
   const filtersKey = JSON.stringify(filters)
+  const treeRequestId = useRef(0)
 
   const setUrl = useCallback(
     (id: string | null) => {
@@ -61,24 +64,25 @@ export function JournalWorkspace({
   )
 
   const reloadSidebar = useCallback(async () => {
+    const requestId = ++treeRequestId.current
     if (author) {
       const d = await fetchAuthorWorkspaceData({ author, groupBy, filters })
-      if (d) setData(d)
+      if (d && requestId === treeRequestId.current) setData(d)
       return
     }
-    setData(await fetchWorkspace({ groupBy, filters }))
+    const next = await fetchWorkspace({ groupBy, filters })
+    if (requestId === treeRequestId.current) setData(next)
   }, [author, groupBy, filters])
 
-  // Refetch the tree/sidebar whenever filters change (skip the first render).
-  const firstRun = useRef(true)
+  // Refetch the tree/sidebar whenever filters change. The explicit key guard
+  // avoids a duplicate fetch when groupBy changes the reload callback; that
+  // path is fetched immediately by changeGroupBy below.
+  const previousFiltersKey = useRef(filtersKey)
   useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false
-      return
-    }
+    if (previousFiltersKey.current === filtersKey) return
+    previousFiltersKey.current = filtersKey
     void reloadSidebar()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey])
+  }, [filtersKey, reloadSidebar])
 
   // Esc closes the mobile Browse flyout.
   useEffect(() => {
@@ -105,13 +109,45 @@ export function JournalWorkspace({
   async function changeGroupBy(g: GroupBy) {
     setGroupBy(g)
     setTreeLoading(true)
+    const requestId = ++treeRequestId.current
     try {
-      const tree = author
+      const page = author
         ? await fetchAuthorTree({ author, groupBy: g, filters })
         : await fetchTree({ groupBy: g, filters })
-      setData((d) => ({ ...d, tree }))
+      if (requestId !== treeRequestId.current) return
+      setData((d) => ({
+        ...d,
+        tree: page.nodes,
+        treeHasMore: page.hasMore,
+        treeNextCursor: page.nextCursor,
+      }))
     } finally {
-      setTreeLoading(false)
+      if (requestId === treeRequestId.current) setTreeLoading(false)
+    }
+  }
+
+  async function loadOlderEntries() {
+    if (treeLoading || treeLoadingMore || !data.treeHasMore) return
+    setTreeLoadingMore(true)
+    const requestId = ++treeRequestId.current
+    try {
+      const page = author
+        ? await fetchAuthorTree({
+            author,
+            groupBy,
+            filters,
+            cursor: data.treeNextCursor,
+          })
+        : await fetchTree({ groupBy, filters, cursor: data.treeNextCursor })
+      if (requestId !== treeRequestId.current) return
+      setData((current) => ({
+        ...current,
+        tree: mergeTreePages(current.tree, page.nodes, groupBy),
+        treeHasMore: page.hasMore,
+        treeNextCursor: page.nextCursor,
+      }))
+    } finally {
+      setTreeLoadingMore(false)
     }
   }
 
@@ -175,10 +211,12 @@ export function JournalWorkspace({
       filters={filters}
       selectedId={entry?.id ?? null}
       loading={treeLoading}
+      loadingMore={treeLoadingMore}
       authorMode={!!author}
       onGroupByChange={changeGroupBy}
       onFiltersChange={changeFilters}
       onSelect={selectEntry}
+      onLoadMore={loadOlderEntries}
       onNewEntry={newEntry}
       onPickDate={pickDate}
     />
@@ -223,8 +261,6 @@ export function JournalWorkspace({
             <EditorPane
               key={entry.id}
               entry={entry}
-              sites={data.sites}
-              people={data.people}
               tagSuggestions={data.tagSuggestions}
               aiEnabled={data.aiEnabled}
               onMutated={onMutated}

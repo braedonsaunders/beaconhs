@@ -6,6 +6,7 @@ import {
   boolean,
   date,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -44,6 +45,7 @@ export const equipmentCategories = pgTable(
   },
   (t) => ({
     tenantIdx: index('equipment_categories_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('equipment_categories_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantSlugUx: uniqueIndex('equipment_categories_tenant_slug_ux').on(t.tenantId, t.slug),
   }),
 )
@@ -56,14 +58,15 @@ export const equipmentTypes = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    categoryId: uuid('category_id').references(() => equipmentCategories.id, {
-      onDelete: 'set null',
-    }),
+    // The physical tenant-aware key uses partial-column SET NULL so deleting a
+    // category clears only category_id and keeps tenant_id intact.
+    categoryId: uuid('category_id'),
     description: text('description'),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('equipment_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('equipment_types_tenant_id_id_ux').on(t.tenantId, t.id),
     catIdx: index('equipment_types_cat_idx').on(t.tenantId, t.categoryId),
   }),
 )
@@ -85,13 +88,13 @@ export const equipmentItems = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    typeId: uuid('type_id').references(() => equipmentTypes.id),
+    typeId: uuid('type_id'),
     // Per-item category. Legacy EQUIPMENT.Category is a free-text name set per
     // item, independent of Type (a generic type like "Cordless" spans 13
     // categories) — so category lives on the item, not derived through the type.
-    categoryId: uuid('category_id').references(() => equipmentCategories.id, {
-      onDelete: 'set null',
-    }),
+    // Nullable tenant-owned references whose parent deletion clears the
+    // business ID use partial-column SET NULL constraints installed by SQL.
+    categoryId: uuid('category_id'),
     assetTag: text('asset_tag').notNull(),
     serialNumber: text('serial_number'),
     name: text('name').notNull(),
@@ -134,8 +137,8 @@ export const equipmentItems = pgTable(
     capacity: text('capacity'),
     weight: text('weight'),
     dimensions: text('dimensions'),
-    currentSiteOrgUnitId: uuid('current_site_org_unit_id').references(() => orgUnits.id),
-    currentHolderPersonId: uuid('current_holder_person_id').references(() => people.id),
+    currentSiteOrgUnitId: uuid('current_site_org_unit_id'),
+    currentHolderPersonId: uuid('current_holder_person_id'),
     photoAttachmentId: uuid('photo_attachment_id'),
     manualAttachmentId: uuid('manual_attachment_id'),
     // Pre-use inspections gate on each use rather than a calendar; recurring
@@ -148,8 +151,8 @@ export const equipmentItems = pgTable(
     lastPreUseInspectionAt: timestamp('last_pre_use_inspection_at', { withTimezone: true }),
     isMissing: boolean('is_missing').default(false).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
-    lastSeenSiteOrgUnitId: uuid('last_seen_site_org_unit_id').references(() => orgUnits.id),
-    lastSeenHolderPersonId: uuid('last_seen_holder_person_id').references(() => people.id),
+    lastSeenSiteOrgUnitId: uuid('last_seen_site_org_unit_id'),
+    lastSeenHolderPersonId: uuid('last_seen_holder_person_id'),
     // ----- Report-missing / report-found workflow -----
     // Set when a user files a "report missing" with last seen date / location /
     // notes; cleared (with `missingFoundAt` set) when the item is reported
@@ -174,10 +177,11 @@ export const equipmentItems = pgTable(
     // which is per-item and scanned during pre-use inspection.
     bulkQrToken: text('bulk_qr_token'),
     bulkQrGeneratedAt: timestamp('bulk_qr_generated_at', { withTimezone: true }),
-    // ----- Availability shortcut for the "available for check-in" filter -----
+    // ----- Availability shortcut for the "available for checkout" filter -----
     // When `currentHolderPersonId` is null AND status='in_service' AND
-    // `isMissing` is false the item is considered available; we cache the
-    // computed flag here so the list page can filter without a sub-query.
+    // `isMissing` is false AND there is no open checkout row, the item is
+    // considered available; we cache the computed flag here so the list page
+    // can filter without repeating the custody sub-query.
     isAvailableForCheckout: boolean('is_available_for_checkout').default(true).notNull(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     ...timestamps,
@@ -185,11 +189,51 @@ export const equipmentItems = pgTable(
   },
   (t) => ({
     tenantTagUx: uniqueIndex('equipment_items_tenant_tag_ux').on(t.tenantId, t.assetTag),
+    tenantIdIdUx: uniqueIndex('equipment_items_tenant_id_id_ux').on(t.tenantId, t.id),
     qrUx: uniqueIndex('equipment_items_qr_ux').on(t.qrToken),
     tenantIdx: index('equipment_items_tenant_idx').on(t.tenantId),
+    typeIdx: index('equipment_items_type_idx').on(t.tenantId, t.typeId),
     siteIdx: index('equipment_items_site_idx').on(t.tenantId, t.currentSiteOrgUnitId),
+    holderIdx: index('equipment_items_holder_idx').on(t.tenantId, t.currentHolderPersonId),
+    lastSeenSiteIdx: index('equipment_items_last_seen_site_idx').on(
+      t.tenantId,
+      t.lastSeenSiteOrgUnitId,
+    ),
+    lastSeenHolderIdx: index('equipment_items_last_seen_holder_idx').on(
+      t.tenantId,
+      t.lastSeenHolderPersonId,
+    ),
+    preUseInspectionTypeIdx: index('equipment_items_pre_use_inspection_type_idx').on(
+      t.tenantId,
+      t.preUseInspectionTypeId,
+    ),
     availableIdx: index('equipment_items_available_idx').on(t.tenantId, t.isAvailableForCheckout),
     categoryIdx: index('equipment_items_category_idx').on(t.tenantId, t.categoryId),
+    typeFk: foreignKey({
+      name: 'equipment_items_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [equipmentTypes.tenantId, equipmentTypes.id],
+    }),
+    currentSiteFk: foreignKey({
+      name: 'equipment_items_tenant_current_site_fk',
+      columns: [t.tenantId, t.currentSiteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    currentHolderFk: foreignKey({
+      name: 'equipment_items_tenant_current_holder_fk',
+      columns: [t.tenantId, t.currentHolderPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+    lastSeenSiteFk: foreignKey({
+      name: 'equipment_items_tenant_last_seen_site_fk',
+      columns: [t.tenantId, t.lastSeenSiteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    lastSeenHolderFk: foreignKey({
+      name: 'equipment_items_tenant_last_seen_holder_fk',
+      columns: [t.tenantId, t.lastSeenHolderPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
     // Accelerate jsonb containment over custom-field values (metadata.custom).
     metadataGin: index('equipment_items_metadata_gin').using('gin', t.metadata),
   }),
@@ -202,20 +246,44 @@ export const equipmentLocationHistory = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    itemId: uuid('item_id')
-      .notNull()
-      .references(() => equipmentItems.id, { onDelete: 'cascade' }),
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id),
-    holderPersonId: uuid('holder_person_id').references(() => people.id),
+    itemId: uuid('item_id').notNull(),
+    siteOrgUnitId: uuid('site_org_unit_id'),
+    holderPersonId: uuid('holder_person_id'),
     geoLat: doublePrecision('geo_lat'),
     geoLng: doublePrecision('geo_lng'),
-    recordedByTenantUserId: uuid('recorded_by_tenant_user_id').references(() => tenantUsers.id),
+    recordedByTenantUserId: uuid('recorded_by_tenant_user_id'),
     recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
     note: text('note'),
   },
   (t) => ({
-    itemIdx: index('equipment_location_history_item_idx').on(t.itemId, t.recordedAt),
+    itemIdx: index('equipment_location_history_item_idx').on(t.tenantId, t.itemId, t.recordedAt),
     tenantIdx: index('equipment_location_history_tenant_idx').on(t.tenantId),
+    siteIdx: index('equipment_location_history_site_idx').on(t.tenantId, t.siteOrgUnitId),
+    holderIdx: index('equipment_location_history_holder_idx').on(t.tenantId, t.holderPersonId),
+    recordedByIdx: index('equipment_location_history_recorded_by_idx').on(
+      t.tenantId,
+      t.recordedByTenantUserId,
+    ),
+    itemFk: foreignKey({
+      name: 'equipment_location_history_tenant_item_fk',
+      columns: [t.tenantId, t.itemId],
+      foreignColumns: [equipmentItems.tenantId, equipmentItems.id],
+    }).onDelete('cascade'),
+    siteFk: foreignKey({
+      name: 'equipment_location_history_tenant_site_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }),
+    holderFk: foreignKey({
+      name: 'equipment_location_history_tenant_holder_fk',
+      columns: [t.tenantId, t.holderPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+    recordedByFk: foreignKey({
+      name: 'equipment_location_history_tenant_recorded_by_fk',
+      columns: [t.tenantId, t.recordedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -239,9 +307,7 @@ export const equipmentWorkOrders = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    itemId: uuid('item_id')
-      .notNull()
-      .references(() => equipmentItems.id, { onDelete: 'cascade' }),
+    itemId: uuid('item_id').notNull(),
     reference: text('reference').notNull(),
     status: workOrderStatus('status').default('open').notNull(),
     priority: workOrderPriority('priority').default('med').notNull(),
@@ -249,38 +315,71 @@ export const equipmentWorkOrders = pgTable(
     description: text('description'),
     actionTaken: text('action_taken'),
     cost: numeric('cost', { precision: 12, scale: 2 }),
-    reportedByPersonId: uuid('reported_by_person_id').references(() => people.id),
-    openedByTenantUserId: uuid('opened_by_tenant_user_id').references(() => tenantUsers.id),
-    assignedToTenantUserId: uuid('assigned_to_tenant_user_id').references(() => tenantUsers.id),
+    reportedByPersonId: uuid('reported_by_person_id'),
+    openedByTenantUserId: uuid('opened_by_tenant_user_id'),
+    assignedToTenantUserId: uuid('assigned_to_tenant_user_id'),
     openedAt: timestamp('opened_at', { withTimezone: true }).defaultNow().notNull(),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => ({
-    itemIdx: index('equipment_work_orders_item_idx').on(t.itemId),
+    itemIdx: index('equipment_work_orders_item_idx').on(t.tenantId, t.itemId),
     statusIdx: index('equipment_work_orders_status_idx').on(t.tenantId, t.status),
     tenantIdx: index('equipment_work_orders_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('equipment_work_orders_tenant_id_id_ux').on(t.tenantId, t.id),
     priorityIdx: index('equipment_work_orders_priority_idx').on(t.tenantId, t.priority),
+    reportedByIdx: index('equipment_work_orders_reported_by_idx').on(
+      t.tenantId,
+      t.reportedByPersonId,
+    ),
+    openedByIdx: index('equipment_work_orders_opened_by_idx').on(
+      t.tenantId,
+      t.openedByTenantUserId,
+    ),
+    assignedToIdx: index('equipment_work_orders_assigned_to_idx').on(
+      t.tenantId,
+      t.assignedToTenantUserId,
+    ),
+    itemFk: foreignKey({
+      name: 'equipment_work_orders_tenant_item_fk',
+      columns: [t.tenantId, t.itemId],
+      foreignColumns: [equipmentItems.tenantId, equipmentItems.id],
+    }).onDelete('cascade'),
+    reportedByFk: foreignKey({
+      name: 'equipment_work_orders_tenant_reported_by_fk',
+      columns: [t.tenantId, t.reportedByPersonId],
+      foreignColumns: [people.tenantId, people.id],
+    }),
+    openedByFk: foreignKey({
+      name: 'equipment_work_orders_tenant_opened_by_fk',
+      columns: [t.tenantId, t.openedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    assignedToFk: foreignKey({
+      name: 'equipment_work_orders_tenant_assigned_to_fk',
+      columns: [t.tenantId, t.assignedToTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
 export const equipmentItemsRelations = relations(equipmentItems, ({ one, many }) => ({
   tenant: one(tenants, { fields: [equipmentItems.tenantId], references: [tenants.id] }),
   type: one(equipmentTypes, {
-    fields: [equipmentItems.typeId],
-    references: [equipmentTypes.id],
+    fields: [equipmentItems.tenantId, equipmentItems.typeId],
+    references: [equipmentTypes.tenantId, equipmentTypes.id],
   }),
   category: one(equipmentCategories, {
-    fields: [equipmentItems.categoryId],
-    references: [equipmentCategories.id],
+    fields: [equipmentItems.tenantId, equipmentItems.categoryId],
+    references: [equipmentCategories.tenantId, equipmentCategories.id],
   }),
   currentSite: one(orgUnits, {
-    fields: [equipmentItems.currentSiteOrgUnitId],
-    references: [orgUnits.id],
+    fields: [equipmentItems.tenantId, equipmentItems.currentSiteOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
   }),
   currentHolder: one(people, {
-    fields: [equipmentItems.currentHolderPersonId],
-    references: [people.id],
+    fields: [equipmentItems.tenantId, equipmentItems.currentHolderPersonId],
+    references: [people.tenantId, people.id],
   }),
   history: many(equipmentLocationHistory),
   workOrders: many(equipmentWorkOrders),
@@ -293,8 +392,8 @@ export const equipmentCategoriesRelations = relations(equipmentCategories, ({ ma
 export const equipmentTypesRelations = relations(equipmentTypes, ({ one, many }) => ({
   tenant: one(tenants, { fields: [equipmentTypes.tenantId], references: [tenants.id] }),
   category: one(equipmentCategories, {
-    fields: [equipmentTypes.categoryId],
-    references: [equipmentCategories.id],
+    fields: [equipmentTypes.tenantId, equipmentTypes.categoryId],
+    references: [equipmentCategories.tenantId, equipmentCategories.id],
   }),
   items: many(equipmentItems),
 }))

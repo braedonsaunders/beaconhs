@@ -3,11 +3,13 @@ import 'server-only'
 // Documents FlowSubjectAdapter — subject = a document MANAGEMENT REVIEW.
 // Field-map keys mirror MODULE_FLOW_PROFILES.documents.
 
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import {
   correctiveActions,
+  documentManagementReviewDocuments,
   documentManagementReviews,
+  documentVersions,
   documents,
   tenantUsers,
   users,
@@ -62,7 +64,6 @@ export function createDocumentFlowAdapter(
       if (!head) return {}
       const r = head.r
       const participantIds = r.participants ?? []
-      const docIds = r.documentsReviewed ?? []
       const caIds = r.actionItemsCreated ?? []
 
       const [attendees, docsReviewed, actionItems] = await Promise.all([
@@ -75,14 +76,31 @@ export function createDocumentFlowAdapter(
                 .where(inArray(tenantUsers.id, participantIds)),
             )
           : Promise.resolve([] as { name: string | null; email: string | null }[]),
-        docIds.length
-          ? ctx.db((tx) =>
-              tx
-                .select({ title: documents.title, status: documents.status })
-                .from(documents)
-                .where(inArray(documents.id, docIds)),
+        ctx.db((tx) =>
+          tx
+            .select({
+              title: documents.title,
+              status: documents.status,
+              version: documentVersions.version,
+            })
+            .from(documentManagementReviewDocuments)
+            .innerJoin(
+              documents,
+              and(
+                eq(documents.tenantId, documentManagementReviewDocuments.tenantId),
+                eq(documents.id, documentManagementReviewDocuments.documentId),
+              ),
             )
-          : Promise.resolve([] as { title: string; status: string }[]),
+            .innerJoin(
+              documentVersions,
+              and(
+                eq(documentVersions.tenantId, documentManagementReviewDocuments.tenantId),
+                eq(documentVersions.documentId, documentManagementReviewDocuments.documentId),
+                eq(documentVersions.id, documentManagementReviewDocuments.documentVersionId),
+              ),
+            )
+            .where(eq(documentManagementReviewDocuments.managementReviewId, reviewId)),
+        ),
         caIds.length
           ? ctx.db((tx) =>
               tx
@@ -112,6 +130,7 @@ export function createDocumentFlowAdapter(
         attendees: attendees.map((a) => ({ name: a.name ?? '', email: a.email ?? '' })),
         documents_reviewed: docsReviewed.map((d) => ({
           title: d.title ?? '',
+          version: `v${d.version}`,
           status: titleize(d.status),
         })),
         action_items: actionItems.map((c) => ({

@@ -17,13 +17,7 @@ type ProposalKind = 'create_corrective_action' | 'create_incident'
 type CaSeverity = 'low' | 'medium' | 'high' | 'critical'
 type CaSource = 'inspection' | 'incident' | 'near_miss' | 'observation' | 'audit' | 'jsha' | 'other'
 type IncidentType =
-  | 'injury'
-  | 'illness'
-  | 'near_miss'
-  | 'property_damage'
-  | 'environmental'
-  | 'security'
-  | 'other'
+  'injury' | 'illness' | 'near_miss' | 'property_damage' | 'environmental' | 'security' | 'other'
 type IncidentSeverity = 'first_aid_only' | 'medical_aid' | 'lost_time' | 'fatality' | 'no_injury'
 
 export type CaPreview = {

@@ -15,23 +15,17 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
-import { assertCan, can } from '@beaconhs/tenant'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { materializePpeTypeEvidence } from '@/lib/compliance-type-evidence'
 import { csvRow } from '@/lib/csv'
-import { recordPpeIssueAction } from './_lib'
+import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 
 type BulkActionResult =
-  | { ok: true; updated: number; skipped: number }
-  | { ok: false; error: string }
+  { ok: true; updated: number; skipped: number } | { ok: false; error: string }
 
 type BulkCsvResult = { ok: true; filename: string; content: string } | { ok: false; error: string }
-
-const MAX_BULK = 500
-
-function makeBatchId(): string {
-  return `bat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
 
 function safeTenantUserId(ctx: Awaited<ReturnType<typeof requireRequestContext>>): string | null {
   const id = ctx.membership?.id
@@ -50,10 +44,14 @@ export async function bulkIssuePpeToPerson(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'ppe.issue')
-  if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
-  if (!args.personId) return { ok: false, error: 'Pick a holder.' }
-  const ids = args.ppeItemIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.ppeItemIds, {
+    singular: 'PPE item',
+    plural: 'PPE items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  if (!isBulkActionId(args?.personId)) return { ok: false, error: 'Pick a holder.' }
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const person = await ctx.db(async (tx) => {
     const [p] = await tx
@@ -79,16 +77,20 @@ export async function bulkIssuePpeToPerson(args: {
     const rows = await tx
       .select({
         id: ppeItems.id,
+        typeId: ppeItems.typeId,
         status: ppeItems.status,
         deletedAt: ppeItems.deletedAt,
       })
       .from(ppeItems)
       .where(inArray(ppeItems.id, ids))
+      .orderBy(asc(ppeItems.id))
+      .for('update')
     const editable = rows
       .filter((r) => r.deletedAt === null && r.status !== 'discarded' && r.status !== 'expired')
       .map((r) => r.id)
-    const skipped = rows.length - editable.length
+    const skipped = ids.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
+    const editableRows = rows.filter((row) => editable.includes(row.id))
 
     // 1) Insert one ledger row per item.
     await tx.insert(ppeIssues).values(
@@ -108,6 +110,12 @@ export async function bulkIssuePpeToPerson(args: {
       .update(ppeItems)
       .set({ status: 'issued', currentHolderPersonId: args.personId })
       .where(inArray(ppeItems.id, editable))
+
+    await materializePpeTypeEvidence(
+      tx,
+      ctx.tenantId,
+      editableRows.map((row) => row.typeId),
+    )
 
     return { updated: editable.length, skipped, editable }
   })
@@ -146,9 +154,13 @@ export async function bulkDiscardPpe(args: {
 }): Promise<BulkActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'ppe.manage')
-  if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
-  const ids = args.ppeItemIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.ppeItemIds, {
+    singular: 'PPE item',
+    plural: 'PPE items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const issuedByTenantUserId = safeTenantUserId(ctx)
   if (!issuedByTenantUserId) {
@@ -162,16 +174,19 @@ export async function bulkDiscardPpe(args: {
     const rows = await tx
       .select({
         id: ppeItems.id,
+        typeId: ppeItems.typeId,
         status: ppeItems.status,
         currentHolderPersonId: ppeItems.currentHolderPersonId,
         deletedAt: ppeItems.deletedAt,
       })
       .from(ppeItems)
       .where(inArray(ppeItems.id, ids))
+      .orderBy(asc(ppeItems.id))
+      .for('update')
     const editable = rows
       .filter((r) => r.deletedAt === null && r.status !== 'discarded')
       .map((r) => r.id)
-    const skipped = rows.length - editable.length
+    const skipped = ids.length - editable.length
     if (editable.length === 0) return { updated: 0, skipped }
 
     const editableRows = rows.filter((r) => editable.includes(r.id))
@@ -192,6 +207,12 @@ export async function bulkDiscardPpe(args: {
       .update(ppeItems)
       .set({ status: 'discarded', currentHolderPersonId: null })
       .where(inArray(ppeItems.id, editable))
+
+    await materializePpeTypeEvidence(
+      tx,
+      ctx.tenantId,
+      editableRows.map((row) => row.typeId),
+    )
 
     return { updated: editable.length, skipped, editable }
   })
@@ -222,9 +243,13 @@ export async function bulkDiscardPpe(args: {
 export async function bulkExportPpeCsv(args: { ppeItemIds: string[] }): Promise<BulkCsvResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'ppe.read.all')
-  if (args.ppeItemIds.length === 0) return { ok: false, error: 'No items selected.' }
-  const ids = args.ppeItemIds.slice(0, MAX_BULK)
-  const batchId = makeBatchId()
+  const parsedIds = parseBulkActionIds(args?.ppeItemIds, {
+    singular: 'PPE item',
+    plural: 'PPE items',
+  })
+  if (!parsedIds.ok) return parsedIds
+  const ids = parsedIds.ids
+  const batchId = newBulkActionBatchId()
 
   const rows = await ctx.db((tx) =>
     tx
@@ -313,9 +338,24 @@ export async function createAndIssuePpe(input: {
     return { ok: false, error: 'Super-admin cannot issue PPE — switch to a tenant user.' }
   }
 
+  const issuedByTenantUserId = input.personId ? safeTenantUserId(ctx) : null
   let itemId: string | null
   try {
     itemId = await ctx.db(async (tx) => {
+      if (input.personId) {
+        const [person] = await tx
+          .select({ id: people.id })
+          .from(people)
+          .where(
+            and(
+              eq(people.id, input.personId),
+              eq(people.status, 'active'),
+              isNull(people.deletedAt),
+            ),
+          )
+          .limit(1)
+        if (!person) throw new Error('Active holder not found.')
+      }
       const [row] = await tx
         .insert(ppeItems)
         .values({
@@ -326,10 +366,37 @@ export async function createAndIssuePpe(input: {
           purchaseDate: input.purchaseDate?.trim() || null,
           expiresOn: input.expiresOn?.trim() || null,
           notes: input.notes?.trim() || null,
-          status: 'in_stock',
+          status: input.personId ? 'issued' : 'in_stock',
+          currentHolderPersonId: input.personId ?? null,
         })
         .returning({ id: ppeItems.id })
-      return row?.id ?? null
+      if (!row) return null
+      if (input.personId) {
+        await tx.insert(ppeIssues).values({
+          tenantId: ctx.tenantId,
+          itemId: row.id,
+          personId: input.personId,
+          action: 'issue',
+          quantity: 1,
+          issuedByTenantUserId: issuedByTenantUserId!,
+          note: input.note?.trim() || null,
+        })
+      }
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'ppe_item',
+        entityId: row.id,
+        action: 'create',
+        summary: `Added PPE item${input.serialNumber ? ` ${input.serialNumber}` : ''}`,
+        after: {
+          typeId: input.typeId,
+          serialNumber: input.serialNumber ?? null,
+          size: input.size ?? null,
+          status: input.personId ? 'issued' : 'in_stock',
+          currentHolderPersonId: input.personId ?? null,
+        },
+      })
+      await materializePpeTypeEvidence(tx, ctx.tenantId, [input.typeId])
+      return row.id
     })
   } catch (e) {
     if ((e as { code?: string })?.code === '23505') {
@@ -339,60 +406,6 @@ export async function createAndIssuePpe(input: {
   }
   if (!itemId) return { ok: false, error: 'Failed to create PPE item.' }
 
-  await recordAudit(ctx, {
-    entityType: 'ppe_item',
-    entityId: itemId,
-    action: 'create',
-    summary: `Added PPE item${input.serialNumber ? ` ${input.serialNumber}` : ''}`,
-    after: {
-      typeId: input.typeId,
-      serialNumber: input.serialNumber ?? null,
-      size: input.size ?? null,
-    },
-  })
-
-  let issued = false
-  if (input.personId) {
-    await recordPpeIssueAction(ctx, {
-      itemId,
-      personId: input.personId,
-      action: 'issue',
-      note: input.note?.trim() || null,
-    })
-    issued = true
-  }
-
   revalidatePath('/ppe')
-  return { ok: true, id: itemId, issued }
-}
-
-// ---------- Lookups (used by bulk-bar dropdowns) ----------------------------
-
-export async function listPeopleForBulkPpe(): Promise<
-  { id: string; name: string; employeeNo: string | null }[]
-> {
-  const ctx = await requireRequestContext()
-  // People enumeration exists solely to pick an issuance holder — require an
-  // issuance-capable permission so it can't be used to list the tenant roster.
-  if (!can(ctx, 'ppe.issue') && !can(ctx, 'ppe.manage')) {
-    throw new Error('You do not have permission to issue PPE')
-  }
-  return ctx.db(async (tx) => {
-    const rows = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-      .orderBy(asc(people.lastName), asc(people.firstName))
-      .limit(1000)
-    return rows.map((r) => ({
-      id: r.id,
-      name: `${r.lastName}, ${r.firstName}`,
-      employeeNo: r.employeeNo,
-    }))
-  })
+  return { ok: true, id: itemId, issued: Boolean(input.personId) }
 }

@@ -23,13 +23,15 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
-import { auditLog, roleAssignments, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
+import { auditLog, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { assertNotImpersonating } from '@beaconhs/tenant'
+import { materializeUserIdentityAudienceObligations } from '@beaconhs/compliance'
 import { nextInviteGenerationDate } from '@beaconhs/auth/invites'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { setActiveTenant } from '@/lib/actions'
 import { sendMembershipInviteEmail } from '@/lib/invite-email'
+import { upsertRoleAssignments } from '@/lib/role-assignment-upsert'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
@@ -228,14 +230,18 @@ export async function addMembership(formData: FormData): Promise<void> {
         .where(and(eq(roles.id, roleId), eq(roles.tenantId, tenantId)))
         .limit(1)
       if (role) {
-        await tx.insert(roleAssignments).values({
-          tenantId,
-          tenantUserId: m.id,
-          roleId: role.id,
-          scope: { type: 'self' },
-        })
+        await upsertRoleAssignments(tx, [
+          {
+            tenantId,
+            tenantUserId: m.id,
+            roleId: role.id,
+            scope: { type: 'self' },
+          },
+        ])
       }
     }
+
+    await materializeUserIdentityAudienceObligations(tx, tenantId, [userId])
 
     await tx.insert(auditLog).values({
       tenantId,
@@ -333,6 +339,7 @@ export async function setMembershipStatus(formData: FormData): Promise<void> {
       .where(and(eq(tenantUsers.id, membershipId), eq(tenantUsers.status, row.membership.status)))
       .returning({ id: tenantUsers.id })
     if (!updated) return { ok: false, error: 'That membership status has already changed.' }
+    await materializeUserIdentityAudienceObligations(tx, row.tenant.id, [row.account.id])
     await tx.insert(auditLog).values({
       tenantId: row.tenant.id,
       actorUserId: ctx.userId,
@@ -371,6 +378,7 @@ export async function removeMembership(formData: FormData): Promise<void> {
     }
     // Cascade removes role assignments + permission overrides (FK onDelete cascade).
     await tx.delete(tenantUsers).where(eq(tenantUsers.id, membershipId))
+    await materializeUserIdentityAudienceObligations(tx, row.tenant.id, [row.account.id])
     await tx.insert(auditLog).values({
       tenantId: row.tenant.id,
       actorUserId: ctx.userId,

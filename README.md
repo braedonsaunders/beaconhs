@@ -201,10 +201,13 @@ packages/
   ai/         Per-tenant AI provider configuration + clients
   sync/       Inbound data-sync engine + connectors (database/NetSuite/CSV/Nango)
   integrations/ Outbound automation triggers + destinations
-  etl/        Legacy-system migration tooling
   ui/         Shared React component library
   emails/     Transactional email templates
 ```
+
+Company-specific migration tooling is private, ignored, and excluded from the
+public pnpm workspace. See [`docs/migration/README.md`](docs/migration/README.md)
+for the maintainer-only boundary.
 
 See [`AGENTS.md`](AGENTS.md) for the full repo map and engineering conventions.
 

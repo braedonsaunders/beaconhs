@@ -40,6 +40,51 @@ function zodIssues(err: { issues: { path: PropertyKey[]; message: string }[] }):
     .join('; ')
 }
 
+type JsonValidation<T> = { ok: true; value: T; warnings: string[] } | { ok: false; error: string }
+
+async function generateValidatedJson<T>(options: {
+  config: AiConfig | null | undefined
+  system: string
+  prompt: (attempt: number, previousError: string) => string
+  validate: (json: unknown) => JsonValidation<T>
+  invalidResultLabel: string
+}): Promise<GenResult<T>> {
+  let lastError = ''
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const text = await runBuilderPrompt(options.config, {
+      system: options.system,
+      prompt: options.prompt(attempt, lastError),
+      tier: 'smart',
+    })
+    if (!text) {
+      return {
+        ok: false,
+        error: 'AI is not configured for this workspace, or the model did not respond.',
+      }
+    }
+
+    let json: unknown
+    try {
+      json = extractJson(text)
+    } catch {
+      lastError = 'response was not valid JSON'
+      continue
+    }
+
+    const validated = options.validate(json)
+    if (validated.ok) return validated
+    lastError = validated.error
+  }
+  return { ok: false, error: `The AI returned ${options.invalidResultLabel}: ${lastError}` }
+}
+
+function validateAppJson(json: unknown): JsonValidation<FormSchemaV1> {
+  const parsed = formSchemaV1.safeParse(json)
+  return parsed.success
+    ? { ok: true, value: parsed.data, warnings: lintFormSchema(parsed.data) }
+    : { ok: false, error: zodIssues(parsed.error) }
+}
+
 const FIELD_CATALOGUE = Object.values(FIELD_TYPES)
   .map((m) => `- ${m.type}: ${m.label} — ${m.description}`)
   .join('\n')
@@ -104,36 +149,16 @@ export async function generateAppFromPrompt(
   config: AiConfig | null | undefined,
   prompt: string,
 ): Promise<GenResult<FormSchemaV1>> {
-  let lastErr = ''
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const userPrompt =
+  return generateValidatedJson({
+    config,
+    system: APP_SYSTEM,
+    prompt: (attempt, previousError) =>
       attempt === 0
         ? `Build an App for: ${prompt}`
-        : `Build an App for: ${prompt}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
-    const text = await runBuilderPrompt(config, {
-      system: APP_SYSTEM,
-      prompt: userPrompt,
-      tier: 'smart',
-    })
-    if (!text)
-      return {
-        ok: false,
-        error: 'AI is not configured for this workspace, or the model did not respond.',
-      }
-    let json: unknown
-    try {
-      json = extractJson(text)
-    } catch {
-      lastErr = 'response was not valid JSON'
-      continue
-    }
-    const parsed = formSchemaV1.safeParse(json)
-    if (parsed.success) {
-      return { ok: true, value: parsed.data, warnings: lintFormSchema(parsed.data) }
-    }
-    lastErr = zodIssues(parsed.error)
-  }
-  return { ok: false, error: `The AI returned an invalid app schema: ${lastErr}` }
+        : `Build an App for: ${prompt}\n\nYour previous JSON was invalid (${previousError}). Return corrected JSON only.`,
+    validate: validateAppJson,
+    invalidResultLabel: 'an invalid app schema',
+  })
 }
 
 // Edit an EXISTING app: the model receives the current schema + a change
@@ -144,37 +169,17 @@ export async function generateAppEdit(
   prompt: string,
   currentSchema: FormSchemaV1,
 ): Promise<GenResult<FormSchemaV1>> {
-  let lastErr = ''
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const base = `Here is the CURRENT app as JSON:\n${JSON.stringify(currentSchema)}\n\nApply this change request: ${prompt}\n\nReturn the COMPLETE updated app as a single JSON object (same shape). Preserve existing section/field ids wherever they still apply; only add/remove/modify what the request needs.`
-    const userPrompt =
+  const base = `Here is the CURRENT app as JSON:\n${JSON.stringify(currentSchema)}\n\nApply this change request: ${prompt}\n\nReturn the COMPLETE updated app as a single JSON object (same shape). Preserve existing section/field ids wherever they still apply; only add/remove/modify what the request needs.`
+  return generateValidatedJson({
+    config,
+    system: APP_SYSTEM,
+    prompt: (attempt, previousError) =>
       attempt === 0
         ? base
-        : `${base}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
-    const text = await runBuilderPrompt(config, {
-      system: APP_SYSTEM,
-      prompt: userPrompt,
-      tier: 'smart',
-    })
-    if (!text)
-      return {
-        ok: false,
-        error: 'AI is not configured for this workspace, or the model did not respond.',
-      }
-    let json: unknown
-    try {
-      json = extractJson(text)
-    } catch {
-      lastErr = 'response was not valid JSON'
-      continue
-    }
-    const parsed = formSchemaV1.safeParse(json)
-    if (parsed.success) {
-      return { ok: true, value: parsed.data, warnings: lintFormSchema(parsed.data) }
-    }
-    lastErr = zodIssues(parsed.error)
-  }
-  return { ok: false, error: `The AI returned an invalid app schema: ${lastErr}` }
+        : `${base}\n\nYour previous JSON was invalid (${previousError}). Return corrected JSON only.`,
+    validate: validateAppJson,
+    invalidResultLabel: 'an invalid app schema',
+  })
 }
 
 const FLOW_SYSTEM = `You design "Flows" (automation graphs) for BeaconHS forms. A Flow is a node graph: triggers → conditions → gates/actions. Output a SINGLE JSON object matching this shape and NOTHING else:
@@ -218,34 +223,23 @@ export async function generateFlowFromPrompt(
     fieldIds.length ? fieldIds.join(', ') : '(none yet)',
   )
   const fieldIdSet = new Set(fieldIds)
-  let lastErr = ''
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const userPrompt =
+  return generateValidatedJson({
+    config,
+    system,
+    prompt: (attempt, previousError) =>
       attempt === 0
         ? `Build a Flow for: ${prompt}`
-        : `Build a Flow for: ${prompt}\n\nYour previous JSON was invalid (${lastErr}). Return corrected JSON only.`
-    const text = await runBuilderPrompt(config, { system, prompt: userPrompt, tier: 'smart' })
-    if (!text)
-      return {
-        ok: false,
-        error: 'AI is not configured for this workspace, or the model did not respond.',
-      }
-    let json: unknown
-    try {
-      json = extractJson(text)
-    } catch {
-      lastErr = 'response was not valid JSON'
-      continue
-    }
-    const parsed = automationGraphSchema.safeParse(json)
-    if (parsed.success) {
-      return {
-        ok: true,
-        value: parsed.data,
-        warnings: lintAutomationGraph(parsed.data, fieldIdSet),
-      }
-    }
-    lastErr = zodIssues(parsed.error)
-  }
-  return { ok: false, error: `The AI returned an invalid flow: ${lastErr}` }
+        : `Build a Flow for: ${prompt}\n\nYour previous JSON was invalid (${previousError}). Return corrected JSON only.`,
+    validate: (json) => {
+      const parsed = automationGraphSchema.safeParse(json)
+      return parsed.success
+        ? {
+            ok: true,
+            value: parsed.data,
+            warnings: lintAutomationGraph(parsed.data, fieldIdSet),
+          }
+        : { ok: false, error: zodIssues(parsed.error) }
+    },
+    invalidResultLabel: 'an invalid flow',
+  })
 }

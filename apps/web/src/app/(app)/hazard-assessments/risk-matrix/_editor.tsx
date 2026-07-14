@@ -31,6 +31,7 @@ import {
   type RiskMatrixConfig,
 } from '@/components/risk-matrix'
 import { saveRiskMatrix } from './_actions'
+import { RISK_MATRIX_LABEL_MAX } from './_policy'
 
 type Band = RiskBandDef & { id: string }
 
@@ -233,6 +234,7 @@ export function RiskMatrixEditor({ initial }: { initial: RiskMatrixConfig }) {
                   <Label className="text-xs">Label</Label>
                   <Input
                     value={b.label}
+                    maxLength={RISK_MATRIX_LABEL_MAX}
                     onChange={(e) => updateBand(b.id, { label: e.target.value })}
                     placeholder="e.g. High"
                   />
@@ -366,6 +368,7 @@ function AxisLabels({
             </span>
             <Input
               value={label}
+              maxLength={RISK_MATRIX_LABEL_MAX}
               aria-label={`${title} level ${i + 1}`}
               onChange={(e) => onChange(i, e.target.value)}
               placeholder={`${title} ${i + 1}`}

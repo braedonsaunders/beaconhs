@@ -14,10 +14,17 @@ import { runBhql } from '@beaconhs/analytics/server'
 import { insightCards, type BhqlQuery, type InsightCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { resolveAnalyticsAccess, runAuthorizedBhql } from '@/lib/analytics-access'
 import { canCreateInsights, canPublishInsights } from '../_access'
 import { generateBhqlFromPrompt } from './_lib/ai-card'
+import { isUuid } from '@/lib/list-params'
+import {
+  INSIGHT_CARD_DESCRIPTION_MAX_LENGTH,
+  INSIGHT_CARD_NAME_MAX_LENGTH,
+  validateOptionalPersistedText,
+  validateRequiredPersistedText,
+} from '@/lib/persisted-text-policy'
 
 type Ok<T = {}> = { ok: true } & T
 type Err = { ok: false; error: string }
@@ -114,40 +121,49 @@ export async function createCard(input: {
 }): Promise<Ok<{ id: string }> | Err> {
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t create Cards.' }
-  let query
+  if (!input || typeof input !== 'object') return { ok: false, error: 'Invalid Card.' }
+  const parsedName = validateRequiredPersistedText(input.name, {
+    label: 'Card name',
+    maxLength: INSIGHT_CARD_NAME_MAX_LENGTH,
+  })
+  if (!parsedName.ok) return parsedName
+  const parsedDescription = validateOptionalPersistedText(input.description, {
+    label: 'Card description',
+    maxLength: INSIGHT_CARD_DESCRIPTION_MAX_LENGTH,
+  })
+  if (!parsedDescription.ok) return parsedDescription
   try {
-    query = await ctx.db(async (tx) => {
+    const row = await ctx.db(async (tx) => {
       const access = await resolveAnalyticsAccess(ctx, tx)
-      return parseBhqlQuery(input.query, access.entityMap)
+      const query = parseBhqlQuery(input.query, access.entityMap)
+      const [created] = await tx
+        .insert(insightCards)
+        .values({
+          tenantId: ctx.tenantId,
+          createdBy: ctx.userId,
+          name: parsedName.value,
+          description: parsedDescription.value,
+          kind: input.kind ?? 'question',
+          query,
+          vizType: input.vizType,
+          vizSettings: input.vizSettings ?? {},
+          config: input.config ?? null,
+        })
+        .returning({ id: insightCards.id })
+      if (!created) throw new Error('Could not create the Card.')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'insight_card',
+        entityId: created.id,
+        action: 'create',
+        summary: `Created Insights card "${parsedName.value}"`,
+      })
+      return created
     })
+    revalidatePath('/insights')
+    return { ok: true, id: row.id }
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(insightCards)
-      .values({
-        tenantId: ctx.tenantId,
-        createdBy: ctx.userId,
-        name: input.name.trim().slice(0, 120) || 'Untitled card',
-        description: input.description?.trim().slice(0, 500) || null,
-        kind: input.kind ?? 'question',
-        query,
-        vizType: input.vizType,
-        vizSettings: input.vizSettings ?? {},
-        config: input.config ?? null,
-      })
-      .returning({ id: insightCards.id }),
-  )
-  if (!row) return { ok: false, error: 'Could not create the Card.' }
-  await recordAudit(ctx, {
-    entityType: 'insight_card',
-    entityId: row.id,
-    action: 'create',
-    summary: `Created Insights card "${input.name.trim().slice(0, 120) || 'Untitled card'}"`,
-  })
-  revalidatePath('/insights')
-  return { ok: true, id: row.id }
 }
 
 /** The live (non-deleted) card, when the caller may manage it (owner or
@@ -179,37 +195,58 @@ export async function updateCard(input: {
 }): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx)) return { ok: false, error: 'You can’t edit Cards.' }
-  if (!(await ownedCard(ctx, input.id))) return { ok: false, error: 'Card not found.' }
-  let query
+  if (!input || typeof input !== 'object' || !isUuid(input.id)) {
+    return { ok: false, error: 'Card not found.' }
+  }
+  const parsedName = validateRequiredPersistedText(input.name, {
+    label: 'Card name',
+    maxLength: INSIGHT_CARD_NAME_MAX_LENGTH,
+  })
+  if (!parsedName.ok) return parsedName
+  const parsedDescription = validateOptionalPersistedText(input.description, {
+    label: 'Card description',
+    maxLength: INSIGHT_CARD_DESCRIPTION_MAX_LENGTH,
+  })
+  if (!parsedDescription.ok) return parsedDescription
   try {
-    query = await ctx.db(async (tx) => {
+    const updated = await ctx.db(async (tx) => {
+      const [card] = await tx
+        .select({ createdBy: insightCards.createdBy })
+        .from(insightCards)
+        .where(and(eq(insightCards.id, input.id), isNull(insightCards.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!card || (!ctx.isSuperAdmin && card.createdBy !== ctx.userId)) return false
+
       const access = await resolveAnalyticsAccess(ctx, tx)
-      return parseBhqlQuery(input.query, access.entityMap)
+      const query = parseBhqlQuery(input.query, access.entityMap)
+      const name = parsedName.value
+      const [row] = await tx
+        .update(insightCards)
+        .set({
+          name,
+          description: parsedDescription.value,
+          kind: input.kind ?? 'question',
+          query,
+          vizType: input.vizType,
+          vizSettings: input.vizSettings ?? {},
+          config: input.config ?? null,
+        })
+        .where(and(eq(insightCards.id, input.id), isNull(insightCards.deletedAt)))
+        .returning({ id: insightCards.id })
+      if (!row) return false
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'insight_card',
+        entityId: input.id,
+        action: 'update',
+        summary: `Updated Insights card "${name}"`,
+      })
+      return true
     })
+    if (!updated) return { ok: false, error: 'Card not found.' }
   } catch (e) {
     return { ok: false, error: errMsg(e) }
   }
-  const name = input.name.trim().slice(0, 120) || 'Untitled card'
-  await ctx.db((tx) =>
-    tx
-      .update(insightCards)
-      .set({
-        name,
-        description: input.description?.trim().slice(0, 500) || null,
-        kind: input.kind ?? 'question',
-        query,
-        vizType: input.vizType,
-        vizSettings: input.vizSettings ?? {},
-        config: input.config ?? null,
-      })
-      .where(eq(insightCards.id, input.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'insight_card',
-    entityId: input.id,
-    action: 'update',
-    summary: `Updated Insights card "${name}"`,
-  })
   revalidatePath('/insights')
   return { ok: true }
 }

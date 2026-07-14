@@ -2,11 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, eq, max } from 'drizzle-orm'
+import { and, asc, eq, isNull, max } from 'drizzle-orm'
 import { trainingAssessmentTypeQuestions, trainingAssessmentTypes } from '@beaconhs/db/schema'
+import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 
 /**
  * Instant-create an assessment type and land in its detail editor (where the
@@ -66,6 +67,7 @@ export async function updateAssessmentType(typeId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
+  const tenantId: string = ctx.tenantId
 
   const name = String(formData.get('name') ?? '').trim()
   if (!name) throw new Error('Name is required')
@@ -78,13 +80,23 @@ export async function updateAssessmentType(typeId: string, formData: FormData) {
   const graded = formData.get('graded') !== 'off'
   const active = formData.get('active') !== 'off'
 
-  const updated = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [before] = await tx
       .select()
       .from(trainingAssessmentTypes)
-      .where(eq(trainingAssessmentTypes.id, typeId))
+      .where(
+        and(
+          eq(trainingAssessmentTypes.tenantId, tenantId),
+          eq(trainingAssessmentTypes.id, typeId),
+          isNull(trainingAssessmentTypes.deletedAt),
+        ),
+      )
       .limit(1)
+      .for('update')
     if (!before) throw new Error('Assessment type not found')
+    if (!active) {
+      await assertComplianceTargetCanRetire(tx, tenantId, 'assessment_type', typeId)
+    }
     const [row] = await tx
       .update(trainingAssessmentTypes)
       .set({
@@ -97,21 +109,25 @@ export async function updateAssessmentType(typeId: string, formData: FormData) {
         graded,
         active,
       })
-      .where(eq(trainingAssessmentTypes.id, typeId))
+      .where(
+        and(
+          eq(trainingAssessmentTypes.tenantId, tenantId),
+          eq(trainingAssessmentTypes.id, typeId),
+          isNull(trainingAssessmentTypes.deletedAt),
+        ),
+      )
       .returning()
-    return { before, row }
-  })
-
-  if (updated.row) {
-    await recordAudit(ctx, {
+    if (!row) throw new Error('Assessment type not found')
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'training_assessment_type',
       entityId: typeId,
       action: 'update',
       summary: `Updated assessment type "${name}"`,
-      before: { ...updated.before },
+      before: { ...before },
       after: { name, passingScore, courseId, graded, active },
     })
-  }
+  })
+
   revalidatePath(`/training/assessments/types/${typeId}`)
   revalidatePath('/training/assessments/types')
 }
@@ -120,17 +136,38 @@ export async function deleteAssessmentType(typeId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
+  const tenantId: string = ctx.tenantId
   await ctx.db(async (tx) => {
+    const [type] = await tx
+      .select({ id: trainingAssessmentTypes.id })
+      .from(trainingAssessmentTypes)
+      .where(
+        and(
+          eq(trainingAssessmentTypes.tenantId, tenantId),
+          eq(trainingAssessmentTypes.id, typeId),
+          isNull(trainingAssessmentTypes.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!type) throw new Error('Assessment type not found')
+    await assertComplianceTargetCanRetire(tx, tenantId, 'assessment_type', typeId)
     await tx
       .update(trainingAssessmentTypes)
       .set({ deletedAt: new Date() })
-      .where(eq(trainingAssessmentTypes.id, typeId))
-  })
-  await recordAudit(ctx, {
-    entityType: 'training_assessment_type',
-    entityId: typeId,
-    action: 'delete',
-    summary: `Deleted assessment type ${typeId}`,
+      .where(
+        and(
+          eq(trainingAssessmentTypes.tenantId, tenantId),
+          eq(trainingAssessmentTypes.id, typeId),
+          isNull(trainingAssessmentTypes.deletedAt),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_assessment_type',
+      entityId: typeId,
+      action: 'delete',
+      summary: `Deleted assessment type ${typeId}`,
+    })
   })
   revalidatePath('/training/assessments/types')
   redirect('/training/assessments/types')

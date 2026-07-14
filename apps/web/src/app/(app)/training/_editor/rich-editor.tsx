@@ -6,19 +6,18 @@
 
 import { useEffect } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
+import { sanitizeTrainingHtml } from '@/lib/training-rich-content'
 import { buildLessonExtensions } from './extensions'
 
-type RichChange = { json: unknown; html: string }
+type RichChange = { html: string }
 
 export function RichEditor({
-  initialJson,
   initialHtml,
   placeholder,
   onChange,
   onFocusEditor,
   className = '',
 }: {
-  initialJson?: unknown | null
   initialHtml?: string | null
   placeholder?: string
   onChange?: (change: RichChange) => void
@@ -27,13 +26,17 @@ export function RichEditor({
 }) {
   const editor = useEditor({
     extensions: buildLessonExtensions({ placeholder }),
-    content: (initialJson as never) ?? initialHtml ?? '',
+    // Sanitized HTML is the sole persisted representation. Keeping a second,
+    // caller-controlled ProseMirror tree caused author/player drift whenever
+    // the server removed an unsafe node from the HTML.
+    content: sanitizeTrainingHtml(initialHtml),
     immediatelyRender: false,
     editorProps: {
       attributes: { class: 'min-h-[1.5em] focus:outline-none' },
+      transformPastedHTML: sanitizeTrainingHtml,
     },
     onUpdate({ editor }) {
-      onChange?.({ json: editor.getJSON(), html: editor.getHTML() })
+      onChange?.({ html: editor.getHTML() })
     },
     onFocus({ editor }) {
       onFocusEditor?.(editor)
@@ -44,8 +47,7 @@ export function RichEditor({
   // for single-editor surfaces.
   useEffect(() => {
     if (editor) onFocusEditor?.(editor)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor])
+  }, [editor, onFocusEditor])
 
   return <EditorContent editor={editor} className={className} />
 }

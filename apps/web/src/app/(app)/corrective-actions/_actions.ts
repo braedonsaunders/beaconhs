@@ -13,7 +13,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import {
   caCompleteSteps,
   caPhotos,
@@ -24,12 +24,14 @@ import {
 } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionClosedEvent } from '@beaconhs/integrations'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { appBaseUrl } from '@/lib/app-base-url'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
+import { requireUuidArrayInput, requireUuidInput } from '@/lib/mutation-input'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -380,6 +382,17 @@ export async function closeCorrectiveAction(args: {
         }),
       },
     })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: args.caId,
+      action: 'update',
+      summary: 'Closed + locked',
+      after: { status: 'closed', closedAt: closedAt.toISOString(), costImpact: parsedCost },
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'corrective_action',
+      targetRef: {},
+    })
     return true
   })
   if (!closed) return { ok: false, error: 'This corrective action is already closed.' }
@@ -390,13 +403,6 @@ export async function closeCorrectiveAction(args: {
       description: `Close note: ${args.closeNotes.trim()}`,
     })
   }
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: args.caId,
-    action: 'update',
-    summary: 'Closed + locked',
-    after: { status: 'closed', closedAt: closedAt.toISOString(), costImpact: parsedCost },
-  })
   revalidatePath(`/corrective-actions/${args.caId}`)
   revalidatePath('/corrective-actions')
   revalidatePath('/corrective-actions/reports/overdue')
@@ -416,8 +422,8 @@ export async function reopenCorrectiveAction(caId: string): Promise<ActionResult
   if (!ca.locked && ca.status !== 'closed') {
     return { ok: false, error: 'Action is not closed.' }
   }
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    await tx
       .update(correctiveActions)
       .set({
         status: 'in_progress',
@@ -426,13 +432,17 @@ export async function reopenCorrectiveAction(caId: string): Promise<ActionResult
         verifiedAt: null,
         verifiedByTenantUserId: null,
       })
-      .where(eq(correctiveActions.id, caId)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: caId,
-    action: 'update',
-    summary: 'Reopened',
+      .where(eq(correctiveActions.id, caId))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: caId,
+      action: 'update',
+      summary: 'Reopened',
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'corrective_action',
+      targetRef: {},
+    })
   })
   revalidatePath(`/corrective-actions/${caId}`)
   revalidatePath('/corrective-actions')
@@ -615,24 +625,34 @@ export async function bulkReassignCorrectiveActions(args: {
   if (!can(ctx, 'ca.update')) {
     return { ok: false, error: 'You do not have permission to update corrective actions.' }
   }
-  if (args.caIds.length === 0) return { ok: false, error: 'No actions selected.' }
-  if (!args.newOwnerTenantUserId) return { ok: false, error: 'Pick an owner.' }
+  let ids: string[]
+  let newOwnerTenantUserId: string
+  try {
+    if (!args || typeof args !== 'object') throw new Error('Bulk reassignment is invalid.')
+    ids = requireUuidArrayInput(args.caIds, 'Selected actions', { max: 500 })
+    newOwnerTenantUserId = requireUuidInput(args.newOwnerTenantUserId, 'Owner')
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid request.' }
+  }
 
-  // Confirm the new owner is a real active member of this tenant.
-  const ownerExists = await ctx.db(async (tx) => {
-    const [r] = await tx
+  const reassignmentEventId = randomUUID()
+  const result = await ctx.db(async (tx) => {
+    // Hold the membership row for the duration of the reassignment so the
+    // owner cannot be deactivated between validation and the business write.
+    const [owner] = await tx
       .select({ id: tenantUsers.id })
       .from(tenantUsers)
       .where(
-        and(eq(tenantUsers.id, args.newOwnerTenantUserId), eq(tenantUsers.tenantId, ctx.tenantId)),
+        and(
+          eq(tenantUsers.id, newOwnerTenantUserId),
+          eq(tenantUsers.tenantId, ctx.tenantId),
+          eq(tenantUsers.status, 'active'),
+        ),
       )
       .limit(1)
-    return Boolean(r)
-  })
-  if (!ownerExists) return { ok: false, error: 'Owner is not a member of this tenant.' }
+      .for('update')
+    if (!owner) return { kind: 'invalid-owner' as const }
 
-  const ids = args.caIds.slice(0, 500)
-  const rows = await ctx.db(async (tx) => {
     // Re-scope to the caller's read tier so a self/site-tier user can't drive
     // corrective actions they cannot see by posting guessed ids (mirrors the
     // loadCA guard on the single-record mutations).
@@ -641,7 +661,7 @@ export async function bulkReassignCorrectiveActions(args: {
       ownerCols: [correctiveActions.ownerTenantUserId],
       siteCol: correctiveActions.siteOrgUnitId,
     })
-    return tx
+    const rows = await tx
       .select({
         id: correctiveActions.id,
         locked: correctiveActions.locked,
@@ -649,19 +669,17 @@ export async function bulkReassignCorrectiveActions(args: {
       })
       .from(correctiveActions)
       .where(and(inArray(correctiveActions.id, ids), vis))
-  })
-  const editable = rows.filter((r) => !r.locked).map((r) => r.id)
-  // Out-of-scope / unknown ids never come back from the scoped select, so
-  // count everything that wasn't updated as skipped.
-  if (editable.length === 0) {
-    return { ok: true, updated: 0, skipped: ids.length }
-  }
+      .for('update')
+    const editable = rows.filter((row) => !row.locked).map((row) => row.id)
+    // Out-of-scope / unknown ids never come back from the scoped select, so
+    // count everything that wasn't updated as skipped.
+    if (editable.length === 0) {
+      return { kind: 'updated' as const, ids: [] as string[], skipped: ids.length }
+    }
 
-  const reassignmentEventId = randomUUID()
-  const updated = await ctx.db(async (tx) => {
     const changed = await tx
       .update(correctiveActions)
-      .set({ ownerTenantUserId: args.newOwnerTenantUserId })
+      .set({ ownerTenantUserId: newOwnerTenantUserId })
       .where(and(inArray(correctiveActions.id, editable), eq(correctiveActions.locked, false)))
       .returning({ id: correctiveActions.id })
     for (const { id } of changed) {
@@ -674,58 +692,40 @@ export async function bulkReassignCorrectiveActions(args: {
           notification: { kind: 'corrective_action_assigned', caId: id },
         },
       })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'corrective_action',
+        entityId: id,
+        action: 'update',
+        summary: 'Bulk reassigned',
+        after: { ownerTenantUserId: newOwnerTenantUserId },
+      })
     }
-    return changed.map((row) => row.id)
-  })
-  const skipped = ids.length - updated.length
-
-  for (const id of updated) {
-    await recordAudit(ctx, {
+    const skipped = ids.length - changed.length
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'corrective_action',
-      entityId: id,
       action: 'update',
-      summary: 'Bulk reassigned',
-      after: { ownerTenantUserId: args.newOwnerTenantUserId },
+      summary: `Bulk reassigned ${changed.length} action${changed.length === 1 ? '' : 's'}`,
+      metadata: {
+        caIds: changed.map((row) => row.id),
+        skipped,
+        newOwnerTenantUserId,
+      },
     })
-  }
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    action: 'update',
-    summary: `Bulk reassigned ${updated.length} action${updated.length === 1 ? '' : 's'}`,
-    metadata: {
-      caIds: updated,
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'corrective_action',
+      targetRef: {},
+    })
+    return {
+      kind: 'updated' as const,
+      ids: changed.map((row) => row.id),
       skipped,
-      newOwnerTenantUserId: args.newOwnerTenantUserId,
-    },
+    }
   })
+  if (result.kind === 'invalid-owner') {
+    return { ok: false, error: 'Owner is not an active member of this tenant.' }
+  }
 
   revalidatePath('/corrective-actions')
   revalidatePath('/corrective-actions/reports/by-assignee')
-  return { ok: true, updated: updated.length, skipped }
-}
-
-// ---------- Lookups (used by bulk-reassign + verification UI) -----------
-
-export async function listTenantOwners(): Promise<
-  { id: string; name: string; email: string | null }[]
-> {
-  const ctx = await requireRequestContext()
-  return ctx.db(async (tx) => {
-    const rows = await tx
-      .select({
-        id: tenantUsers.id,
-        displayName: tenantUsers.displayName,
-        name: user.name,
-        email: user.email,
-      })
-      .from(tenantUsers)
-      .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.status, 'active')))
-      .orderBy(asc(user.name))
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.displayName ?? r.name ?? 'Unnamed user',
-      email: r.email,
-    }))
-  })
+  return { ok: true, updated: result.ids.length, skipped: result.skipped }
 }

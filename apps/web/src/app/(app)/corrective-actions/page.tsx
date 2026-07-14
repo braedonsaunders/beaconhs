@@ -13,7 +13,6 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
-import { listTenantOwners } from './_actions'
 import { RecordsTable, type RecordsTableRow } from './_records-table'
 
 export const metadata = { title: 'Corrective Actions' }
@@ -149,7 +148,6 @@ export default async function CorrectiveActionsPage({
     }
   })
 
-  const owners = await listTenantOwners()
   const today = new Date().toISOString().slice(0, 10)
 
   const tableRows: RecordsTableRow[] = rows.map(({ ca, site, owner, ownerAccount }) => ({
@@ -232,7 +230,6 @@ export default async function CorrectiveActionsPage({
         <>
           <RecordsTable
             rows={tableRows}
-            owners={owners}
             today={today}
             canUpdate={canUpdate}
             basePath="/corrective-actions"

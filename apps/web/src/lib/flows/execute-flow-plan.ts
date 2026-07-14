@@ -28,6 +28,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
+import { secureFetch } from '@beaconhs/sync/egress'
 import {
   interpolate,
   renderEmail,
@@ -41,9 +42,11 @@ import {
 } from '@/lib/pdf-templates'
 import { loadTenantEmailTemplate } from '@/lib/email-templates'
 import { appBaseUrl } from '@/lib/app-base-url'
+import { recordAudit } from '@/lib/audit'
 import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
 import type { FlowActorRef, FlowSubjectAdapter } from './types'
+import { describeFlowWebhookError } from './webhook-policy'
 
 export async function executeFlowPlan(
   ctx: RequestContext,
@@ -55,7 +58,10 @@ export async function executeFlowPlan(
     executionId?: string
   },
 ): Promise<{ ran: string[]; failed: string[] }> {
-  const { flowId, plan, values } = params
+  const { flowId, plan } = params
+  // Strip inherited properties and materialize special keys (including
+  // "__proto__") as ordinary own data properties before any flow lookup.
+  const values = Object.fromEntries(Object.entries(params.values))
   const evalCtx: EvalContext = { values, rows: {}, entities: {} }
   const ran: string[] = []
   const failed: string[] = []
@@ -293,7 +299,19 @@ export async function executeFlowPlan(
 
   // --- Execute actions ----------------------------------------------------
 
-  const fieldPatch: Record<string, unknown> = {}
+  const fieldPatch = new Map<string, unknown>()
+  const setField = (field: string, value: unknown): void => {
+    fieldPatch.set(field, value)
+    // defineProperty has data-property semantics for every field name; unlike
+    // bracket assignment on a normal object, "__proto__" cannot mutate the
+    // record prototype. Graph validation separately limits writable fields.
+    Object.defineProperty(values, field, {
+      value,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+  }
   let flagReason: string | null | undefined
 
   const { enqueueEmail, enqueueNotification, enqueuePdfEmail } = await import('@beaconhs/jobs')
@@ -537,8 +555,7 @@ export async function executeFlowPlan(
         }
         case 'set_field': {
           const v = resolveDefaultValue(action.value, evalCtx)
-          fieldPatch[action.field] = v
-          values[action.field] = v // visible to later nodes
+          setField(action.field, v)
           ran.push('set_field')
           break
         }
@@ -548,18 +565,18 @@ export async function executeFlowPlan(
           break
         }
         case 'webhook': {
-          const payload = action.bodyTemplate
-            ? interpolate(action.bodyTemplate, values)
-            : JSON.stringify(values)
-          const res = await fetch(action.url, {
+          const payload = JSON.stringify(values)
+          const res = await secureFetch(action.url, {
             method: action.method,
             headers: {
               'content-type': 'application/json',
-              ...(action.headers ?? {}),
               ...(params.executionId ? { 'idempotency-key': jobId(nodeId, 'webhook')! } : {}),
             },
             body: payload,
-            signal: AbortSignal.timeout(8000),
+            timeoutMs: 8_000,
+            maxRequestBytes: 2 * 1024 * 1024,
+            maxResponseBytes: 64 * 1024,
+            maxRedirects: 2,
           })
           if (!res.ok) throw new Error(`Webhook returned HTTP ${res.status}`)
           ran.push('webhook')
@@ -569,7 +586,7 @@ export async function executeFlowPlan(
           // create_response | analyze_photos | start_monitored_session — subject-specific.
           const r = await adapter.handleExtraAction?.(action, {
             values,
-            fieldPatch,
+            setField,
             evalCtx,
             executionKey: durableExecutionKey,
           })
@@ -582,21 +599,36 @@ export async function executeFlowPlan(
         }
       }
       if (failed.length === failedBefore) {
-        if (Object.keys(fieldPatch).length > 0 || flagReason !== undefined) {
+        if (fieldPatch.size > 0 || flagReason !== undefined) {
           if (!adapter.persistAfterRun) throw new Error('Flow subject cannot persist field changes')
           await adapter.persistAfterRun({
-            fieldPatch: { ...fieldPatch },
+            fieldPatch: Object.fromEntries(fieldPatch),
             flagNonCompliant: flagReason !== undefined,
           })
-          for (const key of Object.keys(fieldPatch)) delete fieldPatch[key]
+          fieldPatch.clear()
           flagReason = undefined
         }
         await markEffectComplete(actionEffectKey, { action: action.action })
       } else {
         break
       }
-    } catch {
-      failed.push(`${action.action} (error)`)
+    } catch (error) {
+      if (action.action === 'webhook') {
+        const detail = describeFlowWebhookError(error)
+        failed.push(`webhook (${detail})`)
+        await recordAudit(ctx, {
+          entityType: adapter.auditEntityType,
+          entityId: adapter.subjectId,
+          action: 'update',
+          dedupKey: params.executionId
+            ? `domain:${params.executionId}:flow-webhook-failed:${flowId}:${nodeId}`
+            : undefined,
+          summary: `Flow webhook failed: ${detail}`,
+          metadata: { flowId, nodeId },
+        })
+      } else {
+        failed.push(`${action.action} (error)`)
+      }
       break
     }
   }

@@ -13,6 +13,7 @@
 import { relations } from 'drizzle-orm'
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -46,6 +47,7 @@ export const hazidHazardTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('hazid_hazard_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('hazid_hazard_types_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantNameUx: uniqueIndex('hazid_hazard_types_tenant_name_ux').on(t.tenantId, t.name),
   }),
 )
@@ -62,9 +64,9 @@ export const hazidHazards = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description'),
-    hazardTypeId: uuid('hazard_type_id').references(() => hazidHazardTypes.id, {
-      onDelete: 'set null',
-    }),
+    // The physical tenant-aware key uses partial-column SET NULL so deleting a
+    // type clears only hazard_type_id and keeps tenant_id intact.
+    hazardTypeId: uuid('hazard_type_id'),
     standardControls: text('standard_controls'), // the canonical control text
     risks: text('risks'), // optional "what could go wrong" copy
     photoAttachmentId: uuid('photo_attachment_id'),
@@ -73,6 +75,7 @@ export const hazidHazards = pgTable(
   },
   (t) => ({
     tenantIdx: index('hazid_hazards_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('hazid_hazards_tenant_id_id_ux').on(t.tenantId, t.id),
     nameIdx: index('hazid_hazards_name_idx').on(t.tenantId, t.name),
     typeIdx: index('hazid_hazards_type_idx').on(t.tenantId, t.hazardTypeId),
   }),
@@ -95,6 +98,7 @@ export const hazidHazardSets = pgTable(
   },
   (t) => ({
     tenantIdx: index('hazid_hazard_sets_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('hazid_hazard_sets_tenant_id_id_ux').on(t.tenantId, t.id),
   }),
 )
 
@@ -129,6 +133,7 @@ export const hazidTasks = pgTable(
   },
   (t) => ({
     tenantIdx: index('hazid_tasks_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('hazid_tasks_tenant_id_id_ux').on(t.tenantId, t.id),
     nameIdx: index('hazid_tasks_name_idx').on(t.tenantId, t.name),
   }),
 )
@@ -143,19 +148,29 @@ export const hazidLocationTasks = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    orgUnitId: uuid('org_unit_id')
-      .notNull()
-      .references(() => orgUnits.id, { onDelete: 'cascade' }),
-    taskId: uuid('task_id')
-      .notNull()
-      .references(() => hazidTasks.id, { onDelete: 'cascade' }),
+    orgUnitId: uuid('org_unit_id').notNull(),
+    taskId: uuid('task_id').notNull(),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('hazid_location_tasks_tenant_idx').on(t.tenantId),
-    orgIdx: index('hazid_location_tasks_org_idx').on(t.orgUnitId),
-    taskIdx: index('hazid_location_tasks_task_idx').on(t.taskId),
-    orgTaskUx: uniqueIndex('hazid_location_tasks_org_task_ux').on(t.orgUnitId, t.taskId),
+    orgIdx: index('hazid_location_tasks_org_idx').on(t.tenantId, t.orgUnitId),
+    taskIdx: index('hazid_location_tasks_task_idx').on(t.tenantId, t.taskId),
+    orgTaskUx: uniqueIndex('hazid_location_tasks_org_task_ux').on(
+      t.tenantId,
+      t.orgUnitId,
+      t.taskId,
+    ),
+    orgFk: foreignKey({
+      name: 'hazid_location_tasks_tenant_org_unit_fk',
+      columns: [t.tenantId, t.orgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
+    }).onDelete('cascade'),
+    taskFk: foreignKey({
+      name: 'hazid_location_tasks_tenant_task_fk',
+      columns: [t.tenantId, t.taskId],
+      foreignColumns: [hazidTasks.tenantId, hazidTasks.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -186,9 +201,7 @@ export const hazidAssessmentTypes = pgTable(
     // toggles on the type.
 
     // Optional default hazard set to seed the hazard list with.
-    defaultHazardSetId: uuid('default_hazard_set_id').references(() => hazidHazardSets.id, {
-      onDelete: 'set null',
-    }),
+    defaultHazardSetId: uuid('default_hazard_set_id'),
 
     // Restrict which person-groups may start assessments of this type (legacy
     // AvailableTo). Empty array = available to everyone.
@@ -199,6 +212,11 @@ export const hazidAssessmentTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('hazid_assessment_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('hazid_assessment_types_tenant_id_id_ux').on(t.tenantId, t.id),
+    defaultHazardSetIdx: index('hazid_assessment_types_default_hazard_set_idx').on(
+      t.tenantId,
+      t.defaultHazardSetId,
+    ),
     tenantNameUx: uniqueIndex('hazid_assessment_types_tenant_name_ux').on(t.tenantId, t.name),
   }),
 )
@@ -213,9 +231,7 @@ export const hazidAssessmentTypePPE = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    typeId: uuid('type_id')
-      .notNull()
-      .references(() => hazidAssessmentTypes.id, { onDelete: 'cascade' }),
+    typeId: uuid('type_id').notNull(),
     name: text('name').notNull(),
     description: text('description'),
     required: boolean('required').default(true).notNull(),
@@ -223,8 +239,13 @@ export const hazidAssessmentTypePPE = pgTable(
     ...timestamps,
   },
   (t) => ({
-    typeIdx: index('hazid_assessment_type_ppe_type_idx').on(t.typeId, t.entityOrder),
+    typeIdx: index('hazid_assessment_type_ppe_type_idx').on(t.tenantId, t.typeId, t.entityOrder),
     tenantIdx: index('hazid_assessment_type_ppe_tenant_idx').on(t.tenantId),
+    typeFk: foreignKey({
+      name: 'hazid_assessment_type_ppe_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -240,9 +261,7 @@ export const hazidAssessmentTypeQuestions = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    typeId: uuid('type_id')
-      .notNull()
-      .references(() => hazidAssessmentTypes.id, { onDelete: 'cascade' }),
+    typeId: uuid('type_id').notNull(),
     question: text('question').notNull(),
     questionType: hazidQuestionType('question_type').default('yes_no').notNull(),
     // For multi_select, the options shown to the user. Ignored for yes_no / text.
@@ -252,8 +271,17 @@ export const hazidAssessmentTypeQuestions = pgTable(
     ...timestamps,
   },
   (t) => ({
-    typeIdx: index('hazid_assessment_type_questions_type_idx').on(t.typeId, t.entityOrder),
+    typeIdx: index('hazid_assessment_type_questions_type_idx').on(
+      t.tenantId,
+      t.typeId,
+      t.entityOrder,
+    ),
     tenantIdx: index('hazid_assessment_type_questions_tenant_idx').on(t.tenantId),
+    typeFk: foreignKey({
+      name: 'hazid_assessment_type_questions_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -271,12 +299,8 @@ export const hazidAssessmentTypeApps = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    typeId: uuid('type_id')
-      .notNull()
-      .references(() => hazidAssessmentTypes.id, { onDelete: 'cascade' }),
-    templateId: uuid('template_id')
-      .notNull()
-      .references(() => formTemplates.id, { onDelete: 'cascade' }),
+    typeId: uuid('type_id').notNull(),
+    templateId: uuid('template_id').notNull(),
     // Stable per-type key used by seeders/admin UI, e.g. "confined_space".
     key: text('key').notNull(),
     label: text('label').notNull(),
@@ -289,10 +313,25 @@ export const hazidAssessmentTypeApps = pgTable(
     ...softDelete,
   },
   (t) => ({
-    typeIdx: index('hazid_assessment_type_apps_type_idx').on(t.typeId, t.entityOrder),
-    templateIdx: index('hazid_assessment_type_apps_template_idx').on(t.templateId),
+    typeIdx: index('hazid_assessment_type_apps_type_idx').on(t.tenantId, t.typeId, t.entityOrder),
+    templateIdx: index('hazid_assessment_type_apps_template_idx').on(t.tenantId, t.templateId),
     tenantIdx: index('hazid_assessment_type_apps_tenant_idx').on(t.tenantId),
+    tenantTemplateIdUx: uniqueIndex('hazid_assessment_type_apps_tenant_template_id_ux').on(
+      t.tenantId,
+      t.templateId,
+      t.id,
+    ),
     typeKeyUx: uniqueIndex('hazid_assessment_type_apps_type_key_ux').on(t.typeId, t.key),
+    templateFk: foreignKey({
+      name: 'hazid_assessment_type_apps_tenant_template_fk',
+      columns: [t.tenantId, t.templateId],
+      foreignColumns: [formTemplates.tenantId, formTemplates.id],
+    }).onDelete('cascade'),
+    typeFk: foreignKey({
+      name: 'hazid_assessment_type_apps_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -308,8 +347,8 @@ export const hazidHazardTypesRelations = relations(hazidHazardTypes, ({ one, man
 export const hazidHazardsRelations = relations(hazidHazards, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidHazards.tenantId], references: [tenants.id] }),
   type: one(hazidHazardTypes, {
-    fields: [hazidHazards.hazardTypeId],
-    references: [hazidHazardTypes.id],
+    fields: [hazidHazards.tenantId, hazidHazards.hazardTypeId],
+    references: [hazidHazardTypes.tenantId, hazidHazardTypes.id],
   }),
   photo: one(attachments, {
     fields: [hazidHazards.photoAttachmentId],
@@ -328,17 +367,20 @@ export const hazidTasksRelations = relations(hazidTasks, ({ one }) => ({
 export const hazidLocationTasksRelations = relations(hazidLocationTasks, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidLocationTasks.tenantId], references: [tenants.id] }),
   orgUnit: one(orgUnits, {
-    fields: [hazidLocationTasks.orgUnitId],
-    references: [orgUnits.id],
+    fields: [hazidLocationTasks.tenantId, hazidLocationTasks.orgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
   }),
-  task: one(hazidTasks, { fields: [hazidLocationTasks.taskId], references: [hazidTasks.id] }),
+  task: one(hazidTasks, {
+    fields: [hazidLocationTasks.tenantId, hazidLocationTasks.taskId],
+    references: [hazidTasks.tenantId, hazidTasks.id],
+  }),
 }))
 
 export const hazidAssessmentTypesRelations = relations(hazidAssessmentTypes, ({ one, many }) => ({
   tenant: one(tenants, { fields: [hazidAssessmentTypes.tenantId], references: [tenants.id] }),
   defaultHazardSet: one(hazidHazardSets, {
-    fields: [hazidAssessmentTypes.defaultHazardSetId],
-    references: [hazidHazardSets.id],
+    fields: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.defaultHazardSetId],
+    references: [hazidHazardSets.tenantId, hazidHazardSets.id],
   }),
   ppe: many(hazidAssessmentTypePPE),
   questions: many(hazidAssessmentTypeQuestions),
@@ -348,8 +390,8 @@ export const hazidAssessmentTypesRelations = relations(hazidAssessmentTypes, ({ 
 export const hazidAssessmentTypePPERelations = relations(hazidAssessmentTypePPE, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidAssessmentTypePPE.tenantId], references: [tenants.id] }),
   type: one(hazidAssessmentTypes, {
-    fields: [hazidAssessmentTypePPE.typeId],
-    references: [hazidAssessmentTypes.id],
+    fields: [hazidAssessmentTypePPE.tenantId, hazidAssessmentTypePPE.typeId],
+    references: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.id],
   }),
 }))
 
@@ -361,8 +403,8 @@ export const hazidAssessmentTypeQuestionsRelations = relations(
       references: [tenants.id],
     }),
     type: one(hazidAssessmentTypes, {
-      fields: [hazidAssessmentTypeQuestions.typeId],
-      references: [hazidAssessmentTypes.id],
+      fields: [hazidAssessmentTypeQuestions.tenantId, hazidAssessmentTypeQuestions.typeId],
+      references: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.id],
     }),
   }),
 )
@@ -370,11 +412,11 @@ export const hazidAssessmentTypeQuestionsRelations = relations(
 export const hazidAssessmentTypeAppsRelations = relations(hazidAssessmentTypeApps, ({ one }) => ({
   tenant: one(tenants, { fields: [hazidAssessmentTypeApps.tenantId], references: [tenants.id] }),
   type: one(hazidAssessmentTypes, {
-    fields: [hazidAssessmentTypeApps.typeId],
-    references: [hazidAssessmentTypes.id],
+    fields: [hazidAssessmentTypeApps.tenantId, hazidAssessmentTypeApps.typeId],
+    references: [hazidAssessmentTypes.tenantId, hazidAssessmentTypes.id],
   }),
   template: one(formTemplates, {
-    fields: [hazidAssessmentTypeApps.templateId],
-    references: [formTemplates.id],
+    fields: [hazidAssessmentTypeApps.tenantId, hazidAssessmentTypeApps.templateId],
+    references: [formTemplates.tenantId, formTemplates.id],
   }),
 }))

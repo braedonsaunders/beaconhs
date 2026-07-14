@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { and, count, desc, eq, gte, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import {
   correctiveActions,
   documentCategories,
@@ -23,6 +24,7 @@ import { can } from '@beaconhs/tenant'
 import { getRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
+import { documentReadFilter } from '@/lib/assistant/doc-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,12 +37,7 @@ export type SearchResultItem = {
 
 export type SearchGroup = {
   type:
-    | 'incidents'
-    | 'corrective_actions'
-    | 'people'
-    | 'equipment'
-    | 'documents'
-    | 'hazid_assessments'
+    'incidents' | 'corrective_actions' | 'people' | 'equipment' | 'documents' | 'hazid_assessments'
   total: number
   items: SearchResultItem[]
 }
@@ -106,8 +103,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     ])
     // Documents has a flat read permission instead of tiers — the /documents
     // page 404s without it, so search must skip the group entirely.
-    const documentsVis: SQL<unknown> | undefined =
-      can(ctx, 'documents.read') || can(ctx, 'documents.manage') ? undefined : sql`false`
+    const canReadDocuments = can(ctx, 'documents.read') || can(ctx, 'documents.manage')
+    const documentsVis: SQL<unknown> | undefined = canReadDocuments
+      ? documentReadFilter(ctx)
+      : sql`false`
 
     const [
       incidentRows,
@@ -220,7 +219,7 @@ export async function GET(req: Request): Promise<NextResponse> {
             firstName: people.firstName,
             lastName: people.lastName,
             employeeNo: people.employeeNo,
-            jobTitle: people.jobTitle,
+            jobTitle: primaryPersonTitleName(people.id, people.tenantId),
           })
           .from(people)
           .where(and(...where))

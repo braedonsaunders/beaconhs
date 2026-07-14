@@ -1,7 +1,7 @@
 'use client'
 
 // Nango self-serve connect. Mints a Connect session server-side, then opens
-// Nango's hosted Connect UI (loaded from CDN) so the customer authorises their
+// Nango's hosted Connect UI (loaded from a version-pinned CDN asset) so the customer authorises their
 // own account. Falls back to pasting a Connection ID if the UI can't load.
 
 import { useState, useTransition } from 'react'
@@ -23,6 +23,11 @@ interface NangoClient {
     onEvent: (e: { type: string; payload?: { connectionId?: string } }) => void
   }): unknown
 }
+
+// Never load a floating npm tag in production. This exact SDK release is part
+// of the reviewed application build even though the browser retrieves its ESM
+// artifact on demand.
+const NANGO_FRONTEND_URL = 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@0.70.9/+esm'
 
 export function NangoConnect({
   connectionId,
@@ -67,8 +72,9 @@ export function NangoConnect({
         toast.error(res.error ?? 'Could not start Nango connect.')
         return
       }
-      const url = 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest/+esm'
-      const mod = (await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ url)) as {
+      const mod = (await import(
+        /* webpackIgnore: true */ /* turbopackIgnore: true */ NANGO_FRONTEND_URL
+      )) as {
         default: new () => NangoClient
       }
       const nango = new mod.default()

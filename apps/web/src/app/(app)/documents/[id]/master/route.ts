@@ -8,6 +8,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { getObjectStream } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,8 @@ export async function GET(
   routeCtx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await routeCtx.params
+  if (!isUuid(id)) return new NextResponse('Not found', { status: 404 })
+
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
 

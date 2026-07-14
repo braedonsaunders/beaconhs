@@ -5,7 +5,8 @@
 //
 // When a user creates a new inspection_record from a type, every criterion (in
 // group order, then ungrouped) is materialised into inspection_record_criteria
-// rows so the inspector can answer pass / fail / N-A on each.
+// rows so the inspector can answer each snapshotted outcome or configured
+// choice without later template edits changing the record.
 //
 // Legacy parity:
 //   - app/Models/InspectionType.php
@@ -57,6 +58,7 @@ export const inspectionTypes = pgTable(
   },
   (t) => ({
     tenantIdx: index('inspection_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('inspection_types_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantNameUx: uniqueIndex('inspection_types_tenant_name_ux').on(t.tenantId, t.name),
   }),
 )

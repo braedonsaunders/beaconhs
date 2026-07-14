@@ -42,7 +42,13 @@ export function NewPdfTemplateFlyout({
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="name">Name *</Label>
-            <Input id="name" name="name" required placeholder="e.g. Incident report" />
+            <Input
+              id="name"
+              name="name"
+              required
+              maxLength={200}
+              placeholder="e.g. Incident report"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="recordSubject">Record type *</Label>

@@ -63,8 +63,7 @@ export default async function ExpiringPage({
   const moduleFilter = MODULE_OPTIONS.find((option) => option.value === moduleParam)?.value
   const statusParam = pickString(sp.status)
   const statusFilter = STATUS_OPTIONS.find((option) => option.value === statusParam)?.value as
-    | SignalStatus
-    | undefined
+    SignalStatus | undefined
   const params = parseListParams(sp, {
     sort: 'status',
     dir: 'asc',

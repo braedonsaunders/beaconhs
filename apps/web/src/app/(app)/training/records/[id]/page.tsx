@@ -1,14 +1,10 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull, like } from 'drizzle-orm'
+import { notFound } from 'next/navigation'
+import { and, asc, count, desc, eq, ilike, isNull, like, or } from 'drizzle-orm'
 import {
   CreditCard,
-  FileText,
   Paperclip,
-  Printer,
   RotateCcw,
-  Settings,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
@@ -33,144 +29,37 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import {
-  attachments,
-  people,
-  tenants,
-  trainingCertificates,
-  trainingCourses,
-  trainingRecords,
-} from '@beaconhs/db/schema'
+import { attachments, people, tenants, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
-import { assertCan, can } from '@beaconhs/tenant'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
-import { CredentialDownloadButton } from '@/components/credential-download-button'
+import { CredentialOutputsCard } from '@/components/credential-outputs-card'
 import { ConfirmButton } from '@/components/confirm-button'
 import { StatTile, type StatTone } from '@/components/stat-tile'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { isUuid } from '@/lib/list-params'
-import {
-  courseCredentialOutputs,
-  type CredentialFormat,
-  type CredentialOutput,
-} from '@/lib/credential-designs'
+import { isUuid, parseListParams } from '@/lib/list-params'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { courseCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
-import { addMonthsIso, isoToday } from '../../_lib/dates'
 import { RecordDetailFields } from './_fields'
-import { updateTrainingRecordField } from '../_actions'
+import { renewTrainingRecord, revokeTrainingRecord, updateTrainingRecordField } from '../_actions'
 
 export const dynamic = 'force-dynamic'
 
 const TABS = ['overview', 'outputs', 'attachments', 'activity'] as const
 type Tab = (typeof TABS)[number]
+const ATTACHMENT_SORTS = ['uploaded'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return { title: `Training record · ${id.slice(0, 8)}` }
-}
-
-// ---------- Server actions ----------
-
-// Renew — mint a fresh record for the same person + course (completed today,
-// expiry auto-computed from the course) and open it for inline edits. A header
-// button: it copies the identity and lands you on the new record to adjust.
-async function renewRecord(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  // A server action is a POST endpoint; the page's render-time gate does not
-  // protect it. Recording (renewing) training requires training.record.create.
-  assertCan(ctx, 'training.record.create')
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-
-  const existing = await ctx.db(async (tx) => {
-    const [r] = await tx.select().from(trainingRecords).where(eq(trainingRecords.id, id)).limit(1)
-    return r
-  })
-  if (!existing) return
-
-  const completedOn = isoToday()
-  let expiresOn: string | null = null
-  if (existing.courseId) {
-    const courseId = existing.courseId
-    const course = await ctx.db(async (tx) => {
-      const [c] = await tx
-        .select({ validForMonths: trainingCourses.validForMonths })
-        .from(trainingCourses)
-        .where(eq(trainingCourses.id, courseId))
-        .limit(1)
-      return c
-    })
-    if (course?.validForMonths) {
-      expiresOn = addMonthsIso(completedOn, course.validForMonths)
-    }
-  }
-
-  let newId: string | undefined
-  await ctx.db(async (tx) => {
-    const [row] = await tx
-      .insert(trainingRecords)
-      .values({
-        tenantId: ctx.tenantId,
-        personId: existing.personId,
-        courseId: existing.courseId,
-        source: 'external_upload',
-        completedOn,
-        expiresOn,
-        instructor: existing.instructor,
-        issuedByTenantUserId: ctx.membership?.id,
-      })
-      .returning({ id: trainingRecords.id })
-    newId = row?.id
-  })
-  if (newId) {
-    await recordAudit(ctx, {
-      entityType: 'training_record',
-      entityId: newId,
-      action: 'create',
-      summary: 'Record renewed (created replacement)',
-      after: { previousRecordId: id, completedOn, expiresOn },
-    })
-  }
-  revalidatePath(`/training/records/${id}`)
-  if (newId) redirect(`/training/records/${newId}`)
-}
-
-async function revokeRecord(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  // Mutating (revoking) a training record requires training.record.create,
-  // matching renewRecord and the bulk actions. Direct POSTs bypass the page gate.
-  assertCan(ctx, 'training.record.create')
-  const id = String(formData.get('id') ?? '')
-  const reason = String(formData.get('reason') ?? '').trim() || null
-  if (!id) return
-
-  // Soft-revoke the record by marking deletedAt + revoking any active certs.
-  await ctx.db(async (tx) => {
-    await tx
-      .update(trainingRecords)
-      .set({ deletedAt: new Date(), notes: reason ? `Revoked: ${reason}` : 'Revoked' })
-      .where(eq(trainingRecords.id, id))
-    await tx
-      .update(trainingCertificates)
-      .set({ revokedAt: new Date(), revokedReason: reason })
-      .where(and(eq(trainingCertificates.recordId, id), isNull(trainingCertificates.revokedAt)))
-  })
-  await recordAudit(ctx, {
-    entityType: 'training_record',
-    entityId: id,
-    action: 'delete',
-    summary: 'Record revoked',
-    after: { reason },
-  })
-  revalidatePath(`/training/records/${id}`)
-  revalidatePath('/training')
 }
 
 // ---------- Page ----------
@@ -188,6 +77,21 @@ export default async function TrainingRecordPage({
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const attachmentParams = parseListParams(
+    {
+      q: sp.attachmentQ,
+      sort: sp.attachmentSort,
+      dir: sp.attachmentDir,
+      page: sp.attachmentPage,
+      perPage: sp.attachmentPerPage,
+    },
+    {
+      sort: 'uploaded',
+      dir: 'desc',
+      perPage: 25,
+      allowedSorts: ATTACHMENT_SORTS,
+    },
+  )
   const ctx = await requireRequestContext()
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -203,19 +107,40 @@ export default async function TrainingRecordPage({
       .where(eq(trainingRecords.id, id))
       .limit(1)
     if (!row) return null
-    const [certAttachments, tenant, peopleList, coursesList] = await Promise.all([
-      // Pull any uploaded scan attachments tagged with this record (by r2Key
-      // prefix or exif metadata). The cert-route also lists them via r2 prefix.
-      tx
-        .select()
-        .from(attachments)
-        .where(
-          and(
-            eq(attachments.kind, 'document'),
-            like(attachments.r2Key, `t/${ctx.tenantId}/document/training-records/${id}/%`),
-          ),
+    const attachmentBase = and(
+      eq(attachments.kind, 'document'),
+      like(attachments.r2Key, `t/${ctx.tenantId}/document/training-records/${id}/%`),
+    )
+    const attachmentSearch = attachmentParams.q
+      ? or(
+          ilike(attachments.filename, `%${attachmentParams.q}%`),
+          ilike(attachments.contentType, `%${attachmentParams.q}%`),
         )
-        .orderBy(desc(attachments.createdAt)),
+      : undefined
+    const attachmentWhere = and(attachmentBase, attachmentSearch)
+    const [
+      attachmentCountRows,
+      filteredAttachmentCountRows,
+      certAttachments,
+      tenant,
+      peopleList,
+      coursesList,
+    ] = await Promise.all([
+      tx.select({ c: count() }).from(attachments).where(attachmentBase),
+      active === 'attachments'
+        ? tx.select({ c: count() }).from(attachments).where(attachmentWhere)
+        : Promise.resolve([]),
+      // Pull only the visible page of uploaded scans. Counts remain available
+      // on every tab for the tab badge and overview statistic.
+      active === 'attachments'
+        ? tx
+            .select()
+            .from(attachments)
+            .where(attachmentWhere)
+            .orderBy(desc(attachments.createdAt))
+            .limit(attachmentParams.perPage)
+            .offset((attachmentParams.page - 1) * attachmentParams.perPage)
+        : Promise.resolve([]),
       tx
         .select({ settings: tenants.settings })
         .from(tenants)
@@ -243,6 +168,8 @@ export default async function TrainingRecordPage({
     return {
       ...row,
       certAttachments,
+      attachmentCount: Number(attachmentCountRows[0]?.c ?? 0),
+      filteredAttachmentCount: Number(filteredAttachmentCountRows[0]?.c ?? 0),
       tenantSettings: tenant?.settings ?? {},
       peopleList,
       coursesList,
@@ -266,7 +193,17 @@ export default async function TrainingRecordPage({
     ))
   )
     notFound()
-  const { record, person, course, certAttachments, tenantSettings, peopleList, coursesList } = data
+  const {
+    record,
+    person,
+    course,
+    certAttachments,
+    attachmentCount,
+    filteredAttachmentCount,
+    tenantSettings,
+    peopleList,
+    coursesList,
+  } = data
   const isRevoked = record.deletedAt != null
   // Ensure the current holder + course are selectable even if no longer active /
   // soft-deleted (the option lists only carry active rows). A blank draft has
@@ -288,11 +225,10 @@ export default async function TrainingRecordPage({
       ? [{ id: course.id, name: course.name, code: course.code }, ...coursesList]
       : coursesList
   const credentialOutputs = courseCredentialOutputs(course?.metadata, tenantSettings)
-  const certOutput = credentialOutputs.find((o) => o.format !== 'wallet') ?? credentialOutputs[0]
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
   // Recording training (renew/revoke) is gated separately from viewing: a
   // read-only viewer (e.g. foreman with training.read.all) sees the record but
-  // not the mutate forms. Mirrors the assertCan in renewRecord/revokeRecord.
+  // not the mutate forms. The imported actions repeat this permission gate.
   const canRecord = can(ctx, 'training.record.create')
 
   const today = new Date()
@@ -331,29 +267,16 @@ export default async function TrainingRecordPage({
             </div>
           }
           actions={
-            certOutput || canRecord ? (
+            canRecord ? (
               <div className="flex items-center gap-2">
-                {certOutput && !isRevoked ? (
-                  <CredentialDownloadButton
-                    endpoint={`${basePath}/certificate`}
-                    outputId={certOutput.id}
-                    variant="outline"
-                    size="sm"
-                    title={`Open ${certOutput.name}`}
-                  >
-                    <FileText size={14} /> Open certificate
-                  </CredentialDownloadButton>
-                ) : null}
-                {canRecord ? (
-                  <form action={renewRecord}>
-                    <input type="hidden" name="id" value={id} />
-                    <Button type="submit" variant="outline" size="sm">
-                      <RotateCcw size={14} /> Renew
-                    </Button>
-                  </form>
-                ) : null}
-                {canRecord && !isRevoked ? (
-                  <form action={revokeRecord}>
+                <form action={renewTrainingRecord}>
+                  <input type="hidden" name="id" value={id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    <RotateCcw size={14} /> Renew
+                  </Button>
+                </form>
+                {!isRevoked ? (
+                  <form action={revokeTrainingRecord}>
                     <input type="hidden" name="id" value={id} />
                     <ConfirmButton
                       size="sm"
@@ -387,7 +310,7 @@ export default async function TrainingRecordPage({
           tabs={[
             { key: 'overview', label: 'Overview' },
             { key: 'outputs', label: 'Cards & certificates', count: credentialOutputs.length },
-            { key: 'attachments', label: 'Attachments', count: certAttachments.length },
+            { key: 'attachments', label: 'Attachments', count: attachmentCount },
             { key: 'activity', label: 'Activity' },
           ]}
         />
@@ -420,7 +343,7 @@ export default async function TrainingRecordPage({
                 tone="sky"
                 label="Attachments"
                 dense
-                value={certAttachments.length}
+                value={attachmentCount}
                 href={`${basePath}?tab=attachments`}
               />
             </div>
@@ -448,132 +371,87 @@ export default async function TrainingRecordPage({
         ) : null}
 
         {active === 'outputs' ? (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>Cards & certificates ({credentialOutputs.length})</CardTitle>
-                {canDesignCredentials ? (
-                  <Link href="/training/credential-designs">
-                    <Button variant="outline" size="sm">
-                      <Settings size={14} /> Design
-                    </Button>
-                  </Link>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {credentialOutputs.map((output) => (
-                  <div
-                    key={output.id}
-                    className="flex min-h-44 flex-col rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className="grid h-11 w-11 shrink-0 place-items-center rounded-md border"
-                        style={{
-                          borderColor: output.accent,
-                          color: output.primary,
-                          backgroundColor: output.paper,
-                        }}
-                      >
-                        <OutputIcon output={output} size={18} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold text-slate-900 dark:text-slate-100">
-                          {output.name}
-                        </div>
-                        <div className="mt-1">
-                          <Badge variant="secondary">{formatLabel(output.format)}</Badge>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
-                      {output.description}
-                    </p>
-                    <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-                      Opens as a fresh PDF using the current design.
-                    </div>
-                    <div className="mt-auto pt-4">
-                      <div className="flex flex-wrap gap-2">
-                        <CredentialDownloadButton
-                          endpoint={`/training/records/${id}/certificate`}
-                          outputId={output.id}
-                          variant="outline"
-                          size="sm"
-                          title={`Open ${output.name}`}
-                        >
-                          <OutputIcon output={output} /> Open PDF
-                        </CredentialDownloadButton>
-                        {output.format === 'wallet' ? (
-                          <CredentialDownloadButton
-                            endpoint={`/training/records/${id}/certificate`}
-                            outputId={output.id}
-                            action="print"
-                            variant="outline"
-                            size="sm"
-                            title={`Print ${output.name}`}
-                          >
-                            <Printer size={14} /> Print
-                          </CredentialDownloadButton>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <CredentialOutputsCard
+            outputs={credentialOutputs}
+            endpoint={`${basePath}/certificate`}
+            canDesign={canDesignCredentials}
+            unavailable={isRevoked}
+          />
         ) : null}
 
         {active === 'attachments' ? (
           <Card>
             <CardHeader>
-              <CardTitle>Attachments ({certAttachments.length})</CardTitle>
+              <CardTitle>Attachments ({attachmentCount})</CardTitle>
             </CardHeader>
             <CardContent>
+              <TableToolbar className="mb-3">
+                <SearchInput
+                  placeholder="Search attachments…"
+                  paramKey="attachmentQ"
+                  pageParamKey="attachmentPage"
+                />
+              </TableToolbar>
               {certAttachments.length === 0 ? (
                 <EmptyState
                   icon={<Paperclip size={24} />}
-                  title="No attachments uploaded"
-                  description="Scanned certificates, instructor notes, and other supporting documents appear here."
+                  title={
+                    attachmentParams.q
+                      ? 'No attachments match your search'
+                      : 'No attachments uploaded'
+                  }
+                  description={
+                    attachmentParams.q
+                      ? 'Try a different filename or file type.'
+                      : 'Scanned certificates, instructor notes, and other supporting documents appear here.'
+                  }
                 />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>File</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Uploaded</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {certAttachments.map((a) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-medium">{a.filename}</TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {a.contentType}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {humanSize(a.sizeBytes)}
-                        </TableCell>
-                        <TableCell>{formatDate(new Date(a.createdAt), ctx.timezone)}</TableCell>
-                        <TableCell>
-                          <a
-                            href={attachmentUrl(a.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                          >
-                            Open →
-                          </a>
-                        </TableCell>
+                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>File</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Uploaded</TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {certAttachments.map((a) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="font-medium">{a.filename}</TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            {a.contentType}
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            {humanSize(a.sizeBytes)}
+                          </TableCell>
+                          <TableCell>{formatDate(new Date(a.createdAt), ctx.timezone)}</TableCell>
+                          <TableCell>
+                            <a
+                              href={attachmentUrl(a.id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                            >
+                              Open →
+                            </a>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={filteredAttachmentCount}
+                    page={attachmentParams.page}
+                    perPage={attachmentParams.perPage}
+                    pageParamKey="attachmentPage"
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -627,16 +505,6 @@ const STATUS_META: Record<
     badge: 'secondary',
     value: () => 'No expiry',
   },
-}
-
-function OutputIcon({ output, size = 14 }: { output: CredentialOutput; size?: number }) {
-  return output.format === 'wallet' ? <CreditCard size={size} /> : <FileText size={size} />
-}
-
-function formatLabel(format: CredentialFormat): string {
-  if (format === 'wallet') return 'CR80 wallet'
-  if (format === 'letter-portrait') return '8.5 x 11 portrait'
-  return '11 x 8.5 landscape'
 }
 
 function humanSize(bytes: number): string {

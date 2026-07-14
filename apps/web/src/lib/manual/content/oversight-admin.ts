@@ -2,6 +2,7 @@
 // Written for supervisors and office staff, but kept plain-language.
 
 import type { ManualArticle } from '../types'
+import { CSV_EXPORT_LIMIT_GUIDANCE } from './_shared'
 
 export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
   {
@@ -19,10 +20,14 @@ export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
       'org chart',
       'reporting structure',
       'crew',
+      'job title',
+      'primary title',
+      'held titles',
       'hire date',
       'id badge',
       'badge',
       'transcript qr',
+      'custom fields',
     ],
     body: `The People directory lists everyone in your company — workers, contractors, and supervisors.
 
@@ -37,7 +42,7 @@ Open [People](/people) from the sidebar.
 ## Find a person
 
 1. Open [People](/people).
-2. Type a name or employee number in the **Search by name or employee #** box.
+2. Type a name, employee number, or job title in the **Search by name, employee #, or job title** box.
 3. Use the **Status** filter to switch between **Active**, **Inactive**, **Terminated**, or **All**. The list shows active people by default.
 4. Click a person to open their page. Tabs like **Overview**, **Compliance**, **Transcript**, and **PPE** show everything about them in one place.
 
@@ -45,8 +50,24 @@ Open [People](/people) from the sidebar.
 
 1. Open [People](/people).
 2. Click **Add person**.
-3. Fill in their name, employee number, department, and hire date.
-4. Save. They now show up in pickers across the app.
+3. Fill in their name, employee number, **Primary job title**, department, and hire date.
+4. Click **Create person**. They now show up in pickers across the app.
+
+## Job titles
+
+**Primary job title** is the one shown in the directory, org chart, reports, and people pickers. **Held titles** can include extra duties, such as a carpenter who also acts as a relief foreman.
+
+1. Open the person's **Overview** tab.
+2. Under **Employment**, choose their **Primary job title**.
+3. Under **Groups & titles**, use **Held titles** to add or remove any other titles they hold.
+
+Changing the primary title also adds it to **Held titles**. Removing the current primary automatically promotes one of the remaining held titles. For a synced person, job titles are read-only here; update them in the source system.
+
+To manage the title catalogue, open [Job titles](/people/titles) under **Manage people**. Use the **Status** filter to find active or archived titles.
+
+- **Archive** keeps the title and its history but removes it from new selections. BeaconHS blocks archiving while the title still has current or historical person assignments, active tasks, or active compliance obligations. Remove or archive those dependencies first.
+- Open an archived title and click **Restore** to make it available again.
+- Open **Tasks** on a title to search, reorder, archive, or restore its job-description tasks. After anyone acknowledges a task, its wording is locked. Archive it and add a replacement instead of changing text that was already signed.
 
 ## Departments
 
@@ -54,6 +75,14 @@ Each person belongs to one department. Departments are used for grouping, compli
 
 1. Open [Departments](/people/departments).
 2. Click **Add department** to create one, or search the list to edit one.
+
+## Add company-specific fields (managers)
+
+1. Open [People custom fields](/people/custom-fields) from **Manage people** → **Custom fields**.
+2. Use **Search custom fields…** or **Status** to find a field. Select **New field** to add one.
+3. Enter the label and field type, then select **Create field**. The field appears on each person's page and saves inline.
+
+The field type is fixed after creation. Removing a choice option or tightening a number range can clear saved values that no longer fit; BeaconHS warns you before it saves. **Delete field** permanently removes the field and every value captured under it. If a saved report or Insights Card uses the field, BeaconHS blocks **Hidden** and **Delete field** until you remove that reference.
 
 ## Org chart
 
@@ -78,6 +107,8 @@ To change how badges look:
 2. Move, restyle, or add elements on the front and back. Click **Save badge design**.
 3. New prints use the new design right away.
 
+${CSV_EXPORT_LIMIT_GUIDANCE}
+
 ## Tips
 
 - Some companies sync people from another system. Synced fields show as read-only and cannot be edited here. If a locked field is wrong, fix it in the source system and it will update on the next sync.
@@ -98,6 +129,7 @@ To change how badges look:
       'customers',
       'site contacts',
       'areas',
+      'custom fields',
     ],
     body: `Locations describe where your work happens: customers at the top, then projects, then sites.
 
@@ -125,6 +157,14 @@ Locations sit at the top of the tree. You add projects and sites underneath from
 3. Open a project and add sites under it the same way.
 4. Use the **Contacts** tab to add on-site contacts, like a client rep or a site manager who does not work for you.
 
+## Add company-specific fields (managers)
+
+1. Open [Location custom fields](/locations/custom-fields) from **Manage locations** → **Custom fields**.
+2. Use **Search custom fields…** or **Status** to find a field. Select **New field** to add one.
+3. Enter the label and field type, then select **Create field**. The field appears on each location page and saves inline.
+
+The field type is fixed after creation. Removing a choice option or tightening a number range can clear saved values that no longer fit; BeaconHS warns you before it saves. **Delete field** permanently removes the field and every value captured under it. If a saved report or Insights Card uses the field, BeaconHS blocks **Hidden** and **Delete field** until you remove that reference.
+
 ## What picking a site on a record means
 
 When someone fills out a form or reports an incident, they pick a site. That choice controls:
@@ -138,6 +178,8 @@ Tell your crews which site to pick for each job. A record filed against the wron
 ## See the whole tree at once
 
 The list page shows locations with their projects and sites. For one flat, searchable list of every level — customer, project, site, and area — open [Org units](/locations/units) and use the **Level** filter.
+
+${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
 
@@ -202,6 +244,8 @@ The schedule runs with the current access of the member and active role that cre
 
 The **Schedules** tab shows every schedule with its next run and last run. Use **Search schedules and reports…** to find one by schedule or report name, and use the **Status** filter to show active or paused schedules. Use the pause button to stop one without deleting it.
 
+Open a schedule to see **Run history**. Search by date, status, or trigger, or use **Status** to show queued, running, succeeded, or failed runs. Use **Next** and **Prev** to move through older deliveries.
+
 ## Build your own report
 
 If no built-in report fits, click **New report** to build a custom one. You can also open a built-in report and click **Edit a copy** to start from something close.
@@ -250,11 +294,14 @@ Open [Insights](/insights) from the sidebar. Your dashboards appear as tabs acro
 A card is one saved chart or table. The fastest way to build one is to describe it.
 
 1. Open the [Library](/insights/library) and click **New card**.
-2. In the **Ask AI** box, type what you want in plain words — for example, incidents by month this year.
-3. Click **Ask AI**. It sets up the data and chart for you.
-4. Adjust anything in the side panel (data, filters, grouping, chart type), then click **Save card**.
+2. Enter the **Card name**. Add the optional **Description** when people need more context in the Insights library.
+3. In the **Ask AI** box, type what you want in plain words — for example, incidents by month this year.
+4. Click **Ask AI**. It sets up the data and chart for you.
+5. Adjust anything in the side panel (data, filters, grouping, chart type), then click **Save card**.
 
 You can also build a card by hand using the same side panel, without asking AI. The data-source list only includes Builder apps you can currently open. If an app is a draft, archived, or restricted to another active role, its records cannot be used by your cards.
+
+For a custom grouping or measure, open **ƒ Fields & functions**. If the data source has many columns, type a field or related-table name in **Search fields or related tables…**. The search covers the complete available schema; no field is dropped after the first page of columns.
 
 ## Build or change a dashboard
 
@@ -304,9 +351,12 @@ The **Overview** tab shows the big picture: total obligations, subjects tracked,
 2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, and **Inspection**.
 3. Fill in the title and what to require for that kind — for example, which course or which document.
 4. Pick the audience: specific people, a role, a department, a site, or everyone.
-5. Click **Create obligation**.
+5. For a recurring item, choose the **Cadence**. Inspections, journals, and hazard assessments also have **Quantity per period** and **Compliant threshold (%)**. Leave **Cron override (optional)** blank for the standard cadence time. For an inspection or scheduled app, **Due offset (minutes after fire)** moves the deadline later without changing when the next period starts.
+6. Click **Create obligation**.
 
 The system then tracks every person in the audience and creates their tasks automatically.
+
+Recurring periods use the compliance scan timezone under **Admin** → **Notifications**. A schedule must fire once in each selected cadence period. The current period stays visible until the next scheduled fire, so an overdue weekly item does not disappear at midnight before the new week actually starts.
 
 ## See who is overdue
 
@@ -318,6 +368,7 @@ The system then tracks every person in the audience and creates their tasks auto
 
 - Each person's own view lives on the **Mine** tab and on their profile, so they can see the same list you see.
 - Requiring people to fill a custom form is also done here — see [Builder (custom forms & apps)](/help/builder) for how the two connect.
+- A setup record used by an active obligation cannot be deleted, deactivated, or unpublished. Turn off or delete the obligation first, then retire the inspection type, assessment, document, equipment type, or PPE type.
 - Turning an obligation off keeps its history. Edit the obligation and disable it instead of deleting it.`,
   },
   {
@@ -359,7 +410,25 @@ Open [Builder](/apps) from the sidebar. People who can build templates see every
 4. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
 5. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
 
+Use **Risk matrix** when a response needs a scored likelihood-and-severity rating based on the workspace risk matrix. Use **Rating grid** for an ordinary set of choice rows; it does not add a compliance score.
+
+Under **Data**, a **Lookup** searches its full data source as the worker types. **Results per search** controls the size of each result set. A **Data table** has its own search and pages; **Rows per page** controls each page. For a grouped **Metric**, **Groups shown** limits only the chart. Counts, sums, averages, minimums, and maximums always use every matching record the worker is allowed to see.
+
+**Photo + AI analysis** stores the review for the exact attached photos. Replacing, adding, removing, or reordering a photo clears the old review. **Photo + markup** uses one photo at a time and clears its numbered markers when that photo changes.
+
+For a text field that must follow a fixed code format, open its validation settings and use **Fixed-format pattern**. Start the pattern with **^**, end it with **$**, and use exact repeats such as **{2}** or **{4}**. The designer rejects variable repeats and alternate branches so a saved pattern cannot slow down form submission.
+
 Publishing again later creates the next version. Old submissions keep the version they were filled on.
+
+## Build or edit with AI
+
+If AI is enabled and you have permission to use it, click **AI** in the designer.
+
+1. Describe the form or change you want, then send the message.
+2. Review the assistant's proposed form and click **Apply to builder**. Nothing is published by the assistant.
+3. Click **History** to reopen a saved chat. Use **Search chats** and **Load more** to find older chats.
+4. In a long chat, click **Load older messages** to read earlier messages.
+5. Review the applied draft in the designer, then click **Publish** only when it is ready.
 
 If a person has several roles and switches roles in BeaconHS, the app gallery, pinned apps, records, and form links immediately follow the role they are acting under. A template builder can still open every app to maintain it, but can only create a live entry after the app is published.
 
@@ -377,7 +446,7 @@ Filling a form on a schedule is tracked by the compliance engine.
 2. Click **Create an assignment**. This opens a new obligation with the form pre-selected.
 3. Pick who must fill it and on what cadence, then click **Create obligation**.
 
-Anyone with access can also open and fill the app straight from the gallery, without an assignment. See [Managing compliance](/help/compliance-management) for tracking who is behind.
+Anyone with access can also open and fill the app straight from the gallery. That is an on-demand entry and does not clear a scheduled obligation. To complete a required app, open **Compliance** → **Mine** and use **Open app** on that exact obligation. See [Managing compliance](/help/compliance-management) for tracking who is behind.
 
 ## Automate with Flows
 
@@ -387,11 +456,21 @@ Flows run automatically when things happen on your form.
 2. Add a trigger, like **A record is submitted** or **A field matches a condition**.
 3. Connect actions, like **Send email**, **Create CAPA**, **Notify role**, or **Export PDF**.
 
+Rename a flow from its pencil button. Flow names can be up to 200 characters.
+
+**Export PDF** saves the generated file on that form response. The response list shows a **PDF** badge when it is ready. Running the action again replaces that response's previous generated file.
+
+Use **Start another form** to choose a published target app. Each run creates one draft and carries over the source record's owner, person, and site. The quick **Record actions** panel offers only actions that are complete as soon as they are added; configure actions that need recipients, fields, statuses, or a target app on the full **Flows** surface.
+
+Webhook actions send the record payload as JSON to a public **HTTPS** URL. BeaconHS owns the request headers, rejects local or private network destinations when you save the flow, and checks the destination again every time the flow runs.
+
 ## See the responses
 
 Every submission lands in [Form responses](/apps/responses). Filter by app and status, open any record, or click **Export CSV** to download the list.
 
 The [Builder gallery](/apps) is paged for large workspaces. Search app names or descriptions, filter by app type, then use **Sort** and **Direction** to change the order. Open an app to see its records. On that record list, search by record ID, subject, site, or submitter; filter by status; and click a column heading to sort. Your search, filters, sort, and page stay in the address so a shared link opens the same view.
+
+Inside a response, use **Response** for the saved answers and workflow. If the response created corrective actions or incidents, search and filter each list under **Spawned from this response**. Use **Comments** to search the full discussion or post a new note. Use **Audit trail** to search and filter the complete change history. A monitored response also shows the complete **Check-in history**, with search, kind, order, and page controls.
 
 ## Monitor timed sessions
 
@@ -467,7 +546,7 @@ Open the member to manage only this workspace's settings:
 
 Pending invitations cannot be marked active by an administrator. The person must prove control of the invited email by using the one-time link.
 
-A platform-level workspace suspension blocks normal member access, pending invitations, API keys, public kiosks, live badge pages, and in-browser Word or PowerPoint editing. Printed individual certificate links remain available so issued credentials can still be verified.
+A platform-level workspace suspension blocks normal member access, pending invitations, API keys, public kiosks, live badge pages, and in-browser Word or PowerPoint editing and playback. Printed individual certificate links remain available so issued credentials can still be verified.
 
 ## Account security
 
@@ -538,11 +617,36 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 
 On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing.
 
+## Build notification groups
+
+Notification groups are reusable alert audiences. One group can include roles, departments, sites, crews, trades, people groups, named people, or everyone. **Exclude** rows remove matching people from the final audience.
+
+1. Open **Admin**, then **Notifications**, then **Groups**.
+2. Use **Search group name or description** to find an existing group. The page shows the exact number of matches. Use **Prev** and **Next** to move through longer lists.
+3. Click **New group**, enter its name and optional description, and choose a colour.
+4. Click **Add member**. Choose **Include** or **Exclude**, choose the member type, then search for the role, team, or person.
+5. Check the live **Reaches** preview, then click **Create**. To change an existing group, open it and click **Save**.
+
+A group can contain up to 100 include or exclude rows. Names can be up to 200 characters, and descriptions can be up to 1,000 characters. Split a larger audience into focused groups so each one stays understandable.
+
 ## Integrations
 
 - **AI**, **Email**, and **SMS** — pick a provider and store its credentials securely.
 - **Integrations** — sync data in and send events out to other systems.
-- **API keys** — credentials for the public REST API. Search by key name or prefix and filter by active, expired, or revoked status. Choose the smallest permissions and explicitly select every Builder app the integration may access; forms permissions alone expose no apps. Write requests require an **Idempotency-Key**, and keys are rate-limited. API keys stop authenticating while the workspace is suspended or archived.
+- **API keys** — credentials for the public REST API. Search by key name or prefix and filter by active, expired, or revoked status. Choose the smallest permissions and explicitly select every Builder app the integration may access; forms permissions alone expose no apps. After you click **Generate**, copy each highlighted secret before you dismiss it; a secret is shown only once. Write requests require an **Idempotency-Key**, and keys are rate-limited. API keys stop authenticating while the workspace is suspended or archived.
+
+For an inbound data-sync connection, the schedule controls automatic runs only. A connection set to manual still owns the records it imported, so source-managed fields stay read-only. Use **Delete connection** only when you want those records handed back to manual management. Deleting the connection keeps the imported records; it removes the source ownership link.
+
+## Configure AI
+
+1. Open **Admin**, then click **AI**. Platform super-admins set the shared default under **Platform AI**.
+2. Choose the **Provider** and enter its API key.
+3. Choose the fast and smart models. Use **Load models** to read the provider's available model list, or enter the exact model IDs.
+4. For **Custom (OpenAI-compatible)**, enter a public **HTTPS** base URL with a valid certificate. Private, local, reserved, and unresolvable addresses are blocked. Named providers can use their built-in address by leaving **Base URL** blank.
+5. Turn on the provider and click **Save AI settings**.
+6. Click **Test saved connection** and confirm the model replies.
+
+The platform policy can let tenants choose their own provider, force every tenant to use the platform provider, or disable AI everywhere. API keys are encrypted at rest. Removing a key disables that saved provider; it does not bypass a platform default that still applies.
 
 ## Configure the platform email provider
 
@@ -573,9 +677,37 @@ This option is available only while the platform policy is **Tenants choose thei
 
 When the override is off, the tenant uses the platform default provider. Clicking **Remove key** removes the tenant credential and turns off the override; it does not stop email supplied by the platform default. Add a credential and enable the override again before sending another tenant-provider test.
 
+## Configure the platform SMS provider
+
+Platform super-admins set the default provider used for critical text-message notifications.
+
+1. Open **Platform**, then click **Platform SMS**.
+2. Choose the **Policy**. **Tenants choose their own (recommended)** lets a tenant override the default. **Force the platform default for all tenants** sends every tenant's SMS through this provider. **Disable all SMS (kill switch)** stops all SMS immediately.
+3. Choose the **Provider** and enter the required sender and provider account details.
+4. Enter the provider credential. If you change providers, enter the new provider's credential in the same save. BeaconHS never reuses one provider's saved credential with another provider.
+5. Click **Save platform SMS**.
+6. Under **Send a test through the platform provider**, enter a full E.164 number such as **+15551234567**, then click **Send test**.
+
+A successful test means the provider accepted the message. Confirm that the phone receives it. The global kill switch blocks test messages too. Platform tests are limited to five every ten minutes per administrator. Each tenant applies the same limit to its own test sends.
+
+## Configure a tenant SMS provider
+
+This option is available only while the platform policy is **Tenants choose their own (recommended)**.
+
+1. Open **Admin**, then **Notifications**, then **SMS**.
+2. Choose the **Provider** and enter its sender and account details.
+3. Enter the provider credential. Changing providers requires the new provider's credential.
+4. Turn on **Enable this tenant provider override**.
+5. Click **Save SMS settings**.
+6. Under **Send a test through this tenant's provider**, enter a full E.164 number such as **+15551234567**, then click **Send test**.
+
+When the override is off, the tenant uses the platform default provider. Clicking **Remove key** removes the tenant credential and turns off the override; it does not stop SMS supplied by the platform default. Add a credential and enable the override again before sending another tenant-provider test.
+
 Integration connections can reach public **HTTPS** services only. External database connections also need a public DNS name, valid **SSL/TLS**, and a certificate that matches that name. BeaconHS blocks local, private, and reserved network addresses. When sending to an external SQL table, enter its **Identity column** so a partial retry can remove completed inserts before trying again.
 
 If a sync uses **Archive after safe full pulls**, BeaconHS applies it only after a complete full snapshot. An empty entity or failed record blocks archiving and marks the run partial. A page-limit warning means BeaconHS processed only part of the source, so it also skips archiving. Check the run details before trying again.
+
+On a connection, **Run history** shows every attempt. Search by trigger, status, or error, or use **Status** and **Type** to separate live runs from previews. Use **Next** and **Prev** to move through older runs.
 
 On a sync run, use the record-decision search and the **Action** and **Entity** filters to review created, updated, skipped, failed, or conflicting rows. Click a sortable heading when you need a different order.
 

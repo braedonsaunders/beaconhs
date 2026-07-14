@@ -1,8 +1,7 @@
 // /ppe/types/new — admin form to define a new PPE type.
 //
-// The form mirrors the /ppe/types/[id]/edit form but starts blank. After
-// creating, the user is redirected to the type detail page so they can
-// configure the criteria + sizing scheme in dedicated sub-tabs.
+// The form creates the base type, then redirects to the unified type builder
+// where settings, criteria, and sizing are configured together.
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'

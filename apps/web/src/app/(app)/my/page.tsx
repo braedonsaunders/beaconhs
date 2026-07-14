@@ -25,7 +25,6 @@ import {
   incidents,
   inspectionRecords,
   people,
-  trainingAudienceAssignmentRecords,
   trainingRecords,
   trainingSkillAssignments,
 } from '@beaconhs/db/schema'
@@ -192,23 +191,6 @@ export default async function MyLandingPage() {
           .then((r) => Number(r[0]?.c ?? 0))
       : Promise.resolve(0)
 
-    const trainingAssignedPromise: Promise<number> = personId
-      ? tx
-          .select({ c: count() })
-          .from(trainingAudienceAssignmentRecords)
-          .where(
-            and(
-              eq(trainingAudienceAssignmentRecords.personId, personId),
-              or(
-                eq(trainingAudienceAssignmentRecords.status, 'pending'),
-                eq(trainingAudienceAssignmentRecords.status, 'in_progress'),
-                eq(trainingAudienceAssignmentRecords.status, 'overdue'),
-              ) as SQL<unknown>,
-            ),
-          )
-          .then((r) => Number(r[0]?.c ?? 0))
-      : Promise.resolve(0)
-
     // ---- inspections this user inspected ---------------------------------
     const inspectionsPromise: Promise<number> = membershipId
       ? tx
@@ -246,7 +228,6 @@ export default async function MyLandingPage() {
       overdueTasks: await overdueTasksPromise,
       trainingRecords: await trainingRecordsPromise,
       trainingExpiring: await trainingExpiringPromise,
-      trainingAssigned: await trainingAssignedPromise,
       inspections: await inspectionsPromise,
       skills: await skillsPromise,
     }
@@ -271,6 +252,14 @@ export default async function MyLandingPage() {
   const complianceOutstanding = complianceRows.filter((r) => r.status !== 'completed').length
   const complianceUrgent = complianceRows.filter(
     (r) => r.status === 'overdue' || r.status === 'expiring',
+  ).length
+  const trainingAssigned = complianceRows.filter(
+    (row) =>
+      (row.kind === 'training' || row.kind === 'cert_requirement') &&
+      (row.status === 'pending' ||
+        row.status === 'in_progress' ||
+        row.status === 'overdue' ||
+        row.status === 'expiring'),
   ).length
 
   const inProgressCount = counts.inProgress.length
@@ -324,8 +313,8 @@ export default async function MyLandingPage() {
       hint:
         counts.trainingExpiring > 0
           ? `${counts.trainingExpiring} expiring in 90d`
-          : counts.trainingAssigned > 0
-            ? `${counts.trainingAssigned} assigned`
+          : trainingAssigned > 0
+            ? `${trainingAssigned} assigned`
             : undefined,
       hintVariant: counts.trainingExpiring > 0 ? 'warning' : 'secondary',
     },

@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useCallback, useState, useTransition } from 'react'
 import { ScanLine } from 'lucide-react'
 import { StationClient } from '@/app/(app)/equipment/station/_station-client'
+import type { RemoteSearchLoader } from '@/components/remote-search-select'
 import {
   performKioskScan,
+  searchEquipmentKioskPicker,
   searchKioskScan,
   unlockEquipmentKiosk,
   type EquipmentKioskConfig,
@@ -17,6 +19,36 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
   const [pinInput, setPinInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+
+  const loadPicker = useCallback(
+    async (kind: 'holder' | 'location', input: Parameters<RemoteSearchLoader>[0]) => {
+      if (!pin) throw new Error('PIN required')
+      const result = await searchEquipmentKioskPicker({
+        tenantId,
+        pin,
+        kind,
+        query: input.query,
+        selected: input.selected,
+      })
+      if (!result.ok) {
+        if (/pin/i.test(result.error)) {
+          setPin(null)
+          setConfig(null)
+        }
+        throw new Error(result.error)
+      }
+      return { options: result.options, hasMore: result.hasMore }
+    },
+    [pin, tenantId],
+  )
+  const loadHolderOptions = useCallback<RemoteSearchLoader>(
+    (input) => loadPicker('holder', input),
+    [loadPicker],
+  )
+  const loadLocationOptions = useCallback<RemoteSearchLoader>(
+    (input) => loadPicker('location', input),
+    [loadPicker],
+  )
 
   function unlock(e: React.FormEvent) {
     e.preventDefault()
@@ -56,9 +88,10 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
           <input
             type="password"
             inputMode="numeric"
+            maxLength={12}
             autoFocus
             value={pinInput}
-            onChange={(e) => setPinInput(e.target.value)}
+            onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
             placeholder="PIN"
             className="w-full rounded-lg border-0 bg-slate-950 px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none"
           />
@@ -85,9 +118,9 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
       soundEnabled={config.soundEnabled}
       requireConditionOnCheckin={config.requireConditionOnCheckin}
       homeLocationName={config.homeLocationName}
-      people={config.people}
-      locations={config.locations}
       availableCount={config.availableCount}
+      holderOptionsLoader={loadHolderOptions}
+      locationOptionsLoader={loadLocationOptions}
       onSearch={async (query) => {
         const r = await searchKioskScan({ tenantId, pin, query })
         if (!r.ok) {

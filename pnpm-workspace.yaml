@@ -1,9 +1,21 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - '!packages/etl'
   - 'plugins/*'
 
 overrides:
+  # The published Excalidraw runtime ships precompiled JS/CSS but mistakenly
+  # declares its build-time Sass compiler as a production dependency.
+  '@excalidraw/excalidraw@0.18.1>sass': '-'
+  # BeaconHS has no Sass sources. Remove the optional compiler peer from the
+  # exact framework/tool versions so pnpm does not resolve an unused native
+  # toolchain merely because another package once exposed Sass transitively.
+  'next@16.2.10>sass': '-'
+  # The application loads pdfjs-dist only in a client component. Its optional
+  # Node canvas backend is unused and otherwise installs a second native ABI.
+  'pdfjs-dist@4.10.38>@napi-rs/canvas': '-'
+  'vite@8.1.4>sass': '-'
   dompurify: 3.4.11
   esbuild@0.18.20: 0.25.12
   esbuild@0.28.0: 0.28.1
@@ -13,7 +25,7 @@ overrides:
   lodash-es: 4.18.1
   nanoid@3.3.3: 3.3.12
   nanoid@4.0.2: 5.0.9
-  postcss@8.4.31: 8.5.15
+  postcss@8.4.31: 8.5.19
   undici@7.27.2: 7.28.0
   uuid@8.3.2: 11.1.1
 
@@ -21,6 +33,29 @@ peerDependencyRules:
   ignoreMissing:
     - react
     - react-dom
+  allowedVersions:
+    'unpdf@1.6.2>@napi-rs/canvas': '1.0.2'
+    # Excalidraw 0.18.1 explicitly supports React 19, but its pinned Radix 1.0
+    # internals predate Radix's peer-metadata update. These exact, tested
+    # transitive versions use the same stable hooks/DOM APIs under React 19.
+    '@radix-ui/react-tabs@1.0.2>react': '19.2.7'
+    '@radix-ui/react-tabs@1.0.2>react-dom': '19.2.7'
+    '@radix-ui/react-context@1.0.0>react': '19.2.7'
+    '@radix-ui/react-direction@1.0.0>react': '19.2.7'
+    '@radix-ui/react-id@1.0.0>react': '19.2.7'
+    '@radix-ui/react-use-layout-effect@1.0.0>react': '19.2.7'
+    '@radix-ui/react-roving-focus@1.0.2>react': '19.2.7'
+    '@radix-ui/react-roving-focus@1.0.2>react-dom': '19.2.7'
+    '@radix-ui/react-primitive@1.0.1>react': '19.2.7'
+    '@radix-ui/react-primitive@1.0.1>react-dom': '19.2.7'
+    '@radix-ui/react-slot@1.0.1>react': '19.2.7'
+    '@radix-ui/react-compose-refs@1.0.0>react': '19.2.7'
+    '@radix-ui/react-use-controllable-state@1.0.0>react': '19.2.7'
+    '@radix-ui/react-use-callback-ref@1.0.0>react': '19.2.7'
+    '@radix-ui/react-collection@1.0.1>react': '19.2.7'
+    '@radix-ui/react-collection@1.0.1>react-dom': '19.2.7'
+    '@radix-ui/react-presence@1.0.0>react': '19.2.7'
+    '@radix-ui/react-presence@1.0.0>react-dom': '19.2.7'
 
 patchedDependencies:
   pagedjs@0.4.3: patches/pagedjs@0.4.3.patch

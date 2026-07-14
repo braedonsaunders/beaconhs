@@ -3,8 +3,8 @@
 // in-app authored documents read the way they were written. Server component:
 // the sanitizer runs in Node during RSC render.
 
-import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { cn } from '@beaconhs/ui'
+import { SanitizedRichContent } from './sanitized-rich-content'
 
 export function RichContent({
   html,
@@ -13,10 +13,9 @@ export function RichContent({
   html: string | null | undefined
   className?: string
 }) {
-  const clean = sanitizeDocumentHtml(html)
-  if (!clean) return null
   return (
-    <div
+    <SanitizedRichContent
+      html={html}
       className={cn(
         'rich-content prose prose-slate max-w-none',
         'prose-headings:font-semibold prose-a:text-teal-700 dark:prose-a:text-teal-300',
@@ -25,7 +24,6 @@ export function RichContent({
         'prose-td:border prose-td:border-slate-200 dark:prose-td:border-slate-800 prose-td:px-2 prose-td:py-1',
         className,
       )}
-      dangerouslySetInnerHTML={{ __html: clean }}
     />
   )
 }

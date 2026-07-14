@@ -5,18 +5,24 @@
 // Mirrors the contract of journals/ai/route.ts but for a full agent loop.
 
 import { convertToModelMessages, type UIMessage } from 'ai'
-import { runAgentTurn, AIDisabledError, providerSupportsImageToolResults } from '@beaconhs/ai'
+import {
+  runAgentTurn,
+  AIDisabledError,
+  getModel,
+  providerSupportsImageToolResults,
+} from '@beaconhs/ai'
 import { can } from '@beaconhs/tenant'
 import { getRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import {
   appendMessage,
   createConversation,
-  getConversationMessages,
+  getConversationMessagePage,
   resolveConversationAccess,
 } from '@/lib/ai-conversations'
 import { buildToolRegistry } from '@/lib/assistant/registry'
 import { assistantSystemPrompt } from '@/lib/assistant/system-prompt'
+import { MAX_ASSISTANT_PROMPT_CHARS, MAX_ASSISTANT_REQUEST_BYTES } from '@/lib/assistant/limits'
 import {
   readBoundedJsonBody,
   RequestBodyLengthError,
@@ -24,20 +30,14 @@ import {
   RequestBodyTimeoutError,
   RequestBodyTooLargeError,
 } from '@/lib/request-body'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 // Agent turns run a multi-step tool loop — far longer than a single completion.
 export const maxDuration = 300
 
 const SCOPE = 'assistant'
-const MAX_HISTORY = 40
-const MAX_REQUEST_BYTES = 128 * 1024
-const MAX_PROMPT_LENGTH = 32_000
 const REQUEST_TIMEOUT_MS = 15_000
-
-// Conversation ids are uuid PKs — reject malformed ids before they reach a
-// uuid-typed column comparison (Postgres errors on invalid uuid input).
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Vision tool (view_document_pages) results carry base64 page images so the
 // model can SEE them this turn — but they must NOT be written into the saved
@@ -57,6 +57,38 @@ function stripVisionImages(parts: UIMessage['parts']): UIMessage['parts'] {
   })
 }
 
+function conversationResponse(
+  body: BodyInit | null,
+  status: number,
+  conversationId: string | null,
+): Response {
+  const headers = new Headers()
+  if (conversationId) headers.set('x-conversation-id', conversationId)
+  return new Response(body, { status, headers })
+}
+
+const TURN_FAILURE_MESSAGE = 'The assistant could not complete this response. Please try again.'
+
+async function persistFailedTurn(conversationId: string): Promise<void> {
+  try {
+    await appendMessage({
+      conversationId,
+      role: 'assistant',
+      content: TURN_FAILURE_MESSAGE,
+      data: {
+        v: 1,
+        kind: 'agent-turn',
+        status: 'failed',
+        finishReason: 'error',
+        aborted: false,
+        parts: [{ type: 'text', text: TURN_FAILURE_MESSAGE }],
+      },
+    })
+  } catch (error) {
+    console.error('[assistant/chat] failed to persist terminal error state', error)
+  }
+}
+
 export async function POST(req: Request): Promise<Response> {
   const ctx = await getRequestContext()
   if (!ctx) return new Response('Unauthorized', { status: 401 })
@@ -65,7 +97,7 @@ export async function POST(req: Request): Promise<Response> {
   let body: unknown
   try {
     body = await readBoundedJsonBody(req, {
-      maxBytes: MAX_REQUEST_BYTES,
+      maxBytes: MAX_ASSISTANT_REQUEST_BYTES,
       timeoutMs: REQUEST_TIMEOUT_MS,
     })
   } catch (error) {
@@ -88,7 +120,7 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('Bad request', { status: 400 })
   }
   if (typeof input.prompt !== 'string') return new Response('Invalid prompt', { status: 400 })
-  if (input.prompt.length > MAX_PROMPT_LENGTH) {
+  if (input.prompt.length > MAX_ASSISTANT_PROMPT_CHARS) {
     return new Response('Prompt too large', { status: 413 })
   }
   const prompt = input.prompt.trim()
@@ -97,48 +129,23 @@ export async function POST(req: Request): Promise<Response> {
   // Resolve / create the conversation. Only the OWNER may send a turn.
   let conversationId = input.conversationId ?? null
   if (conversationId) {
-    if (!UUID.test(conversationId)) return new Response('Bad request', { status: 400 })
-    if ((await resolveConversationAccess(conversationId)) !== 'owner') {
+    if (!isUuid(conversationId)) return new Response('Bad request', { status: 400 })
+    if ((await resolveConversationAccess(conversationId, SCOPE)) !== 'owner') {
       return new Response('Forbidden', { status: 403 })
     }
-  } else {
-    conversationId = await createConversation({ scope: SCOPE, title: prompt.slice(0, 60) })
   }
 
-  // Persist the user message FIRST so a dropped connection never loses the turn.
-  await appendMessage({ conversationId, role: 'user', content: prompt })
-
   const aiConfig = await getTenantAiConfig(ctx)
+  // Resolve provider/model readiness before creating a thread. A disabled or
+  // incomplete configuration must not leave an unreachable user-only chat.
+  if (!getModel(aiConfig, 'smart')) {
+    return conversationResponse('AI is not configured for this workspace.', 503, conversationId)
+  }
   // Vision tools (rendered scanned-PDF pages) are only exposed when the provider
   // accepts image content in a tool result — currently Anthropic.
   const tools = buildToolRegistry(ctx, {
     imageToolResults: providerSupportsImageToolResults(aiConfig),
   })
-
-  // Rebuild the model transcript from persisted history (cap to recent turns).
-  const history = (await getConversationMessages(conversationId)).slice(-MAX_HISTORY)
-  const uiMessages = history.map((m) => ({
-    role: m.role,
-    parts:
-      m.data && Array.isArray((m.data as { parts?: unknown }).parts)
-        ? ((m.data as { parts: unknown }).parts as UIMessage['parts'])
-        : ([{ type: 'text', text: m.content }] as UIMessage['parts']),
-  }))
-
-  let modelMessages
-  try {
-    modelMessages = await convertToModelMessages(uiMessages, {
-      tools,
-      ignoreIncompleteToolCalls: true,
-    })
-  } catch {
-    // Fall back to a plain text transcript if a stored part can't be converted.
-    modelMessages = await convertToModelMessages(
-      history.map((m) => ({ role: m.role, parts: [{ type: 'text', text: m.content }] })),
-      { ignoreIncompleteToolCalls: true },
-    )
-  }
-
   const system = assistantSystemPrompt({
     orgName: aiConfig?.org?.name ?? null,
     userName: ctx.membership?.displayName ?? null,
@@ -146,7 +153,44 @@ export async function POST(req: Request): Promise<Response> {
     canWrite: can(ctx, 'assistant.write'),
   })
 
+  if (!conversationId) {
+    conversationId = await createConversation({ scope: SCOPE, title: prompt.slice(0, 60) })
+  }
+  let userPersisted = false
   try {
+    // Persist first so a dropped connection cannot lose a turn that actually started.
+    await appendMessage({ conversationId, role: 'user', content: prompt })
+    userPersisted = true
+
+    // Fetch exactly the recent model window in SQL; never materialize the full transcript.
+    const history = (await getConversationMessagePage({ conversationId })).items
+    const uiMessages = history.map((message) => ({
+      role: message.role,
+      parts:
+        message.data &&
+        Array.isArray((message.data as { parts?: unknown }).parts) &&
+        (message.data as { parts: unknown[] }).parts.length > 0
+          ? ((message.data as { parts: unknown }).parts as UIMessage['parts'])
+          : ([{ type: 'text', text: message.content }] as UIMessage['parts']),
+    }))
+
+    let modelMessages
+    try {
+      modelMessages = await convertToModelMessages(uiMessages, {
+        tools,
+        ignoreIncompleteToolCalls: true,
+      })
+    } catch {
+      // Fall back to plain text if an older persisted tool part is no longer convertible.
+      modelMessages = await convertToModelMessages(
+        history.map((message) => ({
+          role: message.role,
+          parts: [{ type: 'text', text: message.content }],
+        })),
+        { ignoreIncompleteToolCalls: true },
+      )
+    }
+
     const res = runAgentTurn(aiConfig, {
       messages: modelMessages,
       system,
@@ -158,17 +202,29 @@ export async function POST(req: Request): Promise<Response> {
           .map((p) => p.text)
           .join('\n')
           .trim()
+        const fallback = aborted
+          ? 'Response stopped.'
+          : finishReason === 'error'
+            ? TURN_FAILURE_MESSAGE
+            : ''
+        const content = text || fallback
+        const persistedParts = parts.length
+          ? stripVisionImages(parts)
+          : content
+            ? ([{ type: 'text', text: content }] as UIMessage['parts'])
+            : []
         await appendMessage({
           conversationId: conversationId!,
           role: 'assistant',
-          content: text || (aborted ? '(stopped)' : ''),
+          content,
           data: {
             v: 1,
             kind: 'agent-turn',
+            status: aborted ? 'stopped' : finishReason === 'error' ? 'failed' : 'complete',
             finishReason,
             aborted,
             usage,
-            parts: stripVisionImages(parts),
+            parts: persistedParts,
           },
         })
       },
@@ -179,10 +235,11 @@ export async function POST(req: Request): Promise<Response> {
     headers.set('x-conversation-id', conversationId)
     return new Response(res.body, { status: res.status, headers })
   } catch (err) {
+    if (userPersisted) await persistFailedTurn(conversationId)
     if (err instanceof AIDisabledError) {
-      return new Response('AI is not configured for this workspace.', { status: 503 })
+      return conversationResponse('AI is not configured for this workspace.', 503, conversationId)
     }
     console.error('[assistant/chat] failed', err)
-    return new Response('Assistant request failed.', { status: 500 })
+    return conversationResponse('Assistant request failed.', 500, conversationId)
   }
 }

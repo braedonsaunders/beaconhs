@@ -110,13 +110,7 @@ type CreateIncidentFromResponseInput = {
   title: string
   description?: string | null
   type?:
-    | 'injury'
-    | 'illness'
-    | 'near_miss'
-    | 'property_damage'
-    | 'environmental'
-    | 'security'
-    | 'other'
+    'injury' | 'illness' | 'near_miss' | 'property_damage' | 'environmental' | 'security' | 'other'
   severity?: 'first_aid_only' | 'medical_aid' | 'lost_time' | 'fatality' | 'no_injury'
   occurredAt?: string | null
   siteOrgUnitId?: string | null

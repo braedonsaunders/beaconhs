@@ -240,7 +240,7 @@ export default async function EquipmentCategoriesPage({
         <>
           <PageHeader
             title="Equipment categories"
-            description="Buckets that group equipment types — e.g. Tools, Vehicles, Lifts. Used in the rate matrix and reports."
+            description="Buckets that group equipment types — e.g. Tools, Vehicles, Lifts. Used to organize the register, filters, and reports."
             actions={
               <Link href={newHref as never} scroll={false}>
                 <Button>
@@ -260,7 +260,7 @@ export default async function EquipmentCategoriesPage({
         <EmptyState
           icon={<Tags size={32} />}
           title={params.q ? 'No categories match your search' : 'No categories'}
-          description="Create a category to organise equipment types in the rate matrix."
+          description="Create a category to organize equipment types in the register, filters, and reports."
           action={
             <Link href={newHref as never} scroll={false}>
               <Button>New category</Button>

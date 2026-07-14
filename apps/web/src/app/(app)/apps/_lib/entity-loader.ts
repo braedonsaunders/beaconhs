@@ -8,12 +8,7 @@
 
 import 'server-only'
 import { loadEntitiesForFormPickers, type EntitiesByField } from '@beaconhs/db'
-import {
-  ENTITY_ATTRS,
-  entityKindForPicker,
-  type FormField,
-  type FormSchemaV1,
-} from '@beaconhs/forms-core'
+import { entityKindForPicker, type FormField, type FormSchemaV1 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 
 /**

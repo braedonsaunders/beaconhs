@@ -6,16 +6,13 @@ import { eq } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { tenants } from '@beaconhs/db/schema'
 import { renderDesignDocumentPdf } from '@beaconhs/forms-pdf'
-import {
-  createCertificateDesignDocument,
-  createWalletDesignDocument,
-  type CredentialDesignData,
-} from '@beaconhs/design-studio'
+import { type CredentialDesignData } from '@beaconhs/design-studio'
 import { requireRequestContext } from '@/lib/auth'
 import {
-  CREDENTIAL_OUTPUTS_SETTINGS_KEY,
-  normalizeCredentialOutputs,
-} from '@/lib/credential-designs'
+  CREDENTIAL_OUTPUT_LIMITS,
+  CredentialDesignValidationError,
+  parseCredentialOutputForPreview,
+} from '@/lib/credential-design-write'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 import {
   readBoundedJsonBody,
@@ -25,7 +22,7 @@ import {
   RequestBodyTooLargeError,
 } from '@/lib/request-body'
 
-const MAX_DESIGN_BYTES = 512_000
+const MAX_DESIGN_BYTES = CREDENTIAL_OUTPUT_LIMITS.maxJsonBytes
 const MAX_DESIGN_READ_MS = 15_000
 
 export async function POST(request: Request) {
@@ -52,20 +49,25 @@ export async function POST(request: Request) {
     }
     return new Response('Invalid request body', { status: 400 })
   }
-  if (!body || typeof body !== 'object' || !('output' in body) || !body.output) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return new Response('Missing design', { status: 400 })
   }
+  const requestBody = body as Record<string, unknown>
+  if (Object.keys(requestBody).some((key) => key !== 'output') || !requestBody.output) {
+    return new Response('Invalid design request', { status: 400 })
+  }
 
-  // Same normalization path as saving — clamps, colors, document shape.
-  const [output] = normalizeCredentialOutputs({
-    [CREDENTIAL_OUTPUTS_SETTINGS_KEY]: [body.output],
-  })
-  if (!output) return new Response('Invalid design', { status: 400 })
-  const document =
-    output.document ??
-    (output.format === 'wallet'
-      ? createWalletDesignDocument(output)
-      : createCertificateDesignDocument(output))
+  let output: ReturnType<typeof parseCredentialOutputForPreview>
+  try {
+    output = parseCredentialOutputForPreview(requestBody.output)
+  } catch (error) {
+    if (error instanceof CredentialDesignValidationError) {
+      return new Response(error.message, { status: 400 })
+    }
+    console.error('[credential-designs] preview validation failed unexpectedly', error)
+    return new Response('Invalid design', { status: 400 })
+  }
+  const document = output.document!
 
   const tenant = await ctx.db(async (tx) => {
     const [row] = await tx

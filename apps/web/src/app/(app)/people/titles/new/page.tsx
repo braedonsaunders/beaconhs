@@ -7,8 +7,14 @@ import { createTitle } from '../../_actions/titles'
 export const metadata = { title: 'New job title' }
 export const dynamic = 'force-dynamic'
 
-export default async function NewTitlePage() {
+export default async function NewTitlePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   await requireModuleManage('people')
+  const sp = await searchParams
+  const errorMessage = typeof sp.error === 'string' ? sp.error : null
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-5">
@@ -17,6 +23,11 @@ export default async function NewTitlePage() {
           title="New job title"
           subtitle="Define the Job Description fields once — every person assigned to this title shares them."
         />
+        {errorMessage ? (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+            {errorMessage}
+          </p>
+        ) : null}
         <Card>
           <CardContent className="pt-6">
             <form action={createTitle} className="space-y-4">

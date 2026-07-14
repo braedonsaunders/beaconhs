@@ -95,8 +95,7 @@ export type BhqlExpr =
 
 /** Bucketing applied to a breakout dimension. */
 export type BhqlBin =
-  | { kind: 'temporal'; unit: BhqlTemporalUnit }
-  | { kind: 'numeric'; numBins: number }
+  { kind: 'temporal'; unit: BhqlTemporalUnit } | { kind: 'numeric'; numBins: number }
 
 /** A group-by dimension, optionally bucketed. Exactly one of `field` (a column
  *  ref) or `expr` (a computed expression — e.g. a CASE age bucket) is set. */

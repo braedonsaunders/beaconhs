@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import {
   formResponses,
   formTemplateVersions,
@@ -16,6 +16,7 @@ import { parseBuilderReturnTo } from '@/app/(app)/apps/_lib/return-to'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { isUuid } from '@/lib/list-params'
 import { canSeeRecord } from '@/lib/visibility'
+import { loadApplicableFormObligation } from '@/lib/forms/form-compliance-obligation'
 import { FormRenderer } from './form-renderer'
 
 export const dynamic = 'force-dynamic'
@@ -35,8 +36,14 @@ export default async function FillTemplatePage({
   const { id } = await params
   const sp = await searchParams
   const responseIdParam = typeof sp.responseId === 'string' ? sp.responseId : null
+  const obligationIdParam = typeof sp.obligationId === 'string' ? sp.obligationId : null
   const returnTo = parseBuilderReturnTo(sp.returnTo)
-  if (!isUuid(id) || (responseIdParam !== null && !isUuid(responseIdParam))) notFound()
+  if (
+    !isUuid(id) ||
+    (responseIdParam !== null && !isUuid(responseIdParam)) ||
+    (obligationIdParam !== null && !isUuid(obligationIdParam))
+  )
+    notFound()
 
   const ctx = await requireRequestContext()
   const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
@@ -64,6 +71,7 @@ export default async function FillTemplatePage({
       submittedBy: string | null
       subjectPersonId: string | null
       siteOrgUnitId: string | null
+      complianceObligationId: string | null
     } | null = null
     if (responseIdParam) {
       const [row] = await tx
@@ -79,6 +87,7 @@ export default async function FillTemplatePage({
           submittedBy: formResponses.submittedBy,
           subjectPersonId: formResponses.subjectPersonId,
           siteOrgUnitId: formResponses.siteOrgUnitId,
+          complianceObligationId: formResponses.complianceObligationId,
         })
         .from(formResponses)
         .where(
@@ -101,6 +110,7 @@ export default async function FillTemplatePage({
           submittedBy: row.submittedBy,
           subjectPersonId: row.subjectPersonId,
           siteOrgUnitId: row.siteOrgUnitId,
+          complianceObligationId: row.complianceObligationId,
         }
       }
       if (!responseRow) return null
@@ -112,6 +122,25 @@ export default async function FillTemplatePage({
       })
       if (!visible) return null
     }
+
+    if (
+      responseRow &&
+      obligationIdParam &&
+      responseRow.complianceObligationId !== obligationIdParam
+    ) {
+      return null
+    }
+    const linkedObligation = responseRow
+      ? null
+      : obligationIdParam
+        ? await loadApplicableFormObligation(tx, {
+            tenantId: ctx.tenantId,
+            obligationId: obligationIdParam,
+            templateId: id,
+            personId: ctx.personId,
+          })
+        : null
+    if (!responseRow && obligationIdParam && !linkedObligation) return null
 
     // Existing responses are immutable snapshots of the template version they
     // started on. Loading the latest version here would render one schema while
@@ -125,7 +154,11 @@ export default async function FillTemplatePage({
               eq(formTemplateVersions.id, responseRow.templateVersionId),
               eq(formTemplateVersions.templateId, id),
             )
-          : eq(formTemplateVersions.templateId, id),
+          : and(
+              eq(formTemplateVersions.templateId, id),
+              eq(formTemplateVersions.tenantId, ctx.tenantId),
+              isNotNull(formTemplateVersions.publishedAt),
+            ),
       )
       .orderBy(desc(formTemplateVersions.version))
       .limit(1)
@@ -162,6 +195,7 @@ export default async function FillTemplatePage({
       people: allPeople,
       currentPerson: currentPerson[0] ?? null,
       responseRow,
+      complianceObligationId: responseRow?.complianceObligationId ?? linkedObligation?.id ?? null,
     }
   })
 
@@ -252,6 +286,7 @@ export default async function FillTemplatePage({
       readOnly={readOnly}
       responseStatus={response?.status ?? null}
       reviewHref={reviewHref}
+      complianceObligationId={data.complianceObligationId}
     />
   )
 }

@@ -24,20 +24,12 @@ export type QuickActionOption = {
 export type QuickActionOptions = {
   /** Curated create-CTAs + permitted navigation destinations. */
   common: QuickActionOption[]
-  /** Published forms & Builder apps for the tenant. */
-  forms: QuickActionOption[]
+  /** Whether the purpose-scoped app/form lookup is available to this caller. */
+  canChooseApps: boolean
 }
 
 type QuickActionTone =
-  | 'rose'
-  | 'orange'
-  | 'amber'
-  | 'emerald'
-  | 'teal'
-  | 'sky'
-  | 'blue'
-  | 'violet'
-  | 'slate'
+  'rose' | 'orange' | 'amber' | 'emerald' | 'teal' | 'sky' | 'blue' | 'violet' | 'slate'
 
 type ToneClasses = {
   /** Border + surface + hover + focus ring for the tile (light + dark). */

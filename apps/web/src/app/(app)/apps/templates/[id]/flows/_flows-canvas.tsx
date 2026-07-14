@@ -53,6 +53,7 @@ import type {
 import { emptyAutomationGraph } from '@beaconhs/forms-core'
 import { LogicBuilder } from '../designer/logic-builder'
 import { toast } from '@/lib/toast'
+import { MAX_FLOW_NAME_LENGTH } from '@/lib/flows/flow-name-policy'
 import {
   createFlow,
   deleteFlow,
@@ -63,9 +64,18 @@ import {
 } from '@/lib/flows/flow-crud'
 import { generateFlowDraft } from '../../../_ai-actions'
 import { compileEmailDesign } from '@/lib/flows/email-design-actions'
+import { serializeTemplateEditor } from '@/lib/template-builder-html'
 
 type EmailTemplateOption = { id: string; name: string }
 type PdfTemplateOption = { id: string; name: string }
+type TargetAppOption = { id: string; name: string }
+type ActionFieldOptions = {
+  all: string[]
+  writable: string[]
+  photoSources: string[]
+  textOutputs: string[]
+  numeric: string[]
+}
 
 // Pickable people / roles / departments for the send_email recipient editor.
 export type RecipientOptions = {
@@ -273,8 +283,7 @@ type FlowMeta = { id: string; name: string; enabled: boolean }
 type NData = AutomationNode['data']
 type FlowNode = Node<NData>
 
-let _seq = 0
-const newId = (p: string) => `${p}_${(_seq += 1)}_${Math.random().toString(36).slice(2, 6)}`
+const newId = (prefix: string) => `${prefix}_${globalThis.crypto.randomUUID()}`
 
 function toFlow(graph: AutomationGraph): { nodes: FlowNode[]; edges: Edge[] } {
   return {
@@ -383,7 +392,7 @@ function buildTrigger(
   if (v === 'manual')
     return {
       trigger: 'manual',
-      buttonId: `btn_${Math.random().toString(36).slice(2, 10)}`,
+      buttonId: newId('btn'),
       label: 'Run flow',
     }
   return { trigger: v } as TriggerData
@@ -475,7 +484,12 @@ function ActionNode({ data, selected }: NodeProps) {
 
 // --- Default node data ------------------------------------------------------
 
-function defaultData(kind: NData['kind'], firstField: string, profile: FlowSubjectProfile): NData {
+function defaultData(
+  kind: NData['kind'],
+  firstField: string,
+  profile: FlowSubjectProfile,
+  actionFields: ActionFieldOptions,
+): NData {
   switch (kind) {
     case 'trigger':
       return {
@@ -496,7 +510,7 @@ function defaultData(kind: NData['kind'], firstField: string, profile: FlowSubje
     case 'action':
       return {
         kind: 'action',
-        action: defaultAction(profile.actions[0] ?? 'send_email', firstField ? [firstField] : []),
+        action: defaultAction(profile.actions[0] ?? 'send_email', actionFields),
       }
   }
 }
@@ -742,6 +756,7 @@ export function FlowsCanvas({
   profile,
   emailTemplates,
   pdfTemplates = [],
+  targetApps = [],
   recipientOptions = EMPTY_RECIPIENT_OPTIONS,
   flows,
   canEdit,
@@ -752,6 +767,7 @@ export function FlowsCanvas({
   profile: FlowSubjectProfile
   emailTemplates: EmailTemplateOption[]
   pdfTemplates?: PdfTemplateOption[]
+  targetApps?: TargetAppOption[]
   recipientOptions?: RecipientOptions
   flows: FlowSummary[]
   canEdit: boolean
@@ -766,6 +782,20 @@ export function FlowsCanvas({
   const subject: FlowSubjectRef = { type: profile.subjectType, key: profile.subjectKey }
   const subjectLabel = profile.label
   const fieldIds = useMemo(() => profile.fields.map((f) => f.key), [profile])
+  const actionFields = useMemo<ActionFieldOptions>(
+    () => ({
+      all: profile.fields.map((field) => field.key),
+      writable: profile.fields
+        .filter((field) => field.writable !== false)
+        .map((field) => field.key),
+      photoSources: profile.fields.filter((field) => field.photoSource).map((field) => field.key),
+      textOutputs: profile.fields.filter((field) => field.textOutput).map((field) => field.key),
+      numeric: profile.fields
+        .filter((field) => field.kind === 'number' && field.writable !== false)
+        .map((field) => field.key),
+    }),
+    [profile],
+  )
   // Working graphs live in a ref keyed by flow id; switching flows captures the
   // current canvas into the ref and loads the target's graph. Save persists the
   // selected flow only (n8n-style). The sidebar list holds name/enabled.
@@ -854,17 +884,33 @@ export function FlowsCanvas({
         setFlowList((list) =>
           list.map((flow) => (flow.id === id ? { ...flow, enabled: !enabled } : flow)),
         )
-        toast.error(enabled ? 'Save a valid flow before enabling it' : 'Could not disable the flow')
+        toast.error(
+          result.error ??
+            (enabled ? 'Save a valid flow before enabling it' : 'Could not disable the flow'),
+        )
       }
     })
   }
 
   const commitRename = (id: string) => {
     const nm = editName.trim() || 'Flow'
+    if (nm.length > MAX_FLOW_NAME_LENGTH) {
+      toast.error(`Flow name cannot exceed ${MAX_FLOW_NAME_LENGTH} characters`)
+      return
+    }
+    const previousName = flowList.find((flow) => flow.id === id)?.name
     setFlowList((l) => l.map((f) => (f.id === id ? { ...f, name: nm } : f)))
     setEditingId(null)
     start(async () => {
-      await renameFlow(id, nm)
+      const result = await renameFlow(id, nm)
+      if (!result.ok) {
+        if (previousName) {
+          setFlowList((list) =>
+            list.map((flow) => (flow.id === id ? { ...flow, name: previousName } : flow)),
+          )
+        }
+        toast.error(result.error ?? 'Could not rename the flow')
+      }
     })
   }
 
@@ -891,7 +937,7 @@ export function FlowsCanvas({
       id,
       type: kind,
       position: { x: 80 + Math.random() * 240, y: 80 + Math.random() * 240 },
-      data: defaultData(kind, fieldIds[0] ?? '', profile),
+      data: defaultData(kind, fieldIds[0] ?? '', profile, actionFields),
     }
     setNodes((ns) => [...ns, node])
     setSelectedNodeId(id)
@@ -1011,6 +1057,7 @@ export function FlowsCanvas({
                     <input
                       autoFocus
                       value={editName}
+                      maxLength={MAX_FLOW_NAME_LENGTH}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => setEditName(e.target.value)}
                       onBlur={() => commitRename(f.id)}
@@ -1221,10 +1268,12 @@ export function FlowsCanvas({
           <NodeInspector
             data={selectedNode.data}
             fieldIds={fieldIds}
+            actionFields={actionFields}
             availableFields={availableFields}
             profile={profile}
             emailTemplates={emailTemplates}
             pdfTemplates={pdfTemplates}
+            targetApps={targetApps}
             recipientOptions={recipientOptions}
             readOnly={!canEdit}
             onChange={(d) => patchData(selectedNode.id, d)}
@@ -1299,20 +1348,24 @@ export function FlowsCanvas({
 function NodeInspector({
   data,
   fieldIds,
+  actionFields,
   availableFields,
   profile,
   emailTemplates,
   pdfTemplates,
+  targetApps,
   recipientOptions,
   readOnly,
   onChange,
 }: {
   data: NData
   fieldIds: string[]
+  actionFields: ActionFieldOptions
   availableFields: { id: string; label: string }[]
   profile: FlowSubjectProfile
   emailTemplates: EmailTemplateOption[]
   pdfTemplates: PdfTemplateOption[]
+  targetApps: TargetAppOption[]
   recipientOptions: RecipientOptions
   readOnly: boolean
   onChange: (d: NData) => void
@@ -1581,9 +1634,11 @@ function NodeInspector({
     <ActionInspector
       data={data}
       fieldIds={fieldIds}
+      actionFields={actionFields}
       actions={profile.actions}
       emailTemplates={emailTemplates}
       pdfTemplates={pdfTemplates}
+      targetApps={targetApps}
       recipientOptions={recipientOptions}
       readOnly={readOnly}
       onChange={onChange}
@@ -1594,18 +1649,22 @@ function NodeInspector({
 function ActionInspector({
   data,
   fieldIds,
+  actionFields,
   actions,
   emailTemplates,
   pdfTemplates,
+  targetApps,
   recipientOptions,
   readOnly,
   onChange,
 }: {
   data: Extract<NData, { kind: 'action' }>
   fieldIds: string[]
+  actionFields: ActionFieldOptions
   actions: ActionData['action'][]
   emailTemplates: EmailTemplateOption[]
   pdfTemplates: PdfTemplateOption[]
+  targetApps: TargetAppOption[]
   recipientOptions: RecipientOptions
   readOnly: boolean
   onChange: (d: NData) => void
@@ -1625,14 +1684,13 @@ function ActionInspector({
     if (!ed || a.action !== 'send_email') return
     setDesignBusy(true)
     try {
-      const design = ed.getProjectData() as Record<string, unknown>
-      const mjmlSource = ed.getHtml()
-      const res = await compileEmailDesign(mjmlSource)
-      if (!res.ok) {
+      const sourceHtml = serializeTemplateEditor(ed)
+      const res = await compileEmailDesign(sourceHtml)
+      if (!res.ok || !res.html || !res.sourceHtml) {
         toast.error(res.error ?? 'Could not compile the design')
         return
       }
-      set({ ...a, mode: 'design', design, compiledHtml: res.html ?? '' })
+      set({ ...a, mode: 'design', sourceHtml: res.sourceHtml, compiledHtml: res.html })
       setDesignOpen(false)
     } finally {
       setDesignBusy(false)
@@ -1658,7 +1716,7 @@ function ActionInspector({
           </div>
           <div className="min-h-0 flex-1">
             <EmailDesignBuilder
-              initialDesign={a.action === 'send_email' ? (a.design ?? null) : null}
+              initialHtml={a.action === 'send_email' ? (a.sourceHtml ?? null) : null}
               mergeFields={fieldIds.map((f) => ({ key: f }))}
               onReady={(ed) => {
                 designRef.current = ed
@@ -1671,7 +1729,7 @@ function ActionInspector({
         <Select
           value={a.action}
           disabled={readOnly}
-          onChange={(e) => set(defaultAction(e.target.value as ActionData['action'], fieldIds))}
+          onChange={(e) => set(defaultAction(e.target.value as ActionData['action'], actionFields))}
         >
           {actionChoices.map((k) => (
             <option key={k} value={k}>
@@ -1917,7 +1975,7 @@ function ActionInspector({
               onChange={(e) => set({ ...a, field: e.target.value })}
             >
               <option value="">— pick a field —</option>
-              {fieldIds.map((f) => (
+              {actionFields.writable.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -1966,6 +2024,23 @@ function ActionInspector({
         </>
       ) : null}
 
+      {a.action === 'create_response' ? (
+        <Field label="Published target app">
+          <SearchSelect
+            value={a.templateId}
+            disabled={readOnly}
+            options={targetApps.map((app) => ({ value: app.id, label: app.name }))}
+            placeholder="Choose an app"
+            sheetTitle="Target app"
+            ariaLabel="Target app"
+            onChange={(templateId) => set({ ...a, templateId })}
+          />
+          <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+            Creates one draft and carries over the source record&apos;s owner, person, and site.
+          </p>
+        </Field>
+      ) : null}
+
       {a.action === 'analyze_photos' ? (
         <>
           <Field label="Photo field">
@@ -1975,7 +2050,7 @@ function ActionInspector({
               onChange={(e) => set({ ...a, fieldId: e.target.value })}
             >
               <option value="">— pick a field —</option>
-              {fieldIds.map((f) => (
+              {actionFields.photoSources.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -1989,7 +2064,7 @@ function ActionInspector({
               onChange={(e) => set({ ...a, storeInField: e.target.value || undefined })}
             >
               <option value="">— none —</option>
-              {fieldIds.map((f) => (
+              {actionFields.textOutputs.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -2034,7 +2109,7 @@ function ActionInspector({
             label="Check-in interval (min)"
             value={a.intervalMinutes}
             fieldKey={a.intervalFieldKey}
-            fieldIds={fieldIds}
+            fieldIds={actionFields.numeric}
             readOnly={readOnly}
             onValue={(v) => set({ ...a, intervalMinutes: Math.max(1, v) })}
             onField={(k) => set({ ...a, intervalFieldKey: k })}
@@ -2043,7 +2118,7 @@ function ActionInspector({
             label="Grace period (min)"
             value={a.graceMinutes}
             fieldKey={a.graceFieldKey}
-            fieldIds={fieldIds}
+            fieldIds={actionFields.numeric}
             readOnly={readOnly}
             onValue={(v) => set({ ...a, graceMinutes: Math.max(0, v) })}
             onField={(k) => set({ ...a, graceFieldKey: k })}
@@ -2052,7 +2127,7 @@ function ActionInspector({
             label="Expected duration (min)"
             value={a.durationMinutes ?? 0}
             fieldKey={a.durationFieldKey}
-            fieldIds={fieldIds}
+            fieldIds={actionFields.numeric}
             readOnly={readOnly}
             onValue={(v) => set({ ...a, durationMinutes: Math.max(0, v) })}
             onField={(k) => set({ ...a, durationFieldKey: k })}
@@ -2121,7 +2196,7 @@ function MonitorNum({
   )
 }
 
-function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionData {
+function defaultAction(kind: ActionData['action'], fields: ActionFieldOptions): ActionData {
   switch (kind) {
     case 'send_email':
       return { action: 'send_email', to: [{ type: 'submitter' }], subject: '', bodyTemplate: '' }
@@ -2134,7 +2209,7 @@ function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionDa
     case 'set_field':
       return {
         action: 'set_field',
-        field: fieldIds[0] ?? '',
+        field: fields.writable[0] ?? '',
         value: { kind: 'literal', value: '' },
       }
     case 'flag_non_compliant':
@@ -2144,7 +2219,7 @@ function defaultAction(kind: ActionData['action'], fieldIds: string[]): ActionDa
     case 'create_response':
       return { action: 'create_response', templateId: '' }
     case 'analyze_photos':
-      return { action: 'analyze_photos', fieldId: fieldIds[0] ?? '' }
+      return { action: 'analyze_photos', fieldId: fields.photoSources[0] ?? '' }
     case 'start_monitored_session':
       return {
         action: 'start_monitored_session',

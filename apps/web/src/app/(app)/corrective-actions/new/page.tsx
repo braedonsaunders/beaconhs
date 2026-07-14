@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { asc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -14,14 +14,16 @@ import {
   Select,
   Textarea,
 } from '@beaconhs/ui'
-import { correctiveActions, incidents, orgUnits } from '@beaconhs/db/schema'
+import { correctiveActions, incidents } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
+import { RemoteSelectField } from '@/components/remote-search-select'
 import { nextReference } from '@/lib/reference'
 
 export const metadata = { title: 'New corrective action' }
@@ -52,7 +54,7 @@ async function createCA(formData: FormData) {
   const dueOn = String(formData.get('dueOn') ?? '').trim() || null
   const assignedOn = new Date().toISOString().slice(0, 10)
 
-  const [row] = await ctx.db(async (tx) => {
+  const row = await ctx.db(async (tx) => {
     const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
     const created = await tx
       .insert(correctiveActions)
@@ -99,18 +101,22 @@ async function createCA(formData: FormData) {
           }),
         },
       })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'corrective_action',
+        entityId: correctiveAction.id,
+        action: 'create',
+        summary: `Created ${correctiveAction.reference}: ${title}`,
+        after: { reference: correctiveAction.reference, severity, source, dueOn, siteOrgUnitId },
+      })
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'corrective_action',
+        targetRef: {},
+      })
     }
-    return created
+    return correctiveAction ?? null
   })
   revalidatePath('/corrective-actions')
   if (row) {
-    await recordAudit(ctx, {
-      entityType: 'corrective_action',
-      entityId: row.id,
-      action: 'create',
-      summary: `Created ${row.reference}: ${title}`,
-      after: { reference: row.reference, severity, source, dueOn, siteOrgUnitId },
-    })
     redirect(`/corrective-actions/${row.id}`)
   }
   redirect('/corrective-actions')
@@ -126,18 +132,13 @@ export default async function NewCAPage({
   const presetSourceId = pickString(sp.sourceEntityId)
   const ctx = await requireRequestContext()
 
-  const [sites, sourceIncident] = await ctx.db(async (tx) => {
-    const s = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      .where(eq(orgUnits.level, 'site'))
-      .orderBy(asc(orgUnits.name))
+  const sourceIncident = await ctx.db(async (tx) => {
     let inc = null
     if (presetSourceType === 'incident' && presetSourceId) {
       const [i] = await tx.select().from(incidents).where(eq(incidents.id, presetSourceId)).limit(1)
       inc = i ?? null
     }
-    return [s, inc] as const
+    return inc
   })
 
   return (
@@ -190,14 +191,14 @@ export default async function NewCAPage({
                   </Select>
                 </Field>
                 <Field label="Site">
-                  <Select name="siteOrgUnitId" defaultValue="">
-                    <option value="">—</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <RemoteSelectField
+                    lookup="corrective-action-sites"
+                    name="siteOrgUnitId"
+                    placeholder="Select a site…"
+                    searchPlaceholder="Search sites…"
+                    sheetTitle="Select a site"
+                    emptyLabel="—"
+                  />
                 </Field>
                 <Field label="Due on">
                   <Input name="dueOn" type="date" />

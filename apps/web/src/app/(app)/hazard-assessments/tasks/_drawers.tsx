@@ -1,7 +1,9 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { normalizeDocumentHref } from '@beaconhs/forms-core'
 import { Button, Input, Label, RichTextEditor, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { toast } from '@/lib/toast'
 import { MultiPicker } from '../_multipicker'
 import { RiskMatrixField } from '../_risk'
 
@@ -145,6 +147,10 @@ function TaskDrawer({
                 defaultValue={defaults?.controls ?? ''}
                 placeholder="LOTO, double-block & bleed, PPE..."
                 minHeight="140px"
+                normalizeLink={normalizeDocumentHref}
+                onInvalidLink={() =>
+                  toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')
+                }
               />
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">

@@ -72,8 +72,11 @@ Prettier violations that fail CI.
 - `packages/jobs`: BullMQ queue definitions and Redis connection.
 - `packages/events`: module event fan-out into notifications/jobs.
 - `packages/storage`: S3-compatible storage client for MinIO/R2.
-- `packages/ai`, `packages/audit`, `packages/emails`, `packages/etl`,
-  `packages/sync`, `packages/integrations`: supporting platform packages.
+- `packages/ai`, `packages/audit`, `packages/emails`, `packages/sync`,
+  `packages/integrations`: supporting platform packages.
+- `packages/etl`: optional company-specific package in authorized local
+  checkouts only. It is Git-ignored and excluded from the public workspace and
+  lockfile; install and run it independently.
 - `docs/QUICKSTART.md`: local setup details.
 - `docs/IMPLEMENTATION_PLAN.md`: product history and implementation context;
   verify against current code before trusting old status notes.
@@ -113,8 +116,7 @@ Prettier violations that fail CI.
 - Navigation comes from `apps/web/src/lib/nav/registry.ts` plus tenant saved
   overrides. Add modules there instead of hardcoding sidebar entries.
 - Use the existing page shells from `apps/web/src/components/page-layout.tsx`:
-  `PageContainer`, `ListPageLayout`, `DetailPageLayout`, `DetailSplitLayout`,
-  and `WizardLayout`.
+  `PageContainer`, `ListPageLayout`, `DetailPageLayout`, and `WizardLayout`.
 - Use `@beaconhs/ui` for buttons, inputs, cards, tables, badges, drawers,
   popovers, rich text, uploaders, signatures, skeletons, and page headers.
 - Use `lucide-react` icons; keep operational UI dense, calm, and scannable.

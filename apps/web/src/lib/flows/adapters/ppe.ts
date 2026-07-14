@@ -4,16 +4,27 @@ import 'server-only'
 // legacy "PPE Inspection (date)" email fires when an inspection is recorded).
 // Field-map keys mirror MODULE_FLOW_PROFILES.ppe.
 //
-// Note: the PPE model derives the overall result from the checklist answers at
-// record time but does NOT persist per-criterion answers, so this subject has
-// no `criteria` collection — the record carries the kind, result, and notes.
+// The PPE model derives the overall result from immutable per-criterion
+// snapshots. The flow subject currently exposes the record-level fields used
+// by the PPE automation profile; the detail UI retains the full evidence.
 
-import { eq } from 'drizzle-orm'
-import { people, ppeInspections, ppeItems, ppeTypes, tenantUsers, users } from '@beaconhs/db/schema'
+import { asc, eq, or } from 'drizzle-orm'
+import {
+  attachments,
+  people,
+  ppeInspectionAttachments,
+  ppeInspectionCriteria,
+  ppeInspections,
+  ppeItems,
+  ppeTypes,
+  tenantUsers,
+  users,
+} from '@beaconhs/db/schema'
+import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
-import { fmtDate, personName } from '../format'
+import { fmtDate, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 function kindLabel(kind: string | null): string {
@@ -78,6 +89,40 @@ export function createPpeInspectionFlowAdapter(
       if (!head) return {}
       const i = head.i
       const item = head.item
+      const [criteria, photos] = await Promise.all([
+        ctx.db((tx) =>
+          tx
+            .select({
+              question: ppeInspectionCriteria.questionTextSnapshot,
+              answer: ppeInspectionCriteria.answer,
+              severity: ppeInspectionCriteria.severity,
+              nonCompliance: ppeInspectionCriteria.nonComplianceReason,
+            })
+            .from(ppeInspectionCriteria)
+            .where(eq(ppeInspectionCriteria.inspectionId, inspectionId))
+            .orderBy(asc(ppeInspectionCriteria.sequence)),
+        ),
+        ctx.db((tx) =>
+          tx
+            .select({
+              caption: ppeInspectionAttachments.caption,
+              criterionQuestion: ppeInspectionCriteria.questionTextSnapshot,
+              r2Key: attachments.r2Key,
+            })
+            .from(ppeInspectionAttachments)
+            .innerJoin(attachments, eq(attachments.id, ppeInspectionAttachments.attachmentId))
+            .leftJoin(
+              ppeInspectionCriteria,
+              eq(ppeInspectionCriteria.id, ppeInspectionAttachments.criterionResultId),
+            )
+            .where(
+              or(
+                eq(ppeInspectionAttachments.inspectionId, inspectionId),
+                eq(ppeInspectionCriteria.inspectionId, inspectionId),
+              ),
+            ),
+        ),
+      ])
 
       return {
         reference: item.serialNumber || `PPE-${inspectionId.slice(0, 8)}`,
@@ -97,12 +142,24 @@ export function createPpeInspectionFlowAdapter(
           lastName: head.holderLast,
           formalName: head.holderFormal,
         }),
-        inspector_name: head.inspectorName ?? '',
+        inspector_name: i.inspectorNameSnapshot ?? head.inspectorName ?? '',
         // FK ids for conditions / recipient `field` targets.
         item_id: i.itemId ?? null,
         type_id: item.typeId ?? null,
         holder_person_id: item.currentHolderPersonId ?? null,
         inspected_by_tenant_user_id: i.inspectedByTenantUserId ?? null,
+        criteria: criteria.map((criterion) => ({
+          question: criterion.question,
+          answer: criterion.answer === 'n_a' ? 'N/A' : titleize(criterion.answer),
+          severity: titleize(criterion.severity),
+          non_compliance: criterion.nonCompliance ?? '',
+        })),
+        photos: await Promise.all(
+          photos.map(async (photo) => ({
+            url: await presignGet({ key: photo.r2Key, expiresInSeconds: 900 }),
+            caption: photo.caption ?? photo.criterionQuestion ?? '',
+          })),
+        ),
       }
     },
 

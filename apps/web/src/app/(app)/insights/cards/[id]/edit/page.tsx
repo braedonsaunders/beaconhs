@@ -3,12 +3,15 @@ import { requireRequestContext } from '@/lib/auth'
 import { canCreateInsights } from '../../../_access'
 import { loadCard, loadMetricCards, loadStudioEntities } from '../../_data'
 import { CardStudio } from '../../_studio/card-studio.client'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Edit card · Insights' }
 
 export default async function EditCardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!canCreateInsights(ctx)) redirect('/insights')
   const card = await loadCard(ctx, id)
@@ -20,6 +23,7 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
       initial={{
         id: card.id,
         name: card.name,
+        description: card.description,
         query: card.query,
         vizType: card.vizType,
         vizSettings: card.vizSettings,

@@ -27,14 +27,10 @@ import {
   evaluateSafeDistanceState,
   parseSafeDistanceIdentity,
   parseSafeDistanceSave,
-  type SafeDistanceSaveInput,
 } from './_mutation-policy'
 
 export type ActionResult =
-  | { ok: true; version?: string }
-  | { ok: false; error: string; reason?: 'locked' | 'conflict' }
-
-type SaveSafeDistanceInput = SafeDistanceSaveInput
+  { ok: true; version?: string } | { ok: false; error: string; reason?: 'locked' | 'conflict' }
 
 type SafeDistanceAuditEvent = Omit<AuditEvent, 'tenantId' | 'actorUserId'>
 

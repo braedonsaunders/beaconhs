@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createIntegrationEmailBodyRenderer } from './destinations/email'
 import { httpDestination } from './destinations/http'
 import { sqlDestination } from './destinations/sql'
 import { summarizePriorDelivery } from './dispatch'
@@ -10,6 +11,25 @@ const unusedDb = (() =>
   Promise.reject(
     new Error('database should not be called'),
   )) as unknown as DestinationTestContext['db']
+
+test('email destination sanitizes authored markup and cannot promote record values to HTML', () => {
+  const render = createIntegrationEmailBodyRenderer(
+    '<p onclick="alert(1)">Hello {{{name}}}</p>' +
+      '<a href="javascript:alert(1)">Open</a><script>alert(1)</script>',
+  )
+  const html = render({ name: 'Alice & </p><img src=x onerror=alert(1)><p>' })
+
+  assert.match(html, /Hello Alice &amp;/)
+  assert.doesNotMatch(html, /<img|onerror|onclick|javascript:|<script/i)
+  assert.throws(
+    () => createIntegrationEmailBodyRenderer('<script>alert(1)</script>'),
+    /no safe content/,
+  )
+  assert.throws(
+    () => createIntegrationEmailBodyRenderer('<a href="{{url}}">Open</a>'),
+    /visible body text/,
+  )
+})
 
 test('HTTP destination connectivity checks reject non-HTTPS and private targets without egress', async () => {
   const base = { tenantId: 'tenant', db: unusedDb, secrets: {} }

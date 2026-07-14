@@ -23,6 +23,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { isUuid } from '@/lib/list-params'
 import { formatDate } from '@/lib/datetime'
 import { recentActivityForEntity } from '@/lib/audit'
 import { ActivityFeed } from '@/components/activity-feed'
@@ -59,9 +60,11 @@ export default async function AdminUserDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.users.manage')) redirect('/admin')
-  const { id } = await params
   const sp = await searchParams
   const active = pickActiveTab(sp, TABS, 'overview')
   const error = typeof sp.error === 'string' ? sp.error : undefined

@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 import { Button, DetailHeader, EmptyState } from '@beaconhs/ui'
 import { UserCheck, UserPlus } from 'lucide-react'
 import {
@@ -12,11 +12,16 @@ import {
 } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailPageLayout } from '@/components/page-layout'
-import { PersonSelectField } from '@/components/person-select-field'
+import { Pagination } from '@/components/pagination'
+import { RemoteSelectField } from '@/components/remote-search-select'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { isUuid, parseListParams } from '@/lib/list-params'
 import { enrollLearner } from './_actions'
 import { EvaluationsGrid, type EvalLesson, type EvalRow } from './_evaluate'
 
 export const dynamic = 'force-dynamic'
+const SORTS = ['person'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -25,10 +30,21 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function CourseEvaluationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
+  const sp = await searchParams
+  const listParams = parseListParams(sp, {
+    sort: 'person',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const ctx = await requireModuleManage('training')
 
   const data = await ctx.db(async (tx) => {
@@ -51,12 +67,34 @@ export default async function CourseEvaluationsPage({
       )
       .orderBy(asc(trainingLessons.sortOrder))
 
-    const enrollments = await tx
-      .select({ enrollment: trainingEnrollments, person: people })
-      .from(trainingEnrollments)
-      .innerJoin(people, eq(people.id, trainingEnrollments.personId))
-      .where(and(eq(trainingEnrollments.courseId, id), isNull(trainingEnrollments.deletedAt)))
-      .orderBy(asc(people.lastName), asc(people.firstName))
+    const enrollmentBase = and(
+      eq(trainingEnrollments.courseId, id),
+      isNull(trainingEnrollments.deletedAt),
+    )
+    const enrollmentSearch = listParams.q
+      ? or(
+          ilike(people.firstName, `%${listParams.q}%`),
+          ilike(people.lastName, `%${listParams.q}%`),
+          ilike(people.employeeNo, `%${listParams.q}%`),
+        )
+      : undefined
+    const enrollmentWhere = and(enrollmentBase, enrollmentSearch)
+    const [[enrollmentCountRow], [filteredEnrollmentCountRow], enrollments] = await Promise.all([
+      tx.select({ c: count() }).from(trainingEnrollments).where(enrollmentBase),
+      tx
+        .select({ c: count() })
+        .from(trainingEnrollments)
+        .innerJoin(people, eq(people.id, trainingEnrollments.personId))
+        .where(enrollmentWhere),
+      tx
+        .select({ enrollment: trainingEnrollments, person: people })
+        .from(trainingEnrollments)
+        .innerJoin(people, eq(people.id, trainingEnrollments.personId))
+        .where(enrollmentWhere)
+        .orderBy(asc(people.lastName), asc(people.firstName))
+        .limit(listParams.perPage)
+        .offset((listParams.page - 1) * listParams.perPage),
+    ])
 
     const progress =
       practicals.length > 0 && enrollments.length > 0
@@ -68,37 +106,32 @@ export default async function CourseEvaluationsPage({
               eq(tenantUsers.id, trainingLessonProgress.evaluatedByTenantUserId),
             )
             .where(
-              inArray(
-                trainingLessonProgress.lessonId,
-                practicals.map((l) => l.id),
+              and(
+                inArray(
+                  trainingLessonProgress.enrollmentId,
+                  enrollments.map(({ enrollment }) => enrollment.id),
+                ),
+                inArray(
+                  trainingLessonProgress.lessonId,
+                  practicals.map((l) => l.id),
+                ),
               ),
             )
         : []
 
-    // Active people not yet enrolled — candidates for the staff enroll control.
-    const enrolledPersonIds = enrollments.map((e) => e.enrollment.personId)
-    const candidates = await tx
-      .select({
-        id: people.id,
-        firstName: people.firstName,
-        lastName: people.lastName,
-        employeeNo: people.employeeNo,
-      })
-      .from(people)
-      .where(
-        and(
-          isNull(people.deletedAt),
-          eq(people.status, 'active'),
-          ...(enrolledPersonIds.length ? [notInArray(people.id, enrolledPersonIds)] : []),
-        ),
-      )
-      .orderBy(asc(people.lastName), asc(people.firstName))
-
-    return { course, practicals, enrollments, progress, candidates }
+    return {
+      course,
+      practicals,
+      enrollments,
+      enrollmentCount: Number(enrollmentCountRow?.c ?? 0),
+      filteredEnrollmentCount: Number(filteredEnrollmentCountRow?.c ?? 0),
+      progress,
+    }
   })
 
   if (!data) notFound()
-  const { course, practicals, enrollments, progress, candidates } = data
+  const { course, practicals, enrollments, enrollmentCount, filteredEnrollmentCount, progress } =
+    data
 
   const lessons: EvalLesson[] = practicals.map((l) => ({
     id: l.id,
@@ -156,13 +189,10 @@ export default async function CourseEvaluationsPage({
             action={enrollLearner.bind(null, id)}
             className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
           >
-            <PersonSelectField
+            <RemoteSelectField
               name="personId"
-              options={candidates.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
+              lookup="training-evaluation-people"
+              contextId={id}
               placeholder="Enroll a learner…"
               searchPlaceholder="Search people…"
               sheetTitle="Enroll a learner"
@@ -173,14 +203,35 @@ export default async function CourseEvaluationsPage({
               <UserPlus size={14} /> Enroll
             </Button>
           </form>
+          <TableToolbar>
+            <SearchInput placeholder="Search learners…" />
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {enrollmentCount} enrolled
+            </span>
+          </TableToolbar>
           {rows.length === 0 ? (
             <EmptyState
               icon={<UserCheck size={32} />}
-              title="No enrolled learners"
-              description="Enroll a learner above to start signing off practicals."
+              title={
+                listParams.q ? 'No enrolled learners match your search' : 'No enrolled learners'
+              }
+              description={
+                listParams.q
+                  ? 'Try a different name or employee number.'
+                  : 'Enroll a learner above to start signing off practicals.'
+              }
             />
           ) : (
-            <EvaluationsGrid courseId={id} lessons={lessons} rows={rows} />
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <EvaluationsGrid courseId={id} lessons={lessons} rows={rows} bordered={false} />
+              <Pagination
+                basePath={`/training/courses/${id}/evaluations`}
+                currentParams={sp}
+                total={filteredEnrollmentCount}
+                page={listParams.page}
+                perPage={listParams.perPage}
+              />
+            </div>
           )}
         </div>
       )}

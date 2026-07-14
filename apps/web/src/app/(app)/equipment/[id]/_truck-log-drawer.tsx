@@ -8,7 +8,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Truck } from 'lucide-react'
-import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 type CreateTruckLogInput = {
   equipmentItemId: string
@@ -24,9 +25,6 @@ type CreateTruckLogInput = {
 
 type CreateTruckLogAction = (input: CreateTruckLogInput) => Promise<{ ok: boolean; error?: string }>
 
-type Driver = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
-type Site = { id: string; name: string }
-
 function safeInt(raw: string): number | null {
   const s = raw.trim()
   if (!s) return null
@@ -38,16 +36,12 @@ export function NewTruckLogEntryDrawer({
   open,
   closeHref,
   itemId,
-  drivers,
-  sites,
   defaultDate,
   action,
 }: {
   open: boolean
   closeHref: string
   itemId: string
-  drivers: Driver[]
-  sites: Site[]
   defaultDate: string
   action: CreateTruckLogAction
 }) {
@@ -139,34 +133,30 @@ export function NewTruckLogEntryDrawer({
             <Label htmlFor="tl-driver">
               Driver <span className="text-red-600">*</span>
             </Label>
-            <SearchSelect
+            <RemoteSearchSelect
+              id="tl-driver"
+              lookup="vehicle-drivers"
               value={driverPersonId}
               onChange={setDriverPersonId}
-              options={drivers.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
               placeholder="Select a driver…"
-              searchPlaceholder="Search people…"
-              sheetTitle="Driver"
+              searchPlaceholder="Search active drivers…"
+              sheetTitle="Select driver"
               clearable={false}
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="tl-site">Customer / site</Label>
-            <Select
+            <RemoteSearchSelect
               id="tl-site"
+              lookup="vehicle-customers"
               value={siteOrgUnitId}
-              onChange={(e) => setSiteOrgUnitId(e.currentTarget.value)}
-            >
-              <option value="">—</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
+              onChange={setSiteOrgUnitId}
+              placeholder="Select a customer…"
+              searchPlaceholder="Search customers…"
+              sheetTitle="Select customer"
+              clearable
+              emptyLabel="— None —"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="tl-start">Start odometer (km)</Label>
@@ -174,6 +164,7 @@ export function NewTruckLogEntryDrawer({
               id="tl-start"
               type="number"
               min="0"
+              max="2147483647"
               step="1"
               value={startOdometer}
               onChange={(e) => setStartOdometer(e.currentTarget.value)}
@@ -185,6 +176,7 @@ export function NewTruckLogEntryDrawer({
               id="tl-end"
               type="number"
               min="0"
+              max="2147483647"
               step="1"
               value={endOdometer}
               onChange={(e) => setEndOdometer(e.currentTarget.value)}
@@ -196,6 +188,7 @@ export function NewTruckLogEntryDrawer({
               id="tl-hours"
               type="number"
               min="0"
+              max="24"
               step="0.25"
               placeholder="e.g. 8.5"
               value={hoursOnSite}
@@ -208,6 +201,7 @@ export function NewTruckLogEntryDrawer({
               id="tl-manpower"
               type="number"
               min="0"
+              max="100000"
               step="1"
               value={manpowerCount}
               onChange={(e) => setManpowerCount(e.currentTarget.value)}
@@ -219,6 +213,7 @@ export function NewTruckLogEntryDrawer({
           <Textarea
             id="tl-notes"
             rows={3}
+            maxLength={5000}
             value={notes}
             onChange={(e) => setNotes(e.currentTarget.value)}
             placeholder="Anything noteworthy for billing or maintenance."

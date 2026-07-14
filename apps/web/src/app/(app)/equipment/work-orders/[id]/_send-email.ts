@@ -1,7 +1,7 @@
 // Server-only helper to email an equipment work order. Sends a recap
 // with the WO summary, status, equipment, priority, assignee + reporter
-// and the description / action-taken text. Default recipients are the
-// tenant admin distribution list; caller can override.
+// and the description / action-taken text. Recipients are explicit, plus the
+// assigned user when they have an email address.
 
 import { eq } from 'drizzle-orm'
 import {
@@ -49,14 +49,24 @@ export async function sendWorkOrderEmail(
 
   // Explicit recipients (+ the assignee, who the work order is for) — no blast
   // to every active tenant user.
-  const to = Array.from(
+  const primary = Array.from(
     new Set([
       ...(options?.recipients ?? []).filter((s) => /@/.test(s)),
       ...(data.assigneeUser?.email ? [data.assigneeUser.email] : []),
     ]),
   )
+  const primaryCanonical = new Set(primary.map((address) => address.toLowerCase()))
+  const cc = Array.from(
+    new Set(
+      (options?.cc ?? []).filter(
+        (address) => /@/.test(address) && !primaryCanonical.has(address.toLowerCase()),
+      ),
+    ),
+  )
+  // The queue delivers one private copy per address and has no Cc header.
+  const to = [...primary, ...cc]
   if (to.length === 0) return null
-  const cc = (options?.cc ?? []).filter((s) => /@/.test(s))
+  if (to.length > 100) throw new Error('A work-order email may have at most 100 recipients')
 
   const assigneeName =
     data.assigneeUser?.name ?? data.assigneeMembership?.displayName ?? 'Unassigned'
@@ -147,7 +157,7 @@ export async function sendWorkOrderEmail(
     entityId: workOrderId,
     action: 'export',
     summary: `Emailed work order to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
-    metadata: { recipients: to, cc, channel: 'email' },
+    metadata: { recipients: primary, cc, deliveredTo: to, channel: 'email' },
   })
   return { recipientCount: to.length }
 }

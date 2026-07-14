@@ -2,7 +2,7 @@
 //
 // What lives here:
 //   - shouldSpawnCorrectiveAction(): the severity-threshold guard
-//   - spawnCorrectiveActionForFailedInspection(): mints + audits the CA
+//   - createCorrectiveActionForFailedPpeInspection(): mints + audits the CA
 //   - issuePpeToPerson() / returnPpeFromPerson() / discardPpe() / replacePpe(): the
 //     four issuance transactions, each one inserts the ledger row AND
 //     mutates the item state in the same tx
@@ -11,18 +11,17 @@
 // touches a PPE item lifecycle goes through the same hardened path.
 
 import { and, asc, eq, sql } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import {
   correctiveActions,
-  ppeAnnualRecords,
-  ppeInspections,
   ppeIssues,
   ppeItems,
   ppeTypeCriteriaGroups,
-  ppeTypes,
   ppeTypeInspectionCriteria,
 } from '@beaconhs/db/schema'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
 
 type PpeInspectionKind = 'pre_use' | 'annual'
@@ -47,10 +46,11 @@ export function shouldSpawnCorrectiveAction(
  * `source` is 'inspection' and we set the source_entity link back to the
  * ppe_inspections row id so the CA detail page can render the back-link.
  *
- * Returns the new CA id, or null if a CA could not be created (e.g. tenant
- * caps).
+ * Uses the caller's transaction so the inspection, evidence, CA, and audit
+ * trail either all commit or all roll back.
  */
-export async function spawnCorrectiveActionForFailedPpeInspection(
+export async function createCorrectiveActionForFailedPpeInspection(
+  tx: Database,
   ctx: RequestContext,
   args: {
     inspectionId: string
@@ -60,45 +60,46 @@ export async function spawnCorrectiveActionForFailedPpeInspection(
     severity: PpeSeverity
     siteOrgUnitId?: string | null
   },
-): Promise<string | null> {
+): Promise<string> {
   const today = new Date().toISOString().slice(0, 10)
   const dayOffset = args.severity === 'critical' ? 1 : args.severity === 'high' ? 3 : 7
   const dueDate = new Date()
   dueDate.setDate(dueDate.getDate() + dayOffset)
   const dueOn = dueDate.toISOString().slice(0, 10)
-  const caId = await ctx.db(async (tx) => {
-    const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
+  const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
 
-    const [ca] = await tx
-      .insert(correctiveActions)
-      .values({
-        tenantId: ctx.tenantId,
-        reference,
-        title: args.title,
-        description: args.description,
-        severity: args.severity,
-        status: 'open',
-        source: 'inspection',
-        sourceEntityType: 'ppe_inspection',
-        sourceEntityId: args.inspectionId,
-        siteOrgUnitId: args.siteOrgUnitId ?? null,
-        assignedOn: today,
-        dueOn,
-        assignedByTenantUserId: ctx.membership?.id ?? null,
-        ownerTenantUserId: ctx.membership?.id ?? null,
-      })
-      .returning({ id: correctiveActions.id })
-    return ca?.id ?? null
-  })
-  if (!caId) return null
-  await recordAudit(ctx, {
+  const [ca] = await tx
+    .insert(correctiveActions)
+    .values({
+      tenantId: ctx.tenantId,
+      reference,
+      title: args.title,
+      description: args.description,
+      severity: args.severity,
+      status: 'open',
+      source: 'inspection',
+      sourceEntityType: 'ppe_inspection',
+      sourceEntityId: args.inspectionId,
+      siteOrgUnitId: args.siteOrgUnitId ?? null,
+      assignedOn: today,
+      dueOn,
+      assignedByTenantUserId: ctx.membership?.id ?? null,
+      ownerTenantUserId: ctx.membership?.id ?? null,
+    })
+    .returning({ id: correctiveActions.id })
+  if (!ca) throw new Error('Corrective action could not be created')
+  await recordAuditInTransaction(tx, ctx, {
     entityType: 'corrective_action',
-    entityId: caId,
+    entityId: ca.id,
     action: 'create',
     summary: `Auto-spawned CA from failed PPE inspection (severity ${args.severity})`,
     after: { source: 'ppe_inspection', inspectionId: args.inspectionId, itemId: args.itemId },
   })
-  return caId
+  await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+    sourceModule: 'corrective_action',
+    targetRef: {},
+  })
+  return ca.id
 }
 
 /**
@@ -124,6 +125,27 @@ export async function recordPpeIssueAction(
     throw new Error('Super-admin cannot change PPE custody — switch to a tenant user.')
   }
   const issueId = await ctx.db(async (tx) => {
+    const [item] = await tx
+      .select({
+        id: ppeItems.id,
+        typeId: ppeItems.typeId,
+        status: ppeItems.status,
+        deletedAt: ppeItems.deletedAt,
+      })
+      .from(ppeItems)
+      .where(eq(ppeItems.id, args.itemId))
+      .limit(1)
+      .for('update')
+    if (!item || item.deletedAt) throw new Error('PPE item was not found.')
+    if (
+      (args.action === 'issue' || args.action === 'replace') &&
+      (item.status === 'discarded' || item.status === 'expired')
+    ) {
+      throw new Error('Discarded or expired PPE cannot be issued.')
+    }
+    if ((args.action === 'issue' || args.action === 'replace') && !args.personId) {
+      throw new Error('Select a holder before issuing PPE.')
+    }
     const [iss] = await tx
       .insert(ppeIssues)
       .values({
@@ -156,23 +178,27 @@ export async function recordPpeIssueAction(
         .set({ status: 'discarded', currentHolderPersonId: null })
         .where(eq(ppeItems.id, args.itemId))
     }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'ppe_item',
+      entityId: args.itemId,
+      action: 'update',
+      summary:
+        args.action === 'issue'
+          ? 'Issued PPE to holder'
+          : args.action === 'return'
+            ? 'Returned PPE'
+            : args.action === 'replace'
+              ? 'Replaced PPE'
+              : args.action === 'mark_damaged'
+                ? 'Marked PPE damaged'
+                : 'Discarded PPE',
+      after: { action: args.action, personId: args.personId ?? null, note: args.note ?? null },
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'ppe_inspection',
+      targetRef: { ppeTypeId: item.typeId },
+    })
     return iss?.id ?? null
-  })
-  await recordAudit(ctx, {
-    entityType: 'ppe_item',
-    entityId: args.itemId,
-    action: 'update',
-    summary:
-      args.action === 'issue'
-        ? 'Issued PPE to holder'
-        : args.action === 'return'
-          ? 'Returned PPE'
-          : args.action === 'replace'
-            ? 'Replaced PPE'
-            : args.action === 'mark_damaged'
-              ? 'Marked PPE damaged'
-              : 'Discarded PPE',
-    after: { action: args.action, personId: args.personId ?? null, note: args.note ?? null },
   })
   return { issueId }
 }
@@ -192,6 +218,7 @@ export async function loadInspectionCriteriaForType(
     question: string
     description: string | null
     severity: PpeSeverity
+    requiresPhoto: boolean
     entityOrder: number
   }[]
 > {
@@ -202,6 +229,7 @@ export async function loadInspectionCriteriaForType(
         question: ppeTypeInspectionCriteria.question,
         description: ppeTypeInspectionCriteria.description,
         severity: ppeTypeInspectionCriteria.severity,
+        requiresPhoto: ppeTypeInspectionCriteria.requiresPhoto,
         entityOrder: ppeTypeInspectionCriteria.entityOrder,
       })
       .from(ppeTypeInspectionCriteria)
@@ -224,6 +252,7 @@ export async function loadInspectionCriteriaForType(
       question: r.question,
       description: r.description,
       severity: r.severity as PpeSeverity,
+      requiresPhoto: r.requiresPhoto,
       entityOrder: r.entityOrder,
     }))
   })

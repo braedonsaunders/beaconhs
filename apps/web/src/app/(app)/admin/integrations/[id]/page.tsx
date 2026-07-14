@@ -5,7 +5,7 @@
 import Link from 'next/link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound, redirect } from 'next/navigation'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
 import { Clock, Eye, Play, Settings2 } from 'lucide-react'
 import {
   Button,
@@ -23,19 +23,17 @@ import { type SyncEntityStat, syncConnections, syncRuns } from '@beaconhs/db/sch
 import { getConnector, toConnectorSummary } from '@beaconhs/sync'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
+import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
-import { RunPill, StatusPill } from '../_pills'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
+import { RunPill } from '../_pills'
 import { DbMapper } from './_db-mapper'
 import { NangoConnect } from './_nango-connect'
-import {
-  previewNow,
-  renameConnection,
-  runNow,
-  saveConfig,
-  saveCsv,
-  saveSchedule,
-  saveSyncPolicy,
-} from '../_actions'
+import { previewNow, runNow, saveConfig, saveCsv, saveSchedule, saveSyncPolicy } from '../_actions'
+import { ConnectionNameForm } from './_connection-name-form'
 
 export const metadata = { title: 'Connection' }
 export const dynamic = 'force-dynamic'
@@ -61,8 +59,36 @@ function statSummary(stats: Record<string, SyncEntityStat>): string {
   return parts.join(' · ') || 'no records'
 }
 
-export default async function ConnectionPage({ params }: { params: Promise<{ id: string }> }) {
+const RUN_SORTS = ['started'] as const
+
+export default async function ConnectionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+  const sp = await searchParams
+  const runParams = parseListParams(sp, {
+    sort: 'started',
+    dir: 'desc',
+    perPage: 15,
+    allowedSorts: RUN_SORTS,
+  })
+  const requestedRunStatus = pickString(sp.runStatus)
+  const runStatus =
+    requestedRunStatus === 'running' ||
+    requestedRunStatus === 'success' ||
+    requestedRunStatus === 'partial' ||
+    requestedRunStatus === 'error'
+      ? requestedRunStatus
+      : undefined
+  const requestedRunType = pickString(sp.runType)
+  const runType =
+    requestedRunType === 'preview' || requestedRunType === 'live' ? requestedRunType : undefined
+
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.integrations.manage')) redirect('/admin')
 
@@ -81,23 +107,46 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   const config = (conn.config as Record<string, unknown>) ?? {}
   const sealed = (conn.secrets as Record<string, { ciphertext: string; nonce: string }>) ?? {}
 
-  const runs = await ctx.db((tx) =>
-    tx
-      .select({
-        id: syncRuns.id,
-        trigger: syncRuns.trigger,
-        dryRun: syncRuns.dryRun,
-        status: syncRuns.status,
-        startedAt: syncRuns.startedAt,
-        durationMs: syncRuns.durationMs,
-        stats: syncRuns.stats,
-        error: syncRuns.error,
-      })
-      .from(syncRuns)
-      .where(eq(syncRuns.connectionId, id))
-      .orderBy(desc(syncRuns.startedAt))
-      .limit(15),
-  )
+  const runData = await ctx.db(async (tx) => {
+    const baseWhere = eq(syncRuns.connectionId, id)
+    const filteredWhere = and(
+      baseWhere,
+      runParams.q
+        ? or(
+            ilike(syncRuns.trigger, `%${runParams.q}%`),
+            ilike(syncRuns.status, `%${runParams.q}%`),
+            ilike(syncRuns.error, `%${runParams.q}%`),
+          )
+        : undefined,
+      runStatus ? eq(syncRuns.status, runStatus) : undefined,
+      runType ? eq(syncRuns.dryRun, runType === 'preview') : undefined,
+    )
+    const [totalRows, filteredRows, rows] = await Promise.all([
+      tx.select({ count: count() }).from(syncRuns).where(baseWhere),
+      tx.select({ count: count() }).from(syncRuns).where(filteredWhere),
+      tx
+        .select({
+          id: syncRuns.id,
+          trigger: syncRuns.trigger,
+          dryRun: syncRuns.dryRun,
+          status: syncRuns.status,
+          startedAt: syncRuns.startedAt,
+          durationMs: syncRuns.durationMs,
+          stats: syncRuns.stats,
+          error: syncRuns.error,
+        })
+        .from(syncRuns)
+        .where(filteredWhere)
+        .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+        .limit(runParams.perPage)
+        .offset((runParams.page - 1) * runParams.perPage),
+    ])
+    return {
+      rows,
+      total: Number(totalRows[0]?.count ?? 0),
+      filteredTotal: Number(filteredRows[0]?.count ?? 0),
+    }
+  })
 
   const hasSettingsForm =
     (summary?.configFields.length ?? 0) > 0 || (summary?.secretFields.length ?? 0) > 0
@@ -114,24 +163,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
               label="Integrations"
               className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
             />
-            <form action={renameConnection} className="mt-1 flex items-center gap-2">
-              <input type="hidden" name="id" value={conn.id} />
-              <input
-                name="name"
-                defaultValue={conn.name}
-                aria-label="Connection name"
-                className="max-w-[16rem] min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-2xl font-semibold text-slate-900 hover:border-slate-200 focus:border-teal-400 focus:bg-white focus:outline-none dark:text-slate-100 dark:hover:border-slate-700 dark:focus:bg-slate-900"
-              />
-              <StatusPill status={conn.status} />
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-              >
-                Save
-              </Button>
-            </form>
+            <ConnectionNameForm id={conn.id} name={conn.name} status={conn.status} />
             <p className="text-sm text-slate-500">{summary?.name ?? conn.connectorKey}</p>
           </div>
           {summary ? (
@@ -323,16 +355,43 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
             {/* Run history */}
             <Card>
               <CardHeader>
-                <CardTitle>Run history</CardTitle>
+                <CardTitle>Run history ({runData.total})</CardTitle>
               </CardHeader>
               <CardContent>
-                {runs.length === 0 ? (
+                <TableToolbar className="mb-3">
+                  <SearchInput placeholder="Search trigger, status, or error…" />
+                  <FilterChips
+                    basePath={`/admin/integrations/${id}`}
+                    currentParams={sp}
+                    paramKey="runStatus"
+                    label="Status"
+                    options={[
+                      { value: 'running', label: 'Running' },
+                      { value: 'success', label: 'Success' },
+                      { value: 'partial', label: 'Partial' },
+                      { value: 'error', label: 'Error' },
+                    ]}
+                  />
+                  <FilterChips
+                    basePath={`/admin/integrations/${id}`}
+                    currentParams={sp}
+                    paramKey="runType"
+                    label="Type"
+                    options={[
+                      { value: 'preview', label: 'Preview' },
+                      { value: 'live', label: 'Live' },
+                    ]}
+                  />
+                </TableToolbar>
+                {runData.rows.length === 0 ? (
                   <p className="text-sm text-slate-400">
-                    No runs yet. Use “Run now” or set a schedule.
+                    {runData.total === 0
+                      ? 'No runs yet. Use “Run now” or set a schedule.'
+                      : 'No runs match these filters.'}
                   </p>
                 ) : (
                   <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {runs.map((r) => (
+                    {runData.rows.map((r) => (
                       <li key={r.id} className="flex items-start justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -367,6 +426,13 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                     ))}
                   </ul>
                 )}
+                <Pagination
+                  basePath={`/admin/integrations/${id}`}
+                  currentParams={sp}
+                  total={runData.filteredTotal}
+                  page={runParams.page}
+                  perPage={runParams.perPage}
+                />
               </CardContent>
             </Card>
           </div>

@@ -101,7 +101,7 @@ function parseKey(key: string): TableRef {
 
 function newMapping(entity: string, count: number): MappingDraft {
   return {
-    localId: `${entity}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    localId: `${entity}-${globalThis.crypto.randomUUID()}`,
     label: count > 0 ? `${ENTITY_LABELS[entity] ?? entity} source ${count + 1}` : '',
     table: '',
     columns: {},
@@ -112,7 +112,7 @@ function newMapping(entity: string, count: number): MappingDraft {
 function asDraft(entity: string, raw: unknown, index: number): MappingDraft {
   const m = (raw ?? {}) as Partial<EntityMapping>
   return {
-    localId: `${entity}-${index}-${Math.random().toString(36).slice(2)}`,
+    localId: `${entity}-${index}-${globalThis.crypto.randomUUID()}`,
     label: m.label ?? '',
     table: m.table ?? '',
     schema: m.schema,

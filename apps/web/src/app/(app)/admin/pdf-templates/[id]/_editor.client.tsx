@@ -12,6 +12,7 @@ import type { Editor } from 'grapesjs'
 import { ArrowLeft, FileText, Save } from 'lucide-react'
 import { Button, Input, Select } from '@beaconhs/ui'
 import { savePdfTemplateDesign } from '../_actions'
+import { serializeTemplateEditor } from '@/lib/template-builder-html'
 
 const PdfBuilder = dynamic(() => import('../_builder.client'), {
   ssr: false,
@@ -51,23 +52,12 @@ function pageMetrics(size: PaperSize, orientation: Orientation, marginMm: number
   return { pageW: w, pageH: h, margin: m, contentW: w - 2 * m }
 }
 
-// GrapesJS keeps authored styles in getCss() (keyed by generated ids like
-// #iltl), NOT inline on the elements getHtml() returns. Serializing html alone
-// loses every style — so the document is the CSS block + the structure. This is
-// what gets saved (sourceHtml → compiledHtml) and what the worker/Preview print.
-function fullHtml(ed: Editor): string {
-  const css = ed.getCss?.() ?? ''
-  const html = ed.getHtml()
-  return css ? `<style>${css}</style>${html}` : html
-}
-
 export function PdfTemplateEditor({
   template,
 }: {
   template: {
     id: string
     name: string
-    design: Record<string, unknown>
     sourceHtml?: string | null
     paperSize: PaperSize
     orientation: Orientation
@@ -97,8 +87,7 @@ export function PdfTemplateEditor({
     const ed = editorRef.current
     if (!ed) return null
     return {
-      design: ed.getProjectData() as Record<string, unknown>,
-      sourceHtml: fullHtml(ed),
+      sourceHtml: serializeTemplateEditor(ed),
     }
   }
 
@@ -113,7 +102,6 @@ export function PdfTemplateEditor({
       const res = await savePdfTemplateDesign({
         id: template.id,
         name,
-        design: snap.design,
         sourceHtml: snap.sourceHtml,
         paperSize,
         orientation,
@@ -123,6 +111,8 @@ export function PdfTemplateEditor({
       })
       if (res.ok) toast.success('Saved')
       else toast.error(res.error ?? 'Save failed')
+    } catch {
+      toast.error('Save failed')
     } finally {
       setBusy(false)
     }
@@ -130,7 +120,7 @@ export function PdfTemplateEditor({
 
   const showPreview = () => {
     const ed = editorRef.current
-    const html = ed ? fullHtml(ed) : (template.sourceHtml ?? '')
+    const html = ed ? serializeTemplateEditor(ed) : (template.sourceHtml ?? '')
     setPreviewHtml(html)
     setTab('preview')
   }
@@ -150,6 +140,7 @@ export function PdfTemplateEditor({
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
+          maxLength={200}
           className="h-9 w-56 font-semibold"
           aria-label="Template name"
         />
@@ -237,7 +228,6 @@ export function PdfTemplateEditor({
       <div className="min-h-0 flex-1">
         {tab === 'design' ? (
           <PdfBuilder
-            initialDesign={template.design}
             initialHtml={template.sourceHtml ?? null}
             pageWidthPx={metrics.pageW}
             pageHeightPx={metrics.pageH}

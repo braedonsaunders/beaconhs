@@ -35,6 +35,7 @@ export default async function GroupsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = await searchParams
+  const errorMessage = typeof sp.error === 'string' ? sp.error : null
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const ctx = await requireModuleManage('people')
 
@@ -97,6 +98,11 @@ export default async function GroupsPage({
             }
           />
           <SearchInput placeholder="Search by name or description" />
+          {errorMessage ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              {errorMessage}
+            </p>
+          ) : null}
         </>
       }
     >

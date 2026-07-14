@@ -14,7 +14,9 @@ import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 import { RawImage } from '@/components/raw-image'
+import { BrowserPrintButton } from '@/components/browser-print-controls'
 
 export const metadata = { title: 'Corrective action — print' }
 export const dynamic = 'force-dynamic'
@@ -22,7 +24,7 @@ export const dynamic = 'force-dynamic'
 /**
  * Server-rendered print view. The page is designed for the browser's print
  * dialog: an A4-friendly layout with @page margins, no app chrome, and an
- * inline window.print() trigger button (hidden when printing).
+ * browser print trigger button (hidden when printing).
  *
  * Reusing the existing detail-page data shape so the printed copy matches
  * what the user just looked at on screen.
@@ -33,6 +35,8 @@ export default async function CorrectiveActionPrintPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
 
   const data = await ctx.db(async (tx) => {
@@ -142,9 +146,7 @@ export default async function CorrectiveActionPrintPage({
         </div>
         <div>
           <a href={`/corrective-actions/${id}`}>Back</a>
-          <button type="button" data-print>
-            Print
-          </button>
+          <BrowserPrintButton />
         </div>
       </div>
       <div className="pca-shell">
@@ -218,6 +220,7 @@ export default async function CorrectiveActionPrintPage({
                   <RawImage
                     src={attachmentUrl(p.attachment.id)}
                     alt={p.link.caption ?? p.attachment.filename}
+                    optimizationReason="authenticated"
                   />
                   {p.link.caption ? <div className="cap">{p.link.caption}</div> : null}
                 </div>
@@ -245,6 +248,7 @@ export default async function CorrectiveActionPrintPage({
                       className="sig"
                       src={attachmentUrl(s.step.signatureAttachmentId)}
                       alt="Signature"
+                      optimizationReason="authenticated"
                     />
                   ) : null}
                 </div>
@@ -253,14 +257,6 @@ export default async function CorrectiveActionPrintPage({
           </div>
         ) : null}
       </div>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `document.addEventListener('click', (e) => {
-            const t = e.target instanceof Element ? e.target : null;
-            if (t && t.closest('[data-print]')) window.print();
-          });`,
-        }}
-      />
     </div>
   )
 }

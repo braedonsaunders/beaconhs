@@ -11,16 +11,49 @@ export const photoInsightSchema = z.object({
 
 export type PhotoInsight = z.infer<typeof photoInsightSchema>
 
+export const AI_VISION_LIMITS = {
+  images: 4,
+  imageBytes: 8 * 1024 * 1024,
+  totalImageBytes: 10 * 1024 * 1024,
+  promptChars: 4_000,
+} as const
+
+export function assertVisionRequest(args: {
+  images: readonly Uint8Array[]
+  prompt?: string
+}): void {
+  if (args.images.length === 0 || args.images.length > AI_VISION_LIMITS.images) {
+    throw new Error(`AI vision requires between 1 and ${AI_VISION_LIMITS.images} images.`)
+  }
+  if (args.prompt !== undefined && args.prompt.length > AI_VISION_LIMITS.promptChars) {
+    throw new Error(`AI vision prompt exceeds ${AI_VISION_LIMITS.promptChars} characters.`)
+  }
+  let totalBytes = 0
+  for (const image of args.images) {
+    if (!(image instanceof Uint8Array) || image.byteLength === 0) {
+      throw new Error('AI vision image must contain bytes.')
+    }
+    if (image.byteLength > AI_VISION_LIMITS.imageBytes) {
+      throw new Error(`AI vision image exceeds ${AI_VISION_LIMITS.imageBytes} bytes.`)
+    }
+    totalBytes += image.byteLength
+    if (totalBytes > AI_VISION_LIMITS.totalImageBytes) {
+      throw new Error(`AI vision images exceed ${AI_VISION_LIMITS.totalImageBytes} total bytes.`)
+    }
+  }
+}
+
 /**
- * Caption a jobsite photo. `image` may be a public URL, a data: URL, or raw
- * bytes. Returns null when AI is unconfigured.
+ * Caption a jobsite photo from storage-validated bytes. Returns null when AI
+ * is unconfigured.
  */
 export async function describePhoto(
   config: AiConfig | null | undefined,
-  args: { image: string | URL | Uint8Array },
+  args: { image: Uint8Array },
 ): Promise<PhotoInsight | null> {
   const model = getModel(config, 'smart')
   if (!model) return null
+  assertVisionRequest({ images: [args.image] })
 
   const { object } = await generateObject({
     model,
@@ -110,17 +143,17 @@ Report only what is CLEARLY VISIBLE — never speculate about what might be out 
 If no people are visible, return an empty ppe list. If nothing of concern is visible, return empty hazards and overallRisk "none". Set overallRisk to the highest individual concern.`
 
 /**
- * Review jobsite photo(s) for missing PPE + hazards. `images` may be public
- * URLs, data: URLs, or raw bytes. Returns null when AI is unconfigured or no
- * images are supplied.
+ * Review storage-validated jobsite photo bytes for missing PPE + hazards.
+ * Returns null when AI is unconfigured or no images are supplied.
  */
 export async function runVisionAnalysis(
   config: AiConfig | null | undefined,
-  args: { images: Array<string | URL | Uint8Array>; prompt?: string },
+  args: { images: Uint8Array[]; prompt?: string },
 ): Promise<SafetyVisionAnalysis | null> {
+  if (!args.images || args.images.length === 0) return null
   const model = getModel(config, 'smart')
   if (!model) return null
-  if (!args.images || args.images.length === 0) return null
+  assertVisionRequest(args)
 
   const { object } = await generateObject({
     model,

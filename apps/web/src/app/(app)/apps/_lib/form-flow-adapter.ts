@@ -8,7 +8,7 @@ import 'server-only'
 // flow_gates store (via the executor); the three forms-only actions
 // (create_response / analyze_photos / start_monitored_session) run here.
 
-import { and, desc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import {
   SKIP_FIELD_TYPES,
@@ -16,15 +16,18 @@ import {
   hasImageCompanion,
   hasPhotosCompanion,
   hasTextCompanion,
+  normalizeFormResponseData,
   resolveDefaultValue,
+  validateResponse,
   type ActionData,
   type EvalContext,
   type FormSchemaV1,
 } from '@beaconhs/forms-core'
-import { loadEntitiesForFormPickers } from '@beaconhs/db'
+import { loadEntitiesForFormPickers, lockFormResponseForMutation } from '@beaconhs/db'
 import {
   formResponses,
   formTemplateVersions,
+  formTemplates,
   attachments,
   people,
   tenantUsers,
@@ -42,6 +45,8 @@ import {
 import { personName } from '@/lib/flows/format'
 import { buildRecordSummaryPdfJob } from '@/lib/flows/pdf-summary'
 import type { ExtraActionHelpers, FlowSubjectAdapter } from '@/lib/flows/types'
+import { isUuid } from '@/lib/list-params'
+import { materializeFormResponseEvidenceChange } from '@/lib/forms/form-response-evidence'
 
 const SEVERITY_ORDER: Record<string, number> = { low: 1, medium: 2, high: 3 }
 
@@ -128,13 +133,19 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             data: formResponses.data,
             score: formResponses.complianceScore,
             status: formResponses.complianceStatus,
-            templateVersionId: formResponses.templateVersionId,
+            schema: formTemplateVersions.schema,
           })
           .from(formResponses)
+          .innerJoin(
+            formTemplateVersions,
+            eq(formTemplateVersions.id, formResponses.templateVersionId),
+          )
           .where(eq(formResponses.id, responseId))
           .limit(1),
       )
-      const data = (resp?.data as Record<string, unknown> | null) ?? {}
+      const schema = resp?.schema as FormSchemaV1 | undefined
+      const storedData = (resp?.data as Record<string, unknown> | null) ?? {}
+      const data = schema ? normalizeFormResponseData(schema, storedData) : storedData
       const attachmentIds = new Set<string>()
       collectAttachmentIds(data, attachmentIds)
       const attachmentRows =
@@ -165,15 +176,6 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         compliance_status: resp?.status ?? null,
       }
       if (!resp) return out
-
-      const [ver] = await ctx.db((tx) =>
-        tx
-          .select({ schema: formTemplateVersions.schema })
-          .from(formTemplateVersions)
-          .where(eq(formTemplateVersions.id, resp.templateVersionId))
-          .limit(1),
-      )
-      const schema = ver?.schema as FormSchemaV1 | undefined
       if (!schema) return out
 
       // Picker-bound entity attrs — the same loader the bespoke PDF render
@@ -298,14 +300,25 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
 
     async persistAfterRun({ fieldPatch, flagNonCompliant }) {
       await ctx.db(async (tx) => {
+        const mutable = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+        if (!mutable) return
         const patch: Record<string, unknown> = {}
         if (Object.keys(fieldPatch).length > 0) {
           const [cur] = await tx
-            .select({ data: formResponses.data })
+            .select({ data: formResponses.data, schema: formTemplateVersions.schema })
             .from(formResponses)
+            .innerJoin(
+              formTemplateVersions,
+              eq(formTemplateVersions.id, formResponses.templateVersionId),
+            )
             .where(eq(formResponses.id, responseId))
             .limit(1)
-          patch.data = { ...(cur?.data ?? {}), ...fieldPatch }
+          if (cur) {
+            patch.data = normalizeFormResponseData(cur.schema, {
+              ...(cur.data ?? {}),
+              ...fieldPatch,
+            })
+          }
         }
         if (flagNonCompliant) patch.complianceStatus = 'non_compliant'
         if (Object.keys(patch).length > 0) {
@@ -316,22 +329,54 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
 
     async handleExtraAction(
       action: ActionData,
-      { values, fieldPatch, evalCtx, executionKey }: ExtraActionHelpers,
+      { values, setField, evalCtx, executionKey }: ExtraActionHelpers,
     ) {
       const ran: string[] = []
       const failed: string[] = []
 
       if (action.action === 'create_response') {
-        const [ver] = await ctx.db((tx) =>
-          tx
-            .select({ id: formTemplateVersions.id })
-            .from(formTemplateVersions)
-            .where(eq(formTemplateVersions.templateId, action.templateId))
-            .orderBy(desc(formTemplateVersions.version))
-            .limit(1),
-        )
-        if (!ver) {
-          failed.push('create_response (no version)')
+        if (!isUuid(action.templateId)) {
+          failed.push('create_response (invalid target)')
+          return { ran, failed }
+        }
+        const target = await ctx.db(async (tx) => {
+          const [[ver], [source]] = await Promise.all([
+            tx
+              .select({ id: formTemplateVersions.id, schema: formTemplateVersions.schema })
+              .from(formTemplateVersions)
+              .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
+              .where(
+                and(
+                  eq(formTemplateVersions.templateId, action.templateId),
+                  eq(formTemplateVersions.tenantId, ctx.tenantId),
+                  eq(formTemplates.tenantId, ctx.tenantId),
+                  eq(formTemplates.status, 'published'),
+                  isNull(formTemplates.deletedAt),
+                  isNotNull(formTemplateVersions.publishedAt),
+                ),
+              )
+              .orderBy(desc(formTemplateVersions.version))
+              .limit(1),
+            tx
+              .select({
+                submittedBy: formResponses.submittedBy,
+                siteOrgUnitId: formResponses.siteOrgUnitId,
+                subjectPersonId: formResponses.subjectPersonId,
+              })
+              .from(formResponses)
+              .where(
+                and(
+                  eq(formResponses.id, responseId),
+                  eq(formResponses.tenantId, ctx.tenantId),
+                  isNull(formResponses.deletedAt),
+                ),
+              )
+              .limit(1),
+          ])
+          return ver && source ? { ver, source } : null
+        })
+        if (!target) {
+          failed.push('create_response (published target not found)')
           return { ran, failed }
         }
         const data: Record<string, unknown> = {}
@@ -340,15 +385,30 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             data[k] = resolveDefaultValue(expr, evalCtx)
           }
         }
+        const rawErrors = validateResponse(target.ver.schema, data, 'draft')
+        if (rawErrors.length > 0) {
+          failed.push('create_response (invalid prefill)')
+          return { ran, failed }
+        }
+        const canonicalData = normalizeFormResponseData(target.ver.schema, data)
+        if (validateResponse(target.ver.schema, canonicalData, 'draft').length > 0) {
+          failed.push('create_response (invalid canonical prefill)')
+          return { ran, failed }
+        }
         await ctx.db((tx) =>
           tx
             .insert(formResponses)
             .values({
               tenantId: ctx.tenantId,
               templateId: action.templateId,
-              templateVersionId: ver.id,
+              templateVersionId: target.ver.id,
               status: 'draft',
-              data,
+              submittedBy: target.source.submittedBy,
+              siteOrgUnitId: target.source.siteOrgUnitId,
+              subjectPersonId: target.source.subjectPersonId,
+              sourceEntityType: 'form_response',
+              sourceEntityId: responseId,
+              data: canonicalData,
               flowExecutionKey: executionKey,
             })
             .onConflictDoNothing({
@@ -379,8 +439,7 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             )
           if (badPpe.length) lines.push(`PPE: ${badPpe.map((p) => p.item).join(', ')}`)
           const summary = lines.filter(Boolean).join('\n')
-          fieldPatch[action.storeInField] = summary
-          values[action.storeInField] = summary
+          setField(action.storeInField, summary)
         }
         if (action.createCapaOnHazard) {
           const min = SEVERITY_ORDER[action.minSeverity ?? 'medium'] ?? 2
@@ -421,8 +480,10 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
             : action.graceMinutes
         const duration = numField(action.durationFieldKey, action.durationMinutes ?? 0)
         const now = new Date()
-        await ctx.db((tx) =>
-          tx
+        await ctx.db(async (tx) => {
+          const mutable = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+          if (!mutable) return
+          await tx
             .update(formResponses)
             .set({
               monitorStatus: 'active',
@@ -444,8 +505,8 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
                     )
                   : undefined,
               ),
-            ),
-        )
+            )
+        })
         ran.push('start_monitored_session')
         return { ran, failed }
       }
@@ -463,9 +524,18 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
           set.lockedAt = new Date()
           set.lockedByTenantUserId = ctx.membership?.id ?? null
         }
-        await ctx.db((tx) =>
-          tx.update(formResponses).set(set).where(eq(formResponses.id, responseId)),
-        )
+        await ctx.db(async (tx) => {
+          const before = await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+          if (!before) return
+          const [updated] = await tx
+            .update(formResponses)
+            .set(set)
+            .where(eq(formResponses.id, responseId))
+            .returning()
+          if (updated) {
+            await materializeFormResponseEvidenceChange(tx, ctx.tenantId, before, updated)
+          }
+        })
         ran.push(`change_status→${action.to}`)
         return { ran, failed }
       }
@@ -478,10 +548,15 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
               templateId: formResponses.templateId,
               templateVersionId: formResponses.templateVersionId,
               data: formResponses.data,
+              schema: formTemplateVersions.schema,
               siteOrgUnitId: formResponses.siteOrgUnitId,
               subjectPersonId: formResponses.subjectPersonId,
             })
             .from(formResponses)
+            .innerJoin(
+              formTemplateVersions,
+              eq(formTemplateVersions.id, formResponses.templateVersionId),
+            )
             .where(eq(formResponses.id, responseId))
             .limit(1),
         )
@@ -497,7 +572,10 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
               templateId: src.templateId,
               templateVersionId: src.templateVersionId,
               status: 'draft',
-              data: (src.data as Record<string, unknown>) ?? {},
+              data: normalizeFormResponseData(
+                src.schema,
+                (src.data as Record<string, unknown>) ?? {},
+              ),
               siteOrgUnitId: src.siteOrgUnitId,
               subjectPersonId: src.subjectPersonId,
               submittedBy: ctx.membership?.id ?? null,
@@ -546,20 +624,25 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
                   : null,
                 entityType: 'form_response',
                 entityId: responseId,
+                artifactTarget: { kind: 'form_response', responseId },
               },
               pdfJobId,
             )
           } else {
+            const summaryJob = buildRecordSummaryPdfJob({
+              tenantId: ctx.tenantId,
+              subjectId: responseId,
+              entityType: 'form_response',
+              heading: 'Form response',
+              reference: responseId.slice(0, 8),
+              subtitle: values.title,
+              values,
+            })
             await enqueuePdf(
-              buildRecordSummaryPdfJob({
-                tenantId: ctx.tenantId,
-                subjectId: responseId,
-                entityType: 'form_response',
-                heading: 'Form response',
-                reference: responseId.slice(0, 8),
-                subtitle: values.title,
-                values,
-              }),
+              {
+                ...summaryJob,
+                artifactTarget: { kind: 'form_response', responseId },
+              },
               pdfJobId,
             )
           }

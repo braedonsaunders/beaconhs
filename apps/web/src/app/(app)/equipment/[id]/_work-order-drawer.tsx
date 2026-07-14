@@ -8,7 +8,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Wrench } from 'lucide-react'
-import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 type CreateWorkOrderInput = {
   itemId: string
@@ -23,27 +24,15 @@ type CreateWorkOrderAction = (
   input: CreateWorkOrderInput,
 ) => Promise<{ ok: boolean; error?: string }>
 
-type Assignee = {
-  id: string
-  displayName: string | null
-  userName: string | null
-  email?: string | null
-}
-type Reporter = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
-
 export function NewWorkOrderDrawer({
   open,
   closeHref,
   itemId,
-  assignees,
-  reporters,
   action,
 }: {
   open: boolean
   closeHref: string
   itemId: string
-  assignees: Assignee[]
-  reporters: Reporter[]
   action: CreateWorkOrderAction
 }) {
   const router = useRouter()
@@ -115,6 +104,7 @@ export function NewWorkOrderDrawer({
           <Input
             id="wo-summary"
             value={summary}
+            maxLength={500}
             onChange={(e) => setSummary(e.currentTarget.value)}
             placeholder="e.g. Brake lights inoperative"
           />
@@ -124,6 +114,7 @@ export function NewWorkOrderDrawer({
           <Textarea
             id="wo-description"
             rows={4}
+            maxLength={10000}
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
             placeholder="What's wrong? Steps to reproduce, smell, sound, error code…"
@@ -146,16 +137,13 @@ export function NewWorkOrderDrawer({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wo-assignee">Assign to</Label>
-            <SearchSelect
+            <RemoteSearchSelect
+              id="wo-assignee"
+              lookup="equipment-work-order-assignees"
               value={assignedTo}
               onChange={setAssignedTo}
-              options={assignees.map((a) => ({
-                value: a.id,
-                label: a.userName ?? a.displayName ?? a.id.slice(0, 6),
-                hint: a.email ?? undefined,
-              }))}
               placeholder="Select an assignee..."
-              searchPlaceholder="Search people..."
+              searchPlaceholder="Search active members..."
               sheetTitle="Assign to"
               ariaLabel="Assign to"
               clearable
@@ -164,16 +152,13 @@ export function NewWorkOrderDrawer({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="wo-reporter">Reported by</Label>
-            <SearchSelect
+            <RemoteSearchSelect
+              id="wo-reporter"
+              lookup="equipment-work-order-reporters"
               value={reportedBy}
               onChange={setReportedBy}
-              options={reporters.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
               placeholder="Select a person…"
-              searchPlaceholder="Search people…"
+              searchPlaceholder="Search active people…"
               sheetTitle="Reported by"
               clearable
               emptyLabel="— Not specified —"

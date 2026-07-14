@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { asc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
@@ -17,12 +17,18 @@ import { extractRows } from '@beaconhs/reports'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { buildHref, pickString } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
+import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
 
 export const metadata = { title: 'Vehicle log summary' }
 export const dynamic = 'force-dynamic'
+const BASE = '/equipment/vehicle-log/summary'
+const SORTS = ['asset_tag'] as const
 
 function parseYear(raw: string | undefined): number {
   if (raw && /^\d{4}$/.test(raw)) return Number(raw)
@@ -59,6 +65,12 @@ export default async function TruckLogSummaryPage({
 }) {
   const sp = await searchParams
   const year = parseYear(pickString(sp.year))
+  const params = parseListParams(sp, {
+    sort: 'asset_tag',
+    dir: 'asc',
+    perPage: 25,
+    allowedSorts: SORTS,
+  })
   const ctx = await requireRequestContext()
   // Same read-tier gate as /equipment/vehicle-log — this is a tenant-wide
   // fleet roll-up.
@@ -74,7 +86,23 @@ export default async function TruckLogSummaryPage({
   const firstDay = ymd(year, 1, 1)
   const nextFirst = ymd(year + 1, 1, 1)
 
-  const { trucks, rows } = await ctx.db(async (tx) => {
+  const { trucks, rows, monthlyTotals, total } = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+    const search: SQL<unknown> | undefined = params.q
+      ? or(
+          ilike(equipmentItems.assetTag, `%${params.q}%`),
+          ilike(equipmentItems.name, `%${params.q}%`),
+          ilike(equipmentCategories.name, `%${params.q}%`),
+          ilike(equipmentTypes.name, `%${params.q}%`),
+        )
+      : undefined
+    const where = and(vehicleWhere, search)!
+    const [totalRow] = await tx
+      .select({ c: count() })
+      .from(equipmentItems)
+      .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
+      .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
+      .where(where)
     const t = await tx
       .select({
         id: equipmentItems.id,
@@ -86,19 +114,49 @@ export default async function TruckLogSummaryPage({
       .from(equipmentItems)
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
-      .where(isNull(equipmentItems.deletedAt))
+      .where(where)
       .orderBy(asc(equipmentItems.assetTag))
-      .limit(500)
-    const result = await tx.execute(sql`
+      .limit(params.perPage)
+      .offset((params.page - 1) * params.perPage)
+    const pageIds = t.map((truck) => truck.id)
+    const result =
+      pageIds.length === 0
+        ? []
+        : await tx.execute(sql`
+            SELECT
+              monthly.equipment_item_id,
+              extract(month from monthly.month)::int AS month,
+              monthly.total_km,
+              monthly.hours_on_site,
+              monthly.manpower_count,
+              monthly.logged_days
+            FROM report_vehicle_log_monthly monthly
+            WHERE monthly.equipment_item_id IN (${sql.join(
+              pageIds.map((id) => sql`${id}`),
+              sql`, `,
+            )})
+              AND monthly.month >= ${firstDay}::date
+              AND monthly.month < ${nextFirst}::date
+          `)
+    const totalsResult = await tx.execute(sql`
       SELECT
-        equipment_item_id,
-        extract(month from month)::int AS month,
-        total_km,
-        hours_on_site,
-        manpower_count,
-        logged_days
-      FROM report_vehicle_log_monthly
-      WHERE month >= ${firstDay}::date AND month < ${nextFirst}::date
+        extract(month from monthly.month)::int AS month,
+        coalesce(sum(monthly.total_km), 0) AS total_km,
+        coalesce(sum(monthly.hours_on_site), 0) AS hours_on_site,
+        coalesce(sum(monthly.manpower_count), 0) AS manpower_count,
+        coalesce(sum(monthly.logged_days), 0) AS logged_days
+      FROM report_vehicle_log_monthly monthly
+      INNER JOIN ${equipmentItems}
+        ON ${equipmentItems.id} = monthly.equipment_item_id
+      LEFT JOIN ${equipmentTypes}
+        ON ${equipmentTypes.id} = ${equipmentItems.typeId}
+      LEFT JOIN ${equipmentCategories}
+        ON ${equipmentCategories.id} = ${equipmentItems.categoryId}
+      WHERE ${where}
+        AND monthly.month >= ${firstDay}::date
+        AND monthly.month < ${nextFirst}::date
+      GROUP BY extract(month from monthly.month)
+      ORDER BY extract(month from monthly.month)
     `)
     const r = extractRows(result).map((row) => ({
       equipmentItemId: String(row.equipment_item_id ?? ''),
@@ -108,15 +166,20 @@ export default async function TruckLogSummaryPage({
       manpowerTotal: Number(row.manpower_count ?? 0),
       entryDays: Number(row.logged_days ?? 0),
     }))
-    return { trucks: t, rows: r }
+    const totals = extractRows(totalsResult).map((row) => ({
+      month: Number(row.month ?? 0),
+      kmTotal: Number(row.total_km ?? 0),
+      hoursTotal: Number(row.hours_on_site ?? 0),
+      manpowerTotal: Number(row.manpower_count ?? 0),
+      entryDays: Number(row.logged_days ?? 0),
+    }))
+    return {
+      trucks: t,
+      rows: r,
+      monthlyTotals: totals,
+      total: Number(totalRow?.c ?? 0),
+    }
   })
-
-  const vehicleTrucks = trucks.filter(
-    (t) =>
-      (t.category ?? '').toLowerCase().includes('vehicle') ||
-      (t.typeName ?? '').toLowerCase().includes('truck'),
-  )
-  const displayTrucks = vehicleTrucks.length > 0 ? vehicleTrucks : trucks
 
   type MonthRollup = { km: number; hours: number; manpower: number; days: number }
   const grid = new Map<string, Map<number, MonthRollup>>()
@@ -139,7 +202,7 @@ export default async function TruckLogSummaryPage({
     days: 0,
   }))
   const truckTotals = new Map<string, MonthRollup>()
-  for (const r of rows) {
+  for (const r of monthlyTotals) {
     const km = Number(r.kmTotal ?? 0)
     const hours = Number(r.hoursTotal ?? 0)
     const man = Number(r.manpowerTotal ?? 0)
@@ -155,6 +218,12 @@ export default async function TruckLogSummaryPage({
       monthTotals[idx]!.manpower += man
       monthTotals[idx]!.days += days
     }
+  }
+  for (const r of rows) {
+    const km = Number(r.kmTotal ?? 0)
+    const hours = Number(r.hoursTotal ?? 0)
+    const man = Number(r.manpowerTotal ?? 0)
+    const days = Number(r.entryDays ?? 0)
     const tt = truckTotals.get(r.equipmentItemId) ?? { km: 0, hours: 0, manpower: 0, days: 0 }
     tt.km += km
     tt.hours += hours
@@ -172,18 +241,23 @@ export default async function TruckLogSummaryPage({
             description={`Annual roll-up of km driven, hours on site, and crew count for ${year}.`}
             actions={
               <div className="flex items-center gap-2">
-                <Link href={`/equipment/vehicle-log/summary?year=${year - 1}` as any}>
+                <Link href={{ pathname: BASE, query: { ...sp, year: year - 1, page: undefined } }}>
                   <Button variant="outline" size="sm">
                     ← {year - 1}
                   </Button>
                 </Link>
-                <Link href={`/equipment/vehicle-log/summary?year=${year + 1}` as any}>
+                <Link href={{ pathname: BASE, query: { ...sp, year: year + 1, page: undefined } }}>
                   <Button variant="outline" size="sm">
                     {year + 1} →
                   </Button>
                 </Link>
                 {canExport ? (
-                  <Link href={buildHref('/equipment/vehicle-log/export.csv', { year }) as any}>
+                  <Link
+                    href={{
+                      pathname: '/equipment/vehicle-log/export.csv',
+                      query: { year, q: params.q },
+                    }}
+                  >
                     <Button>Export CSV</Button>
                   </Link>
                 ) : null}
@@ -194,6 +268,7 @@ export default async function TruckLogSummaryPage({
           <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
             <span>Year</span>
             <form className="flex items-center gap-2" action="/equipment/vehicle-log/summary">
+              {params.q ? <input type="hidden" name="q" value={params.q} /> : null}
               <input
                 name="year"
                 type="number"
@@ -207,14 +282,21 @@ export default async function TruckLogSummaryPage({
               </Button>
             </form>
           </div>
+          <TableToolbar>
+            <SearchInput placeholder="Search asset tag, name, category, or type…" />
+          </TableToolbar>
         </>
       }
     >
-      {displayTrucks.length === 0 ? (
+      {trucks.length === 0 ? (
         <EmptyState
           icon={<Truck size={32} />}
-          title="No equipment"
-          description="Add equipment first, then log daily entries to populate the monthly roll-up."
+          title={params.q ? 'No vehicles match your search' : 'No equipment'}
+          description={
+            params.q
+              ? 'Clear the search to see other accessible vehicles.'
+              : 'Add equipment first, then log daily entries to populate the monthly roll-up.'
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -236,7 +318,7 @@ export default async function TruckLogSummaryPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayTrucks.map((t) => {
+              {trucks.map((t) => {
                 const months = grid.get(t.id) ?? new Map<number, MonthRollup>()
                 const totals = truckTotals.get(t.id) ?? { km: 0, hours: 0, manpower: 0, days: 0 }
                 return (
@@ -324,6 +406,13 @@ export default async function TruckLogSummaryPage({
           </Table>
         </div>
       )}
+      <Pagination
+        basePath={BASE}
+        currentParams={sp}
+        total={total}
+        page={params.page}
+        perPage={params.perPage}
+      />
     </ListPageLayout>
   )
 }

@@ -3,8 +3,9 @@
 import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { CheckSquare, Download, MapPin, Square, ToggleRight, UserCog, X } from 'lucide-react'
-import { Button, SearchSelect, Select } from '@beaconhs/ui'
+import { Download, MapPin, ToggleRight, UserCog, X } from 'lucide-react'
+import { Button, Select } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import {
   bulkAssignEquipmentToHolder,
   bulkExportEquipmentCsv,
@@ -13,9 +14,6 @@ import {
   type EquipmentStatus,
 } from './_actions'
 import { useHydrated } from '@/lib/use-hydrated'
-
-export type SiteOption = { id: string; name: string }
-export type HolderOption = { id: string; name: string; employeeNo: string | null }
 
 const STATUS_LABELS: Record<EquipmentStatus, string> = {
   in_service: 'In service',
@@ -28,19 +26,19 @@ const STATUS_LABELS: Record<EquipmentStatus, string> = {
 export function BulkEquipmentBar({
   selectedIds,
   onClear,
-  sites,
-  holders,
+  canManage,
   canExport,
 }: {
   selectedIds: string[]
   onClear: () => void
-  sites: SiteOption[]
-  holders: HolderOption[]
+  canManage: boolean
   canExport: boolean
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<'site' | 'holder' | 'status' | 'export'>('site')
+  const [action, setAction] = useState<'site' | 'holder' | 'status' | 'export'>(() =>
+    canManage ? 'site' : 'export',
+  )
   const [siteId, setSiteId] = useState('')
   const [personId, setPersonId] = useState('')
   const [status, setStatus] = useState<EquipmentStatus>('in_service')
@@ -59,6 +57,10 @@ export function BulkEquipmentBar({
   function go() {
     setError(null)
     setInfo(null)
+    if (action !== 'export' && !canManage) {
+      setError('You do not have permission to manage equipment.')
+      return
+    }
     if (action === 'site') {
       if (!siteId) {
         setError('Pick a site.')
@@ -156,46 +158,43 @@ export function BulkEquipmentBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          <option value="site">Transfer to site</option>
-          <option value="holder">Assign to holder</option>
-          <option value="status">Set status</option>
+          {canManage ? <option value="site">Transfer to site</option> : null}
+          {canManage ? <option value="holder">Assign to holder</option> : null}
+          {canManage ? <option value="status">Set status</option> : null}
           {canExport ? <option value="export">Export selected to CSV</option> : null}
         </Select>
 
         {action === 'site' ? (
           <div className="flex items-center gap-2">
             <MapPin size={14} className="text-slate-500" />
-            <Select
+            <RemoteSearchSelect
+              lookup="equipment-custody-sites"
               value={siteId}
-              onChange={(e) => setSiteId(e.target.value)}
-              className="h-8 min-w-[12rem]"
+              onChange={setSiteId}
+              placeholder="Pick site…"
+              searchPlaceholder="Search sites…"
+              sheetTitle="Transfer to site"
+              ariaLabel="Transfer to site"
+              className="min-w-[12rem]"
+              triggerClassName="h-8"
               disabled={pending}
-            >
-              <option value="">Pick site…</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
+            />
           </div>
         ) : null}
 
         {action === 'holder' ? (
           <div className="flex items-center gap-2">
             <UserCog size={14} className="text-slate-500" />
-            <SearchSelect
+            <RemoteSearchSelect
+              lookup="equipment-custody-holders"
               value={personId}
               onChange={setPersonId}
-              options={holders.map((h) => ({
-                value: h.id,
-                label: h.name,
-                hint: h.employeeNo ?? undefined,
-              }))}
               placeholder="Pick holder…"
               searchPlaceholder="Search people…"
               sheetTitle="Assign to holder"
+              ariaLabel="Assign to holder"
               className="min-w-[14rem]"
+              triggerClassName="h-8"
               disabled={pending}
             />
           </div>
@@ -237,56 +236,5 @@ export function BulkEquipmentBar({
       </div>
     </div>,
     document.body,
-  )
-}
-
-export function SelectionCheckbox({
-  id,
-  selected,
-  onToggle,
-}: {
-  id: string
-  selected: boolean
-  onToggle: (id: string) => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        onToggle(id)
-      }}
-      aria-pressed={selected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-    >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
-  )
-}
-
-export function HeaderSelectAll({
-  allSelected,
-  onToggleAll,
-}: {
-  allSelected: boolean
-  onToggleAll: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggleAll}
-      aria-pressed={allSelected}
-      className="inline-flex items-center justify-center rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-    >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
-    </button>
   )
 }

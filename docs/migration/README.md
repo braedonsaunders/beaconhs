@@ -10,11 +10,15 @@ Use this folder for sanitized migration design notes only. Keep live source
 extracts, generated inventories, credentials, and tenant-specific loader code in
 private workspaces or ignored local folders.
 
-The public ETL package is a scaffold for custom adapters:
+No ETL package is shipped in the public repository. Authorized maintainers keep
+the company-specific package in the ignored local `packages/etl` directory. It
+is deliberately excluded from the public pnpm workspace and lockfile so a local
+migration checkout cannot change public dependency resolution or CI behavior.
+Install and validate that package independently:
 
-- connection helpers live in `packages/etl/src/source`
-- id crosswalk helpers live in `packages/etl/src/crosswalk.ts`
-- loader orchestration lives in `packages/etl/src/orchestrator.ts`
+```bash
+pnpm install
+pnpm --dir packages/etl install --ignore-workspace --no-lockfile
+```
 
-To build a private migration, add loaders in a private branch or package and
-wire them into the ETL runner through environment-controlled configuration.
+Follow its private runbook for any source or target access.

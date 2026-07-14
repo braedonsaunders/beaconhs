@@ -9,10 +9,19 @@
 // which the generic inspection banks don't carry.
 
 import { relations } from 'drizzle-orm'
-import { boolean, index, integer, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
-import { ppeCriterionSeverity } from './ppe-types-criteria'
+import { ppeCriterionSeverity } from './ppe'
 
 export const ppeCriteriaBanks = pgTable(
   'ppe_criteria_banks',
@@ -30,6 +39,7 @@ export const ppeCriteriaBanks = pgTable(
   },
   (t) => ({
     tenantIdx: index('ppe_criteria_banks_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('ppe_criteria_banks_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantCategoryIdx: index('ppe_criteria_banks_tenant_category_idx').on(t.tenantId, t.category),
   }),
 )
@@ -41,9 +51,7 @@ export const ppeCriteriaBankCriteria = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    bankId: uuid('bank_id')
-      .notNull()
-      .references(() => ppeCriteriaBanks.id, { onDelete: 'cascade' }),
+    bankId: uuid('bank_id').notNull(),
     sequence: integer('sequence').notNull(),
     question: text('question').notNull(),
     description: text('description'),
@@ -52,8 +60,17 @@ export const ppeCriteriaBankCriteria = pgTable(
     ...timestamps,
   },
   (t) => ({
-    bankSeqIdx: index('ppe_criteria_bank_criteria_bank_seq_idx').on(t.bankId, t.sequence),
+    bankSeqIdx: index('ppe_criteria_bank_criteria_bank_seq_idx').on(
+      t.tenantId,
+      t.bankId,
+      t.sequence,
+    ),
     tenantIdx: index('ppe_criteria_bank_criteria_tenant_idx').on(t.tenantId),
+    bankFk: foreignKey({
+      name: 'ppe_criteria_bank_criteria_tenant_bank_fk',
+      columns: [t.tenantId, t.bankId],
+      foreignColumns: [ppeCriteriaBanks.tenantId, ppeCriteriaBanks.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -66,7 +83,7 @@ export const ppeCriteriaBanksRelations = relations(ppeCriteriaBanks, ({ one, man
 export const ppeCriteriaBankCriteriaRelations = relations(ppeCriteriaBankCriteria, ({ one }) => ({
   tenant: one(tenants, { fields: [ppeCriteriaBankCriteria.tenantId], references: [tenants.id] }),
   bank: one(ppeCriteriaBanks, {
-    fields: [ppeCriteriaBankCriteria.bankId],
-    references: [ppeCriteriaBanks.id],
+    fields: [ppeCriteriaBankCriteria.tenantId, ppeCriteriaBankCriteria.bankId],
+    references: [ppeCriteriaBanks.tenantId, ppeCriteriaBanks.id],
   }),
 }))

@@ -5,8 +5,8 @@
 //   - incident_classifications  hierarchical category (parentId), referenced
 //                                by incidents.classification_id.
 //   - incident_injury_types     flat list of injury labels (laceration,
-//                                strain, fracture …) — referenced from the
-//                                `injuryTypes` JSON array on incident injuries.
+//                                strain, fracture …) — assigned to injuries
+//                                through incident_injury_type_assignments.
 //   - incident_hours_periods    per-period hours-worked + employee-count
 //                                rollup. Drives every frequency-rate
 //                                calculation (TRIR / DART / LTIR) over an
@@ -15,6 +15,7 @@
 import { relations } from 'drizzle-orm'
 import {
   date,
+  foreignKey,
   index,
   integer,
   numeric,
@@ -63,20 +64,28 @@ export const incidentClassifications = pgTable(
     // Soft archive — keep historic incidents linked but hide from new-record
     // pickers.
     isActive: integer('is_active').default(1).notNull(),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id, {
-      onDelete: 'set null',
-    }),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
     ...softDelete,
   },
   (t) => ({
     tenantIdx: index('incident_classifications_tenant_idx').on(t.tenantId),
-    parentIdx: index('incident_classifications_parent_idx').on(t.parentId),
+    tenantIdIdUx: uniqueIndex('incident_classifications_tenant_id_id_ux').on(t.tenantId, t.id),
+    parentIdx: index('incident_classifications_parent_idx').on(t.tenantId, t.parentId),
+    createdByIdx: index('incident_classifications_created_by_idx').on(
+      t.tenantId,
+      t.createdByTenantUserId,
+    ),
     tenantNameUx: uniqueIndex('incident_classifications_tenant_parent_name_ux').on(
       t.tenantId,
       t.parentId,
       t.name,
     ),
+    parentFk: foreignKey({
+      name: 'incident_classifications_tenant_parent_fk',
+      columns: [t.tenantId, t.parentId],
+      foreignColumns: [t.tenantId, t.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -88,8 +97,8 @@ export const incidentClassificationsRelations = relations(
       references: [tenants.id],
     }),
     parent: one(incidentClassifications, {
-      fields: [incidentClassifications.parentId],
-      references: [incidentClassifications.id],
+      fields: [incidentClassifications.tenantId, incidentClassifications.parentId],
+      references: [incidentClassifications.tenantId, incidentClassifications.id],
       relationName: 'incident_classification_parent',
     }),
     children: many(incidentClassifications, {
@@ -117,14 +126,17 @@ export const incidentInjuryTypes = pgTable(
     oshaCode: text('osha_code'),
     sortOrder: integer('sort_order'),
     isActive: integer('is_active').default(1).notNull(),
-    createdByTenantUserId: uuid('created_by_tenant_user_id').references(() => tenantUsers.id, {
-      onDelete: 'set null',
-    }),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
     ...timestamps,
     ...softDelete,
   },
   (t) => ({
     tenantIdx: index('incident_injury_types_tenant_idx').on(t.tenantId),
+    tenantIdIdUx: uniqueIndex('incident_injury_types_tenant_id_id_ux').on(t.tenantId, t.id),
+    createdByIdx: index('incident_injury_types_created_by_idx').on(
+      t.tenantId,
+      t.createdByTenantUserId,
+    ),
     tenantNameUx: uniqueIndex('incident_injury_types_tenant_name_ux').on(t.tenantId, t.name),
   }),
 )
@@ -154,9 +166,7 @@ export const incidentHoursPeriods = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     // Optional scope.  Null orgUnitId = tenant-wide window (most common).
-    siteOrgUnitId: uuid('site_org_unit_id').references(() => orgUnits.id, {
-      onDelete: 'set null',
-    }),
+    siteOrgUnitId: uuid('site_org_unit_id'),
     periodStart: date('period_start').notNull(),
     periodEnd: date('period_end').notNull(),
     // Human-readable label: "2026 Q1", "March 2026", "Turnaround 2026", …
@@ -166,9 +176,7 @@ export const incidentHoursPeriods = pgTable(
     totalHours: numeric('total_hours', { precision: 14, scale: 2 }).notNull(),
     employeeCount: integer('employee_count').notNull(),
     notes: text('notes'),
-    enteredByTenantUserId: uuid('entered_by_tenant_user_id').references(() => tenantUsers.id, {
-      onDelete: 'set null',
-    }),
+    enteredByTenantUserId: uuid('entered_by_tenant_user_id'),
     ...timestamps,
     ...softDelete,
   },
@@ -176,6 +184,10 @@ export const incidentHoursPeriods = pgTable(
     tenantIdx: index('incident_hours_periods_tenant_idx').on(t.tenantId),
     rangeIdx: index('incident_hours_periods_range_idx').on(t.tenantId, t.periodStart, t.periodEnd),
     siteIdx: index('incident_hours_periods_site_idx').on(t.tenantId, t.siteOrgUnitId),
+    enteredByIdx: index('incident_hours_periods_entered_by_idx').on(
+      t.tenantId,
+      t.enteredByTenantUserId,
+    ),
   }),
 )
 
@@ -185,7 +197,7 @@ export const incidentHoursPeriodsRelations = relations(incidentHoursPeriods, ({ 
     references: [tenants.id],
   }),
   site: one(orgUnits, {
-    fields: [incidentHoursPeriods.siteOrgUnitId],
-    references: [orgUnits.id],
+    fields: [incidentHoursPeriods.tenantId, incidentHoursPeriods.siteOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
   }),
 }))

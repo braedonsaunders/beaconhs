@@ -12,6 +12,7 @@ import { tenantIntegrations } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTrigger, listDestinations, listTriggers } from '@beaconhs/integrations'
 import { formatDateTime } from '@/lib/datetime'
+import { isUuid } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { deleteOutbound } from '../_actions'
 import { DeleteIntegrationButton } from '../../_delete-integration-button'
@@ -37,6 +38,8 @@ export default async function OutboundIntegrationPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.integrations.manage')) redirect('/admin')
 

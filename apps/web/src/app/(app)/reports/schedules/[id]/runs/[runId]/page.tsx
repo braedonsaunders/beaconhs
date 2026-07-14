@@ -16,6 +16,7 @@ import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@be
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
+import { isUuid } from '@/lib/list-params'
 import { StatusBadge } from '../../../../_format'
 
 export const metadata = { title: 'Report run' }
@@ -26,6 +27,8 @@ export default async function RunDetailPage({
   params: Promise<{ id: string; runId: string }>
 }) {
   const { id, runId } = await params
+  if (!isUuid(id) || !isUuid(runId)) notFound()
+
   const ctx = await requireRequestContext()
 
   const row = await ctx.db(async (tx) => {

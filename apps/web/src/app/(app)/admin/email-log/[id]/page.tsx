@@ -1,7 +1,8 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { EmailLogDetailView } from '@/components/email-log/detail-view'
 import { requireRequestContext } from '@/lib/auth'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,10 +12,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 export default async function EmailLogDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.audit.read')) redirect('/admin')
 
-  const { id } = await params
   return (
     <EmailLogDetailView
       id={id}

@@ -37,7 +37,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
-import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { deriveColumnsFromSchema, slugify } from '../_shared'
 import { collectDataSourceUsage } from '../_usage'
 
@@ -318,6 +318,7 @@ export default async function DataSourceDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
   const sp = await searchParams
   const editingRow = pickString(sp.editRow)
   const rowParams = parseListParams(

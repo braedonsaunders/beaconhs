@@ -33,18 +33,14 @@
     "@beaconhs/sync": "workspace:*",
     "@beaconhs/tenant": "workspace:*",
     "@sentry/node": "10.65.0",
-    "bullmq": "^5.79.1",
+    "bullmq": "^5.80.2",
     "cron-parser": "^4.9.0",
-    "drizzle-orm": "^0.45.2",
-    "qrcode": "^1.5.4",
-    "web-push": "^3.6.7"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "@types/qrcode": "^1.5.6",
-    "@types/web-push": "^3.6.4",
     "esbuild": "^0.28.1",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

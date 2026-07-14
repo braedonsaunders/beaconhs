@@ -6,21 +6,28 @@
 // the training record + certificate when the course is done).
 
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
-import { trainingEnrollments, trainingLessonProgress, trainingLessons } from '@beaconhs/db/schema'
+import { and, eq, isNull } from 'drizzle-orm'
+import { attachments, trainingLessonProgress, trainingLessons } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
+import {
+  optionalTrainingText,
+  parsePracticalCriteria,
+  parsePracticalEvaluationResults,
+  requireTrainingUuid,
+} from '@/lib/training-mutation-validation'
 import { enrollInCourse } from '../../../learn/_actions'
 import { recomputeEnrollmentCompletion } from '../../../learn/_lib/completion'
+import { requireOpenTrainingEnrollment } from '../../../learn/_lib/enrollment'
 
 // Staff enrollment for assigned delivery types (classroom, on-the-job): puts a
 // learner into the evaluations grid. Permission enforcement (training-write)
 // lives in enrollInCourse — enrolling someone else is the privileged path.
 export async function enrollLearner(courseId: string, formData: FormData) {
-  const personId = String(formData.get('personId') ?? '').trim()
-  if (!personId) throw new Error('Pick a person to enroll.')
+  courseId = requireTrainingUuid(courseId, 'Course')
+  const personId = requireTrainingUuid(formData.get('personId'), 'Person')
   await enrollInCourse(courseId, personId)
   revalidatePath(`/training/courses/${courseId}/evaluations`)
 }
@@ -38,54 +45,83 @@ export async function evaluatePractical(args: {
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
   const tenantId = ctx.tenantId
-  if (args.pass && !args.signatureDataUrl) {
-    return { ok: false, error: 'A signature is required to sign a learner off as competent.' }
-  }
-  if ((args.signatureDataUrl?.length ?? 0) > 1_500_000) {
-    return { ok: false, error: 'Signature payload too large' }
-  }
 
   try {
+    const courseId = requireTrainingUuid(args.courseId, 'Course')
+    const enrollmentId = requireTrainingUuid(args.enrollmentId, 'Enrollment')
+    const lessonId = requireTrainingUuid(args.lessonId, 'Lesson')
+    if (typeof args.pass !== 'boolean') throw new Error('Evaluation result is invalid.')
+    const notes = optionalTrainingText(args.notes, 'Evaluation notes', 20_000)
+    if (
+      args.signatureDataUrl !== null &&
+      args.signatureDataUrl !== undefined &&
+      typeof args.signatureDataUrl !== 'string'
+    ) {
+      throw new Error('Signature payload is invalid.')
+    }
+    const signatureDataUrl = args.signatureDataUrl?.trim() || null
+    if (args.pass && !signatureDataUrl) {
+      throw new Error('A signature is required to sign a learner off as competent.')
+    }
+    if ((signatureDataUrl?.length ?? 0) > 1_500_000) {
+      throw new Error('Signature payload too large')
+    }
+
     const result = await withStoredSignatureAttachment(
       ctx,
-      args.signatureDataUrl,
+      signatureDataUrl,
       async (tx, signatureAttachmentId) => {
         if (args.pass && !signatureAttachmentId) {
           throw new Error('A signature is required to sign a learner off as competent.')
         }
-        const [enr] = await tx
-          .select()
-          .from(trainingEnrollments)
-          .where(eq(trainingEnrollments.id, args.enrollmentId))
-          .limit(1)
-        if (!enr || enr.courseId !== args.courseId) throw new Error('Enrollment not found')
+        const enrollment = await requireOpenTrainingEnrollment(tx, {
+          enrollmentId,
+          expectedCourseId: courseId,
+        })
         const [lesson] = await tx
           .select()
           .from(trainingLessons)
-          .where(eq(trainingLessons.id, args.lessonId))
+          .where(
+            and(
+              eq(trainingLessons.id, lessonId),
+              eq(trainingLessons.courseId, courseId),
+              isNull(trainingLessons.deletedAt),
+            ),
+          )
           .limit(1)
-        if (!lesson || lesson.courseId !== args.courseId) throw new Error('Lesson not found')
+        if (!lesson) throw new Error('Lesson not found')
         if (lesson.kind !== 'practical') throw new Error('Not a practical lesson')
+        const criteria =
+          parsePracticalCriteria(JSON.stringify(lesson.practicalCriteria ?? [])) ?? []
+        const criteriaResults = parsePracticalEvaluationResults(
+          args.criteriaResults,
+          criteria,
+          args.pass,
+        )
 
         const now = new Date()
         const evaluatorFields = {
           evaluatedByTenantUserId: ctx.membership?.id ?? null,
-          evaluationNotes: args.notes,
+          evaluationNotes: notes,
           evaluationSignatureAttachmentId: signatureAttachmentId,
-          criteriaResults: args.criteriaResults,
+          criteriaResults,
         }
         const [existing] = await tx
           .select()
           .from(trainingLessonProgress)
           .where(
             and(
-              eq(trainingLessonProgress.enrollmentId, args.enrollmentId),
-              eq(trainingLessonProgress.lessonId, args.lessonId),
+              eq(trainingLessonProgress.enrollmentId, enrollmentId),
+              eq(trainingLessonProgress.lessonId, lessonId),
             ),
           )
           .limit(1)
+        if (existing && existing.personId !== enrollment.personId) {
+          throw new Error('Lesson progress does not belong to this learner.')
+        }
+        let progressId: string
         if (existing) {
-          await tx
+          const [updated] = await tx
             .update(trainingLessonProgress)
             .set({
               status: args.pass ? 'completed' : 'in_progress',
@@ -93,47 +129,76 @@ export async function evaluatePractical(args: {
               ...evaluatorFields,
             })
             .where(eq(trainingLessonProgress.id, existing.id))
+            .returning({ id: trainingLessonProgress.id })
+          if (!updated) throw new Error('Could not save the evaluation.')
+          progressId = updated.id
         } else {
-          await tx.insert(trainingLessonProgress).values({
-            tenantId,
-            enrollmentId: args.enrollmentId,
-            lessonId: args.lessonId,
-            personId: enr.personId,
-            status: args.pass ? 'completed' : 'in_progress',
-            startedAt: now,
-            completedAt: args.pass ? now : null,
-            ...evaluatorFields,
-          })
+          const [created] = await tx
+            .insert(trainingLessonProgress)
+            .values({
+              tenantId,
+              enrollmentId,
+              lessonId,
+              personId: enrollment.personId,
+              status: args.pass ? 'completed' : 'in_progress',
+              startedAt: now,
+              completedAt: args.pass ? now : null,
+              ...evaluatorFields,
+            })
+            .returning({ id: trainingLessonProgress.id })
+          if (!created) throw new Error('Could not save the evaluation.')
+          progressId = created.id
         }
 
-        if (args.pass) {
-          const summary = await recomputeEnrollmentCompletion(tx, {
-            tenantId,
-            enrollmentId: args.enrollmentId,
-            courseId: args.courseId,
-            personId: enr.personId,
-          })
-          return { courseCompleted: summary.completed, recordId: summary.recordId }
+        if (
+          existing?.evaluationSignatureAttachmentId &&
+          existing.evaluationSignatureAttachmentId !== signatureAttachmentId
+        ) {
+          // The attachment-delete trigger enqueues durable object cleanup in
+          // this transaction, so replacement cannot silently strand storage.
+          const [removedSignature] = await tx
+            .delete(attachments)
+            .where(
+              and(
+                eq(attachments.id, existing.evaluationSignatureAttachmentId),
+                eq(attachments.kind, 'signature'),
+              ),
+            )
+            .returning({ id: attachments.id })
+          if (!removedSignature) throw new Error('Previous evaluation signature is missing.')
         }
-        return { courseCompleted: false, recordId: null }
+
+        const summary = await recomputeEnrollmentCompletion(tx, {
+          tenantId,
+          enrollmentId,
+          courseId,
+          personId: enrollment.personId,
+        })
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'training_lesson_progress',
+          entityId: progressId,
+          action: 'sign',
+          summary: `Practical ${args.pass ? 'signed off' : 'marked not-yet-competent'} (enrollment ${enrollmentId})`,
+          after: {
+            enrollmentId,
+            lessonId,
+            pass: args.pass,
+            criteriaResults,
+            courseCompleted: summary.newlyCompleted,
+            recordId: summary.recordId,
+          },
+        })
+        return {
+          progressId,
+          criteriaResults,
+          courseCompleted: summary.newlyCompleted,
+          recordId: summary.recordId,
+        }
       },
     )
 
-    await recordAudit(ctx, {
-      entityType: 'training_lesson_progress',
-      entityId: args.lessonId,
-      action: 'sign',
-      summary: `Practical ${args.pass ? 'signed off' : 'marked not-yet-competent'} (enrollment ${args.enrollmentId})`,
-      after: {
-        enrollmentId: args.enrollmentId,
-        pass: args.pass,
-        criteriaResults: args.criteriaResults,
-        courseCompleted: result.courseCompleted,
-        recordId: result.recordId,
-      },
-    })
-    revalidatePath(`/training/courses/${args.courseId}/evaluations`)
-    revalidatePath(`/training/learn/${args.courseId}`)
+    revalidatePath(`/training/courses/${courseId}/evaluations`)
+    revalidatePath(`/training/learn/${courseId}`)
     return { ok: true, courseCompleted: result.courseCompleted }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Evaluation failed' }

@@ -13,6 +13,8 @@
  * killed process resumes without duplicating objects, verifies stored bytes by
  * size/type/SHA-256, atomically inserts+links each attachment, nulls the legacy
  * value, compensates failed DB writes, then asserts zero legacy values remain.
+ * Once the final migration retires all legacy columns, replay is a no-op only
+ * if every canonical attachment column still exists; partial retirement fails.
  */
 
 import { createHash, timingSafeEqual } from 'node:crypto'
@@ -245,6 +247,41 @@ async function columnExists(table: string, column: string): Promise<boolean> {
     ) as exists
   `
   return row?.exists ?? false
+}
+
+async function legacyColumnState(): Promise<'present' | 'retired'> {
+  const states = await Promise.all(
+    TARGETS.map(async (target) => ({
+      target,
+      present: await columnExists(target.table, target.legacyColumn),
+    })),
+  )
+  const present = states.filter((state) => state.present)
+  if (present.length === 0) {
+    const missingCanonical = (
+      await Promise.all(
+        TARGETS.map(async (target) => ({
+          target,
+          present: await columnExists(target.table, target.newColumn),
+        })),
+      )
+    ).filter((state) => !state.present)
+    if (missingCanonical.length > 0) {
+      throw new Error(
+        `Legacy signature columns are retired but canonical columns are missing: ${missingCanonical
+          .map((state) => `${state.target.table}.${state.target.newColumn}`)
+          .join(', ')}`,
+      )
+    }
+    return 'retired'
+  }
+  if (present.length !== TARGETS.length) {
+    const missing = states
+      .filter((state) => !state.present)
+      .map((state) => `${state.target.table}.${state.target.legacyColumn}`)
+    throw new Error(`Legacy signature column retirement is partial: ${missing.join(', ')}`)
+  }
+  return 'present'
 }
 
 async function rowsForTarget(
@@ -690,8 +727,13 @@ async function applyCutover(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  storage = await import('@beaconhs/storage')
   await assertCutoverDatabaseSession(sql)
+  if ((await legacyColumnState()) === 'retired') {
+    console.log('[signature-cutover] complete: legacy columns are already retired')
+    return
+  }
+
+  storage = await import('@beaconhs/storage')
   console.log(`[signature-cutover] mode=${APPLY ? 'APPLY' : 'AUDIT-ONLY'} bucket=${storage.BUCKET}`)
   await assertStoragePrivacy()
   if (APPLY) return applyCutover()

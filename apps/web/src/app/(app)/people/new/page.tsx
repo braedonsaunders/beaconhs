@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { asc } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   Alert,
   AlertDescription,
@@ -12,11 +12,22 @@ import {
   Label,
   Select,
 } from '@beaconhs/ui'
-import { crews, departments, trades } from '@beaconhs/db/schema'
-import { people } from '@beaconhs/db/schema'
+import {
+  crews,
+  departments,
+  people,
+  personTitleAssignments,
+  personTitles,
+  trades,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { materializeIdentityAudienceObligations } from '@beaconhs/compliance'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
+import {
+  lockJobTitleObligations,
+  materializeLockedJobTitleObligations,
+} from '@/lib/job-title-compliance'
 import { revalidatePath } from 'next/cache'
 import { PageContainer } from '@/components/page-layout'
 
@@ -35,11 +46,24 @@ async function createPerson(formData: FormData) {
   const departmentId = String(formData.get('departmentId') ?? '').trim() || null
   const tradeId = String(formData.get('tradeId') ?? '').trim() || null
   const crewId = String(formData.get('crewId') ?? '').trim() || null
+  const primaryTitleId = String(formData.get('primaryTitleId') ?? '').trim() || null
 
   if (!firstName || !lastName) throw new Error('First and last name are required')
 
-  const [row] = await ctx.db((tx) =>
-    tx
+  const row = await ctx.db(async (tx) => {
+    let lockedTitleObligations: Awaited<ReturnType<typeof lockJobTitleObligations>> = []
+    if (primaryTitleId) {
+      const [title] = await tx
+        .select({ id: personTitles.id })
+        .from(personTitles)
+        .where(and(eq(personTitles.id, primaryTitleId), isNull(personTitles.deletedAt)))
+        .limit(1)
+        .for('key share')
+      if (!title) throw new Error('Selected job title is unavailable')
+      lockedTitleObligations = await lockJobTitleObligations(tx, ctx.tenantId, [primaryTitleId])
+    }
+
+    const [created] = await tx
       .insert(people)
       .values({
         tenantId: ctx.tenantId,
@@ -52,18 +76,41 @@ async function createPerson(formData: FormData) {
         departmentId,
         tradeId,
         crewId,
+        titleIds: primaryTitleId ? [primaryTitleId] : [],
       })
-      .returning(),
-  )
-  revalidatePath('/people')
-  if (row) {
-    await recordAudit(ctx, {
+      .returning()
+    if (!created) throw new Error('Person could not be created')
+    if (primaryTitleId) {
+      await tx.insert(personTitleAssignments).values({
+        tenantId: ctx.tenantId,
+        personId: created.id,
+        titleId: primaryTitleId,
+        isPrimary: true,
+      })
+      await materializeLockedJobTitleObligations(tx, ctx.tenantId, lockedTitleObligations)
+    }
+    await materializeIdentityAudienceObligations(tx, ctx.tenantId, [created.id])
+    await recordAuditInTransaction(tx, ctx, {
       entityType: 'person',
-      entityId: row.id,
+      entityId: created.id,
       action: 'create',
       summary: `Added person ${firstName} ${lastName}`,
-      after: { firstName, lastName, employeeNo, email, hireDate, departmentId, tradeId, crewId },
+      after: {
+        firstName,
+        lastName,
+        employeeNo,
+        email,
+        hireDate,
+        departmentId,
+        tradeId,
+        crewId,
+        primaryTitleId,
+      },
     })
+    return created
+  })
+  revalidatePath('/people')
+  if (row) {
     redirect(`/people/${row.id}`)
   }
   redirect('/people')
@@ -71,11 +118,16 @@ async function createPerson(formData: FormData) {
 
 export default async function NewPersonPage() {
   const ctx = await requireModuleManage('people')
-  const [depts, allTrades, allCrews] = await ctx.db(async (tx) => {
+  const [depts, allTrades, allCrews, allTitles] = await ctx.db(async (tx) => {
     const d = await tx.select().from(departments).orderBy(asc(departments.name))
     const t = await tx.select().from(trades).orderBy(asc(trades.name))
     const c = await tx.select().from(crews).orderBy(asc(crews.name))
-    return [d, t, c] as const
+    const titles = await tx
+      .select()
+      .from(personTitles)
+      .where(isNull(personTitles.deletedAt))
+      .orderBy(asc(personTitles.name))
+    return [d, t, c, titles] as const
   })
 
   return (
@@ -97,6 +149,16 @@ export default async function NewPersonPage() {
                 </Field>
                 <Field label="Hire date">
                   <Input name="hireDate" type="date" />
+                </Field>
+                <Field label="Primary job title">
+                  <Select name="primaryTitleId" defaultValue="">
+                    <option value="">—</option>
+                    {allTitles.map((title) => (
+                      <option key={title.id} value={title.id}>
+                        {title.name}
+                      </option>
+                    ))}
+                  </Select>
                 </Field>
                 <Field label="Email">
                   <Input name="email" type="email" autoComplete="email" />

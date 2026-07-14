@@ -1,5 +1,5 @@
 // Canonical web-app base URL for worker-generated links (emails, digests,
-// certificate verify QR codes, report links). One resolution order everywhere
+// report links and public artifact URLs). One resolution order everywhere
 // (mirrors apps/web/src/lib/app-base-url.ts): PUBLIC_APP_URL wins (external
 // deployments that split the public hostname), then NEXT_PUBLIC_APP_URL, then
 // APP_URL (the variable documented in .env.example), then the local dev

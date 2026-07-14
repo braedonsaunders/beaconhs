@@ -24,6 +24,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { CheckCircle2, ChevronRight, Circle, XCircle } from 'lucide-react'
 import { Badge, Button, Textarea } from '@beaconhs/ui'
 import { SignaturePad } from '@/components/signature-pad'
+import { RawImage } from '@/components/raw-image'
 import { advanceWorkflowStep, rejectWorkflowStep, signWorkflowStep } from './_actions'
 
 // Mirror of @beaconhs/db/schema FormWorkflowStep + workflow-step-state shape,
@@ -178,10 +179,10 @@ function WorkflowStepCard({
           </div>
           {step.signatureUrl ? (
             <div className="rounded border border-slate-200 bg-white p-1.5 dark:border-slate-700">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <RawImage
                 src={step.signatureUrl}
                 alt={`Signature for ${step.title}`}
+                optimizationReason="authenticated"
                 className="max-h-24 w-auto"
               />
             </div>

@@ -8,7 +8,19 @@
 // (the compliance scanner runs per-tenant with RLS applied). Every query still
 // pins tenantId explicitly as defense-in-depth.
 
-import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  notInArray,
+  sql,
+} from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
@@ -16,7 +28,7 @@ import {
   documentAcknowledgments,
   documentVersions,
   equipmentItems,
-  formResponseParticipants,
+  formResponses,
   hazidAssessmentSignatures,
   hazidAssessments,
   inspectionRecords,
@@ -24,14 +36,29 @@ import {
   jobTitleTasks,
   journalEntries,
   people,
+  personTitleAssignments,
   ppeItems,
   ppeTypes,
   tenantUsers,
   trainingAssessments,
+  trainingEnrollments,
   trainingRecords,
   trainingSkillAssignments,
 } from '@beaconhs/db/schema'
 import { type AudienceItem, type ResolvedMember, resolveObligationAudience } from './audience'
+import {
+  complianceDate,
+  type ComplianceClock,
+  frequencyProgress,
+  resolveCronWindow,
+  resolveFrequencyWindow,
+} from './schedule'
+import {
+  resolveTrainingEvaluationWindow,
+  type TrainingEvidence,
+  trainingEvidenceInWindow,
+  trainingEvidenceOutcome,
+} from './training-evaluation'
 
 export type ComplianceObligation = typeof complianceObligations.$inferSelect
 
@@ -49,24 +76,33 @@ export type EvalSubjectRow = {
   status: EvalStatus
   dueOn: string | null
   completedOn: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
   count?: number
   expected?: number
+  percent?: number
 }
 
 export type EvalResult = {
   rows: EvalSubjectRow[]
   totals: { total: number; completed: number; overdue: number; pending: number }
   percent: number
+  nextDueAt: Date | null
 }
 
 type Tx = Database
 type Ob = ComplianceObligation
 
 function empty(): EvalResult {
-  return { rows: [], totals: { total: 0, completed: 0, overdue: 0, pending: 0 }, percent: 0 }
+  return {
+    rows: [],
+    totals: { total: 0, completed: 0, overdue: 0, pending: 0 },
+    percent: 0,
+    nextDueAt: null,
+  }
 }
 
-function tally(rows: EvalSubjectRow[]): EvalResult {
+function tally(rows: EvalSubjectRow[], nextDueAt: Date | null = null): EvalResult {
   const total = rows.length
   const completed = rows.filter((r) => r.status === 'completed').length
   const overdue = rows.filter((r) => r.status === 'overdue' || r.status === 'expiring').length
@@ -75,22 +111,7 @@ function tally(rows: EvalSubjectRow[]): EvalResult {
   const rank = (s: EvalStatus) =>
     s === 'overdue' ? 0 : s === 'expiring' ? 1 : s === 'pending' ? 2 : s === 'in_progress' ? 3 : 4
   rows.sort((a, b) => rank(a.status) - rank(b.status) || a.label.localeCompare(b.label))
-  return { rows, totals: { total, completed, overdue, pending }, percent }
-}
-
-function periodStart(freq: string | undefined, today: string): string {
-  const d = new Date(`${today}T00:00:00Z`)
-  if (freq === 'week') {
-    const dow = d.getUTCDay()
-    d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1))
-  } else if (freq === 'month') {
-    d.setUTCDate(1)
-  } else if (freq === 'quarter') {
-    d.setUTCMonth(Math.floor(d.getUTCMonth() / 3) * 3, 1)
-  } else if (freq === 'year') {
-    d.setUTCMonth(0, 1)
-  }
-  return d.toISOString().slice(0, 10)
+  return { rows, totals: { total, completed, overdue, pending }, percent, nextDueAt }
 }
 
 function pname(first: string | null, last: string | null): string {
@@ -114,23 +135,24 @@ export async function evaluateObligation(
   tenantId: string,
   ob: Ob,
   audience: AudienceItem[],
-  today: string = new Date().toISOString().slice(0, 10),
+  clock: ComplianceClock = { now: new Date(), timezone: 'UTC' },
 ): Promise<EvalResult> {
+  const today = complianceDate(clock)
   const aud = () => resolveObligationAudience(tx, tenantId, audience)
   switch (ob.sourceModule) {
     case 'training':
     case 'cert_requirement':
-      return evalTraining(tx, tenantId, await aud(), ob, today)
+      return evalTraining(tx, tenantId, await aud(), ob, clock)
     case 'document':
       return evalDocument(tx, tenantId, await aud(), ob, today)
     case 'journal':
-      return evalJournal(tx, tenantId, await aud(), ob, today)
+      return evalJournal(tx, tenantId, await aud(), ob, clock)
     case 'form':
-      return evalForm(tx, tenantId, await aud(), ob, today)
+      return evalForm(tx, tenantId, await aud(), ob, clock)
     case 'inspection':
-      return evalInspection(tx, tenantId, await aud(), ob, today)
+      return evalInspection(tx, tenantId, await aud(), ob, clock)
     case 'hazard_assessment':
-      return evalHazardAssessment(tx, tenantId, await aud(), ob, today)
+      return evalHazardAssessment(tx, tenantId, await aud(), ob, clock)
     case 'equipment_inspection':
       return evalEquipment(tx, tenantId, ob, today)
     case 'ppe_inspection':
@@ -169,13 +191,41 @@ async function evalTraining(
   tid: string,
   members: ResolvedMember[],
   ob: Ob,
-  today: string,
+  clock: ComplianceClock,
 ): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
   const ref = ob.targetRef ?? {}
-  const done = new Map<string, string>() // personId -> completedOn
+  const today = complianceDate(clock)
+  const window = resolveTrainingEvaluationWindow(ob.recurrence, clock, ob.createdAt)
+  const done = new Map<string, TrainingEvidence>()
+  const inProgress = new Set<string>()
+
+  const remember = (personId: string, evidence: TrainingEvidence) => {
+    // Outside expiry mode an expired credential cannot satisfy an assignment.
+    if (ob.recurrence.kind !== 'expiry' && evidence.expiresOn && evidence.expiresOn < today) return
+    const prior = done.get(personId)
+    if (!prior) {
+      done.set(personId, evidence)
+      return
+    }
+    if (ob.recurrence.kind === 'expiry') {
+      // Pick the credential with the longest remaining validity. No expiry is
+      // stronger than any dated expiry, even if another row was completed later.
+      if (!prior.expiresOn) return
+      if (!evidence.expiresOn || evidence.expiresOn > prior.expiresOn) {
+        done.set(personId, evidence)
+      } else if (
+        evidence.expiresOn === prior.expiresOn &&
+        evidence.completedOn > prior.completedOn
+      ) {
+        done.set(personId, evidence)
+      }
+      return
+    }
+    if (evidence.completedOn > prior.completedOn) done.set(personId, evidence)
+  }
 
   if (ref.trainingItemKind === 'assessment_type' && ref.assessmentTypeId) {
     const rows = await tx
@@ -188,14 +238,49 @@ async function evalTraining(
         and(
           eq(trainingAssessments.tenantId, tid),
           eq(trainingAssessments.typeId, ref.assessmentTypeId),
+          eq(trainingAssessments.complianceObligationId, ob.id),
           inArray(trainingAssessments.personId, ids),
           eq(trainingAssessments.passed, true),
           eq(trainingAssessments.status, 'submitted'),
           isNull(trainingAssessments.deletedAt),
+          window.evidenceStartAt
+            ? gte(trainingAssessments.completedAt, window.evidenceStartAt)
+            : undefined,
+          window.evidenceEndAt
+            ? lt(trainingAssessments.completedAt, window.evidenceEndAt)
+            : undefined,
         ),
       )
-    for (const r of rows)
-      if (r.completedAt) done.set(r.personId, r.completedAt.toISOString().slice(0, 10))
+    for (const r of rows) {
+      if (!r.completedAt || !trainingEvidenceInWindow(r.completedAt, window)) continue
+      remember(r.personId, {
+        completedOn: complianceDate({ now: r.completedAt, timezone: clock.timezone }),
+        expiresOn: null,
+      })
+    }
+
+    const attempts = await tx
+      .select({ personId: trainingAssessments.personId, startedAt: trainingAssessments.startedAt })
+      .from(trainingAssessments)
+      .where(
+        and(
+          eq(trainingAssessments.tenantId, tid),
+          eq(trainingAssessments.typeId, ref.assessmentTypeId),
+          eq(trainingAssessments.complianceObligationId, ob.id),
+          inArray(trainingAssessments.personId, ids),
+          eq(trainingAssessments.status, 'in_progress'),
+          isNull(trainingAssessments.deletedAt),
+          window.evidenceStartAt
+            ? gte(trainingAssessments.startedAt, window.evidenceStartAt)
+            : undefined,
+          window.evidenceEndAt
+            ? lt(trainingAssessments.startedAt, window.evidenceEndAt)
+            : undefined,
+        ),
+      )
+    for (const attempt of attempts) {
+      if (trainingEvidenceInWindow(attempt.startedAt, window)) inProgress.add(attempt.personId)
+    }
   } else if (ref.courseId) {
     const rows = await tx
       .select({
@@ -210,13 +295,39 @@ async function evalTraining(
           eq(trainingRecords.courseId, ref.courseId),
           inArray(trainingRecords.personId, ids),
           isNull(trainingRecords.deletedAt),
+          window.evidenceStartOn
+            ? gte(trainingRecords.completedOn, window.evidenceStartOn)
+            : undefined,
+          window.evidenceEndOn ? lte(trainingRecords.completedOn, window.evidenceEndOn) : undefined,
         ),
       )
     for (const r of rows) {
-      const valid = !r.expiresOn || r.expiresOn >= today
       // personId is nullable (blank drafts); the inArray filter already excludes
       // nulls, so this guard only narrows the type.
-      if (valid && r.personId) done.set(r.personId, r.completedOn)
+      if (!r.personId || !trainingEvidenceInWindow(r.completedOn, window)) continue
+      remember(r.personId, { completedOn: r.completedOn, expiresOn: r.expiresOn })
+    }
+
+    const enrollments = await tx
+      .select({
+        personId: trainingEnrollments.personId,
+        startedAt: trainingEnrollments.startedAt,
+        createdAt: trainingEnrollments.createdAt,
+      })
+      .from(trainingEnrollments)
+      .where(
+        and(
+          eq(trainingEnrollments.tenantId, tid),
+          eq(trainingEnrollments.courseId, ref.courseId),
+          inArray(trainingEnrollments.personId, ids),
+          eq(trainingEnrollments.status, 'in_progress'),
+          isNull(trainingEnrollments.deletedAt),
+        ),
+      )
+    for (const enrollment of enrollments) {
+      if (trainingEvidenceInWindow(enrollment.startedAt ?? enrollment.createdAt, window)) {
+        inProgress.add(enrollment.personId)
+      }
     }
   } else if (ref.skillTypeId) {
     // cert_requirement satisfied by holding a valid (non-expired) skill grant of this type
@@ -236,21 +347,33 @@ async function evalTraining(
         ),
       )
     for (const r of rows) {
-      const valid = !r.expiresOn || r.expiresOn >= today
-      if (valid && r.personId) done.set(r.personId, r.grantedOn)
+      if (r.personId) remember(r.personId, { completedOn: r.grantedOn, expiresOn: r.expiresOn })
     }
+  } else {
+    throw new Error(`Training obligation ${ob.id} has no supported target`)
   }
 
-  const dueOn = ob.recurrence?.dueOn ?? null
   return tally(
     ids.map((pid) => {
-      const c = done.get(pid)
-      const status: EvalStatus = c ? 'completed' : dueOn && dueOn < today ? 'overdue' : 'pending'
-      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
-        dueOn,
-        completedOn: c ?? null,
+      const evidence = done.get(pid) ?? null
+      const outcome = trainingEvidenceOutcome({
+        recurrence: ob.recurrence,
+        window,
+        today,
+        evidence,
+        hasProgress: inProgress.has(pid),
+      })
+      return personRow(pid, names.get(pid) ?? '(unnamed)', outcome.status, {
+        dueOn: outcome.dueOn,
+        completedOn: outcome.completedOn,
+        count: outcome.status === 'completed' ? 1 : 0,
+        expected: 1,
+        percent: outcome.status === 'completed' ? 100 : 0,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
       })
     }),
+    window.nextDueAt,
   )
 }
 
@@ -328,33 +451,54 @@ async function evalJournal(
   tid: string,
   members: ResolvedMember[],
   ob: Ob,
-  today: string,
+  clock: ComplianceClock,
 ): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
-  const since = periodStart(ob.recurrence?.frequency, today)
+  const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
+  const threshold = ob.recurrence?.compliantPercentage ?? 100
   const counts = await tx
-    .select({ personId: journalEntries.personId, c: sql<number>`count(*)::int` })
+    .select({
+      personId: journalEntries.personId,
+      c: sql<number>`count(*)::int`,
+      completedOn: sql<string | null>`max(${journalEntries.entryDate})::text`,
+    })
     .from(journalEntries)
     .where(
       and(
         eq(journalEntries.tenantId, tid),
         inArray(journalEntries.personId, ids),
-        gte(journalEntries.entryDate, since),
+        gte(journalEntries.entryDate, window.periodStart),
+        lte(journalEntries.entryDate, window.periodEnd),
+        inArray(journalEntries.status, ['submitted', 'archived']),
         isNull(journalEntries.deletedAt),
       ),
     )
     .groupBy(journalEntries.personId)
-  const byPerson = new Map<string, number>()
-  for (const r of counts) if (r.personId) byPerson.set(r.personId, Number(r.c))
+  const byPerson = new Map<string, { count: number; completedOn: string | null }>()
+  for (const r of counts) {
+    if (r.personId) {
+      byPerson.set(r.personId, { count: Number(r.c), completedOn: r.completedOn })
+    }
+  }
   return tally(
     ids.map((pid) => {
-      const n = byPerson.get(pid) ?? 0
-      const status: EvalStatus = n >= expected ? 'completed' : n > 0 ? 'in_progress' : 'pending'
-      return personRow(pid, names.get(pid) ?? '(unnamed)', status, { count: n, expected })
+      const evidence = byPerson.get(pid)
+      const n = evidence?.count ?? 0
+      const progress = frequencyProgress(n, expected, threshold, window.dueAt, clock.now)
+      return personRow(pid, names.get(pid) ?? '(unnamed)', progress.status, {
+        count: n,
+        expected,
+        percent: progress.percent,
+        dueOn: window.dueOn,
+        completedOn: progress.status === 'completed' ? (evidence?.completedOn ?? null) : null,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
+      })
     }),
+    window.nextDueAt,
   )
 }
 
@@ -363,35 +507,84 @@ async function evalForm(
   tid: string,
   members: ResolvedMember[],
   ob: Ob,
-  today: string,
+  clock: ComplianceClock,
 ): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.formTemplateId) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
-  const since = periodStart(ob.recurrence?.frequency ?? 'week', today)
+  const window = resolveCronWindow(ob.recurrence, clock, ob.createdAt)
+  // A scheduled app becomes actionable at its cron fire. Before the first
+  // eligible fire there is no task to complete and no response can count as
+  // early evidence; the worker materializes the first pending rows at the fire.
+  if (!window.started) return { ...empty(), nextDueAt: window.dueAt }
+  // Completion belongs to the response owner, not every person mentioned in
+  // the payload. Join the immutable submittedBy membership directly: the
+  // participant index deliberately deduplicates a person mentioned in a
+  // picker, so its free-form role cannot reliably distinguish the submitter.
   const parts = await tx
     .select({
-      personId: formResponseParticipants.personId,
-      occurredOn: formResponseParticipants.occurredOn,
+      responseId: formResponses.id,
+      personId: people.id,
+      submittedAt: formResponses.submittedAt,
     })
-    .from(formResponseParticipants)
-    .where(
+    .from(formResponses)
+    .innerJoin(
+      tenantUsers,
       and(
-        eq(formResponseParticipants.tenantId, tid),
-        eq(formResponseParticipants.templateId, ob.targetRef.formTemplateId),
-        inArray(formResponseParticipants.personId, ids),
-        gte(formResponseParticipants.occurredOn, since),
+        eq(tenantUsers.tenantId, formResponses.tenantId),
+        eq(tenantUsers.id, formResponses.submittedBy),
       ),
     )
-  const done = new Map<string, string>()
-  for (const p of parts) if (p.occurredOn) done.set(p.personId, p.occurredOn)
+    .innerJoin(
+      people,
+      and(eq(people.tenantId, tenantUsers.tenantId), eq(people.userId, tenantUsers.userId)),
+    )
+    .where(
+      and(
+        eq(formResponses.tenantId, tid),
+        eq(formResponses.templateId, ob.targetRef.formTemplateId),
+        inArray(people.id, ids),
+        eq(formResponses.complianceObligationId, ob.id),
+        inArray(formResponses.status, ['submitted', 'in_review', 'closed', 'non_compliant']),
+        isNotNull(formResponses.submittedAt),
+        gte(formResponses.submittedAt, window.evidenceStartAt),
+        lt(formResponses.submittedAt, window.periodEndAt),
+        isNull(formResponses.deletedAt),
+      ),
+    )
+  const done = new Map<string, { completedOn: string; responseId: string; submittedAt: Date }>()
+  for (const p of parts) {
+    if (!p.submittedAt) continue
+    const completedOn = complianceDate({ now: p.submittedAt, timezone: clock.timezone })
+    const prior = done.get(p.personId)
+    if (
+      !prior ||
+      p.submittedAt.getTime() > prior.submittedAt.getTime() ||
+      (p.submittedAt.getTime() === prior.submittedAt.getTime() && p.responseId > prior.responseId)
+    ) {
+      done.set(p.personId, { completedOn, responseId: p.responseId, submittedAt: p.submittedAt })
+    }
+  }
   return tally(
     ids.map((pid) => {
-      const c = done.get(pid)
-      return personRow(pid, names.get(pid) ?? '(unnamed)', c ? 'completed' : 'pending', {
-        completedOn: c ?? null,
+      const evidence = done.get(pid)
+      const status: EvalStatus = evidence
+        ? 'completed'
+        : window.started && clock.now.getTime() > window.dueAt.getTime()
+          ? 'overdue'
+          : 'pending'
+      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
+        subjectRef: evidence ? { responseId: evidence.responseId } : null,
+        dueOn: window.dueOn,
+        completedOn: evidence?.completedOn ?? null,
+        count: evidence ? 1 : 0,
+        expected: 1,
+        percent: evidence ? 100 : 0,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
       })
     }),
+    window.nextDueAt,
   )
 }
 
@@ -400,13 +593,14 @@ async function evalInspection(
   tid: string,
   members: ResolvedMember[],
   ob: Ob,
-  today: string,
+  clock: ComplianceClock,
 ): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.inspectionTypeId) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
-  const since = periodStart(ob.recurrence?.frequency, today)
+  const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
+  const threshold = ob.recurrence?.compliantPercentage ?? 100
 
   // Bridge person → tenantUser (inspection_records.inspectorTenantUserId).
   const userIds = members.map((m) => m.userId).filter((u): u is string => Boolean(u))
@@ -419,34 +613,49 @@ async function evalInspection(
     for (const t of tus) if (t.userId) tuByUser.set(t.userId, t.id)
   }
   const tuIds = Array.from(tuByUser.values())
-  const countByTu = new Map<string, number>()
+  const countByTu = new Map<string, { count: number; completedOn: string | null }>()
   if (tuIds.length > 0) {
     const recs = await tx
-      .select({ tu: inspectionRecords.inspectorTenantUserId, c: sql<number>`count(*)::int` })
+      .select({
+        tu: inspectionRecords.inspectorTenantUserId,
+        c: sql<number>`count(*)::int`,
+        completedOn: sql<string | null>`max(${inspectionRecords.occurredAt})::date::text`,
+      })
       .from(inspectionRecords)
       .where(
         and(
           eq(inspectionRecords.tenantId, tid),
           eq(inspectionRecords.typeId, ob.targetRef.inspectionTypeId),
           inArray(inspectionRecords.status, ['submitted', 'closed']),
-          gte(inspectionRecords.occurredAt, new Date(`${since}T00:00:00Z`)),
+          gte(inspectionRecords.occurredAt, window.evidenceStartAt),
+          lt(inspectionRecords.occurredAt, window.periodEndAt),
           inArray(inspectionRecords.inspectorTenantUserId, tuIds),
+          isNull(inspectionRecords.deletedAt),
         ),
       )
       .groupBy(inspectionRecords.inspectorTenantUserId)
-    for (const r of recs) if (r.tu) countByTu.set(r.tu, Number(r.c))
+    for (const r of recs) {
+      if (r.tu) countByTu.set(r.tu, { count: Number(r.c), completedOn: r.completedOn })
+    }
   }
 
   return tally(
     members.map((m) => {
       const tu = m.userId ? tuByUser.get(m.userId) : undefined
-      const n = tu ? (countByTu.get(tu) ?? 0) : 0
-      const status: EvalStatus = n >= expected ? 'completed' : n > 0 ? 'in_progress' : 'pending'
-      return personRow(m.personId, names.get(m.personId) ?? '(unnamed)', status, {
+      const evidence = tu ? countByTu.get(tu) : undefined
+      const n = evidence?.count ?? 0
+      const progress = frequencyProgress(n, expected, threshold, window.dueAt, clock.now)
+      return personRow(m.personId, names.get(m.personId) ?? '(unnamed)', progress.status, {
         count: n,
         expected,
+        percent: progress.percent,
+        dueOn: window.dueOn,
+        completedOn: progress.status === 'completed' ? (evidence?.completedOn ?? null) : null,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
       })
     }),
+    window.nextDueAt,
   )
 }
 
@@ -464,14 +673,14 @@ async function evalHazardAssessment(
   tid: string,
   members: ResolvedMember[],
   ob: Ob,
-  today: string,
+  clock: ComplianceClock,
 ): Promise<EvalResult> {
   if (members.length === 0) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
-  const since = periodStart(ob.recurrence?.frequency, today)
-  const sinceTs = new Date(`${since}T00:00:00Z`)
+  const window = resolveFrequencyWindow(ob.recurrence, clock, ob.createdAt)
   const expected = Math.max(1, ob.recurrence?.quantity ?? 1)
+  const threshold = ob.recurrence?.compliantPercentage ?? 100
 
   // (a) Signatures BY the person in the period (dated via the parent assessment).
   const sigByPerson = new Map<string, number>()
@@ -483,7 +692,10 @@ async function evalHazardAssessment(
       and(
         eq(hazidAssessmentSignatures.tenantId, tid),
         inArray(hazidAssessmentSignatures.personId, ids),
-        gte(hazidAssessments.occurredAt, sinceTs),
+        isNotNull(hazidAssessmentSignatures.signedAt),
+        eq(hazidAssessments.locked, true),
+        gte(hazidAssessments.occurredAt, window.evidenceStartAt),
+        lt(hazidAssessments.occurredAt, window.periodEndAt),
         isNull(hazidAssessments.deletedAt),
       ),
     )
@@ -515,7 +727,9 @@ async function evalHazardAssessment(
         and(
           eq(hazidAssessments.tenantId, tid),
           inArray(hazidAssessments.reportedByTenantUserId, tuIds),
-          gte(hazidAssessments.occurredAt, sinceTs),
+          eq(hazidAssessments.locked, true),
+          gte(hazidAssessments.occurredAt, window.evidenceStartAt),
+          lt(hazidAssessments.occurredAt, window.periodEndAt),
           isNull(hazidAssessments.deletedAt),
         ),
       )
@@ -529,9 +743,17 @@ async function evalHazardAssessment(
   return tally(
     ids.map((pid) => {
       const n = (sigByPerson.get(pid) ?? 0) + (createdByPerson.get(pid) ?? 0)
-      const status: EvalStatus = n >= expected ? 'completed' : n > 0 ? 'in_progress' : 'pending'
-      return personRow(pid, names.get(pid) ?? '(unnamed)', status, { count: n, expected })
+      const progress = frequencyProgress(n, expected, threshold, window.dueAt, clock.now)
+      return personRow(pid, names.get(pid) ?? '(unnamed)', progress.status, {
+        count: n,
+        expected,
+        percent: progress.percent,
+        dueOn: window.dueOn,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
+      })
     }),
+    window.nextDueAt,
   )
 }
 
@@ -586,6 +808,8 @@ async function evalEquipment(tx: Tx, tid: string, ob: Ob, today: string): Promis
       and(
         eq(equipmentItems.tenantId, tid),
         typeId ? eq(equipmentItems.typeId, typeId) : undefined,
+        eq(equipmentItems.isDraft, false),
+        notInArray(equipmentItems.status, ['retired', 'lost']),
         isNull(equipmentItems.deletedAt),
       ),
     )
@@ -605,6 +829,7 @@ async function evalPpe(tx: Tx, tid: string, ob: Ob, today: string): Promise<Eval
       serial: ppeItems.serialNumber,
       type: ppeTypes.name,
       inspection: ppeItems.nextInspectionDue,
+      annualInspection: ppeItems.nextAnnualInspectionDue,
       expiresOn: ppeItems.expiresOn,
     })
     .from(ppeItems)
@@ -613,12 +838,13 @@ async function evalPpe(tx: Tx, tid: string, ob: Ob, today: string): Promise<Eval
       and(
         eq(ppeItems.tenantId, tid),
         typeId ? eq(ppeItems.typeId, typeId) : undefined,
+        notInArray(ppeItems.status, ['discarded', 'expired']),
         isNull(ppeItems.deletedAt),
       ),
     )
   return tally(
     rows.map((r) => {
-      const due = [r.inspection, r.expiresOn].filter(Boolean).sort()[0] ?? null
+      const due = [r.inspection, r.annualInspection, r.expiresOn].filter(Boolean).sort()[0] ?? null
       return recordRow(
         r.id,
         `${r.type ?? 'PPE'}${r.serial ? ` · ${r.serial}` : ''}`,
@@ -705,19 +931,26 @@ async function evalJobTitle(tx: Tx, tid: string, ob: Ob): Promise<EvalResult> {
   const tasks = await tx
     .select({ id: jobTitleTasks.id, task: jobTitleTasks.task })
     .from(jobTitleTasks)
-    .where(and(eq(jobTitleTasks.tenantId, tid), eq(jobTitleTasks.titleId, titleId)))
+    .where(
+      and(
+        eq(jobTitleTasks.tenantId, tid),
+        eq(jobTitleTasks.titleId, titleId),
+        isNull(jobTitleTasks.deletedAt),
+      ),
+    )
   if (tasks.length === 0) return empty()
   const holders = await tx
     .select({ id: people.id, first: people.firstName, last: people.lastName })
     .from(people)
-    .where(
+    .innerJoin(
+      personTitleAssignments,
       and(
-        eq(people.tenantId, tid),
-        eq(people.status, 'active'),
-        isNull(people.deletedAt),
-        sql`${people.titleIds} @> ${JSON.stringify([titleId])}::jsonb`,
+        eq(personTitleAssignments.tenantId, people.tenantId),
+        eq(personTitleAssignments.personId, people.id),
+        eq(personTitleAssignments.titleId, titleId),
       ),
     )
+    .where(and(eq(people.tenantId, tid), eq(people.status, 'active'), isNull(people.deletedAt)))
   if (holders.length === 0) return empty()
   const taskIds = tasks.map((t) => t.id)
   const personIds = holders.map((h) => h.id)

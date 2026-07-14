@@ -36,7 +36,6 @@ import {
   MapPin,
   Mic,
   Minus,
-  Package,
   Pencil,
   Phone,
   Plus,
@@ -75,12 +74,9 @@ import {
 import {
   FIELD_TYPES,
   entityKindForPicker,
-  FORM_TEMPLATE_ACTIONS,
-  FORM_TEMPLATE_TRIGGERS,
-  FORM_STATUS_VALUES,
+  storesResponseValue,
   type CanvasLayout,
   type DataBinding,
-  type FlowSubjectProfile,
   type DefaultValueExpression,
   type FieldType,
   type FormField,
@@ -126,6 +122,7 @@ import {
   Workflow as WorkflowIcon,
 } from 'lucide-react'
 import { listDataSources, type DataSourceSummary } from '../../../_lib/data-sources'
+import { formFlowProfile } from '@/lib/flows/form-flow-validation'
 
 // --- Palette ---------------------------------------------------------------
 
@@ -157,10 +154,6 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   project_picker: Briefcase,
   site_picker: MapPin,
   area_picker: MapIcon,
-  equipment_picker: Package,
-  ppe_picker: Package,
-  document_picker: FileText,
-  course_picker: ClipboardCheck,
   photo: ImageIcon,
   photo_upload: ImageIcon,
   photo_ai: Sparkles,
@@ -175,7 +168,6 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   risk_matrix: Sliders,
   heading: Type,
   paragraph: AlignLeft,
-  image: ImageIcon,
   divider: Minus,
   table: Table2,
   lookup: Database,
@@ -217,8 +209,8 @@ const PALETTE_MORE: PaletteGroup[] = [
     label: 'Date & contact',
     types: ['datetime', 'time', 'gps', 'address', 'email', 'phone', 'url', 'qr_scanner'],
   },
-  { label: 'Choice', types: ['radio', 'multi_select', 'ranking'] },
-  { label: 'Scoring', types: ['rating', 'matrix', 'yes_no_comment', 'traffic_light'] },
+  { label: 'Choice', types: ['radio', 'multi_select', 'ranking', 'matrix'] },
+  { label: 'Scoring', types: ['rating', 'yes_no_comment', 'traffic_light'] },
   {
     label: 'Pickers',
     types: [
@@ -227,20 +219,16 @@ const PALETTE_MORE: PaletteGroup[] = [
       'project_picker',
       'site_picker',
       'area_picker',
-      'equipment_picker',
-      'ppe_picker',
-      'document_picker',
-      'course_picker',
     ],
   },
   { label: 'Media', types: ['photo_ai', 'photo_annotated', 'sketch', 'video', 'audio'] },
   { label: 'Computed', types: ['risk_matrix', 'typed_attestation'] },
   { label: 'Data', types: ['lookup', 'data_table', 'metric'] },
-  { label: 'Display', types: ['heading', 'paragraph', 'rich_text', 'image', 'divider'] },
+  { label: 'Display', types: ['heading', 'paragraph', 'rich_text', 'divider'] },
 ]
 
 function newId(prefix: string): string {
-  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
+  return `${prefix}_${globalThis.crypto.randomUUID()}`
 }
 
 function emptyField(type: FieldType): FormField {
@@ -305,6 +293,7 @@ export function FormDesigner({
   flows = [],
   emailTemplates = [],
   pdfTemplates = [],
+  targetApps = [],
   recipientOptions,
   canGenerate = false,
   canPin = false,
@@ -323,6 +312,7 @@ export function FormDesigner({
   flows?: FlowSummary[]
   emailTemplates?: { id: string; name: string }[]
   pdfTemplates?: { id: string; name: string }[]
+  targetApps?: { id: string; name: string }[]
   recipientOptions?: RecipientOptions
   canGenerate?: boolean
   canPin?: boolean
@@ -355,17 +345,10 @@ export function FormDesigner({
   const [error, setError] = useState<string | null>(null)
   const [changelog, setChangelog] = useState('')
 
-  // Live field ids power Flow conditions even before publishing.
-  const liveFieldIds = useMemo(() => {
-    const ids: string[] = []
-    for (const sec of schema.sections) for (const f of sec.fields) ids.push(f.id)
-    return ids
-  }, [schema])
-
   // Selectable fields for the records-list "List" tab — real answer fields only
   // (content-only display elements carry no data to show in a column).
   const listFields = useMemo(() => {
-    const skip = new Set(['heading', 'paragraph', 'divider', 'image', 'metric'])
+    const skip = new Set(['heading', 'paragraph', 'divider', 'metric'])
     const out: { id: string; label: string }[] = []
     for (const sec of schema.sections)
       for (const f of sec.fields) {
@@ -379,18 +362,12 @@ export function FormDesigner({
   // the full recordConfig jsonb; its type omits `list`, but it's there at runtime).
   const listConfig = (recordConfig as { list?: ListConfig } | undefined)?.list
 
-  // The form-template flow subject: the full Builder vocabulary, fields = live ids.
-  const flowProfile = useMemo<FlowSubjectProfile>(
-    () => ({
-      subjectType: 'form_template',
-      subjectKey: templateId,
-      label: appName,
-      triggers: FORM_TEMPLATE_TRIGGERS,
-      actions: FORM_TEMPLATE_ACTIONS,
-      statusValues: FORM_STATUS_VALUES,
-      fields: liveFieldIds.map((id) => ({ key: id, label: id })),
-    }),
-    [templateId, appName, liveFieldIds],
+  // Keep the canvas vocabulary aligned with the server-side flow validator.
+  // Repeating children are not top-level response fields and must not be offered
+  // as condition or action targets.
+  const flowProfile = useMemo(
+    () => formFlowProfile(templateId, appName, schema),
+    [templateId, appName, schema],
   )
 
   let selectedField: { section: FormSchemaV1['sections'][number]; field: FormField } | null = null
@@ -890,6 +867,7 @@ export function FormDesigner({
                 profile={flowProfile}
                 emailTemplates={emailTemplates}
                 pdfTemplates={pdfTemplates}
+                targetApps={targetApps}
                 recipientOptions={recipientOptions}
                 flows={flows}
                 canEdit
@@ -1493,6 +1471,7 @@ function WorkflowEditor({
 type FieldPropTab = 'basic' | 'validation' | 'logic' | 'default' | 'formula'
 
 function FieldProperties({
+  sectionId,
   field,
   schema,
   onChange,
@@ -1504,16 +1483,30 @@ function FieldProperties({
 }) {
   const [tab, setTab] = useState<FieldPropTab>('basic')
   const isCalcField = field.type === 'formula'
+  const storesValue = storesResponseValue(field)
+  const ownerSection = schema.sections.find((section) => section.id === sectionId)
   const otherFields = schema.sections
-    .flatMap((s) => s.fields)
-    .filter((f) => f.id !== field.id)
+    .flatMap((section) => {
+      if (section.repeating && section.id !== sectionId) return []
+      if (!ownerSection?.repeating && section.repeating) return []
+      return section.fields
+    })
+    .filter((candidate) => candidate.id !== field.id && storesResponseValue(candidate))
     .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
   const repeatingSections = schema.sections
     .filter((s) => s.repeating)
     .map((s) => ({
       id: s.id,
       label: s.title?.en ?? s.id,
-      fields: s.fields.map((f) => ({ id: f.id, label: f.label?.en ?? f.id })),
+      fields: s.fields
+        .filter(
+          (candidate) =>
+            storesResponseValue(candidate) ||
+            (!ownerSection?.repeating &&
+              candidate.type === 'formula' &&
+              candidate.formula !== undefined),
+        )
+        .map((f) => ({ id: f.id, label: f.label?.en ?? f.id })),
     }))
   // Single-entity picker fields the formula builder's entity_attr operator
   // can target. Multi-pickers are excluded because entity_attr resolves one
@@ -1530,9 +1523,9 @@ function FieldProperties({
 
   const tabs: { value: FieldPropTab; label: string; show: boolean }[] = [
     { value: 'basic', label: 'Basic', show: true },
-    { value: 'validation', label: 'Validation', show: true },
+    { value: 'validation', label: 'Validation', show: storesValue },
     { value: 'logic', label: 'Logic', show: true },
-    { value: 'default', label: 'Default', show: true },
+    { value: 'default', label: 'Default', show: storesValue },
     { value: 'formula', label: 'Formula', show: isCalcField },
   ]
 
@@ -1560,8 +1553,12 @@ function FieldProperties({
           ))}
       </div>
 
-      {tab === 'basic' ? <FieldBasicTab field={field} schema={schema} onChange={onChange} /> : null}
-      {tab === 'validation' ? <FieldValidationTab field={field} onChange={onChange} /> : null}
+      {tab === 'basic' ? (
+        <FieldBasicTab sectionId={sectionId} field={field} schema={schema} onChange={onChange} />
+      ) : null}
+      {tab === 'validation' && storesValue ? (
+        <FieldValidationTab field={field} onChange={onChange} />
+      ) : null}
       {tab === 'logic' ? (
         <div className="space-y-1">
           <Label className="text-xs">Show when (showIf)</Label>
@@ -1575,7 +1572,9 @@ function FieldProperties({
           />
         </div>
       ) : null}
-      {tab === 'default' ? <FieldDefaultTab field={field} onChange={onChange} /> : null}
+      {tab === 'default' && storesValue ? (
+        <FieldDefaultTab field={field} onChange={onChange} />
+      ) : null}
       {tab === 'formula' && isCalcField ? (
         <div className="space-y-1">
           <Label className="text-xs">Formula</Label>
@@ -1596,19 +1595,33 @@ function FieldProperties({
 }
 
 function FieldBasicTab({
+  sectionId,
   field,
   schema,
   onChange,
 }: {
+  sectionId: string
   field: FormField
   schema: FormSchemaV1
   onChange: (patch: Partial<FormField>) => void
 }) {
   // Other fields in the app — targets for cascade filters + lookup auto-fill.
+  const ownerSection = schema.sections.find((section) => section.id === sectionId)
   const otherFields = schema.sections
-    .flatMap((s) => s.fields)
-    .filter((f) => f.id !== field.id)
+    .flatMap((section) => {
+      if (section.repeating && section.id !== sectionId) return []
+      if (!ownerSection?.repeating && section.repeating) return []
+      return section.fields
+    })
+    .filter((candidate) => candidate.id !== field.id && storesResponseValue(candidate))
     .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
+  const autofillFields = (
+    ownerSection?.repeating
+      ? ownerSection.fields
+      : schema.sections.filter((section) => !section.repeating).flatMap((section) => section.fields)
+  )
+    .filter((candidate) => candidate.id !== field.id && storesResponseValue(candidate))
+    .map((candidate) => ({ id: candidate.id, label: candidate.label?.en ?? candidate.id }))
   return (
     <div className="space-y-3">
       <div className="space-y-1">
@@ -1636,14 +1649,16 @@ function FieldBasicTab({
           }
         />
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={field.required ?? false}
-          onChange={(e) => onChange({ required: e.target.checked })}
-        />
-        Required
-      </label>
+      {storesResponseValue(field) ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={field.required ?? false}
+            onChange={(e) => onChange({ required: e.target.checked })}
+          />
+          Required
+        </label>
+      ) : null}
       <div className="space-y-1">
         <Label className="text-xs">Width (columns)</Label>
         <Select
@@ -1672,7 +1687,12 @@ function FieldBasicTab({
       {field.type === 'slider' ? <SliderConfigEditor field={field} onChange={onChange} /> : null}
       {field.type === 'matrix' ? <MatrixConfigEditor field={field} onChange={onChange} /> : null}
       {field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
-        <DataBindingEditor field={field} otherFields={otherFields} onChange={onChange} />
+        <DataBindingEditor
+          field={field}
+          otherFields={otherFields}
+          autofillFields={autofillFields}
+          onChange={onChange}
+        />
       ) : null}
     </div>
   )
@@ -1879,10 +1899,12 @@ type DsColumns = DataSourceSummary['columns']
 function DataBindingEditor({
   field,
   otherFields,
+  autofillFields,
   onChange,
 }: {
   field: FormField
   otherFields: { id: string; label: string }[]
+  autofillFields: { id: string; label: string }[]
   onChange: (patch: Partial<FormField>) => void
 }) {
   const { sources, loading, refresh } = useDataSources()
@@ -1898,7 +1920,12 @@ function DataBindingEditor({
       onChange({ binding: undefined })
       return
     }
-    onChange({ binding: next })
+    onChange({
+      binding: next,
+      ...(field.type === 'data_table' && p.selectable === 'none'
+        ? { required: undefined, validation: undefined, defaultValue: undefined }
+        : {}),
+    })
   }
 
   return (
@@ -1930,7 +1957,14 @@ function DataBindingEditor({
         <Select
           className="h-8 text-xs"
           value={b?.sourceKey ?? ''}
-          onChange={(e) => patch({ sourceKey: e.target.value })}
+          onChange={(e) =>
+            onChange({
+              binding: e.target.value ? { sourceKey: e.target.value } : undefined,
+              ...(field.type === 'data_table'
+                ? { required: undefined, validation: undefined, defaultValue: undefined }
+                : {}),
+            })
+          }
         >
           <option value="">{loading ? 'Loading…' : '— pick a data source —'}</option>
           {sources.map((s) => (
@@ -1949,7 +1983,13 @@ function DataBindingEditor({
       {source ? (
         <>
           {field.type === 'lookup' ? (
-            <LookupBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
+            <LookupBindingFields
+              b={b}
+              cols={cols}
+              otherFields={otherFields}
+              autofillFields={autofillFields}
+              patch={patch}
+            />
           ) : null}
           {field.type === 'data_table' ? (
             <DataTableBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
@@ -1967,11 +2007,13 @@ function LookupBindingFields({
   b,
   cols,
   otherFields,
+  autofillFields,
   patch,
 }: {
   b: DataBinding | undefined
   cols: DsColumns
   otherFields: { id: string; label: string }[]
+  autofillFields: { id: string; label: string }[]
   patch: (p: Partial<DataBinding>) => void
 }) {
   const autofill = b?.autofill ?? []
@@ -2012,6 +2054,22 @@ function LookupBindingFields({
 
       <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
 
+      <div className="space-y-1">
+        <Label className="text-xs">Results per search</Label>
+        <Input
+          type="number"
+          min={1}
+          max={1000}
+          className="h-8 text-xs"
+          value={b?.limit ?? ''}
+          placeholder="50"
+          onChange={(e) => patch({ limit: e.target.value ? Number(e.target.value) : undefined })}
+        />
+        <p className="text-[10px] text-slate-500">
+          The lookup searches the full source remotely and returns this many matches at a time.
+        </p>
+      </div>
+
       <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
@@ -2024,7 +2082,7 @@ function LookupBindingFields({
               patch({
                 autofill: [
                   ...autofill,
-                  { column: cols[0]?.key ?? '', targetFieldId: otherFields[0]?.id ?? '' },
+                  { column: cols[0]?.key ?? '', targetFieldId: autofillFields[0]?.id ?? '' },
                 ],
               })
             }
@@ -2068,7 +2126,7 @@ function LookupBindingFields({
                   })
                 }
               >
-                {otherFields.map((f) => (
+                {autofillFields.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.label}
                   </option>
@@ -2206,12 +2264,14 @@ function DataTableBindingFields({
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Max rows</Label>
+          <Label className="text-xs">Rows per page</Label>
           <Input
             type="number"
+            min={1}
+            max={1000}
             className="h-8 text-xs"
             value={b?.limit ?? ''}
-            placeholder="50"
+            placeholder="25"
             onChange={(e) => patch({ limit: e.target.value ? Number(e.target.value) : undefined })}
           />
         </div>
@@ -2244,9 +2304,10 @@ function MetricBindingFields({
           <Select
             className="h-8 text-xs"
             value={agg.fn}
-            onChange={(e) =>
-              setAgg({ fn: e.target.value as NonNullable<DataBinding['aggregate']>['fn'] })
-            }
+            onChange={(e) => {
+              const fn = e.target.value as NonNullable<DataBinding['aggregate']>['fn']
+              setAgg(fn === 'count' ? { fn, column: undefined } : { fn })
+            }}
           >
             <option value="count">Count</option>
             <option value="sum">Sum</option>
@@ -2278,7 +2339,13 @@ function MetricBindingFields({
           <Select
             className="h-8 text-xs"
             value={agg.groupBy ?? ''}
-            onChange={(e) => setAgg({ groupBy: e.target.value || undefined })}
+            onChange={(e) => {
+              const groupBy = e.target.value || undefined
+              patch({
+                aggregate: { ...agg, groupBy },
+                display: groupBy ? (b?.display === 'pie' ? 'pie' : 'bar') : 'number',
+              })
+            }}
           >
             <option value="">— no grouping —</option>
             {cols.map((c) => (
@@ -2295,16 +2362,37 @@ function MetricBindingFields({
             value={b?.display ?? (agg.groupBy ? 'bar' : 'number')}
             onChange={(e) => patch({ display: e.target.value as DataBinding['display'] })}
           >
-            <option value="number">Number</option>
-            <option value="bar">Bar chart</option>
-            <option value="line">Line chart</option>
-            <option value="pie">Pie chart</option>
+            {agg.groupBy ? (
+              <>
+                <option value="bar">Bar chart</option>
+                <option value="pie">Pie chart</option>
+              </>
+            ) : (
+              <option value="number">Number</option>
+            )}
           </Select>
         </div>
       </div>
       <p className="text-[10px] text-slate-500">
         Group by a column to render a chart; leave it blank for a single KPI number.
       </p>
+      {agg.groupBy ? (
+        <div className="space-y-1">
+          <Label className="text-xs">Groups shown</Label>
+          <Input
+            type="number"
+            min={1}
+            max={1000}
+            className="h-8 text-xs"
+            value={b?.limit ?? ''}
+            placeholder={b?.display === 'pie' ? '8' : '12'}
+            onChange={(e) => patch({ limit: e.target.value ? Number(e.target.value) : undefined })}
+          />
+          <p className="text-[10px] text-slate-500">
+            Limits displayed groups only. The aggregate still uses every matching record.
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2393,12 +2481,16 @@ function FieldValidationTab({
       ) : null}
       {isText ? (
         <div className="space-y-1">
-          <Label className="text-xs">Pattern (regex)</Label>
+          <Label className="text-xs">Fixed-format pattern</Label>
           <Input
             value={v.pattern ?? ''}
             onChange={(e) => set({ pattern: e.target.value || undefined })}
-            placeholder="e.g. ^[A-Z0-9]+$"
+            placeholder="e.g. ^[A-Z]{2}-[0-9]{4}$"
           />
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Start with ^, end with $, and use exact {'{n}'} repeats. Variable repeats and alternate
+            branches are not accepted.
+          </p>
         </div>
       ) : null}
       <div className="space-y-1">
@@ -2556,7 +2648,14 @@ function TableConfigEditor({
         <Select
           className="h-8 text-xs"
           value={rowMode}
-          onChange={(e) => setConfig({ rowMode: e.target.value as 'addable' | 'fixed' })}
+          onChange={(e) => {
+            const nextMode = e.target.value as 'addable' | 'fixed'
+            setConfig(
+              nextMode === 'fixed'
+                ? { rowMode: nextMode, minRows: undefined, maxRows: undefined }
+                : { rowMode: nextMode, rows: undefined },
+            )
+          }}
         >
           <option value="addable">Addable — user adds / removes rows</option>
           <option value="fixed">Predefined — fixed list of rows</option>
@@ -2614,13 +2713,20 @@ function TableConfigEditor({
                   <Select
                     className="h-7 w-24 text-xs"
                     value={c.type}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const type = e.target.value as TableColumn['type']
                       setColumns(
                         columns.map((x, idx) =>
-                          idx === i ? { ...x, type: e.target.value as TableColumn['type'] } : x,
+                          idx === i
+                            ? {
+                                ...x,
+                                type,
+                                options: type === 'select' ? (x.options ?? []) : undefined,
+                              }
+                            : x,
                         ),
                       )
-                    }
+                    }}
                   >
                     <option value="text">Text</option>
                     <option value="number">Number</option>
@@ -2787,8 +2893,10 @@ function SectionProperties({
   onChange: (patch: Partial<FormSection>) => void
 }) {
   const allFields = schema.sections
-    .flatMap((s) => s.fields)
-    .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
+    .filter((candidate) => !candidate.repeating)
+    .flatMap((candidate) => candidate.fields)
+    .filter(storesResponseValue)
+    .map((field) => ({ id: field.id, label: field.label?.en ?? field.id }))
   return (
     <div className="space-y-3 text-sm">
       <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Section</h3>

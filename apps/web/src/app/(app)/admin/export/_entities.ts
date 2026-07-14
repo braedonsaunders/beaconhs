@@ -186,19 +186,6 @@ export const EXPORT_GROUPS: ExportGroupSummary[] = [
   },
 ]
 
-function groupEntities(entities: ExportEntity[] = EXPORTABLE_ENTITIES) {
-  const groups = new Map<string, ExportEntity[]>()
-  for (const entity of entities) {
-    const entries = groups.get(entity.groupLabel) ?? []
-    entries.push(entity)
-    groups.set(entity.groupLabel, entries)
-  }
-  return EXPORT_GROUPS.map((group) => ({
-    ...group,
-    entities: groups.get(group.label) ?? [],
-  })).filter((group) => group.entities.length > 0)
-}
-
 export const EXPORTABLE_ENTITIES: ExportEntity[] = [
   {
     key: 'incidents',

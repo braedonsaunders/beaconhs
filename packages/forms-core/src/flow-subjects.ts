@@ -20,6 +20,12 @@ export type FlowFieldDef = {
   key: string
   label: string
   kind?: FlowFieldKind
+  /** The flow may persist a new value into this field. */
+  writable?: boolean
+  /** The field contains attachments accepted by photo analysis. */
+  photoSource?: boolean
+  /** The field accepts a plain-text photo-analysis result. */
+  textOutput?: boolean
 }
 
 /**

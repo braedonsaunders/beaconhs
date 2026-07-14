@@ -21,9 +21,14 @@
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import {
+  isFormResponseParentLockedError,
+  lockFormResponseForMutation,
+  type Database,
+} from '@beaconhs/db'
 import { domainEventActor, recordDomainEvent } from '@beaconhs/events'
 import {
+  attachments,
   formResponseSteps,
   formResponses,
   formTemplateVersions,
@@ -40,6 +45,7 @@ import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canAccessResponseTemplate } from '@/app/(app)/apps/_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { isUuid } from '@/lib/list-params'
+import { materializeFormResponseEvidenceChange } from '@/lib/forms/form-response-evidence'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,6 +58,10 @@ function nowIso(): string {
 function revalidateResponse(id: string) {
   revalidatePath(`/apps/responses/${id}`)
   revalidatePath(`/apps/responses`)
+}
+
+class WorkflowMutationError extends Error {
+  override readonly name = 'WorkflowMutationError'
 }
 
 async function recordStatusChangeFlow(
@@ -135,26 +145,20 @@ async function loadResponseWithWorkflow(
   }
 }
 
-// Materialise an upsert-style write to form_response_steps. Drizzle doesn't
-// expose ON CONFLICT cleanly across versions for partial-update tracking, so
-// we do a select-then-(update|insert).
-async function upsertStepRow(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-  args: {
-    responseId: string
-    stepKey: string
-    sequence: number
-    patch: Partial<typeof formResponseSteps.$inferInsert>
-  },
-): Promise<typeof formResponseSteps.$inferSelect> {
-  return ctx.db((tx) => upsertStepRowInTx(tx, ctx.tenantId!, args))
-}
-
 type TenantTransaction = Parameters<
   Parameters<Awaited<ReturnType<typeof requireRequestContext>>['db']>[0]
 >[0]
 
-async function upsertStepRowInTx(
+type StepRowMutation = {
+  before: typeof formResponseSteps.$inferSelect | null
+  after: typeof formResponseSteps.$inferSelect
+}
+
+// The caller must already hold the response lock returned by
+// lockFormResponseForMutation in this same transaction. Keeping the child-row
+// write behind that lock makes the step, response pointer/status, and
+// denormalized workflow state one atomic lifecycle transition.
+async function upsertStepRowAfterResponseLock(
   tx: TenantTransaction,
   tenantId: string,
   args: {
@@ -163,7 +167,7 @@ async function upsertStepRowInTx(
     sequence: number
     patch: Partial<typeof formResponseSteps.$inferInsert>
   },
-): Promise<typeof formResponseSteps.$inferSelect> {
+): Promise<StepRowMutation> {
   const [existing] = await tx
     .select()
     .from(formResponseSteps)
@@ -180,7 +184,8 @@ async function upsertStepRowInTx(
       .set(args.patch)
       .where(eq(formResponseSteps.id, existing.id))
       .returning()
-    return updated ?? existing
+    if (!updated) throw new Error('Failed to update step row')
+    return { before: existing, after: updated }
   }
   const [inserted] = await tx
     .insert(formResponseSteps)
@@ -193,12 +198,13 @@ async function upsertStepRowInTx(
     })
     .returning()
   if (!inserted) throw new Error('Failed to insert step row')
-  return inserted
+  return { before: null, after: inserted }
 }
 
 // Compose the denormalised `workflow_state` jsonb from all existing
 // form_response_steps rows. Re-built on every state change.
-async function rebuildWorkflowState(
+async function rebuildWorkflowStateAfterResponseLock(
+  tx: TenantTransaction,
   ctx: Awaited<ReturnType<typeof requireRequestContext>>,
   args: {
     responseId: string
@@ -207,13 +213,11 @@ async function rebuildWorkflowState(
     lastReason?: string | null
   },
 ): Promise<FormResponseWorkflowState> {
-  const rows = await ctx.db((tx) =>
-    tx
-      .select()
-      .from(formResponseSteps)
-      .where(eq(formResponseSteps.responseId, args.responseId))
-      .orderBy(asc(formResponseSteps.sequence)),
-  )
+  const rows = await tx
+    .select()
+    .from(formResponseSteps)
+    .where(eq(formResponseSteps.responseId, args.responseId))
+    .orderBy(asc(formResponseSteps.sequence))
   const byKey = new Map(rows.map((r) => [r.stepKey, r]))
   const steps: FormResponseWorkflowStepState[] = args.workflowSteps.map((wf, i) => {
     const row = byKey.get(wf.key)
@@ -245,12 +249,12 @@ async function rebuildWorkflowState(
     lastActionByTenantUserId: ctx.membership?.id ?? null,
     lastReason: args.lastReason ?? null,
   }
-  await ctx.db((tx) =>
-    tx
-      .update(formResponses)
-      .set({ workflowState: state })
-      .where(eq(formResponses.id, args.responseId)),
-  )
+  const [updated] = await tx
+    .update(formResponses)
+    .set({ workflowState: state })
+    .where(eq(formResponses.id, args.responseId))
+    .returning({ id: formResponses.id })
+  if (!updated) throw new Error('Form response not found')
   return state
 }
 
@@ -311,7 +315,8 @@ export async function signWorkflowStep(args: {
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(stepKey)
   if (!meta) return { ok: false, error: `Unknown step "${stepKey}"` }
-  if (!canActOnWorkflowStep(ctx, response, meta.step, await getEffectiveRoleKeys(ctx))) {
+  const roleKeys = await getEffectiveRoleKeys(ctx)
+  if (!canActOnWorkflowStep(ctx, response, meta.step, roleKeys)) {
     return { ok: false, error: 'You are not assigned to this workflow step' }
   }
 
@@ -358,38 +363,84 @@ export async function signWorkflowStep(args: {
   // Store only after every authorization/state check. The previous ordering
   // let an unauthorized or already-signed request create an orphaned object
   // before the action rejected it.
-  await withStoredSignatureAttachment(ctx, args.signatureDataUrl, async (tx, attachmentId) => {
-    if (!attachmentId) throw new Error('Signature could not be stored')
-    await upsertStepRowInTx(tx, ctx.tenantId!, {
-      responseId,
-      stepKey,
-      sequence: meta.sequence,
-      patch: {
-        status: 'signed',
-        signedAt: new Date(),
-        signatureAttachmentId: attachmentId,
-        signedByPersonId: args.personId ?? null,
-        signedByTenantUserId: ctx.membership?.id ?? null,
-        comment: args.comment ?? null,
-        rejectionReason: null,
-        rejectedAt: null,
-        rejectedByTenantUserId: null,
-      },
+  try {
+    await withStoredSignatureAttachment(ctx, args.signatureDataUrl, async (tx, attachmentId) => {
+      if (!attachmentId) throw new Error('Signature could not be stored')
+      const locked = await lockFormResponseForMutation(tx, ctx.tenantId!, responseId)
+      if (!locked) throw new WorkflowMutationError('Form response not found')
+      if (locked.locked) {
+        throw new WorkflowMutationError('This response is locked and cannot be changed')
+      }
+      if (!canActOnWorkflowStep(ctx, locked, meta.step, roleKeys)) {
+        throw new WorkflowMutationError('You are not assigned to this workflow step')
+      }
+      const lockedCurrentKey = resolveCurrentStepKey(locked, workflowSteps)
+      if (lockedCurrentKey !== stepKey) {
+        throw new WorkflowMutationError(`Step "${stepKey}" is no longer the active step`)
+      }
+      const [lockedStep] = await tx
+        .select()
+        .from(formResponseSteps)
+        .where(
+          and(eq(formResponseSteps.responseId, responseId), eq(formResponseSteps.stepKey, stepKey)),
+        )
+        .limit(1)
+      if (lockedStep?.status === 'signed') throw new WorkflowMutationError('Step already signed')
+
+      const stepMutation = await upsertStepRowAfterResponseLock(tx, ctx.tenantId!, {
+        responseId,
+        stepKey,
+        sequence: meta.sequence,
+        patch: {
+          status: 'signed',
+          signedAt: new Date(),
+          signatureAttachmentId: attachmentId,
+          signedByPersonId: args.personId ?? null,
+          signedByTenantUserId: ctx.membership?.id ?? null,
+          comment: args.comment ?? null,
+          rejectionReason: null,
+          rejectedAt: null,
+          rejectedByTenantUserId: null,
+        },
+      })
+      const previousSignatureAttachmentId = stepMutation.before?.signatureAttachmentId ?? null
+      if (previousSignatureAttachmentId && previousSignatureAttachmentId !== attachmentId) {
+        const [retired] = await tx
+          .delete(attachments)
+          .where(
+            and(
+              eq(attachments.tenantId, ctx.tenantId!),
+              eq(attachments.id, previousSignatureAttachmentId),
+              eq(attachments.kind, 'signature'),
+            ),
+          )
+          .returning({ id: attachments.id })
+        if (!retired) throw new Error('The previous workflow signature could not be retired')
+      }
+
+      // Keep currentStep pointing at the just-signed step. Caller is expected
+      // to invoke advanceWorkflowStep() to move forward. The step row, pointer,
+      // and denormalized state still commit atomically within this action.
+      const [updated] = await tx
+        .update(formResponses)
+        .set({ currentStep: stepKey })
+        .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, false)))
+        .returning({ id: formResponses.id })
+      if (!updated) {
+        throw new WorkflowMutationError('Form response changed before it could be signed')
+      }
+      await rebuildWorkflowStateAfterResponseLock(tx, ctx, {
+        responseId,
+        workflowSteps,
+        lastAction: 'sign',
+      })
     })
-  })
-
-  // Keep currentStep pointing at the just-signed step. Caller is expected to
-  // chain advanceWorkflowStep() to move forward. (Separating sign + advance
-  // lets a multi-signer step model be added later without breaking the API.)
-  await ctx.db((tx) =>
-    tx.update(formResponses).set({ currentStep: stepKey }).where(eq(formResponses.id, responseId)),
-  )
-
-  await rebuildWorkflowState(ctx, {
-    responseId,
-    workflowSteps,
-    lastAction: 'sign',
-  })
+  } catch (error) {
+    if (error instanceof WorkflowMutationError || isFormResponseParentLockedError(error)) {
+      return { ok: false, error: error.message }
+    }
+    throw error
+  }
 
   await recordAudit(ctx, {
     entityType: 'form_response',
@@ -422,7 +473,8 @@ export async function advanceWorkflowStep(args: {
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(currentStepKey)
   if (!meta) return { ok: false, error: `Unknown step "${currentStepKey}"` }
-  if (!canActOnWorkflowStep(ctx, response, meta.step, await getEffectiveRoleKeys(ctx))) {
+  const roleKeys = await getEffectiveRoleKeys(ctx)
+  if (!canActOnWorkflowStep(ctx, response, meta.step, roleKeys)) {
     return { ok: false, error: 'You are not assigned to this workflow step' }
   }
 
@@ -435,100 +487,104 @@ export async function advanceWorkflowStep(args: {
     }
   }
 
-  // Guard: if the step has signatureRequired, it must be signed before advancing.
-  const stepConfig = meta.step
-  if (stepConfig.signatureRequired) {
-    const [stepRow] = await ctx.db((tx) =>
-      tx
-        .select()
-        .from(formResponseSteps)
-        .where(
-          and(
-            eq(formResponseSteps.responseId, responseId),
-            eq(formResponseSteps.stepKey, currentStepKey),
-          ),
-        )
-        .limit(1),
-    )
-    if (!stepRow || stepRow.status !== 'signed') {
-      return {
-        ok: false,
-        error: 'This step requires a signature before it can be advanced',
+  let transition:
+    { ok: true; nextStepKey: string | null; closed: boolean } | { ok: false; error: string }
+  try {
+    transition = await ctx.db(async (tx) => {
+      const before = await lockFormResponseForMutation(tx, ctx.tenantId!, responseId)
+      if (!before) return { ok: false as const, error: 'Form response not found' }
+      if (before.locked) {
+        return { ok: false as const, error: 'This response is locked and cannot be changed' }
       }
-    }
-  } else {
-    // Non-signature step: mark as signed-equivalent so the audit trail is
-    // complete. Status 'signed' here means "completed". A future revision could
-    // split into a 'completed' status; for now signed covers both.
-    await upsertStepRow(ctx, {
-      responseId,
-      stepKey: currentStepKey,
-      sequence: meta.sequence,
-      patch: {
-        status: 'signed',
-        signedAt: new Date(),
-        signedByTenantUserId: ctx.membership?.id ?? null,
-      },
-    })
-  }
+      if (!canActOnWorkflowStep(ctx, before, meta.step, roleKeys)) {
+        return { ok: false as const, error: 'You are not assigned to this workflow step' }
+      }
+      const lockedCurrent = resolveCurrentStepKey(before, workflowSteps)
+      if (lockedCurrent !== currentStepKey) {
+        return {
+          ok: false as const,
+          error: `Cannot advance "${currentStepKey}"; response currently at "${lockedCurrent}"`,
+        }
+      }
 
-  // Find the next step in sequence.
-  const idx = meta.sequence
-  const next = workflowSteps[idx + 1] ?? null
-
-  if (next) {
-    await ctx.db(async (tx) => {
-      await tx
-        .update(formResponses)
-        .set({
-          currentStep: next.key,
-          status: 'in_progress',
+      if (meta.step.signatureRequired) {
+        const [stepRow] = await tx
+          .select()
+          .from(formResponseSteps)
+          .where(
+            and(
+              eq(formResponseSteps.responseId, responseId),
+              eq(formResponseSteps.stepKey, currentStepKey),
+            ),
+          )
+          .limit(1)
+        if (!stepRow || stepRow.status !== 'signed') {
+          return {
+            ok: false as const,
+            error: 'This step requires a signature before it can be advanced',
+          }
+        }
+      } else {
+        // Non-signature steps still receive a durable completion row. The
+        // current schema calls that terminal step state "signed".
+        await upsertStepRowAfterResponseLock(tx, ctx.tenantId!, {
+          responseId,
+          stepKey: currentStepKey,
+          sequence: meta.sequence,
+          patch: {
+            status: 'signed',
+            signedAt: new Date(),
+            signedByTenantUserId: ctx.membership?.id ?? null,
+          },
         })
-        .where(eq(formResponses.id, responseId))
-      await recordStatusChangeFlow(tx, ctx, response, 'in_progress')
-    })
-    await rebuildWorkflowState(ctx, {
-      responseId,
-      workflowSteps,
-      lastAction: 'advance',
-    })
-    await recordAudit(ctx, {
-      entityType: 'form_response',
-      entityId: responseId,
-      action: 'update',
-      summary: `Advanced workflow: "${currentStepKey}" → "${next.key}"`,
-      metadata: { from: currentStepKey, to: next.key },
-    })
-    revalidateResponse(responseId)
-    return { ok: true, nextStepKey: next.key, closed: false }
-  }
+      }
 
-  // No more steps — close the response.
-  await ctx.db(async (tx) => {
-    await tx
-      .update(formResponses)
-      .set({
-        status: 'closed',
-        closedAt: new Date(),
-        currentStep: currentStepKey,
+      const next = workflowSteps[meta.sequence + 1] ?? null
+      const toStatus = next ? 'in_progress' : 'closed'
+      const [updated] = await tx
+        .update(formResponses)
+        .set(
+          next
+            ? { currentStep: next.key, status: 'in_progress' }
+            : { status: 'closed', closedAt: new Date(), currentStep: currentStepKey },
+        )
+        .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, false)))
+        .returning()
+      if (!updated) {
+        throw new WorkflowMutationError('Form response changed before it could advance')
+      }
+      await materializeFormResponseEvidenceChange(tx, ctx.tenantId!, before, updated)
+      await recordStatusChangeFlow(tx, ctx, before, toStatus)
+      await rebuildWorkflowStateAfterResponseLock(tx, ctx, {
+        responseId,
+        workflowSteps,
+        lastAction: 'advance',
       })
-      .where(eq(formResponses.id, responseId))
-    await recordStatusChangeFlow(tx, ctx, response, 'closed')
-  })
-  await rebuildWorkflowState(ctx, {
-    responseId,
-    workflowSteps,
-    lastAction: 'advance',
-  })
+      return { ok: true as const, nextStepKey: next?.key ?? null, closed: !next }
+    })
+  } catch (error) {
+    if (error instanceof WorkflowMutationError || isFormResponseParentLockedError(error)) {
+      return { ok: false, error: error.message }
+    }
+    throw error
+  }
+  if (!transition.ok) return transition
+
   await recordAudit(ctx, {
     entityType: 'form_response',
     entityId: responseId,
     action: 'update',
-    summary: `Advanced workflow: closed after "${currentStepKey}"`,
-    metadata: { from: currentStepKey, closed: true },
+    summary: transition.closed
+      ? `Advanced workflow: closed after "${currentStepKey}"`
+      : `Advanced workflow: "${currentStepKey}" → "${transition.nextStepKey}"`,
+    metadata: {
+      from: currentStepKey,
+      to: transition.nextStepKey,
+      closed: transition.closed,
+    },
   })
   revalidateResponse(responseId)
-  return { ok: true, nextStepKey: null, closed: true }
+  return transition
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +608,8 @@ export async function rejectWorkflowStep(args: {
   const { response, workflowSteps, stepsByKey } = await loadResponseWithWorkflow(ctx, responseId)
   const meta = stepsByKey.get(currentStepKey)
   if (!meta) return { ok: false, error: `Unknown step "${currentStepKey}"` }
-  if (!canActOnWorkflowStep(ctx, response, meta.step, await getEffectiveRoleKeys(ctx))) {
+  const roleKeys = await getEffectiveRoleKeys(ctx)
+  if (!canActOnWorkflowStep(ctx, response, meta.step, roleKeys)) {
     return { ok: false, error: 'You are not assigned to this workflow step' }
   }
 
@@ -564,55 +621,98 @@ export async function rejectWorkflowStep(args: {
     }
   }
 
-  await upsertStepRow(ctx, {
-    responseId,
-    stepKey: currentStepKey,
-    sequence: meta.sequence,
-    patch: {
-      status: 'rejected',
-      rejectionReason: trimmed,
-      rejectedAt: new Date(),
-      rejectedByTenantUserId: ctx.membership?.id ?? null,
-      // Clear any prior signature so re-sign starts clean.
-      signedAt: null,
-      signatureAttachmentId: null,
-      signedByPersonId: null,
-      signedByTenantUserId: null,
-    },
-  })
+  let mutation: { ok: true; newStatus: 'in_review' | 'in_progress' } | { ok: false; error: string }
+  try {
+    mutation = await ctx.db(async (tx) => {
+      const before = await lockFormResponseForMutation(tx, ctx.tenantId!, responseId)
+      if (!before) return { ok: false as const, error: 'Form response not found' }
+      if (before.locked) {
+        return { ok: false as const, error: 'This response is locked and cannot be changed' }
+      }
+      if (!canActOnWorkflowStep(ctx, before, meta.step, roleKeys)) {
+        return { ok: false as const, error: 'You are not assigned to this workflow step' }
+      }
+      const lockedCurrent = resolveCurrentStepKey(before, workflowSteps)
+      if (lockedCurrent !== currentStepKey) {
+        return {
+          ok: false as const,
+          error: `Cannot reject "${currentStepKey}"; response currently at "${lockedCurrent}"`,
+        }
+      }
 
-  // Move the response into review state. We pick 'in_review' if the response
-  // was 'submitted' or further, otherwise 'in_progress' so a worker can
-  // re-engage. The legacy enum already supports both. We leave currentStep
-  // pointing at the rejected step so re-sign can re-engage in-place.
-  const newStatus =
-    response.status === 'submitted' || response.status === 'closed' ? 'in_review' : 'in_progress'
-
-  await ctx.db(async (tx) => {
-    await tx
-      .update(formResponses)
-      .set({
-        status: newStatus,
-        currentStep: currentStepKey,
-        closedAt: null,
+      const stepMutation = await upsertStepRowAfterResponseLock(tx, ctx.tenantId!, {
+        responseId,
+        stepKey: currentStepKey,
+        sequence: meta.sequence,
+        patch: {
+          status: 'rejected',
+          rejectionReason: trimmed,
+          rejectedAt: new Date(),
+          rejectedByTenantUserId: ctx.membership?.id ?? null,
+          // Clear any prior signature so re-sign starts clean.
+          signedAt: null,
+          signatureAttachmentId: null,
+          signedByPersonId: null,
+          signedByTenantUserId: null,
+        },
       })
-      .where(eq(formResponses.id, responseId))
-    await recordStatusChangeFlow(tx, ctx, response, newStatus)
-  })
+      const previousSignatureAttachmentId = stepMutation.before?.signatureAttachmentId ?? null
+      if (previousSignatureAttachmentId) {
+        const [retired] = await tx
+          .delete(attachments)
+          .where(
+            and(
+              eq(attachments.tenantId, ctx.tenantId!),
+              eq(attachments.id, previousSignatureAttachmentId),
+              eq(attachments.kind, 'signature'),
+            ),
+          )
+          .returning({ id: attachments.id })
+        if (!retired) throw new Error('The rejected workflow signature could not be retired')
+      }
 
-  await rebuildWorkflowState(ctx, {
-    responseId,
-    workflowSteps,
-    lastAction: 'reject',
-    lastReason: trimmed,
-  })
+      // Submitted/closed evidence stays evaluator-eligible in review. Earlier
+      // draft workflow states return to in-progress and remain ineligible.
+      const newStatus =
+        before.status === 'submitted' || before.status === 'closed'
+          ? ('in_review' as const)
+          : ('in_progress' as const)
+      const [updated] = await tx
+        .update(formResponses)
+        .set({
+          status: newStatus,
+          currentStep: currentStepKey,
+          closedAt: null,
+        })
+        .where(and(eq(formResponses.id, responseId), eq(formResponses.locked, false)))
+        .returning()
+      if (!updated) {
+        throw new WorkflowMutationError('Form response changed before it could be rejected')
+      }
+      await materializeFormResponseEvidenceChange(tx, ctx.tenantId!, before, updated)
+      await recordStatusChangeFlow(tx, ctx, before, newStatus)
+      await rebuildWorkflowStateAfterResponseLock(tx, ctx, {
+        responseId,
+        workflowSteps,
+        lastAction: 'reject',
+        lastReason: trimmed,
+      })
+      return { ok: true as const, newStatus }
+    })
+  } catch (error) {
+    if (error instanceof WorkflowMutationError || isFormResponseParentLockedError(error)) {
+      return { ok: false, error: error.message }
+    }
+    throw error
+  }
+  if (!mutation.ok) return mutation
 
   await recordAudit(ctx, {
     entityType: 'form_response',
     entityId: responseId,
     action: 'update',
     summary: `Rejected workflow step "${currentStepKey}"`,
-    metadata: { stepKey: currentStepKey, reason: trimmed, newStatus },
+    metadata: { stepKey: currentStepKey, reason: trimmed, newStatus: mutation.newStatus },
   })
 
   revalidateResponse(responseId)

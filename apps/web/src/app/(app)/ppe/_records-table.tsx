@@ -1,11 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
+import { RowSelectionButton, SelectVisibleRowsButton } from '@/components/row-selection-buttons'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
-import { BulkPpeBar, HeaderSelectAll, SelectionCheckbox, type PpeHolderOption } from './_bulk-bar'
+import { useRowSelection } from '@/lib/row-selection'
+import { BulkPpeBar } from './_bulk-bar'
 
 export type PpeTableRow = {
   id: string
@@ -21,43 +22,18 @@ export type PpeTableRow = {
 
 export function PpeRecordsTable({
   rows,
-  holders,
   basePath,
   currentParams,
   sort,
   dir,
 }: {
   rows: PpeTableRow[]
-  holders: PpeHolderOption[]
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   sort: string
   dir: 'asc' | 'desc'
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-
-  const allSelected = useMemo(
-    () => rows.length > 0 && rows.every((r) => selected.has(r.id)),
-    [rows, selected],
-  )
-
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  function toggleAll() {
-    setSelected((prev) => {
-      if (rows.length > 0 && rows.every((r) => prev.has(r.id))) return new Set()
-      return new Set(rows.map((r) => r.id))
-    })
-  }
-  function clear() {
-    setSelected(new Set())
-  }
+  const { selected, selectedIds, allSelected, toggleOne, toggleAll, clear } = useRowSelection(rows)
 
   const sortProps = { basePath, currentParams, sort, dir }
 
@@ -70,7 +46,7 @@ export function PpeRecordsTable({
             key={r.id}
             href={`/ppe/${r.id}`}
             leading={
-              <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+              <RowSelectionButton id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
             }
             person={r.holderName}
             reference={r.serialNumber ?? undefined}
@@ -108,7 +84,7 @@ export function PpeRecordsTable({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <th className="w-8 px-3 py-2">
-                <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
+                <SelectVisibleRowsButton allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
               <SortTh column="type" {...sortProps}>
                 Type
@@ -149,7 +125,7 @@ export function PpeRecordsTable({
                   }
                 >
                   <td className="w-8 px-3 py-2">
-                    <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
+                    <RowSelectionButton id={r.id} selected={isSelected} onToggle={toggleOne} />
                   </td>
                   <td className="px-3 py-2">
                     <Link
@@ -192,7 +168,7 @@ export function PpeRecordsTable({
           </tbody>
         </table>
       </div>
-      <BulkPpeBar selectedIds={Array.from(selected)} onClear={clear} holders={holders} />
+      <BulkPpeBar selectedIds={selectedIds} onClear={clear} />
     </>
   )
 }

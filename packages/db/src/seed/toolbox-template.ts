@@ -17,6 +17,7 @@
 // admin-edited version.
 
 import { and, eq } from 'drizzle-orm'
+import type { Database } from '../client'
 import { formTemplates, formTemplateVersions } from '../schema'
 import type { FormSchemaV1 } from '../schema/forms'
 
@@ -103,8 +104,7 @@ const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
   },
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DrizzleTx = any
+type DrizzleTx = Pick<Database, 'select' | 'insert'>
 
 /**
  * Idempotently seed the built-in toolbox-talk form template for one tenant.

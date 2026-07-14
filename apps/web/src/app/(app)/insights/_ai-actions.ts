@@ -94,8 +94,7 @@ export async function runJournalAnalysis(days = 30): Promise<JournalAnalysisResu
 }
 
 export type InsightAiResult =
-  | { ok: true; analysis: DatasetAnalysis; rowCount: number }
-  | { ok: false; error: string }
+  { ok: true; analysis: DatasetAnalysis; rowCount: number } | { ok: false; error: string }
 
 /** Run an Insights AI card on demand: execute its BHQL dataset under RLS, then
  *  have the tenant's model analyse the rows under the card's stored instruction. */

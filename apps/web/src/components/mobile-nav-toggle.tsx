@@ -4,7 +4,7 @@
 // this button opens it as an animated slide-in drawer (portal to body, spring,
 // backdrop fade, Esc + click-out + scroll-lock — matches the @beaconhs/ui Drawer).
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'

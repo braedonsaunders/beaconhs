@@ -7,28 +7,83 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import {
   attachments,
+  tenants,
+  trainingAssessmentTypes,
+  trainingClasses,
+  trainingContentItems,
   trainingCourseFiles,
   trainingCourses,
   trainingCourseModules,
   trainingLessons,
-  type PracticalCriterion,
 } from '@beaconhs/db/schema'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
-import { purgeDeckAssets } from '../../../pptx/_lib'
+import { enabledCredentialOutputs } from '@/lib/credential-designs'
+import { validateTrainingExternalUrl } from '@/lib/training-external-url.server'
+import {
+  assertExactTrainingOrder,
+  MAX_TRAINING_DURATION_MINUTES,
+  MAX_TRAINING_VALIDITY_MONTHS,
+  optionalTrainingInteger,
+  optionalTrainingText,
+  optionalTrainingUuid,
+  parsePracticalCriteria,
+  parseTrainingOrder,
+  requiredTrainingText,
+  requireTrainingEnum,
+  requireTrainingUuid,
+  TRAINING_COMPLETION_RULES,
+  TRAINING_LESSON_KINDS,
+  type TrainingCompletionRule as CompletionRule,
+  type TrainingLessonKind as LessonKind,
+} from '@/lib/training-mutation-validation'
+import { sanitizeTrainingHtml } from '@/lib/training-rich-content'
 import { assertTrainingPptxAttachment } from '@/lib/training-pptx-policy'
+import { purgeDeckAssets } from '../../../pptx/_lib'
 import { DELIVERY_TYPES, type DeliveryType } from '../../../_lib/delivery'
-
-type LessonKind = 'rich' | 'video' | 'file' | 'embed' | 'quiz' | 'session' | 'slides' | 'practical'
-type CompletionRule = 'view' | 'pass' | 'acknowledge' | 'min_time' | 'evaluator'
 
 // The course page IS the builder now.
 const studioPath = (courseId: string) => `/training/courses/${courseId}`
+
+async function requireActiveCourse(tx: Database, courseId: string) {
+  const [course] = await tx
+    .select({ id: trainingCourses.id })
+    .from(trainingCourses)
+    .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
+    .limit(1)
+  if (!course) throw new Error('Course not found.')
+  return course
+}
+
+async function requireOwnedAttachment(tx: Database, attachmentId: string | null): Promise<void> {
+  if (!attachmentId) return
+  const [attachment] = await tx
+    .select({ id: attachments.id })
+    .from(attachments)
+    .where(eq(attachments.id, attachmentId))
+    .limit(1)
+  if (!attachment) throw new Error('Attachment not found.')
+}
+
+async function requireOwnedPptxAttachment(tx: Database, attachmentId: string): Promise<void> {
+  const [attachment] = await tx
+    .select({
+      kind: attachments.kind,
+      contentType: attachments.contentType,
+      sizeBytes: attachments.sizeBytes,
+    })
+    .from(attachments)
+    .where(eq(attachments.id, attachmentId))
+    .limit(1)
+  if (!attachment) throw new Error('PowerPoint attachment not found.')
+  assertTrainingPptxAttachment(attachment)
+}
 
 // Create a draft course and jump straight into its workspace — no intermediate
 // form. Name, code, delivery type and the rest are captured inline on the
@@ -66,9 +121,12 @@ export async function createModule(courseId: string, formData: FormData) {
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
-  const title = String(formData.get('title') ?? '').trim() || 'Untitled module'
+  courseId = requireTrainingUuid(courseId, 'Course')
+  const titleRaw = String(formData.get('title') ?? '').trim()
+  const title = titleRaw ? requiredTrainingText(titleRaw, 'Module title', 200) : 'Untitled module'
 
   const created = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
     const existing = await tx
       .select({ s: trainingCourseModules.sortOrder })
       .from(trainingCourseModules)
@@ -80,29 +138,53 @@ export async function createModule(courseId: string, formData: FormData) {
       .insert(trainingCourseModules)
       .values({ tenantId, courseId, title, sortOrder })
       .returning()
+    if (!row) throw new Error('Could not create the module.')
     return row
   })
-  if (created) {
-    await recordAudit(ctx, {
-      entityType: 'training_course_module',
-      entityId: created.id,
-      action: 'create',
-      summary: `Added module "${title}"`,
-    })
-  }
+  await recordAudit(ctx, {
+    entityType: 'training_course_module',
+    entityId: created.id,
+    action: 'create',
+    summary: `Added module "${title}"`,
+    after: { courseId },
+  })
   revalidatePath(studioPath(courseId))
 }
 
 export async function updateModule(moduleId: string, courseId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  const title = String(formData.get('title') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  await ctx.db(async (tx) => {
-    await tx
+  moduleId = requireTrainingUuid(moduleId, 'Module')
+  courseId = requireTrainingUuid(courseId, 'Course')
+  const titleRaw = String(formData.get('title') ?? '').trim()
+  const title = titleRaw ? requiredTrainingText(titleRaw, 'Module title', 200) : 'Untitled module'
+  const description = optionalTrainingText(
+    formData.get('description'),
+    'Module description',
+    20_000,
+  )
+  const updated = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const [row] = await tx
       .update(trainingCourseModules)
-      .set({ title: title || 'Untitled module', description })
-      .where(eq(trainingCourseModules.id, moduleId))
+      .set({ title, description })
+      .where(
+        and(
+          eq(trainingCourseModules.id, moduleId),
+          eq(trainingCourseModules.courseId, courseId),
+          isNull(trainingCourseModules.deletedAt),
+        ),
+      )
+      .returning({ id: trainingCourseModules.id })
+    if (!row) throw new Error('Module not found.')
+    return row
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_course_module',
+    entityId: updated.id,
+    action: 'update',
+    summary: `Updated module "${title}"`,
+    after: { courseId },
   })
   revalidatePath(studioPath(courseId))
 }
@@ -110,23 +192,57 @@ export async function updateModule(moduleId: string, courseId: string, formData:
 export async function deleteModule(moduleId: string, courseId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
+  moduleId = requireTrainingUuid(moduleId, 'Module')
+  courseId = requireTrainingUuid(courseId, 'Course')
   const decks = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const [module] = await tx
+      .select({ id: trainingCourseModules.id })
+      .from(trainingCourseModules)
+      .where(
+        and(
+          eq(trainingCourseModules.id, moduleId),
+          eq(trainingCourseModules.courseId, courseId),
+          isNull(trainingCourseModules.deletedAt),
+        ),
+      )
+      .limit(1)
+    if (!module) throw new Error('Module not found.')
     const rows = await tx
       .select({
-        slides: trainingLessons.slides,
         sourceAttachmentId: trainingLessons.sourceAttachmentId,
       })
       .from(trainingLessons)
-      .where(eq(trainingLessons.moduleId, moduleId))
+      .where(
+        and(
+          eq(trainingLessons.moduleId, moduleId),
+          eq(trainingLessons.courseId, courseId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
     const now = new Date()
     await tx
       .update(trainingLessons)
-      .set({ deletedAt: now, slides: [], sourceAttachmentId: null })
-      .where(eq(trainingLessons.moduleId, moduleId))
-    await tx
+      .set({ deletedAt: now, sourceAttachmentId: null })
+      .where(
+        and(
+          eq(trainingLessons.moduleId, moduleId),
+          eq(trainingLessons.courseId, courseId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+    const [deleted] = await tx
       .update(trainingCourseModules)
       .set({ deletedAt: now })
-      .where(eq(trainingCourseModules.id, moduleId))
+      .where(
+        and(
+          eq(trainingCourseModules.id, moduleId),
+          eq(trainingCourseModules.courseId, courseId),
+          isNull(trainingCourseModules.deletedAt),
+        ),
+      )
+      .returning({ id: trainingCourseModules.id })
+    if (!deleted) throw new Error('Module changed while it was being deleted.')
     return rows
   })
   const purged = await purgeDeckAssets(ctx.db, decks)
@@ -135,7 +251,7 @@ export async function deleteModule(moduleId: string, courseId: string) {
     entityId: moduleId,
     action: 'delete',
     summary: 'Deleted module and its lessons',
-    metadata: purged ? { purgedAttachments: purged } : {},
+    metadata: { courseId, ...(purged ? { purgedAttachments: purged } : {}) },
   })
   revalidatePath(studioPath(courseId))
 }
@@ -143,13 +259,41 @@ export async function deleteModule(moduleId: string, courseId: string) {
 export async function reorderModules(courseId: string, orderedIds: string[]) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
+  courseId = requireTrainingUuid(courseId, 'Course')
+  orderedIds = parseTrainingOrder(orderedIds, 'Module')
   await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const modules = await tx
+      .select({ id: trainingCourseModules.id })
+      .from(trainingCourseModules)
+      .where(
+        and(eq(trainingCourseModules.courseId, courseId), isNull(trainingCourseModules.deletedAt)),
+      )
+    assertExactTrainingOrder(
+      modules.map((module) => module.id),
+      orderedIds,
+      'Module',
+    )
     for (let i = 0; i < orderedIds.length; i++) {
-      await tx
+      const [updated] = await tx
         .update(trainingCourseModules)
         .set({ sortOrder: i })
-        .where(eq(trainingCourseModules.id, orderedIds[i]!))
+        .where(
+          and(
+            eq(trainingCourseModules.id, orderedIds[i]!),
+            eq(trainingCourseModules.courseId, courseId),
+            isNull(trainingCourseModules.deletedAt),
+          ),
+        )
+        .returning({ id: trainingCourseModules.id })
+      if (!updated) throw new Error('Module order changed while it was being saved.')
     }
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_course',
+    entityId: courseId,
+    action: 'update',
+    summary: `Reordered ${orderedIds.length} course modules`,
   })
   revalidatePath(studioPath(courseId))
 }
@@ -179,8 +323,12 @@ export async function createLessonOfKind(
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   const tenantId = ctx.tenantId
+  courseId = requireTrainingUuid(courseId, 'Course')
+  moduleId = moduleId ? requireTrainingUuid(moduleId, 'Module') : null
+  kind = requireTrainingEnum(kind, TRAINING_LESSON_KINDS, 'Lesson type')
 
   const created = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
     let targetModuleId = moduleId
     if (!targetModuleId) {
       const existing = await tx
@@ -199,6 +347,19 @@ export async function createLessonOfKind(
         .returning()
       if (!mod) throw new Error('Failed to create module')
       targetModuleId = mod.id
+    } else {
+      const [module] = await tx
+        .select({ id: trainingCourseModules.id })
+        .from(trainingCourseModules)
+        .where(
+          and(
+            eq(trainingCourseModules.id, targetModuleId),
+            eq(trainingCourseModules.courseId, courseId),
+            isNull(trainingCourseModules.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!module) throw new Error('Module not found.')
     }
     const existing = await tx
       .select({ s: trainingLessons.sortOrder })
@@ -227,6 +388,7 @@ export async function createLessonOfKind(
     entityId: created.id,
     action: 'create',
     summary: `Added ${kind} lesson via builder`,
+    after: { courseId, moduleId: created.moduleId },
   })
   revalidatePath(studioPath(courseId))
   return { id: created.id }
@@ -241,27 +403,52 @@ export async function addCourseFile(
 ): Promise<{ ok: boolean; error?: string }> {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  if (!courseId || !attachmentId) return { ok: false, error: 'Missing fields' }
-  await ctx.db(async (tx) => {
+  if (!ctx.tenantId) return { ok: false, error: 'No active tenant' }
+  try {
+    courseId = requireTrainingUuid(courseId, 'Course')
+    attachmentId = requireTrainingUuid(attachmentId, 'Attachment')
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid file' }
+  }
+  label = optionalTrainingText(label, 'File label', 255)
+  const created = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    await requireOwnedAttachment(tx, attachmentId)
+    const [duplicate] = await tx
+      .select({ id: trainingCourseFiles.id })
+      .from(trainingCourseFiles)
+      .where(
+        and(
+          eq(trainingCourseFiles.courseId, courseId),
+          eq(trainingCourseFiles.attachmentId, attachmentId),
+        ),
+      )
+      .limit(1)
+    if (duplicate) throw new Error('That file is already attached to this course.')
     const rows = await tx
       .select({ s: trainingCourseFiles.sortOrder })
       .from(trainingCourseFiles)
       .where(eq(trainingCourseFiles.courseId, courseId))
     const next = rows.reduce((m, r) => Math.max(m, r.s), -1) + 1
-    await tx.insert(trainingCourseFiles).values({
-      tenantId: ctx.tenantId,
-      courseId,
-      attachmentId,
-      label,
-      sortOrder: next,
-    })
+    const [row] = await tx
+      .insert(trainingCourseFiles)
+      .values({
+        tenantId: ctx.tenantId,
+        courseId,
+        attachmentId,
+        label,
+        sortOrder: next,
+      })
+      .returning({ id: trainingCourseFiles.id })
+    if (!row) throw new Error('Could not attach the file.')
+    return row
   })
   await recordAudit(ctx, {
-    entityType: 'training_course',
-    entityId: courseId,
-    action: 'update',
+    entityType: 'training_course_file',
+    entityId: created.id,
+    action: 'create',
     summary: `Attached file${label ? ` "${label}"` : ''}`,
-    after: { attachmentId, label },
+    after: { courseId, attachmentId, label },
   })
   revalidatePath(studioPath(courseId))
   return { ok: true }
@@ -270,13 +457,27 @@ export async function addCourseFile(
 export async function removeCourseFile(courseId: string, fileId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  await ctx.db((tx) => tx.delete(trainingCourseFiles).where(eq(trainingCourseFiles.id, fileId)))
+  courseId = requireTrainingUuid(courseId, 'Course')
+  fileId = requireTrainingUuid(fileId, 'Course file')
+  const removed = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const [row] = await tx
+      .delete(trainingCourseFiles)
+      .where(and(eq(trainingCourseFiles.id, fileId), eq(trainingCourseFiles.courseId, courseId)))
+      .returning({
+        id: trainingCourseFiles.id,
+        attachmentId: trainingCourseFiles.attachmentId,
+        label: trainingCourseFiles.label,
+      })
+    if (!row) throw new Error('Course file not found.')
+    return row
+  })
   await recordAudit(ctx, {
-    entityType: 'training_course',
-    entityId: courseId,
+    entityType: 'training_course_file',
+    entityId: removed.id,
     action: 'delete',
     summary: 'Detached course file',
-    before: { fileId },
+    before: { courseId, attachmentId: removed.attachmentId, label: removed.label },
   })
   revalidatePath(studioPath(courseId))
 }
@@ -284,43 +485,114 @@ export async function removeCourseFile(courseId: string, fileId: string) {
 export async function updateLesson(lessonId: string, courseId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  const title = String(formData.get('title') ?? '').trim()
-  const kindRaw = String(formData.get('kind') ?? '').trim() as LessonKind | ''
-  const ruleRaw = String(formData.get('completionRule') ?? '').trim() as CompletionRule | ''
-  const isRequired = formData.get('isRequired') !== 'off'
-  const assessmentTypeId = String(formData.get('assessmentTypeId') ?? '').trim() || null
-  const classId = String(formData.get('classId') ?? '').trim() || null
-  const attachmentId = String(formData.get('attachmentId') ?? '').trim() || null
-  const embedUrl = String(formData.get('embedUrl') ?? '').trim() || null
-  const contentItemId = String(formData.get('contentItemId') ?? '').trim() || null
-  const durationRaw = String(formData.get('durationMinutes') ?? '').trim()
-  const durationMinutes = durationRaw ? Math.max(0, Number(durationRaw) || 0) : null
-  // Practical criteria arrive as a JSON array of {id, text}.
-  let practicalCriteria: PracticalCriterion[] | undefined
-  const criteriaRaw = formData.get('practicalCriteria')
-  if (typeof criteriaRaw === 'string' && criteriaRaw) {
-    try {
-      const parsed = JSON.parse(criteriaRaw)
-      if (Array.isArray(parsed)) {
-        practicalCriteria = parsed
-          .filter((c) => c && typeof c.id === 'string' && typeof c.text === 'string')
-          .slice(0, 100)
-      }
-    } catch {
-      // ignore malformed payloads — keep the existing criteria
-    }
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
+  courseId = requireTrainingUuid(courseId, 'Course')
+  const kind = requireTrainingEnum(formData.get('kind'), TRAINING_LESSON_KINDS, 'Lesson type')
+  const titleRaw = String(formData.get('title') ?? '').trim()
+  const title = titleRaw
+    ? requiredTrainingText(titleRaw, 'Lesson title', 200)
+    : KIND_DEFAULT_TITLE[kind]
+  const rule = requireTrainingEnum(
+    formData.get('completionRule'),
+    TRAINING_COMPLETION_RULES,
+    'Completion rule',
+  )
+  const requiredRaw = formData.get('isRequired')
+  if (requiredRaw !== 'on' && requiredRaw !== 'off') {
+    throw new Error('Required-lesson setting is invalid.')
   }
-  // Practical lessons always require an evaluator sign-off.
-  const effectiveRule: CompletionRule | '' = kindRaw === 'practical' ? 'evaluator' : ruleRaw
+  const isRequired = requiredRaw === 'on'
+  const assessmentTypeIdRaw = optionalTrainingUuid(
+    formData.get('assessmentTypeId'),
+    'Assessment type',
+  )
+  const classIdRaw = optionalTrainingUuid(formData.get('classId'), 'Class')
+  const attachmentIdRaw = optionalTrainingUuid(formData.get('attachmentId'), 'Attachment')
+  const embedUrlRaw = String(formData.get('embedUrl') ?? '').trim()
+  const contentItemIdRaw = optionalTrainingUuid(formData.get('contentItemId'), 'Library item')
+  const durationMinutes = optionalTrainingInteger(
+    formData.get('durationMinutes'),
+    'Duration',
+    MAX_TRAINING_DURATION_MINUTES,
+  )
+  const minimumMinutes = optionalTrainingInteger(
+    formData.get('minimumMinutes'),
+    'Minimum time',
+    MAX_TRAINING_DURATION_MINUTES,
+  )
+  const practicalCriteria = parsePracticalCriteria(formData.get('practicalCriteria'))
 
-  await ctx.db(async (tx) => {
-    await tx
+  const effectiveRule: CompletionRule =
+    kind === 'practical' ? 'evaluator' : kind === 'quiz' ? 'pass' : rule
+  if (effectiveRule === 'evaluator' && kind !== 'practical') {
+    throw new Error('Evaluator sign-off is only valid for practical lessons.')
+  }
+  if (effectiveRule === 'pass' && kind !== 'quiz') {
+    throw new Error('Pass is only valid for quiz lessons.')
+  }
+  if (effectiveRule === 'min_time' && (!minimumMinutes || minimumMinutes < 1)) {
+    throw new Error('Set a minimum time of at least one minute.')
+  }
+
+  const reusable =
+    kind === 'rich' || kind === 'video' || kind === 'file' || kind === 'embed' || kind === 'slides'
+  const contentItemId = reusable ? contentItemIdRaw : null
+  const attachmentId =
+    !contentItemId && (kind === 'video' || kind === 'file') ? attachmentIdRaw : null
+  const embedUrl =
+    !contentItemId && (kind === 'video' || kind === 'embed') && embedUrlRaw
+      ? await validateTrainingExternalUrl(embedUrlRaw)
+      : null
+  const assessmentTypeId = kind === 'quiz' ? assessmentTypeIdRaw : null
+  const classId = kind === 'session' ? classIdRaw : null
+  const minTimeSeconds = effectiveRule === 'min_time' ? minimumMinutes! * 60 : null
+
+  const updated = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    await requireOwnedAttachment(tx, attachmentId)
+    if (assessmentTypeId) {
+      const [assessmentType] = await tx
+        .select({ id: trainingAssessmentTypes.id })
+        .from(trainingAssessmentTypes)
+        .where(
+          and(
+            eq(trainingAssessmentTypes.id, assessmentTypeId),
+            isNull(trainingAssessmentTypes.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!assessmentType) throw new Error('Assessment type not found.')
+    }
+    if (classId) {
+      const [trainingClass] = await tx
+        .select({ id: trainingClasses.id })
+        .from(trainingClasses)
+        .where(and(eq(trainingClasses.id, classId), eq(trainingClasses.courseId, courseId)))
+        .limit(1)
+      if (!trainingClass) throw new Error('Class not found for this course.')
+    }
+    if (contentItemId) {
+      const [contentItem] = await tx
+        .select({ id: trainingContentItems.id, kind: trainingContentItems.kind })
+        .from(trainingContentItems)
+        .where(
+          and(eq(trainingContentItems.id, contentItemId), isNull(trainingContentItems.deletedAt)),
+        )
+        .limit(1)
+      if (!contentItem) throw new Error('Library item not found.')
+      if ((kind === 'slides') !== (contentItem.kind === 'slides')) {
+        throw new Error('The selected library item is not compatible with this lesson type.')
+      }
+    }
+
+    const [row] = await tx
       .update(trainingLessons)
       .set({
-        ...(title ? { title } : {}),
-        ...(kindRaw ? { kind: kindRaw } : {}),
-        ...(effectiveRule ? { completionRule: effectiveRule } : {}),
-        ...(practicalCriteria !== undefined ? { practicalCriteria } : {}),
+        title,
+        kind,
+        completionRule: effectiveRule,
+        minTimeSeconds,
+        practicalCriteria: kind === 'practical' ? (practicalCriteria ?? []) : [],
         isRequired,
         assessmentTypeId,
         classId,
@@ -329,66 +601,83 @@ export async function updateLesson(lessonId: string, courseId: string, formData:
         contentItemId,
         durationMinutes,
       })
-      .where(eq(trainingLessons.id, lessonId))
+      .where(
+        and(
+          eq(trainingLessons.id, lessonId),
+          eq(trainingLessons.courseId, courseId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+      .returning({ id: trainingLessons.id })
+    if (!row) throw new Error('Lesson not found.')
+    return row
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_lesson',
+    entityId: updated.id,
+    action: 'update',
+    summary: `Updated lesson "${title}"`,
+    after: {
+      courseId,
+      kind,
+      completionRule: effectiveRule,
+      minTimeSeconds,
+      assessmentTypeId,
+      classId,
+      attachmentId,
+      contentItemId,
+    },
   })
   revalidatePath(studioPath(courseId))
 }
 
 // TipTap-authored lesson content (rich lessons + practical instructions).
-export async function saveLessonRich(
-  lessonId: string,
-  courseId: string,
-  json: unknown,
-  html: string,
-) {
+export async function saveLessonRich(lessonId: string, courseId: string, html: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
+  courseId = requireTrainingUuid(courseId, 'Course')
   if (typeof html !== 'string' || html.length > 2_000_000) throw new Error('Content too large')
-  await ctx.db(async (tx) => {
-    await tx
+  const updated = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const [row] = await tx
       .update(trainingLessons)
       .set({
-        contentJson: (json ?? null) as Record<string, unknown> | null,
-        contentHtml: sanitizeDocumentHtml(html),
+        contentHtml: sanitizeTrainingHtml(html),
       })
-      .where(eq(trainingLessons.id, lessonId))
-  })
-  revalidatePath(studioPath(courseId))
-}
-
-// Link the original PPTX as the lesson's single source of truth. Collabora
-// edits and presents these bytes directly; no PDF or image render is created.
-export async function importLessonPptx(lessonId: string, courseId: string, attachmentId: string) {
-  const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'training')
-  if (!ctx.tenantId) throw new Error('No active tenant')
-  const replacedAttachmentId = await ctx.db(async (tx) => {
-    const [attachment] = await tx
-      .select({
-        kind: attachments.kind,
-        contentType: attachments.contentType,
-        sizeBytes: attachments.sizeBytes,
-      })
-      .from(attachments)
-      .where(eq(attachments.id, attachmentId))
-      .limit(1)
-    if (!attachment) throw new Error('PowerPoint attachment not found.')
-    assertTrainingPptxAttachment(attachment)
-
-    const [existing] = await tx
-      .select({ sourceAttachmentId: trainingLessons.sourceAttachmentId })
-      .from(trainingLessons)
       .where(
         and(
           eq(trainingLessons.id, lessonId),
           eq(trainingLessons.courseId, courseId),
-          eq(trainingLessons.kind, 'slides'),
+          inArray(trainingLessons.kind, ['rich', 'practical']),
           isNull(trainingLessons.deletedAt),
         ),
       )
-      .limit(1)
-    if (!existing) throw new Error('Slideshow lesson not found.')
+      .returning({ id: trainingLessons.id })
+    if (!row) throw new Error('Rich-text lesson not found.')
+    return row
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_lesson',
+    entityId: updated.id,
+    action: 'update',
+    summary: 'Updated lesson content',
+    after: { courseId },
+  })
+  revalidatePath(studioPath(courseId))
+}
 
+// Attach the PowerPoint master used directly by Collabora editing/playback.
+export async function importLessonPptx(lessonId: string, courseId: string, attachmentId: string) {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
+  courseId = requireTrainingUuid(courseId, 'Course')
+  attachmentId = requireTrainingUuid(attachmentId, 'PowerPoint attachment')
+  await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    await requireOwnedPptxAttachment(tx, attachmentId)
     const [updated] = await tx
       .update(trainingLessons)
       .set({ sourceAttachmentId: attachmentId })
@@ -402,13 +691,7 @@ export async function importLessonPptx(lessonId: string, courseId: string, attac
       )
       .returning({ id: trainingLessons.id })
     if (!updated) throw new Error('Slideshow lesson not found.')
-    return existing.sourceAttachmentId && existing.sourceAttachmentId !== attachmentId
-      ? existing.sourceAttachmentId
-      : null
   })
-  if (replacedAttachmentId) {
-    await purgeDeckAssets(ctx.db, [{ sourceAttachmentId: replacedAttachmentId }])
-  }
   await recordAudit(ctx, {
     entityType: 'training_lesson',
     entityId: lessonId,
@@ -422,19 +705,39 @@ export async function importLessonPptx(lessonId: string, courseId: string, attac
 export async function updateCourseSettings(courseId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  const name = String(formData.get('name') ?? '').trim()
-  const code = String(formData.get('code') ?? '').trim()
-  const descriptionRaw = String(formData.get('description') ?? '').trim()
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  courseId = requireTrainingUuid(courseId, 'Course')
+  const name = requiredTrainingText(formData.get('name'), 'Course name', 200)
+  const code = optionalTrainingText(formData.get('code'), 'Course code', 100) ?? ''
+  const descriptionRaw = optionalTrainingText(
+    formData.get('description'),
+    'Course description',
+    2_000_000,
+  )
   const description = descriptionRaw ? sanitizeDocumentHtml(descriptionRaw) : null
-  const deliveryRaw = String(formData.get('deliveryType') ?? '').trim()
-  const deliveryType: DeliveryType | null = DELIVERY_TYPES.includes(deliveryRaw as DeliveryType)
-    ? (deliveryRaw as DeliveryType)
-    : null
-  const onlineUrl = String(formData.get('onlineUrl') ?? '').trim() || null
-  const instructionsRaw = String(formData.get('instructions') ?? '').trim()
+  const deliveryType = requireTrainingEnum(
+    formData.get('deliveryType'),
+    DELIVERY_TYPES,
+    'Delivery type',
+  ) as DeliveryType
+  const onlineUrlRaw = optionalTrainingText(formData.get('onlineUrl'), 'Course URL', 4_096)
+  const onlineUrl = onlineUrlRaw ? await validateTrainingExternalUrl(onlineUrlRaw) : null
+  const instructionsRaw = optionalTrainingText(
+    formData.get('instructions'),
+    'Course instructions',
+    2_000_000,
+  )
   const instructions = instructionsRaw ? sanitizeDocumentHtml(instructionsRaw) : null
-  const durationRaw = String(formData.get('durationMinutes') ?? '').trim()
-  const validRaw = String(formData.get('validForMonths') ?? '').trim()
+  const durationMinutes = optionalTrainingInteger(
+    formData.get('durationMinutes'),
+    'Duration',
+    MAX_TRAINING_DURATION_MINUTES,
+  )
+  const validForMonths = optionalTrainingInteger(
+    formData.get('validForMonths'),
+    'Validity',
+    MAX_TRAINING_VALIDITY_MONTHS,
+  )
   // Card Studio designs pinned to this course (any number; empty = tenant defaults).
   const credentialOutputIds = Array.from(
     new Set(
@@ -444,28 +747,61 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
         .filter(Boolean),
     ),
   )
-  await ctx.db(async (tx) => {
+  if (credentialOutputIds.length > 20 || credentialOutputIds.some((id) => id.length > 120)) {
+    throw new Error('Credential design selection is invalid.')
+  }
+  const updated = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId))
+      .limit(1)
+    if (!tenant) throw new Error('Tenant not found.')
+    const allowedOutputIds = new Set(
+      enabledCredentialOutputs(tenant.settings).map((output) => output.id),
+    )
+    if (credentialOutputIds.some((id) => !allowedOutputIds.has(id))) {
+      throw new Error('Credential design selection is invalid.')
+    }
     const [existing] = await tx
       .select({ metadata: trainingCourses.metadata })
       .from(trainingCourses)
-      .where(eq(trainingCourses.id, courseId))
+      .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
       .limit(1)
+    if (!existing) throw new Error('Course not found.')
     const metadata = { ...(existing?.metadata ?? {}), credentialOutputIds }
-    await tx
+    const [row] = await tx
       .update(trainingCourses)
       .set({
-        ...(name ? { name } : {}),
-        ...(code ? { code } : {}),
-        ...(deliveryType ? { deliveryType } : {}),
+        name,
+        code,
+        deliveryType,
         description,
         onlineUrl,
         instructions,
-        durationMinutes: durationRaw ? Math.max(0, Number(durationRaw) || 0) : null,
-        validForMonths: validRaw ? Math.max(0, Number(validRaw) || 0) : null,
+        durationMinutes,
+        validForMonths,
         requiresEvaluator: formData.get('requiresEvaluator') === 'on',
         metadata,
       })
-      .where(eq(trainingCourses.id, courseId))
+      .where(and(eq(trainingCourses.id, courseId), isNull(trainingCourses.deletedAt)))
+      .returning({ id: trainingCourses.id })
+    if (!row) throw new Error('Course not found.')
+    return row
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_course',
+    entityId: updated.id,
+    action: 'update',
+    summary: `Updated course "${name}"`,
+    after: {
+      code,
+      deliveryType,
+      durationMinutes,
+      validForMonths,
+      credentialOutputIds,
+    },
   })
   revalidatePath(studioPath(courseId))
   revalidatePath(`/training/courses/${courseId}`)
@@ -474,28 +810,45 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
 export async function deleteLesson(lessonId: string, courseId: string) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
+  courseId = requireTrainingUuid(courseId, 'Course')
   const deck = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
     const [row] = await tx
       .select({
-        slides: trainingLessons.slides,
         sourceAttachmentId: trainingLessons.sourceAttachmentId,
       })
       .from(trainingLessons)
-      .where(eq(trainingLessons.id, lessonId))
+      .where(
+        and(
+          eq(trainingLessons.id, lessonId),
+          eq(trainingLessons.courseId, courseId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
       .limit(1)
-    await tx
+    if (!row) throw new Error('Lesson not found.')
+    const [deleted] = await tx
       .update(trainingLessons)
-      .set({ deletedAt: new Date(), slides: [], sourceAttachmentId: null })
-      .where(eq(trainingLessons.id, lessonId))
-    return row ?? null
+      .set({ deletedAt: new Date(), sourceAttachmentId: null })
+      .where(
+        and(
+          eq(trainingLessons.id, lessonId),
+          eq(trainingLessons.courseId, courseId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+      .returning({ id: trainingLessons.id })
+    if (!deleted) throw new Error('Lesson changed while it was being deleted.')
+    return row
   })
-  const purged = deck ? await purgeDeckAssets(ctx.db, [deck]) : 0
+  const purged = await purgeDeckAssets(ctx.db, [deck])
   await recordAudit(ctx, {
     entityType: 'training_lesson',
     entityId: lessonId,
     action: 'delete',
     summary: 'Deleted lesson',
-    metadata: purged ? { purgedAttachments: purged } : {},
+    metadata: { courseId, ...(purged ? { purgedAttachments: purged } : {}) },
   })
   revalidatePath(studioPath(courseId))
 }
@@ -503,13 +856,64 @@ export async function deleteLesson(lessonId: string, courseId: string) {
 export async function reorderLessons(courseId: string, orderedIds: string[]) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  await ctx.db(async (tx) => {
+  courseId = requireTrainingUuid(courseId, 'Course')
+  orderedIds = parseTrainingOrder(orderedIds, 'Lesson')
+  const moduleId = await ctx.db(async (tx) => {
+    await requireActiveCourse(tx, courseId)
+    const lessons = await tx
+      .select({ id: trainingLessons.id, moduleId: trainingLessons.moduleId })
+      .from(trainingLessons)
+      .where(
+        and(
+          eq(trainingLessons.courseId, courseId),
+          inArray(trainingLessons.id, orderedIds),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+    if (lessons.length !== orderedIds.length) {
+      throw new Error('Lesson order contains unrelated records.')
+    }
+    const moduleIds = new Set(lessons.map((lesson) => lesson.moduleId))
+    if (moduleIds.size !== 1) throw new Error('Lessons can only be reordered within one module.')
+    const targetModuleId = lessons[0]!.moduleId
+    const moduleLessons = await tx
+      .select({ id: trainingLessons.id })
+      .from(trainingLessons)
+      .where(
+        and(
+          eq(trainingLessons.courseId, courseId),
+          eq(trainingLessons.moduleId, targetModuleId),
+          isNull(trainingLessons.deletedAt),
+        ),
+      )
+    assertExactTrainingOrder(
+      moduleLessons.map((lesson) => lesson.id),
+      orderedIds,
+      'Lesson',
+    )
     for (let i = 0; i < orderedIds.length; i++) {
-      await tx
+      const [updated] = await tx
         .update(trainingLessons)
         .set({ sortOrder: i })
-        .where(eq(trainingLessons.id, orderedIds[i]!))
+        .where(
+          and(
+            eq(trainingLessons.id, orderedIds[i]!),
+            eq(trainingLessons.courseId, courseId),
+            eq(trainingLessons.moduleId, targetModuleId),
+            isNull(trainingLessons.deletedAt),
+          ),
+        )
+        .returning({ id: trainingLessons.id })
+      if (!updated) throw new Error('Lesson order changed while it was being saved.')
     }
+    return targetModuleId
+  })
+  await recordAudit(ctx, {
+    entityType: 'training_course_module',
+    entityId: moduleId,
+    action: 'update',
+    summary: `Reordered ${orderedIds.length} lessons`,
+    after: { courseId },
   })
   revalidatePath(studioPath(courseId))
 }

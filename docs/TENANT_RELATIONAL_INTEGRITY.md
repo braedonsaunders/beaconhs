@@ -13,19 +13,20 @@ the relationship safe once a foreign UUID is known through an import, an
 integration, a privileged process, a support operation, or a programming bug.
 The database must compare both tenant and id.
 
-The audit introspected all 203 current Drizzle tables and every declared foreign
-key. It found 315 tenant-child to tenant-parent relationships in Drizzle, plus
-42 attachment columns governed by the explicit raw-migration manifest:
+The audit introspects all 196 current Drizzle tables and every declared foreign
+key. After the PPE cutover in migration `0018`, it finds 279
+tenant-child-to-tenant-parent relationships in Drizzle, plus 42 attachment
+columns governed by the explicit raw-migration manifest:
 
-- 41 are represented by composite `(tenant_id, parent_id)` Drizzle foreign keys.
-- 274 residual single-column relationships remain in the exact, executable
+- 257 are represented by composite `(tenant_id, parent_id)` Drizzle foreign keys.
+- 22 residual single-column relationships remain in the exact, executable
   snapshot at
   `packages/db/src/__snapshots__/tenant-relational-integrity.test.ts.snap`.
 - 42 attachment relationships are represented only by composite constraints
   generated from `packages/db/src/attachment-integrity.ts`; Drizzle intentionally
   declares no redundant `attachment_id -> attachments.id` foreign keys.
 
-The snapshot is a ratchet. Adding, removing, or retargeting one of those 274
+The snapshot is a ratchet. Adding, removing, or retargeting one of those 22
 relationships fails the database tests until the edge is reviewed. Attachment
 references have their own exhaustive manifest test. It proves that every
 attachment-id column appears exactly once, none regresses to a single-column
@@ -57,10 +58,25 @@ Drizzle schema now:
 - notification group member -> notification group
 - compliance audience, dispatch, and status -> obligation
 - compliance status -> person and obligation -> creator membership
-- form, inspection, and journal durable dispatch -> assignment
-- inspection assignment materialized status -> assignment and person
 - report schedule -> run-as membership and role (pre-existing in this audit)
 - report run -> schedule and report delivery -> run (pre-existing in this audit)
+- Builder form ownership and response/workflow children (migration `0006`)
+- HazID assessment, task, question, PPE, photo, signature, and Builder links
+  (migrations `0007` and `0008`)
+- equipment, custody, inspection, work-order, reminder, and vehicle-log links
+  (migration `0009`)
+- document, version, acknowledgment, review, exact-version book, and category
+  links (squashed into the production cutover migration)
+- incident, investigation, injury, taxonomy, hours, people, and source-form
+  links (migration `0013`)
+- all 42 live training course, class, record, assessment, LMS, skill, and exact
+  assessment-to-compliance links (the retired audience-assignment family is excluded)
+- all 18 current inspection type, bank, record, criteria, and principal links
+  (migration `0016`, excluding the retired legacy assignment edge)
+- all 19 declared people, org hierarchy, workforce taxonomy, group, title,
+  contact, kiosk, file, and job-task links (migration `0017`)
+- all 15 declared PPE inventory, issue, inspection, annual-record, criteria-bank,
+  and type-criteria links (migration `0018`)
 
 AI shares also enforce exactly one correctly typed target, use partial unique
 indexes to prevent duplicate shares under concurrency, and insert with conflict
@@ -68,14 +84,22 @@ handling rather than a check-then-insert race.
 
 ## Ranked residual conversion batches
 
-| Rank | Residual edges | Scope                                                         |
-| ---- | -------------: | ------------------------------------------------------------- |
-| P1   |            125 | tenant identity, person identity, and org-unit visibility     |
-| P2   |             73 | operational aggregate ownership and child records             |
-| P3   |             76 | taxonomies, leaf relationships, and reviewed hybrid semantics |
-|      |        **274** | exact current residual ratchet                                |
+The post-`0018` executable ratchet contains exactly 22 edges. This domain split
+is mutually exclusive and therefore sums to the ratchet total:
 
-### P0: finish before production data is accepted
+| Rank | Residual edges | Child domain                                                    |
+| ---- | -------------: | --------------------------------------------------------------- |
+| P2   |              7 | journals: entries, photos, tags, sites, people, and principals  |
+| P2   |              7 | corrective actions: owners, verifiers, steps, photos, and sites |
+| P2   |              8 | remaining templates, reports, insights, and safe-distance links |
+|      |         **22** | exact current residual ratchet                                  |
+
+The highest-fan-out remaining parents are `tenant_users` (9 edges), `people`
+(3), and `org_units` (3). Together those hubs account for 15 of the 22 residual
+relationships, but they cut across the domain batches above and must not be
+added to those totals a second time.
+
+### P0: keep complete before production data is accepted
 
 The 42 attachment links are security-sensitive because they can expose private
 objects or signatures. Their canonical model is composite-only: the cutover
@@ -83,59 +107,18 @@ migration installs and validates the manifest constraints, while the Drizzle
 schema emits no parallel simple constraints. Do not reintroduce a second
 foreign key for the same logical relationship.
 
-The direct critical conversions above must be included in the same generated
-migration and validated against existing data before deployment.
+Each remaining domain must use the same fail-closed cutover pattern already
+proven by forms, HazID, equipment, documents, incidents, training, inspections,
+people/org, and PPE: visible all-tenant preflight, FORCE-RLS restoration before
+durable DDL, validated replacement keys, then legacy-key removal.
 
-### P1: identity, visibility, and tenant scope
+### Reviewed hybrid relationship
 
-These hubs carry most of the remaining exposure and should be converted next:
-
-| Parent         | Residual edges | Why it is high impact                                                |
-| -------------- | -------------: | -------------------------------------------------------------------- |
-| `tenant_users` |             58 | owners, assignees, approvers, submitters, and audit actors           |
-| `people`       |             43 | subject identity, training, signatures, injury, and assignment scope |
-| `org_units`    |             24 | site/department visibility and operational scope                     |
-
-The exact children and columns are in the committed snapshot. Convert one hub
-at a time so preflight failures identify the responsible domain precisely.
-
-### Reviewed hybrid relationships
-
-Some high-value relationships cannot be converted mechanically without changing
-product semantics:
-
-- `report_schedules.definition_id` may target either a global built-in report
-  definition (`tenant_id IS NULL`) or a tenant-owned custom definition. A plain
-  composite tenant FK would reject every valid built-in schedule.
-- API-key creators, audit actors, notification recipients, preferences, and push
-  subscriptions currently retain global user identity. Retargeting them to a
-  `tenant_users` membership would change what happens when membership is removed,
-  including whether audit/notification history is retained or cascaded. Decide
-  that lifecycle explicitly before changing those parents.
-
-### P2: aggregate ownership
-
-Convert the major aggregate roots and their children in bounded domain batches:
-
-| Parent                                 | Residual edges |
-| -------------------------------------- | -------------: |
-| `training_courses`                     |              9 |
-| `equipment_items`                      |              8 |
-| `incidents`                            |              8 |
-| `form_templates`                       |              7 |
-| `hazid_assessments`                    |              7 |
-| `documents`                            |              6 |
-| `form_responses`                       |              6 |
-| equipment inspection roots             |              9 |
-| inspection roots                       |             10 |
-| compliance and corrective-action roots |              3 |
-
-### P3: taxonomies and leaf relationships
-
-The remaining 76 edges are spread across classifications, categories, groups,
-types, assignments, sync metadata, and other low-fan-out parents. They are not
-exempt from tenant integrity; they are last only because they have less direct
-authorization and visibility impact. The snapshot is the authoritative list.
+`report_schedules.definition_id` may target either a global built-in report
+definition (`tenant_id IS NULL`) or a tenant-owned custom definition. A plain
+composite tenant FK would reject every valid built-in schedule. Its final
+cutover needs an explicit hybrid invariant rather than a mechanical composite
+key. It remains in the ratchet until that invariant is implemented and tested.
 
 ## Cutover migration design
 

@@ -15,19 +15,11 @@ import {
   inspectionTypeGroups,
   inspectionTypes,
 } from '@beaconhs/db/schema'
+import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit } from '@/lib/audit'
-
-// 'rating' is withdrawn — it never had a fill-flow control. Unknown values
-// (including 'rating') fall back to pass_fail_na.
-const RESPONSE_TYPES = ['pass_fail_na', 'yes_no'] as const
-type ResponseType = (typeof RESPONSE_TYPES)[number]
-function parseResponseType(v: unknown): ResponseType {
-  return typeof v === 'string' && (RESPONSE_TYPES as readonly string[]).includes(v)
-    ? (v as ResponseType)
-    : 'pass_fail_na'
-}
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { parseInspectionResponseConfig } from '@/lib/inspection-response-config'
 
 async function manageCtx() {
   const ctx = await requireRequestContext()
@@ -81,34 +73,76 @@ export async function updateInspectionType(input: {
 
 export async function deleteInspectionType(input: { id: string }) {
   const ctx = await manageCtx()
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const [type] = await tx
+      .select({ id: inspectionTypes.id })
+      .from(inspectionTypes)
+      .where(
+        and(
+          eq(inspectionTypes.tenantId, ctx.tenantId),
+          eq(inspectionTypes.id, input.id),
+          isNull(inspectionTypes.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!type) throw new Error('Inspection type not found')
+    await assertComplianceTargetCanRetire(tx, ctx.tenantId, 'inspection_type', input.id)
+    await tx
       .update(inspectionTypes)
       .set({ deletedAt: new Date() })
-      .where(eq(inspectionTypes.id, input.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'inspection_type',
-    entityId: input.id,
-    action: 'delete',
-    summary: 'Deleted inspection type',
+      .where(
+        and(
+          eq(inspectionTypes.tenantId, ctx.tenantId),
+          eq(inspectionTypes.id, input.id),
+          isNull(inspectionTypes.deletedAt),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_type',
+      entityId: input.id,
+      action: 'delete',
+      summary: 'Deleted inspection type',
+    })
   })
   revalidatePath('/inspections/types')
 }
 
 export async function toggleInspectionTypePublished(input: { id: string; next: boolean }) {
   const ctx = await manageCtx()
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const [type] = await tx
+      .select({ id: inspectionTypes.id })
+      .from(inspectionTypes)
+      .where(
+        and(
+          eq(inspectionTypes.tenantId, ctx.tenantId),
+          eq(inspectionTypes.id, input.id),
+          isNull(inspectionTypes.deletedAt),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!type) throw new Error('Inspection type not found')
+    if (!input.next) {
+      await assertComplianceTargetCanRetire(tx, ctx.tenantId, 'inspection_type', input.id)
+    }
+    await tx
       .update(inspectionTypes)
       .set({ isPublished: input.next })
-      .where(eq(inspectionTypes.id, input.id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'inspection_type',
-    entityId: input.id,
-    action: input.next ? 'publish' : 'update',
-    summary: input.next ? 'Published' : 'Moved back to draft',
+      .where(
+        and(
+          eq(inspectionTypes.tenantId, ctx.tenantId),
+          eq(inspectionTypes.id, input.id),
+          isNull(inspectionTypes.deletedAt),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_type',
+      entityId: input.id,
+      action: input.next ? 'publish' : 'update',
+      summary: input.next ? 'Published' : 'Moved back to draft',
+    })
   })
   revalidateType(input.id)
 }
@@ -196,12 +230,14 @@ export async function addTypeCriterion(input: {
   groupId: string | null
   text: string
   responseType?: string
+  choiceOptions?: string[]
   requiresPhoto?: boolean
   requiresComment?: boolean
 }) {
   const ctx = await manageCtx()
   const text = input.text.trim()
   if (!text) throw new Error('Question is required')
+  const response = parseInspectionResponseConfig(input.responseType, input.choiceOptions ?? [])
   const id = await ctx.db(async (tx) => {
     const [maxRow] = await tx
       .select({
@@ -225,7 +261,8 @@ export async function addTypeCriterion(input: {
         groupId: input.groupId,
         sequence: seq,
         text,
-        responseType: parseResponseType(input.responseType),
+        responseType: response.responseType,
+        choiceOptions: response.choiceOptions,
         requiresPhoto: Boolean(input.requiresPhoto),
         requiresComment: Boolean(input.requiresComment),
       })
@@ -247,6 +284,7 @@ export async function updateTypeCriterion(input: {
   id: string
   text?: string
   responseType?: string
+  choiceOptions?: string[]
   requiresPhoto?: boolean
   requiresComment?: boolean
   groupId?: string | null
@@ -255,7 +293,23 @@ export async function updateTypeCriterion(input: {
   await ctx.db(async (tx) => {
     const patch: Record<string, unknown> = {}
     if (input.text !== undefined) patch.text = input.text.trim() || 'Criterion'
-    if (input.responseType !== undefined) patch.responseType = parseResponseType(input.responseType)
+    if (input.responseType !== undefined || input.choiceOptions !== undefined) {
+      const [current] = await tx
+        .select({
+          responseType: inspectionTypeCriteria.responseType,
+          choiceOptions: inspectionTypeCriteria.choiceOptions,
+        })
+        .from(inspectionTypeCriteria)
+        .where(eq(inspectionTypeCriteria.id, input.id))
+        .limit(1)
+      if (!current) throw new Error('Criterion not found')
+      const response = parseInspectionResponseConfig(
+        input.responseType ?? current.responseType,
+        input.choiceOptions ?? current.choiceOptions,
+      )
+      patch.responseType = response.responseType
+      patch.choiceOptions = response.choiceOptions
+    }
     if (input.requiresPhoto !== undefined) patch.requiresPhoto = input.requiresPhoto
     if (input.requiresComment !== undefined) patch.requiresComment = input.requiresComment
     // Moving to a different group appends to the end of that group.
@@ -370,6 +424,7 @@ export async function importBankIntoType(input: { typeId: string; bankId: string
                 sequence: i,
                 text: c.text,
                 responseType: c.responseType,
+                choiceOptions: c.choiceOptions,
                 requiresPhoto: c.requiresPhoto,
                 requiresComment: c.requiresComment,
                 sourceBankId: input.bankId,
@@ -382,6 +437,7 @@ export async function importBankIntoType(input: { typeId: string; bankId: string
               sequence: inspectionTypeCriteria.sequence,
               text: inspectionTypeCriteria.text,
               responseType: inspectionTypeCriteria.responseType,
+              choiceOptions: inspectionTypeCriteria.choiceOptions,
               requiresPhoto: inspectionTypeCriteria.requiresPhoto,
               requiresComment: inspectionTypeCriteria.requiresComment,
             })

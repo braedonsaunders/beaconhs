@@ -7,8 +7,13 @@
 // show the decision the write path would make.
 
 import { createHash, randomBytes } from 'node:crypto'
-import { and, eq, isNull, sql } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm'
+import {
+  normalizeCatalogDisplayName,
+  normalizedCatalogNameSql,
+  primaryPersonTitleName,
+  type Database,
+} from '@beaconhs/db'
 import {
   customerContacts,
   departments,
@@ -16,7 +21,10 @@ import {
   equipmentTypes,
   orgUnits,
   people,
+  personTitleAssignments,
+  personTitles,
   syncCrosswalk,
+  syncRecordChanges,
   trades,
   type SyncRecordAction,
   type SyncRecordDiff,
@@ -30,6 +38,13 @@ import type {
   SyncEntityKey,
   SyncLogger,
 } from './types'
+import {
+  decideNaturalPersonAdoption,
+  decidePersonSync,
+  type SyncOwnershipMode,
+} from './person-sync-policy'
+
+export type { SyncOwnershipMode } from './person-sync-policy'
 
 type JsonRecord = Record<string, unknown>
 
@@ -41,8 +56,6 @@ export interface Lookups {
   personIdByEmployeeNo: Map<string, string>
   personIdByExternalEmployeeId: Map<string, string>
 }
-
-export type SyncOwnershipMode = 'source_wins' | 'manual_wins'
 
 export interface UpsertCtx {
   tenantId: string
@@ -96,8 +109,9 @@ export async function loadLookups(tx: Database): Promise<Lookups> {
       .from(people)
       .where(isNull(people.deletedAt)),
   ])
+  const catalogKey = (value: string) => normalizeCatalogDisplayName(value)?.toLowerCase() ?? ''
   const lower = (m: { id: string; name: string }[]) =>
-    new Map(m.map((r) => [r.name.toLowerCase(), r.id] as const))
+    new Map(m.map((r) => [catalogKey(r.name), r.id] as const))
   const orgUnitIdByCode = new Map<string, string>()
   for (const o of ous) if (o.code) orgUnitIdByCode.set(o.code.toLowerCase(), o.id)
   const personIdByEmployeeNo = new Map<string, string>()
@@ -168,15 +182,29 @@ function conflictMessage(): string {
   return 'Local row changed after the last sync; ownership policy requires review.'
 }
 
+function wasTargetUpdatedAfterSync(
+  row: { updatedAt?: Date | string | null } | null,
+  link: { lastSyncedAt: Date | string },
+  relatedUpdatedAt: Array<Date | string | null | undefined> = [],
+): boolean {
+  const syncedAt = new Date(link.lastSyncedAt).getTime()
+  if (!Number.isFinite(syncedAt)) return false
+  return [row?.updatedAt, ...relatedUpdatedAt].some((value) => {
+    if (!value) return false
+    const updatedAt = new Date(value).getTime()
+    return Number.isFinite(updatedAt) && updatedAt > syncedAt
+  })
+}
+
 function isManualConflict(
   ctx: UpsertCtx,
   row: { updatedAt?: Date | string | null } | null,
   link: { lastSyncedAt: Date | string },
+  relatedUpdatedAt: Array<Date | string | null | undefined> = [],
 ): boolean {
-  if (ctx.ownershipMode !== 'manual_wins' || !row?.updatedAt) return false
-  const updatedAt = new Date(row.updatedAt).getTime()
-  const syncedAt = new Date(link.lastSyncedAt).getTime()
-  return Number.isFinite(updatedAt) && Number.isFinite(syncedAt) && updatedAt > syncedAt + 1000
+  return (
+    ctx.ownershipMode === 'manual_wins' && wasTargetUpdatedAfterSync(row, link, relatedUpdatedAt)
+  )
 }
 
 async function findCrosswalk(
@@ -198,6 +226,30 @@ async function findCrosswalk(
     )
     .limit(1)
   return r ?? null
+}
+
+async function findCanonicalOwner(
+  tx: Database,
+  ctx: UpsertCtx,
+  entity: SyncEntityKey,
+  canonicalId: string,
+) {
+  const [row] = await tx
+    .select({
+      connectionId: syncCrosswalk.connectionId,
+      externalId: syncCrosswalk.externalId,
+      sourceSystem: syncCrosswalk.sourceSystem,
+    })
+    .from(syncCrosswalk)
+    .where(
+      and(
+        eq(syncCrosswalk.tenantId, ctx.tenantId),
+        eq(syncCrosswalk.entity, entity),
+        eq(syncCrosswalk.canonicalId, canonicalId),
+      ),
+    )
+    .limit(1)
+  return row ?? null
 }
 
 async function linkCrosswalk(
@@ -273,12 +325,427 @@ interface PersonFields {
   tradeId: string | null
 }
 
+const PERSON_ROW_SELECTION = {
+  id: people.id,
+  firstName: people.firstName,
+  lastName: people.lastName,
+  employeeNo: people.employeeNo,
+  externalEmployeeId: people.externalEmployeeId,
+  email: people.email,
+  phone: people.phone,
+  jobTitle: primaryPersonTitleName(people.id, people.tenantId),
+  hireDate: people.hireDate,
+  status: people.status,
+  departmentId: people.departmentId,
+  tradeId: people.tradeId,
+  metadata: people.metadata,
+  updatedAt: people.updatedAt,
+  deletedAt: people.deletedAt,
+}
+
+const PERSON_SYNC_SCALAR_KEYS = [
+  'firstName',
+  'lastName',
+  'employeeNo',
+  'externalEmployeeId',
+  'email',
+  'phone',
+  'hireDate',
+  'status',
+  'departmentId',
+  'tradeId',
+] as const satisfies ReadonlyArray<Exclude<keyof PersonFields, 'jobTitle'>>
+
+type PersonTitleRelationshipState = {
+  id: string
+  titleId: string
+  titleName: string
+  isPrimary: boolean
+  isManuallyMaintained: boolean
+  sourceConnectionId: string | null
+  assignmentUpdatedAt: Date
+  titleUpdatedAt: Date
+  titleDeletedAt: Date | null
+}
+
+async function selectPersonTitleRelationshipState(
+  tx: Database,
+  ctx: UpsertCtx,
+  personId: string,
+): Promise<{
+  primary: PersonTitleRelationshipState | null
+  sourceOwned: PersonTitleRelationshipState | null
+}> {
+  const selection = {
+    id: personTitleAssignments.id,
+    titleId: personTitleAssignments.titleId,
+    titleName: personTitles.name,
+    isPrimary: personTitleAssignments.isPrimary,
+    isManuallyMaintained: personTitleAssignments.isManuallyMaintained,
+    sourceConnectionId: personTitleAssignments.sourceConnectionId,
+    assignmentUpdatedAt: personTitleAssignments.updatedAt,
+    titleUpdatedAt: personTitles.updatedAt,
+    titleDeletedAt: personTitles.deletedAt,
+  }
+  const [primaryRows, sourceRows] = await Promise.all([
+    tx
+      .select(selection)
+      .from(personTitleAssignments)
+      .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
+      .where(
+        and(
+          eq(personTitleAssignments.tenantId, ctx.tenantId),
+          eq(personTitleAssignments.personId, personId),
+          eq(personTitleAssignments.isPrimary, true),
+        ),
+      )
+      .limit(1),
+    tx
+      .select(selection)
+      .from(personTitleAssignments)
+      .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
+      .where(
+        and(
+          eq(personTitleAssignments.tenantId, ctx.tenantId),
+          eq(personTitleAssignments.personId, personId),
+          eq(personTitleAssignments.sourceConnectionId, ctx.connectionId),
+        ),
+      )
+      .limit(1),
+  ])
+  return { primary: primaryRows[0] ?? null, sourceOwned: sourceRows[0] ?? null }
+}
+
+async function selectPreviousPersonSnapshot(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+): Promise<JsonRecord | null> {
+  const [row] = await tx
+    .select({ after: syncRecordChanges.after })
+    .from(syncRecordChanges)
+    .where(
+      and(
+        eq(syncRecordChanges.tenantId, ctx.tenantId),
+        eq(syncRecordChanges.connectionId, ctx.connectionId),
+        eq(syncRecordChanges.entity, 'people'),
+        eq(syncRecordChanges.externalId, externalId),
+        eq(syncRecordChanges.dryRun, false),
+        inArray(syncRecordChanges.action, ['created', 'updated']),
+        isNotNull(syncRecordChanges.after),
+      ),
+    )
+    .orderBy(desc(syncRecordChanges.createdAt), desc(syncRecordChanges.id))
+    .limit(1)
+  return row?.after ?? null
+}
+
+function personScalarValuesMatch(
+  row: Awaited<ReturnType<typeof selectPerson>>,
+  fields: PersonFields,
+  metadata?: JsonRecord,
+): boolean {
+  if (!row) return false
+  for (const key of PERSON_SYNC_SCALAR_KEYS) {
+    if (JSON.stringify(row[key]) !== JSON.stringify(fields[key])) return false
+  }
+  const currentMetadata =
+    row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+      ? (row.metadata as JsonRecord)
+      : {}
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (JSON.stringify(currentMetadata[key]) !== JSON.stringify(value)) return false
+  }
+  return true
+}
+
+function personTitleValuesMatch(
+  fields: PersonFields,
+  titleState: Awaited<ReturnType<typeof selectPersonTitleRelationshipState>>,
+): boolean {
+  const desired = normalizeCatalogDisplayName(fields.jobTitle)
+  // Blank means the source owns no title. A manual primary is valid and must
+  // not be interpreted as source drift.
+  if (!desired) return true
+  const current = titleState.primary
+  return (
+    Boolean(current) &&
+    current!.titleDeletedAt === null &&
+    normalizeCatalogDisplayName(current!.titleName)?.toLocaleLowerCase() ===
+      desired.toLocaleLowerCase()
+  )
+}
+
+function personTitleOwnershipMatches(
+  fields: PersonFields,
+  titleState: Awaited<ReturnType<typeof selectPersonTitleRelationshipState>>,
+): boolean {
+  const desired = normalizeCatalogDisplayName(fields.jobTitle)
+  const owned = titleState.sourceOwned
+  if (!desired) return owned === null
+  return (
+    Boolean(owned) &&
+    owned!.isPrimary &&
+    owned!.titleDeletedAt === null &&
+    normalizeCatalogDisplayName(owned!.titleName)?.toLocaleLowerCase() ===
+      desired.toLocaleLowerCase()
+  )
+}
+
+function personMatchesPreviousSnapshot(
+  row: Awaited<ReturnType<typeof selectPerson>>,
+  titleState: Awaited<ReturnType<typeof selectPersonTitleRelationshipState>>,
+  previous: JsonRecord,
+): boolean {
+  if (!row) return false
+  for (const key of PERSON_SYNC_SCALAR_KEYS) {
+    if (JSON.stringify(row[key]) !== JSON.stringify(previous[key] ?? null)) return false
+  }
+  const previousTitle = normalizeCatalogDisplayName(previous.jobTitle)
+  if (!previousTitle) return true
+  const currentTitle = titleState.primary
+  return (
+    Boolean(currentTitle) &&
+    currentTitle!.titleDeletedAt === null &&
+    normalizeCatalogDisplayName(currentTitle!.titleName)?.toLowerCase() ===
+      previousTitle.toLowerCase()
+  )
+}
+
+function personTitleUpdatedAt(
+  titleState: Awaited<ReturnType<typeof selectPersonTitleRelationshipState>>,
+): Array<Date | null> {
+  const relationships = [titleState.primary, titleState.sourceOwned].filter(
+    (value, index, all): value is PersonTitleRelationshipState =>
+      Boolean(value) && all.findIndex((candidate) => candidate?.id === value?.id) === index,
+  )
+  return relationships.flatMap((relationship) => [
+    relationship.assignmentUpdatedAt,
+    relationship.titleUpdatedAt,
+  ])
+}
+
 function withPeopleMetadata(fields: PersonFields, metadata?: JsonRecord) {
-  if (!metadata || Object.keys(metadata).length === 0) return fields
+  const { jobTitle: _jobTitle, ...personFields } = fields
+  if (!metadata || Object.keys(metadata).length === 0) return personFields
   return {
-    ...fields,
+    ...personFields,
     metadata: sql`${people.metadata} || ${JSON.stringify(metadata)}::jsonb`,
   }
+}
+
+async function syncPrimaryPersonTitle(
+  tx: Database,
+  ctx: UpsertCtx,
+  personId: string,
+  jobTitle: string | null,
+): Promise<string | null> {
+  // Every title writer locks the parent person first. This gives the source
+  // sync and the manual title actions one ordering point before either reads
+  // or changes primary/source ownership.
+  const [personOwner] = await tx
+    .select({ id: people.id })
+    .from(people)
+    .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, personId)))
+    .limit(1)
+    .for('update')
+  if (!personOwner) throw new Error('Could not lock the person for title synchronization')
+
+  const name = normalizeCatalogDisplayName(jobTitle)
+  let titleId: string | null = null
+  if (name) {
+    // Title names arrive as source-system labels. Reuse the tenant catalogue
+    // by the same normalized key as the database index so casing/spacing drift
+    // cannot create duplicate titles. Stable ordering prefers an active row if
+    // historical duplicates exist.
+    const findTitle = async () => {
+      const [row] = await tx
+        .select({ id: personTitles.id, name: personTitles.name, deletedAt: personTitles.deletedAt })
+        .from(personTitles)
+        .where(
+          and(
+            eq(personTitles.tenantId, ctx.tenantId),
+            eq(normalizedCatalogNameSql(personTitles.name), normalizedCatalogNameSql(sql`${name}`)),
+          ),
+        )
+        .orderBy(
+          sql`${personTitles.deletedAt} is null desc`,
+          personTitles.createdAt,
+          personTitles.id,
+        )
+        .limit(1)
+        .for('key share')
+      return row
+    }
+    let title = await findTitle()
+    if (title?.deletedAt) {
+      ;[title] = await tx
+        .update(personTitles)
+        .set({ deletedAt: null })
+        .where(eq(personTitles.id, title.id))
+        .returning({
+          id: personTitles.id,
+          name: personTitles.name,
+          deletedAt: personTitles.deletedAt,
+        })
+    } else if (!title) {
+      ;[title] = await tx
+        .insert(personTitles)
+        .values({ tenantId: ctx.tenantId, name })
+        .onConflictDoNothing()
+        .returning({
+          id: personTitles.id,
+          name: personTitles.name,
+          deletedAt: personTitles.deletedAt,
+        })
+      // Another sync can create the same normalized catalogue row between our
+      // lookup and insert. The unique index arbitrates; resolve the winner.
+      title ??= await findTitle()
+    }
+    if (!title) throw new Error('Could not resolve the synced job title')
+    titleId = title.id
+  }
+
+  const [owned] = await tx
+    .select({
+      id: personTitleAssignments.id,
+      titleId: personTitleAssignments.titleId,
+      isPrimary: personTitleAssignments.isPrimary,
+      isManuallyMaintained: personTitleAssignments.isManuallyMaintained,
+    })
+    .from(personTitleAssignments)
+    .where(
+      and(
+        eq(personTitleAssignments.tenantId, ctx.tenantId),
+        eq(personTitleAssignments.personId, personId),
+        eq(personTitleAssignments.sourceConnectionId, ctx.connectionId),
+      ),
+    )
+    .limit(1)
+    .for('update')
+
+  // Release the previous source relationship first. A row that was also
+  // selected manually remains a manual assignment; a source-only row can be
+  // removed. This distinction prevents a matching manual secondary from being
+  // silently adopted and later deleted by sync replay.
+  if (owned && owned.titleId !== titleId) {
+    if (owned.isManuallyMaintained) {
+      await tx
+        .update(personTitleAssignments)
+        .set({ sourceConnectionId: null })
+        .where(eq(personTitleAssignments.id, owned.id))
+    } else {
+      await tx.delete(personTitleAssignments).where(eq(personTitleAssignments.id, owned.id))
+    }
+  }
+
+  if (titleId) {
+    const [existing] = await tx
+      .select({
+        id: personTitleAssignments.id,
+        sourceConnectionId: personTitleAssignments.sourceConnectionId,
+      })
+      .from(personTitleAssignments)
+      .where(
+        and(
+          eq(personTitleAssignments.tenantId, ctx.tenantId),
+          eq(personTitleAssignments.personId, personId),
+          eq(personTitleAssignments.titleId, titleId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (existing?.sourceConnectionId && existing.sourceConnectionId !== ctx.connectionId) {
+      throw new Error('The target title assignment is owned by another sync connection')
+    }
+    if (existing) {
+      await tx
+        .update(personTitleAssignments)
+        .set({ isPrimary: false })
+        .where(
+          and(
+            eq(personTitleAssignments.tenantId, ctx.tenantId),
+            eq(personTitleAssignments.personId, personId),
+            ne(personTitleAssignments.id, existing.id),
+          ),
+        )
+      await tx
+        .update(personTitleAssignments)
+        .set({ isPrimary: true, sourceConnectionId: ctx.connectionId })
+        .where(eq(personTitleAssignments.id, existing.id))
+    } else {
+      await tx
+        .update(personTitleAssignments)
+        .set({ isPrimary: false })
+        .where(
+          and(
+            eq(personTitleAssignments.tenantId, ctx.tenantId),
+            eq(personTitleAssignments.personId, personId),
+          ),
+        )
+      await tx.insert(personTitleAssignments).values({
+        tenantId: ctx.tenantId,
+        personId,
+        titleId,
+        isPrimary: true,
+        sourceConnectionId: ctx.connectionId,
+        isManuallyMaintained: false,
+      })
+    }
+  } else if (owned?.isPrimary && !owned.isManuallyMaintained) {
+    // A blank source value removed its source-only primary. Promote one of the
+    // remaining manual titles deterministically; blank never deletes or
+    // demotes a co-owned manual primary.
+    const [nextPrimary] = await tx
+      .select({ id: personTitleAssignments.id })
+      .from(personTitleAssignments)
+      .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
+      .where(
+        and(
+          eq(personTitleAssignments.tenantId, ctx.tenantId),
+          eq(personTitleAssignments.personId, personId),
+          isNull(personTitles.deletedAt),
+        ),
+      )
+      .orderBy(personTitles.name, personTitleAssignments.titleId)
+      .limit(1)
+    if (nextPrimary) {
+      await tx
+        .update(personTitleAssignments)
+        .set({ isPrimary: true })
+        .where(eq(personTitleAssignments.id, nextPrimary.id))
+    }
+  }
+
+  const assignments = await tx
+    .select({ titleId: personTitleAssignments.titleId })
+    .from(personTitleAssignments)
+    .where(
+      and(
+        eq(personTitleAssignments.tenantId, ctx.tenantId),
+        eq(personTitleAssignments.personId, personId),
+      ),
+    )
+    .orderBy(personTitleAssignments.titleId)
+  await tx
+    .update(people)
+    .set({ titleIds: assignments.map((assignment) => assignment.titleId) })
+    .where(eq(people.id, personId))
+
+  const [primary] = await tx
+    .select({ name: personTitles.name })
+    .from(personTitleAssignments)
+    .innerJoin(personTitles, eq(personTitles.id, personTitleAssignments.titleId))
+    .where(
+      and(
+        eq(personTitleAssignments.tenantId, ctx.tenantId),
+        eq(personTitleAssignments.personId, personId),
+        eq(personTitleAssignments.isPrimary, true),
+        isNull(personTitles.deletedAt),
+      ),
+    )
+    .limit(1)
+  return primary?.name ?? null
 }
 
 function rememberPersonLookup(ctx: UpsertCtx, id: string, fields: PersonFields) {
@@ -292,26 +759,20 @@ function rememberPersonLookup(ctx: UpsertCtx, id: string, fields: PersonFields) 
 
 async function selectPerson(tx: Database, id: string) {
   const [row] = await tx
-    .select({
-      id: people.id,
-      firstName: people.firstName,
-      lastName: people.lastName,
-      employeeNo: people.employeeNo,
-      externalEmployeeId: people.externalEmployeeId,
-      email: people.email,
-      phone: people.phone,
-      jobTitle: people.jobTitle,
-      hireDate: people.hireDate,
-      status: people.status,
-      departmentId: people.departmentId,
-      tradeId: people.tradeId,
-      metadata: people.metadata,
-      updatedAt: people.updatedAt,
-      deletedAt: people.deletedAt,
-    })
+    .select(PERSON_ROW_SELECTION)
     .from(people)
     .where(and(eq(people.id, id), isNull(people.deletedAt)))
     .limit(1)
+  return row ?? null
+}
+
+async function selectPersonForUpdate(tx: Database, id: string) {
+  const [row] = await tx
+    .select(PERSON_ROW_SELECTION)
+    .from(people)
+    .where(and(eq(people.id, id), isNull(people.deletedAt)))
+    .limit(1)
+    .for('update')
   return row ?? null
 }
 
@@ -319,27 +780,7 @@ async function selectPerson(tx: Database, id: string) {
 // crosswalk-linked row that was locally archived, so we restore/conflict it
 // instead of inserting a shadow duplicate.
 async function selectPersonAnyState(tx: Database, id: string) {
-  const [row] = await tx
-    .select({
-      id: people.id,
-      firstName: people.firstName,
-      lastName: people.lastName,
-      employeeNo: people.employeeNo,
-      externalEmployeeId: people.externalEmployeeId,
-      email: people.email,
-      phone: people.phone,
-      jobTitle: people.jobTitle,
-      hireDate: people.hireDate,
-      status: people.status,
-      departmentId: people.departmentId,
-      tradeId: people.tradeId,
-      metadata: people.metadata,
-      updatedAt: people.updatedAt,
-      deletedAt: people.deletedAt,
-    })
-    .from(people)
-    .where(eq(people.id, id))
-    .limit(1)
+  const [row] = await tx.select(PERSON_ROW_SELECTION).from(people).where(eq(people.id, id)).limit(1)
   return row ?? null
 }
 
@@ -349,23 +790,7 @@ async function findPersonByExternalEmployeeId(
   externalEmployeeId: string,
 ) {
   const [row] = await tx
-    .select({
-      id: people.id,
-      firstName: people.firstName,
-      lastName: people.lastName,
-      employeeNo: people.employeeNo,
-      externalEmployeeId: people.externalEmployeeId,
-      email: people.email,
-      phone: people.phone,
-      jobTitle: people.jobTitle,
-      hireDate: people.hireDate,
-      status: people.status,
-      departmentId: people.departmentId,
-      tradeId: people.tradeId,
-      metadata: people.metadata,
-      updatedAt: people.updatedAt,
-      deletedAt: people.deletedAt,
-    })
+    .select(PERSON_ROW_SELECTION)
     .from(people)
     .where(
       and(
@@ -380,23 +805,7 @@ async function findPersonByExternalEmployeeId(
 
 async function findPersonByEmployeeNo(tx: Database, ctx: UpsertCtx, employeeNo: string) {
   const [row] = await tx
-    .select({
-      id: people.id,
-      firstName: people.firstName,
-      lastName: people.lastName,
-      employeeNo: people.employeeNo,
-      externalEmployeeId: people.externalEmployeeId,
-      email: people.email,
-      phone: people.phone,
-      jobTitle: people.jobTitle,
-      hireDate: people.hireDate,
-      status: people.status,
-      departmentId: people.departmentId,
-      tradeId: people.tradeId,
-      metadata: people.metadata,
-      updatedAt: people.updatedAt,
-      deletedAt: people.deletedAt,
-    })
+    .select(PERSON_ROW_SELECTION)
     .from(people)
     .where(
       and(
@@ -421,6 +830,68 @@ function personAfter(
   }
 }
 
+function personOwnershipConflict(
+  match: NonNullable<Awaited<ReturnType<typeof selectPerson>>>,
+  fields: PersonFields,
+  rowHash: string,
+  metadata: JsonRecord | undefined,
+  owner: { sourceSystem: string; externalId: string },
+): UpsertResult {
+  const before = snap(match)
+  const after = personAfter(fields, before, metadata)
+  return {
+    action: 'conflict',
+    canonicalId: match.id,
+    rowHash,
+    before,
+    after,
+    diff: diff(before, after),
+    message: `Natural-key match is already owned by ${owner.sourceSystem} record "${owner.externalId}".`,
+  }
+}
+
+async function adoptNaturalPersonMatch(
+  tx: Database,
+  ctx: UpsertCtx,
+  externalId: string,
+  match: NonNullable<Awaited<ReturnType<typeof selectPerson>>>,
+  fields: PersonFields,
+  rowHash: string,
+  metadata?: JsonRecord,
+): Promise<UpsertResult> {
+  // The initial natural-key lookup is intentionally only a candidate search.
+  // Lock and re-read before any ownership/manual-wins decision so two sources
+  // cannot both observe an unowned person and claim it concurrently.
+  const lockedMatch = await selectPersonForUpdate(tx, match.id)
+  if (!lockedMatch) return createPerson(tx, ctx, externalId, fields, rowHash, metadata)
+
+  const owner = await findCanonicalOwner(tx, ctx, 'people', lockedMatch.id)
+  if (owner) return personOwnershipConflict(lockedMatch, fields, rowHash, metadata, owner)
+
+  const titleState = await selectPersonTitleRelationshipState(tx, ctx, lockedMatch.id)
+  if (
+    decideNaturalPersonAdoption({
+      ownershipMode: ctx.ownershipMode ?? 'source_wins',
+      scalarValuesMatch: personScalarValuesMatch(lockedMatch, fields, metadata),
+      titleValuesMatch: personTitleValuesMatch(fields, titleState),
+    }) === 'conflict'
+  ) {
+    const before = snap(lockedMatch)
+    const after = personAfter(fields, before, metadata)
+    return {
+      action: 'conflict',
+      canonicalId: lockedMatch.id,
+      rowHash,
+      before,
+      after,
+      diff: diff(before, after),
+      message: 'Natural-key match contains manually maintained values that differ from the source.',
+    }
+  }
+
+  return updatePerson(tx, ctx, externalId, lockedMatch, fields, rowHash, metadata)
+}
+
 async function createPerson(
   tx: Database,
   ctx: UpsertCtx,
@@ -429,15 +900,18 @@ async function createPerson(
   rowHash: string,
   metadata?: JsonRecord,
 ): Promise<UpsertResult> {
-  const after = { ...fields, metadata: metadata ?? {} }
-  if (ctx.dryRun)
+  if (ctx.dryRun) {
+    const after = { ...fields, metadata: metadata ?? {} }
     return { action: 'created', rowHash, before: null, after, diff: diff(null, after) }
+  }
   const id = firstId(
     await tx
       .insert(people)
-      .values({ tenantId: ctx.tenantId, ...fields, metadata: metadata ?? {} })
+      .values({ tenantId: ctx.tenantId, ...withPeopleMetadata(fields), metadata: metadata ?? {} })
       .returning({ id: people.id }),
   )
+  const jobTitle = await syncPrimaryPersonTitle(tx, ctx, id, fields.jobTitle)
+  const after = { ...fields, jobTitle, metadata: metadata ?? {} }
   await linkCrosswalk(tx, ctx, 'people', externalId, id, rowHash)
   rememberPersonLookup(ctx, id, fields)
   return {
@@ -461,15 +935,18 @@ async function updatePerson(
 ): Promise<UpsertResult> {
   if (!beforeRow) return createPerson(tx, ctx, externalId, fields, rowHash, metadata)
   const before = snap(beforeRow)
-  const after = personAfter(fields, before, metadata)
+  let persistedFields = fields
   if (!ctx.dryRun) {
     await tx
       .update(people)
       .set(withPeopleMetadata(fields, metadata))
       .where(eq(people.id, beforeRow.id))
+    const jobTitle = await syncPrimaryPersonTitle(tx, ctx, beforeRow.id, fields.jobTitle)
+    persistedFields = { ...fields, jobTitle }
     await linkCrosswalk(tx, ctx, 'people', externalId, beforeRow.id, rowHash)
     rememberPersonLookup(ctx, beforeRow.id, fields)
   }
+  const after = personAfter(persistedFields, before, metadata)
   return {
     action: 'updated',
     canonicalId: beforeRow.id,
@@ -495,8 +972,10 @@ async function restorePersonOrConflict(
   const archived = await selectPersonAnyState(tx, link.canonicalId)
   if (!archived || !archived.deletedAt) return null // gone entirely — caller inserts
   const before = snap(archived)
-  const after = personAfter(fields, before, metadata)
-  if (isManualConflict(ctx, archived, link)) {
+  let persistedFields = fields
+  let after = personAfter(persistedFields, before, metadata)
+  const titleState = await selectPersonTitleRelationshipState(tx, ctx, archived.id)
+  if (isManualConflict(ctx, archived, link, personTitleUpdatedAt(titleState))) {
     return {
       action: 'conflict',
       canonicalId: archived.id,
@@ -513,6 +992,9 @@ async function restorePersonOrConflict(
       .update(people)
       .set({ ...withPeopleMetadata(fields, metadata), deletedAt: null })
       .where(eq(people.id, archived.id))
+    const jobTitle = await syncPrimaryPersonTitle(tx, ctx, archived.id, fields.jobTitle)
+    persistedFields = { ...fields, jobTitle }
+    after = personAfter(persistedFields, before, metadata)
     await linkCrosswalk(tx, ctx, 'people', externalId, archived.id, rowHash)
     rememberPersonLookup(ctx, archived.id, fields)
   }
@@ -538,7 +1020,8 @@ async function upsertPerson(
     ctx.log('warn', `${message} — skipped`)
     return { action: 'skipped', message }
   }
-  const rowHash = hashData(data)
+  const normalizedJobTitle = normalizeCatalogDisplayName(data.jobTitle)
+  const rowHash = hashData({ ...data, jobTitle: normalizedJobTitle })
   const metadata = data.metadata as JsonRecord | undefined
   const fields: PersonFields = {
     firstName: data.firstName,
@@ -547,14 +1030,18 @@ async function upsertPerson(
     externalEmployeeId: data.externalEmployeeId ?? null,
     email: data.email ?? null,
     phone: data.phone ?? null,
-    jobTitle: data.jobTitle ?? null,
+    jobTitle: normalizedJobTitle,
     hireDate: data.hireDate ?? null,
     status: data.status ?? 'active',
     departmentId: data.departmentName
-      ? (ctx.lookups.deptByName.get(data.departmentName.toLowerCase()) ?? null)
+      ? (ctx.lookups.deptByName.get(
+          normalizeCatalogDisplayName(data.departmentName)?.toLowerCase() ?? '',
+        ) ?? null)
       : null,
     tradeId: data.tradeName
-      ? (ctx.lookups.tradeByName.get(data.tradeName.toLowerCase()) ?? null)
+      ? (ctx.lookups.tradeByName.get(
+          normalizeCatalogDisplayName(data.tradeName)?.toLowerCase() ?? '',
+        ) ?? null)
       : null,
   }
 
@@ -579,12 +1066,35 @@ async function upsertPerson(
       }
       return createPerson(tx, ctx, externalId, fields, rowHash, metadata)
     }
-    if (link.rowHash === rowHash) {
+    const titleState = await selectPersonTitleRelationshipState(tx, ctx, link.canonicalId)
+    const scalarValuesMatch = personScalarValuesMatch(beforeRow, fields, metadata)
+    const titleValuesMatch = personTitleValuesMatch(fields, titleState)
+    const titleOwnershipMatches = personTitleOwnershipMatches(fields, titleState)
+    const sourceChanged = link.rowHash !== rowHash
+    const previousSnapshot =
+      sourceChanged && ctx.ownershipMode === 'manual_wins'
+        ? await selectPreviousPersonSnapshot(tx, ctx, externalId)
+        : null
+    const decision = decidePersonSync({
+      ownershipMode: ctx.ownershipMode ?? 'source_wins',
+      sourceChanged,
+      scalarValuesMatch,
+      titleValuesMatch,
+      titleOwnershipMatches,
+      targetChangedAfterLastSync: previousSnapshot
+        ? !personMatchesPreviousSnapshot(beforeRow, titleState, previousSnapshot)
+        : wasTargetUpdatedAfterSync(beforeRow, link, personTitleUpdatedAt(titleState)),
+    })
+    if (decision === 'unchanged') {
       await touchCrosswalk(tx, ctx, link.id)
       rememberPersonLookup(ctx, link.canonicalId, fields)
       return { action: 'unchanged', canonicalId: link.canonicalId, rowHash }
     }
-    if (isManualConflict(ctx, beforeRow, link)) {
+    // With an unchanged source hash, any visible value mismatch is necessarily
+    // target drift. source_wins repairs it; manual_wins records a conflict.
+    // Missing provenance alone is safe to claim when the visible title already
+    // matches, because the assignment remains marked as manually maintained.
+    if (decision === 'conflict') {
       return {
         action: 'conflict',
         canonicalId: link.canonicalId,
@@ -602,12 +1112,12 @@ async function upsertPerson(
 
   if (fields.externalEmployeeId) {
     const match = await findPersonByExternalEmployeeId(tx, ctx, fields.externalEmployeeId)
-    if (match) return updatePerson(tx, ctx, externalId, match, fields, rowHash, metadata)
+    if (match) return adoptNaturalPersonMatch(tx, ctx, externalId, match, fields, rowHash, metadata)
   }
 
   if (fields.employeeNo) {
     const match = await findPersonByEmployeeNo(tx, ctx, fields.employeeNo)
-    if (match) return updatePerson(tx, ctx, externalId, match, fields, rowHash, metadata)
+    if (match) return adoptNaturalPersonMatch(tx, ctx, externalId, match, fields, rowHash, metadata)
   }
 
   return createPerson(tx, ctx, externalId, fields, rowHash, metadata)
@@ -626,6 +1136,21 @@ interface OrgUnitFields {
   address: CanonicalOrgUnit['address']
 }
 
+const ORG_UNIT_ROW_SELECTION = {
+  id: orgUnits.id,
+  level: orgUnits.level,
+  name: orgUnits.name,
+  code: orgUnits.code,
+  parentId: orgUnits.parentId,
+  lat: orgUnits.lat,
+  lng: orgUnits.lng,
+  geofenceMeters: orgUnits.geofenceMeters,
+  address: orgUnits.address,
+  metadata: orgUnits.metadata,
+  updatedAt: orgUnits.updatedAt,
+  deletedAt: orgUnits.deletedAt,
+}
+
 function withOrgUnitMetadata(fields: OrgUnitFields, metadata?: JsonRecord) {
   if (!metadata || Object.keys(metadata).length === 0) return fields
   return {
@@ -636,20 +1161,7 @@ function withOrgUnitMetadata(fields: OrgUnitFields, metadata?: JsonRecord) {
 
 async function selectOrgUnit(tx: Database, id: string) {
   const [row] = await tx
-    .select({
-      id: orgUnits.id,
-      level: orgUnits.level,
-      name: orgUnits.name,
-      code: orgUnits.code,
-      parentId: orgUnits.parentId,
-      lat: orgUnits.lat,
-      lng: orgUnits.lng,
-      geofenceMeters: orgUnits.geofenceMeters,
-      address: orgUnits.address,
-      metadata: orgUnits.metadata,
-      updatedAt: orgUnits.updatedAt,
-      deletedAt: orgUnits.deletedAt,
-    })
+    .select(ORG_UNIT_ROW_SELECTION)
     .from(orgUnits)
     .where(and(eq(orgUnits.id, id), isNull(orgUnits.deletedAt)))
     .limit(1)
@@ -658,20 +1170,7 @@ async function selectOrgUnit(tx: Database, id: string) {
 
 async function selectOrgUnitAnyState(tx: Database, id: string) {
   const [row] = await tx
-    .select({
-      id: orgUnits.id,
-      level: orgUnits.level,
-      name: orgUnits.name,
-      code: orgUnits.code,
-      parentId: orgUnits.parentId,
-      lat: orgUnits.lat,
-      lng: orgUnits.lng,
-      geofenceMeters: orgUnits.geofenceMeters,
-      address: orgUnits.address,
-      metadata: orgUnits.metadata,
-      updatedAt: orgUnits.updatedAt,
-      deletedAt: orgUnits.deletedAt,
-    })
+    .select(ORG_UNIT_ROW_SELECTION)
     .from(orgUnits)
     .where(eq(orgUnits.id, id))
     .limit(1)
@@ -680,20 +1179,7 @@ async function selectOrgUnitAnyState(tx: Database, id: string) {
 
 async function findOrgUnitByCode(tx: Database, ctx: UpsertCtx, code: string) {
   const [row] = await tx
-    .select({
-      id: orgUnits.id,
-      level: orgUnits.level,
-      name: orgUnits.name,
-      code: orgUnits.code,
-      parentId: orgUnits.parentId,
-      lat: orgUnits.lat,
-      lng: orgUnits.lng,
-      geofenceMeters: orgUnits.geofenceMeters,
-      address: orgUnits.address,
-      metadata: orgUnits.metadata,
-      updatedAt: orgUnits.updatedAt,
-      deletedAt: orgUnits.deletedAt,
-    })
+    .select(ORG_UNIT_ROW_SELECTION)
     .from(orgUnits)
     .where(
       and(eq(orgUnits.tenantId, ctx.tenantId), eq(orgUnits.code, code), isNull(orgUnits.deletedAt)),
@@ -906,6 +1392,19 @@ interface EquipFields {
   typeId: string | null
 }
 
+const EQUIPMENT_ROW_SELECTION = {
+  id: equipmentItems.id,
+  assetTag: equipmentItems.assetTag,
+  name: equipmentItems.name,
+  serialNumber: equipmentItems.serialNumber,
+  description: equipmentItems.description,
+  status: equipmentItems.status,
+  typeId: equipmentItems.typeId,
+  metadata: equipmentItems.metadata,
+  updatedAt: equipmentItems.updatedAt,
+  deletedAt: equipmentItems.deletedAt,
+}
+
 function withEquipmentMetadata(fields: EquipFields, metadata?: JsonRecord) {
   if (!metadata || Object.keys(metadata).length === 0) return fields
   return {
@@ -916,18 +1415,7 @@ function withEquipmentMetadata(fields: EquipFields, metadata?: JsonRecord) {
 
 async function selectEquipment(tx: Database, id: string) {
   const [row] = await tx
-    .select({
-      id: equipmentItems.id,
-      assetTag: equipmentItems.assetTag,
-      name: equipmentItems.name,
-      serialNumber: equipmentItems.serialNumber,
-      description: equipmentItems.description,
-      status: equipmentItems.status,
-      typeId: equipmentItems.typeId,
-      metadata: equipmentItems.metadata,
-      updatedAt: equipmentItems.updatedAt,
-      deletedAt: equipmentItems.deletedAt,
-    })
+    .select(EQUIPMENT_ROW_SELECTION)
     .from(equipmentItems)
     .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
     .limit(1)
@@ -936,18 +1424,7 @@ async function selectEquipment(tx: Database, id: string) {
 
 async function selectEquipmentAnyState(tx: Database, id: string) {
   const [row] = await tx
-    .select({
-      id: equipmentItems.id,
-      assetTag: equipmentItems.assetTag,
-      name: equipmentItems.name,
-      serialNumber: equipmentItems.serialNumber,
-      description: equipmentItems.description,
-      status: equipmentItems.status,
-      typeId: equipmentItems.typeId,
-      metadata: equipmentItems.metadata,
-      updatedAt: equipmentItems.updatedAt,
-      deletedAt: equipmentItems.deletedAt,
-    })
+    .select(EQUIPMENT_ROW_SELECTION)
     .from(equipmentItems)
     .where(eq(equipmentItems.id, id))
     .limit(1)
@@ -956,18 +1433,7 @@ async function selectEquipmentAnyState(tx: Database, id: string) {
 
 async function findEquipmentByAssetTag(tx: Database, ctx: UpsertCtx, assetTag: string) {
   const [row] = await tx
-    .select({
-      id: equipmentItems.id,
-      assetTag: equipmentItems.assetTag,
-      name: equipmentItems.name,
-      serialNumber: equipmentItems.serialNumber,
-      description: equipmentItems.description,
-      status: equipmentItems.status,
-      typeId: equipmentItems.typeId,
-      metadata: equipmentItems.metadata,
-      updatedAt: equipmentItems.updatedAt,
-      deletedAt: equipmentItems.deletedAt,
-    })
+    .select(EQUIPMENT_ROW_SELECTION)
     .from(equipmentItems)
     .where(
       and(

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, count, desc, ilike, isNotNull, isNull, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, ilike, isNotNull, isNull, sql, type SQL } from 'drizzle-orm'
 import { Gavel } from 'lucide-react'
 import {
   Badge,
@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { documentManagementReviews } from '@beaconhs/db/schema'
+import { documentManagementReviewDocuments, documentManagementReviews } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { ListPageLayout } from '@/components/page-layout'
@@ -87,7 +87,15 @@ export default async function ManagementReviewsPage({
         .from(documentManagementReviews)
         .where(and(active, search, isNull(documentManagementReviews.nextReviewOn))),
       tx
-        .select()
+        .select({
+          review: documentManagementReviews,
+          documentsReviewedCount: sql<number>`(
+            select count(*)::int
+            from ${documentManagementReviewDocuments}
+            where ${documentManagementReviewDocuments.tenantId} = ${documentManagementReviews.tenantId}
+              and ${documentManagementReviewDocuments.managementReviewId} = ${documentManagementReviews.id}
+          )`,
+        })
         .from(documentManagementReviews)
         .where(where)
         .orderBy(...orderBy)
@@ -95,7 +103,10 @@ export default async function ManagementReviewsPage({
         .offset((params.page - 1) * params.perPage),
     ])
     return {
-      rows: result,
+      rows: result.map((row) => ({
+        ...row.review,
+        documentsReviewedCount: row.documentsReviewedCount,
+      })),
       total: Number(totalRow[0]?.c ?? 0),
       scheduledCount: Number(scheduledRow[0]?.c ?? 0),
       unscheduledCount: Number(unscheduledRow[0]?.c ?? 0),
@@ -206,7 +217,7 @@ export default async function ManagementReviewsPage({
                     <Badge variant="outline">{r.participants.length}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{r.documentsReviewed.length}</Badge>
+                    <Badge variant="secondary">{r.documentsReviewedCount}</Badge>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-300">
                     {r.nextReviewOn ?? '—'}

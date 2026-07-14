@@ -20,9 +20,10 @@ import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
 import { appendMessage, createConversation } from '@/lib/ai-conversations'
 import { generateAppEdit, generateAppFromPrompt, generateFlowFromPrompt } from './_lib/ai-generate'
-import { slugify } from './_lib/slug'
+import { generatedTemplateKey } from './_lib/template-key.server'
 import { isUuid } from '@/lib/list-params'
 import { parseFlowGraph } from '@/lib/flows/flow-policy'
+import { validateFlowWebhookConfiguration } from '@/lib/flows/webhook-policy'
 
 const MAX_AI_PROMPT_LENGTH = 8_000
 const MAX_AI_SCHEMA_BYTES = 1024 * 1024
@@ -173,7 +174,7 @@ export async function generateAppDraft(
   const name = schema.title?.en?.trim() || 'AI app'
 
   const templateId = await ctx.db(async (tx) => {
-    const key = `${slugify(name) || 'app'}_${Math.random().toString(36).slice(2, 6)}`
+    const key = generatedTemplateKey(name)
     const [tmpl] = await tx
       .insert(formTemplates)
       .values({
@@ -257,6 +258,8 @@ export async function generateFlowDraft(
   if (!graph.ok) return graph
   const compatibilityErrors = lintWorkerTriggerCompatibility(graph.graph)
   if (compatibilityErrors.length > 0) return { ok: false, error: compatibilityErrors[0] }
+  const webhookValidation = await validateFlowWebhookConfiguration(graph.graph)
+  if (!webhookValidation.ok) return { ok: false, error: webhookValidation.error }
 
   await ctx.db((tx) =>
     tx

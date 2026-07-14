@@ -12,7 +12,7 @@ import {
 
 export const EQUIPMENT_LABEL_DESIGN_SETTINGS_KEY = 'equipmentLabelDesign'
 
-export function defaultEquipmentLabelDesign(): DesignDocument {
+function defaultEquipmentLabelDesign(): DesignDocument {
   return createEquipmentLabelDesignDocument()
 }
 

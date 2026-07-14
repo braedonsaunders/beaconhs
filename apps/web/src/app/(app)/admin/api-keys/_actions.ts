@@ -3,13 +3,19 @@ import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import { apiKeys, formTemplates } from '@beaconhs/db/schema'
 import { assertNotImpersonating } from '@beaconhs/tenant'
-import { recordAudit } from '@/lib/audit'
-import { sanitizeApiPermissions } from '@/lib/api/permissions'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { requireApiKeyAdmin } from './_guard'
-
-export const REVEAL_COOKIE = 'bhs-api-key-reveal'
+import {
+  readApiKeyExpiresAt,
+  readApiKeyId,
+  readApiKeyName,
+  readApiKeyPermissions,
+  readBuilderTemplateGrantIds,
+} from './_mutation-input'
+import { apiKeyIdFromRevealCookie, apiKeyRevealCookieName } from './_reveal-cookie'
 
 /** Mutations additionally refuse impersonated sessions — an admin "viewing as"
  *  someone must not mint or edit credentials. */
@@ -19,54 +25,56 @@ async function requireApiKeyWriter() {
   return ctx
 }
 
-function readPermissions(formData: FormData): string[] {
-  return sanitizeApiPermissions(formData.getAll('permissions').map(String))
-}
+class ApiKeyMutationError extends Error {}
 
-async function readBuilderTemplateIds(
-  ctx: Awaited<ReturnType<typeof requireApiKeyWriter>>,
-  formData: FormData,
-): Promise<string[]> {
-  const requested = [...new Set(formData.getAll('builderTemplateIds').map(String))].filter((id) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
-  )
-  if (requested.length === 0) return []
-  const rows = await ctx.db((tx) =>
-    tx
-      .select({ id: formTemplates.id })
-      .from(formTemplates)
-      .where(
-        and(
-          inArray(formTemplates.id, requested),
-          eq(formTemplates.status, 'published'),
-          isNull(formTemplates.deletedAt),
-        ),
+async function validateBuilderTemplateIds(tx: Database, requested: string[]): Promise<void> {
+  if (requested.length === 0) return
+  const rows = await tx
+    .select({ id: formTemplates.id })
+    .from(formTemplates)
+    .where(
+      and(
+        inArray(formTemplates.id, requested),
+        eq(formTemplates.status, 'published'),
+        isNull(formTemplates.deletedAt),
       ),
-  )
-  if (rows.length !== requested.length)
-    throw new Error('One or more Builder app grants are invalid')
-  return rows.map((row) => row.id)
+    )
+    .for('share')
+  if (rows.length !== requested.length) {
+    throw new ApiKeyMutationError('One or more Builder app grants are no longer available.')
+  }
 }
 
-// Date-only input, anchored to end-of-day UTC so it round-trips exactly with
-// the edit form's `toISOString().slice(0, 10)` display. Parsing in server-local
-// time made the shown date drift forward a day per save on any server west of
-// UTC.
-function parseExpiresAt(formData: FormData): Date | null {
-  const raw = String(formData.get('expiresAt') ?? '').trim()
-  if (!raw) return null
-  const parsed = new Date(`${raw}T23:59:59Z`)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false
+  const normalizedLeft = [...left].sort()
+  const normalizedRight = [...right].sort()
+  return normalizedLeft.every((value, index) => value === normalizedRight[index])
+}
+
+function sameInstant(left: Date | null, right: Date | null): boolean {
+  return left?.getTime() === right?.getTime()
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'The API key details are invalid.'
 }
 
 export async function createApiKey(formData: FormData) {
   'use server'
   const ctx = await requireApiKeyWriter()
-  const name = String(formData.get('name') ?? '').trim()
-  const permissions = readPermissions(formData)
-  const builderTemplateIds = await readBuilderTemplateIds(ctx, formData)
-
-  if (!name) redirect(`/admin/api-keys?error=${encodeURIComponent('Give the key a name.')}`)
+  let name: string
+  let permissions: string[]
+  let builderTemplateIds: string[]
+  let expiresAt: Date | null
+  try {
+    name = readApiKeyName(formData)
+    permissions = readApiKeyPermissions(formData)
+    builderTemplateIds = readBuilderTemplateGrantIds(formData)
+    expiresAt = readApiKeyExpiresAt(formData)
+  } catch (error) {
+    redirect(`/admin/api-keys?error=${encodeURIComponent(errorMessage(error))}`)
+  }
   if (permissions.length === 0) {
     redirect(`/admin/api-keys?error=${encodeURIComponent('Choose at least one permission.')}`)
   }
@@ -74,34 +82,42 @@ export async function createApiKey(formData: FormData) {
   const secret = `bhs_live_${randomBytes(32).toString('base64url')}`
   const keyHash = createHash('sha256').update(secret).digest('hex')
   const prefix = secret.slice(0, 12)
-  const [row] = await ctx.db((tx) =>
-    tx
-      .insert(apiKeys)
-      .values({
-        tenantId: ctx.tenantId,
-        name,
-        keyHash,
-        prefix,
-        permissions,
-        builderTemplateIds,
-        expiresAt: parseExpiresAt(formData),
-        createdBy: ctx.userId,
+  let createdKeyId: string
+  try {
+    createdKeyId = await ctx.db(async (tx) => {
+      await validateBuilderTemplateIds(tx, builderTemplateIds)
+      const [created] = await tx
+        .insert(apiKeys)
+        .values({
+          tenantId: ctx.tenantId,
+          name,
+          keyHash,
+          prefix,
+          permissions,
+          builderTemplateIds,
+          expiresAt,
+          createdBy: ctx.userId,
+        })
+        .returning()
+      if (!created) throw new Error('API key could not be created.')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'api_key',
+        entityId: created.id,
+        action: 'create',
+        summary: `Created API key "${name}"`,
+        after: { name, permissions, builderTemplateIds, expiresAt: created.expiresAt },
       })
-      .returning(),
-  )
-
-  if (row) {
-    await recordAudit(ctx, {
-      entityType: 'api_key',
-      entityId: row.id,
-      action: 'create',
-      summary: `Created API key "${name}"`,
-      after: { name, permissions, builderTemplateIds, expiresAt: row.expiresAt },
+      return created.id
     })
+  } catch (error) {
+    if (error instanceof ApiKeyMutationError) {
+      redirect(`/admin/api-keys?error=${encodeURIComponent(error.message)}`)
+    }
+    throw error
   }
 
   const cookieStore = await cookies()
-  cookieStore.set(REVEAL_COOKIE, secret, {
+  cookieStore.set(apiKeyRevealCookieName(createdKeyId), secret, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
@@ -114,48 +130,83 @@ export async function createApiKey(formData: FormData) {
 export async function updateApiKey(formData: FormData) {
   'use server'
   const ctx = await requireApiKeyWriter()
-  const id = String(formData.get('id') ?? '').trim()
-  if (!id) return
-
-  const name = String(formData.get('name') ?? '').trim()
-  const permissions = readPermissions(formData)
-  const builderTemplateIds = await readBuilderTemplateIds(ctx, formData)
+  let id: string
+  try {
+    id = readApiKeyId(formData)
+  } catch (error) {
+    redirect(`/admin/api-keys?error=${encodeURIComponent(errorMessage(error))}`)
+  }
   const errorPath = `/admin/api-keys/${id}`
-  if (!name) redirect(`${errorPath}?error=${encodeURIComponent('Give the key a name.')}`)
+  let name: string
+  let permissions: string[]
+  let builderTemplateIds: string[]
+  let expiresAt: Date | null
+  try {
+    name = readApiKeyName(formData)
+    permissions = readApiKeyPermissions(formData)
+    builderTemplateIds = readBuilderTemplateGrantIds(formData)
+    expiresAt = readApiKeyExpiresAt(formData)
+  } catch (error) {
+    redirect(`${errorPath}?error=${encodeURIComponent(errorMessage(error))}`)
+  }
   if (permissions.length === 0) {
     redirect(`${errorPath}?error=${encodeURIComponent('Choose at least one permission.')}`)
   }
 
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1)
-    return row ?? null
-  })
-  if (!before) return
-  if (before.revokedAt) {
+  let outcome: 'changed' | 'unchanged' | 'revoked'
+  try {
+    outcome = await ctx.db(async (tx) => {
+      const [before] = await tx
+        .select()
+        .from(apiKeys)
+        .where(eq(apiKeys.id, id))
+        .for('update')
+        .limit(1)
+      if (!before) throw new Error('API key not found.')
+      if (before.revokedAt) return 'revoked'
+      await validateBuilderTemplateIds(tx, builderTemplateIds)
+
+      if (
+        before.name === name &&
+        sameStrings(before.permissions, permissions) &&
+        sameStrings(before.builderTemplateIds, builderTemplateIds) &&
+        sameInstant(before.expiresAt, expiresAt)
+      ) {
+        return 'unchanged'
+      }
+
+      const [updated] = await tx
+        .update(apiKeys)
+        .set({ name, permissions, builderTemplateIds, expiresAt })
+        .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
+        .returning({ id: apiKeys.id })
+      if (!updated) throw new Error('API key could not be updated.')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'api_key',
+        entityId: id,
+        action: 'update',
+        summary: `Updated API key "${name}"`,
+        before: {
+          name: before.name,
+          permissions: before.permissions,
+          builderTemplateIds: before.builderTemplateIds,
+          expiresAt: before.expiresAt,
+          revokedAt: before.revokedAt,
+        },
+        after: { name, permissions, builderTemplateIds, expiresAt },
+      })
+      return 'changed'
+    })
+  } catch (error) {
+    if (error instanceof ApiKeyMutationError) {
+      redirect(`${errorPath}?error=${encodeURIComponent(error.message)}`)
+    }
+    throw error
+  }
+  if (outcome === 'revoked') {
     redirect(`${errorPath}?error=${encodeURIComponent('Revoked API keys cannot be edited.')}`)
   }
-
-  const expiresAt = parseExpiresAt(formData)
-  await ctx.db((tx) =>
-    tx
-      .update(apiKeys)
-      .set({ name, permissions, builderTemplateIds, expiresAt })
-      .where(eq(apiKeys.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'api_key',
-    entityId: id,
-    action: 'update',
-    summary: `Updated API key "${name}"`,
-    before: {
-      name: before.name,
-      permissions: before.permissions,
-      builderTemplateIds: before.builderTemplateIds,
-      expiresAt: before.expiresAt,
-      revokedAt: before.revokedAt,
-    },
-    after: { name, permissions, builderTemplateIds, expiresAt },
-  })
+  if (outcome === 'unchanged') return
   revalidatePath('/admin/api-keys')
   revalidatePath(`/admin/api-keys/${id}`)
 }
@@ -163,32 +214,50 @@ export async function updateApiKey(formData: FormData) {
 export async function revokeApiKey(formData: FormData) {
   'use server'
   const ctx = await requireApiKeyWriter()
-  const id = String(formData.get('id') ?? '').trim()
-  if (!id) return
+  let id: string
+  try {
+    id = readApiKeyId(formData)
+  } catch (error) {
+    redirect(`/admin/api-keys?error=${encodeURIComponent(errorMessage(error))}`)
+  }
 
-  const before = await ctx.db(async (tx) => {
-    const [row] = await tx.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1)
-    return row ?? null
-  })
-  if (!before || before.revokedAt) return
+  const changed = await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.id, id))
+      .for('update')
+      .limit(1)
+    if (!before) throw new Error('API key not found.')
+    if (before.revokedAt) return false
 
-  const revokedAt = new Date()
-  await ctx.db((tx) => tx.update(apiKeys).set({ revokedAt }).where(eq(apiKeys.id, id)))
-  await recordAudit(ctx, {
-    entityType: 'api_key',
-    entityId: id,
-    action: 'update',
-    summary: `Revoked API key "${before.name}"`,
-    before: { name: before.name, permissions: before.permissions },
-    after: { revokedAt },
+    const revokedAt = new Date()
+    const [revoked] = await tx
+      .update(apiKeys)
+      .set({ revokedAt })
+      .where(and(eq(apiKeys.id, id), isNull(apiKeys.revokedAt)))
+      .returning({ id: apiKeys.id })
+    if (!revoked) throw new Error('API key could not be revoked.')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'api_key',
+      entityId: id,
+      action: 'update',
+      summary: `Revoked API key "${before.name}"`,
+      before: { name: before.name, permissions: before.permissions, revokedAt: null },
+      after: { revokedAt },
+    })
+    return true
   })
+  if (!changed) return
   revalidatePath('/admin/api-keys')
   revalidatePath(`/admin/api-keys/${id}`)
 }
 
-export async function dismissReveal() {
+export async function dismissReveal(formData: FormData) {
   'use server'
+  const cookieName = formData.get('cookieName')
+  if (typeof cookieName !== 'string' || !apiKeyIdFromRevealCookie(cookieName)) return
   const cookieStore = await cookies()
-  cookieStore.delete(REVEAL_COOKIE)
+  cookieStore.delete(cookieName)
   revalidatePath('/admin/api-keys')
 }

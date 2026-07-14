@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import {
+  AlertCircle,
   Check,
   CloudUpload,
   FileText,
@@ -21,19 +22,17 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
-import { deleteEntry, emailEntry, setEntryTags, submitEntry, updateEntry } from './_actions'
+import { deleteEntry, emailEntry, submitEntry, updateEntry } from './_actions'
 import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
 import { Photos } from './_photos'
 import { formatDate, isToday, statusMeta, textToHtml } from './_format'
-import type { EntryPatch, JournalEntryDetail, JournalOption, TagSuggestion } from './_types'
+import type { EntryPatch, JournalEntryDetail, TagSuggestion } from './_types'
 
-type SaveState = 'idle' | 'saving' | 'saved'
+type SaveState = 'saving' | 'saved' | 'error'
 
 export function EditorPane({
   entry,
-  sites,
-  people,
   tagSuggestions,
   aiEnabled,
   onMutated,
@@ -42,8 +41,6 @@ export function EditorPane({
   onBrowse,
 }: {
   entry: JournalEntryDetail
-  sites: JournalOption[]
-  people: JournalOption[]
   tagSuggestions: TagSuggestion[]
   aiEnabled: boolean
   onMutated: () => void
@@ -58,6 +55,7 @@ export function EditorPane({
   const [menuOpen, setMenuOpen] = useState(false)
 
   const pending = useRef<EntryPatch>({})
+  const inFlight = useRef<Promise<boolean> | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // The editor emits one onChange as it hydrates a loaded entry; that's not a
   // user edit. We capture it as a baseline and skip it so opening an entry never
@@ -71,23 +69,42 @@ export function EditorPane({
     }
   }, [])
 
-  function flush(): Promise<void> {
+  async function flush(): Promise<boolean> {
     if (timer.current) clearTimeout(timer.current)
-    const patch = pending.current
-    pending.current = {}
-    if (Object.keys(patch).length === 0) return Promise.resolve()
-    setSaveState('saving')
-    return updateEntry({ id: entry.id, patch }).then((r) => {
-      setSaveState(r.ok ? 'saved' : 'idle')
-      if (!r.ok && 'error' in r) toast.error(r.error)
-    })
+    if (inFlight.current) return inFlight.current
+    if (Object.keys(pending.current).length === 0) return true
+
+    const run = (async () => {
+      while (Object.keys(pending.current).length > 0) {
+        const patch = pending.current
+        pending.current = {}
+        setSaveState('saving')
+        const result = await updateEntry({ id: entry.id, patch })
+        if (!result.ok) {
+          // Put the failed fields back while keeping any newer edit for the
+          // same field authoritative. The visible retry can now persist it.
+          pending.current = { ...patch, ...pending.current }
+          setSaveState('error')
+          toast.error(result.error)
+          return false
+        }
+      }
+      setSaveState('saved')
+      return true
+    })()
+    inFlight.current = run
+    try {
+      return await run
+    } finally {
+      if (inFlight.current === run) inFlight.current = null
+    }
   }
 
   function queue(patch: EntryPatch, delay = 700) {
     Object.assign(pending.current, patch)
     setSaveState('saving')
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(flush, delay)
+    timer.current = setTimeout(() => void flush(), delay)
   }
 
   function onMeta(
@@ -99,7 +116,7 @@ export function EditorPane({
 
   function onTags(tags: string[]) {
     onLocalPatch({ tags })
-    setEntryTags({ id: entry.id, tags }).then(() => onMutated())
+    queue({ tags }, 0)
   }
 
   function onBody(html: string) {
@@ -118,7 +135,7 @@ export function EditorPane({
     startSubmit(async () => {
       // Persist the last debounced edits BEFORE submitting — the on-submit
       // flows / recap email / AI read the body from the DB.
-      await flush()
+      if (!(await flush())) return
       const r = await submitEntry(entry.id)
       if (!r.ok) {
         toast.error(r.error)
@@ -162,7 +179,12 @@ export function EditorPane({
   const status = statusMeta(entry.status)
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900">
+    <div
+      className="flex h-full min-h-0 flex-col bg-white dark:bg-slate-900"
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void flush()
+      }}
+    >
       {/* Header */}
       <div className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-2.5 sm:gap-3 sm:px-6 dark:border-slate-800">
         {/* Mobile: open the entries drawer (replaces the old separate top bar). */}
@@ -194,7 +216,7 @@ export function EditorPane({
               {isToday(entry.entryDate) ? 'Today' : formatDate(entry.entryDate)}
             </span>
             <span className="hidden font-mono sm:inline">· {entry.reference}</span>
-            <SaveBadge state={saveState} />
+            <SaveBadge state={saveState} onRetry={() => void flush()} />
           </div>
         </div>
 
@@ -257,8 +279,6 @@ export function EditorPane({
         <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-800/40">
           <MetadataBar
             entry={entry}
-            sites={sites}
-            people={people}
             tagSuggestions={tagSuggestions}
             editable={editable}
             onPatch={onMeta}
@@ -338,7 +358,7 @@ function AuthorAvatar({ name }: { name: string | null }) {
   )
 }
 
-function SaveBadge({ state }: { state: SaveState }) {
+function SaveBadge({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
   if (state === 'saving')
     return (
       <span className="inline-flex items-center gap-1 text-amber-600">
@@ -351,5 +371,13 @@ function SaveBadge({ state }: { state: SaveState }) {
         <Check size={11} /> Saved
       </span>
     )
-  return null
+  return (
+    <button
+      type="button"
+      onClick={onRetry}
+      className="inline-flex items-center gap-1 font-medium text-red-600 hover:underline"
+    >
+      <AlertCircle size={11} /> Not saved — retry
+    </button>
+  )
 }

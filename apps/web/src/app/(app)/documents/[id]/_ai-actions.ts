@@ -177,8 +177,7 @@ export async function newDocConversation(documentId: string): Promise<{ conversa
 }
 
 type DocAiTurnResult =
-  | { ok: true; text: string; actions: string[]; docChanged: boolean }
-  | { ok: false; error: string }
+  { ok: true; text: string; actions: string[]; docChanged: boolean } | { ok: false; error: string }
 
 export async function runDocumentAiTurn(
   documentId: string,

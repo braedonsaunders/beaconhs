@@ -2,7 +2,8 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { Badge, Button, Label, SearchSelect } from '@beaconhs/ui'
+import { Badge, Button, Label } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
 type Member = { id: string; label: string; hint?: string }
 
@@ -16,7 +17,8 @@ export function ParticipantsEditor({
   onChange: (next: string[]) => void
 }) {
   const [pending, setPending] = useState('')
-  const byId = new Map(members.map((m) => [m.id, m]))
+  const [resolved, setResolved] = useState<Member[]>(members)
+  const byId = new Map(resolved.map((m) => [m.id, m]))
 
   function add() {
     if (!pending || value.includes(pending)) return
@@ -32,12 +34,18 @@ export function ParticipantsEditor({
       <Label>Participants</Label>
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="management-review-members"
             value={pending}
             onChange={setPending}
-            options={members
-              .filter((m) => !value.includes(m.id))
-              .map((m) => ({ value: m.id, label: m.label, hint: m.hint }))}
+            onOptionChange={(option) => {
+              if (!option) return
+              setResolved((current) => [
+                ...current.filter((member) => member.id !== option.value),
+                { id: option.value, label: option.label, hint: option.hint },
+              ])
+            }}
+            excludedValues={value}
             placeholder="Add a participant..."
             searchPlaceholder="Search people..."
             sheetTitle="Add a participant"

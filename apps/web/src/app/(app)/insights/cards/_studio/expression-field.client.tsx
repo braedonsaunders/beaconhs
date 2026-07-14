@@ -8,8 +8,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { EXPR_FN_HELP, EXPR_SCALAR_FNS, parseExpression } from '@beaconhs/analytics'
 import { cn } from '@beaconhs/ui'
-
-type ExprField = { value: string; label: string; group?: string | null }
+import {
+  filterInsightsExpressionFields,
+  insightsExpressionFieldLabel,
+  type InsightsExpressionField,
+} from '@/lib/insights-expression-fields'
 
 const FN_PALETTE = [
   'count',
@@ -28,9 +31,7 @@ const FN_PALETTE = [
 
 /** Build the label⇄key map the parser uses to resolve [Column] references. A
  *  related field can be referenced as "[Label]" or "[Relation → Label]". */
-export function exprLabel(f: ExprField): string {
-  return f.group ? `${f.group} → ${f.label}` : f.label
-}
+export const exprLabel = insightsExpressionFieldLabel
 
 export function ExpressionField({
   value,
@@ -40,11 +41,12 @@ export function ExpressionField({
 }: {
   value: string
   onChange: (v: string) => void
-  fields: ExprField[]
+  fields: InsightsExpressionField[]
   placeholder?: string
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null)
   const [showPalette, setShowPalette] = useState(false)
+  const [fieldQuery, setFieldQuery] = useState('')
 
   const resolveColumn = useMemo(() => {
     const m = new Map<string, string>()
@@ -60,6 +62,11 @@ export function ExpressionField({
     [value, resolveColumn],
   )
   const error = parsed && !parsed.ok ? parsed.error : null
+  const requireSearch = fields.length > 80 && !fieldQuery.trim()
+  const visibleFields = useMemo(
+    () => (requireSearch ? [] : filterInsightsExpressionFields(fields, fieldQuery)),
+    [fieldQuery, fields, requireSearch],
+  )
 
   const insert = (text: string) => {
     const ta = taRef.current
@@ -109,11 +116,24 @@ export function ExpressionField({
       </div>
       {showPalette ? (
         <div className="max-h-44 space-y-1.5 overflow-auto rounded-md border border-slate-200 bg-slate-50/60 p-1.5 dark:border-slate-800 dark:bg-slate-800/30">
-          <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-            Fields
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+              Fields
+            </div>
+            <span className="text-[10px] text-slate-400">
+              {visibleFields.length} of {fields.length}
+            </span>
           </div>
+          <input
+            type="search"
+            value={fieldQuery}
+            onChange={(event) => setFieldQuery(event.target.value.slice(0, 100))}
+            placeholder="Search fields or related tables…"
+            aria-label="Search expression fields"
+            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          />
           <div className="flex flex-wrap gap-1">
-            {fields.slice(0, 80).map((f) => (
+            {visibleFields.map((f) => (
               <button
                 key={f.value}
                 type="button"
@@ -124,6 +144,15 @@ export function ExpressionField({
                 {f.label}
               </button>
             ))}
+            {requireSearch ? (
+              <p className="w-full py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
+                Type a field or related-table name to search all {fields.length} fields.
+              </p>
+            ) : visibleFields.length === 0 ? (
+              <p className="w-full py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
+                No fields match this search.
+              </p>
+            ) : null}
           </div>
           <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
             Functions

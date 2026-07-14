@@ -644,8 +644,12 @@ async function migrate(item: PreparedItem): Promise<'migrated' | 'already'> {
     const source = await existingObjectSnapshot(manifest.source.key)
     if (!source) throw new Error(`Attachment ${row.id} source disappeared before copy`)
     assertSourceSnapshot(manifest, source)
+    if (!source.metadata.etag) {
+      throw new Error(`Attachment ${row.id} source has no ETag for a conditional copy`)
+    }
     await storage.promoteObject({
       sourceKey: manifest.source.key,
+      sourceEtag: source.metadata.etag,
       destinationKey: manifest.destination.key,
       contentType: manifest.destination.metadata.contentType,
       contentDisposition: manifest.destination.metadata.contentDisposition,

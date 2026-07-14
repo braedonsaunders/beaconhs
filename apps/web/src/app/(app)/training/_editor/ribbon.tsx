@@ -32,6 +32,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import { cn, Select, uploadReservedFile } from '@beaconhs/ui'
+import { normalizeRichTextLinkUrl } from '@beaconhs/forms-core'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 
@@ -346,7 +347,13 @@ function LinkBtn({ editor }: { editor: Editor | null }) {
           return
         }
         const url = window.prompt('Link URL (https://…)')
-        if (url) editor.chain().focus().setLink({ href: url }).run()
+        if (!url) return
+        const safeUrl = normalizeRichTextLinkUrl(url)
+        if (!safeUrl) {
+          toast.error('Use an HTTPS, email, phone, or BeaconHS link.')
+          return
+        }
+        editor.chain().focus().setLink({ href: safeUrl }).run()
       }}
     >
       <Link2 size={15} />

@@ -1,0 +1,313 @@
+'use client'
+
+import * as React from 'react'
+import { useRouter } from 'next/navigation'
+import { CheckCircle2 } from 'lucide-react'
+import { Button, Label, Textarea, cn } from '@beaconhs/ui'
+import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { RawImage } from '@/components/raw-image'
+import { toast } from '@/lib/toast'
+import type { InspectionSeverity } from '@/components/builder/inspection-severity'
+import { enqueueSerialTask } from './criterion-save-queue'
+
+type CriterionSaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+/**
+ * Serializes autosaves from one criterion so rapid field changes cannot arrive
+ * out of order and overwrite newer values. Visual state follows only the most
+ * recent queued save.
+ */
+export function useCriterionAutosave() {
+  const [state, setState] = React.useState<CriterionSaveState>('idle')
+  const [, startTransition] = React.useTransition()
+  const router = useRouter()
+  const queue = React.useRef<Promise<void>>(Promise.resolve())
+  const latestSave = React.useRef(0)
+  const savedTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current)
+    },
+    [],
+  )
+
+  const save = React.useCallback(
+    (action: (formData: FormData) => Promise<void>, fields: Record<string, string>) => {
+      const saveId = ++latestSave.current
+      if (savedTimer.current) {
+        clearTimeout(savedTimer.current)
+        savedTimer.current = null
+      }
+      setState('saving')
+
+      const run = async () => {
+        const formData = new FormData()
+        for (const [key, value] of Object.entries(fields)) formData.set(key, value)
+        await action(formData)
+      }
+      const pending = enqueueSerialTask(queue.current, run)
+      queue.current = pending
+
+      startTransition(async () => {
+        try {
+          await pending
+          if (saveId !== latestSave.current) return
+          setState('saved')
+          savedTimer.current = setTimeout(() => {
+            if (saveId === latestSave.current) setState('idle')
+          }, 1500)
+        } catch {
+          if (saveId === latestSave.current) setState('error')
+        }
+      })
+    },
+    [],
+  )
+
+  return { state, save, refresh: () => router.refresh() }
+}
+
+export function CriterionSaveIndicator({ state }: { state: CriterionSaveState }) {
+  if (state === 'idle') return null
+  return (
+    <span
+      className={cn(
+        'text-[11px] font-medium',
+        state === 'saving' && 'text-slate-400',
+        state === 'saved' && 'text-emerald-600',
+        state === 'error' && 'text-red-600',
+      )}
+    >
+      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : 'Not saved — retry'}
+    </span>
+  )
+}
+
+export function AutosaveTextarea({
+  label,
+  initial,
+  placeholder,
+  rows = 2,
+  disabled,
+  onCommit,
+}: {
+  label: string
+  initial: string | null
+  placeholder?: string
+  rows?: number
+  disabled?: boolean
+  onCommit: (value: string) => void
+}) {
+  const [value, setValue] = React.useState(initial ?? '')
+  const baseline = React.useRef(initial ?? '')
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestCommit = React.useRef(onCommit)
+
+  React.useEffect(() => {
+    latestCommit.current = onCommit
+  }, [onCommit])
+
+  React.useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    [],
+  )
+
+  function commit(next: string) {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    if (next === baseline.current) return
+    baseline.current = next
+    latestCommit.current(next)
+  }
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Textarea
+        rows={rows}
+        value={value}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(event) => {
+          const next = event.target.value
+          setValue(next)
+          if (timer.current) clearTimeout(timer.current)
+          timer.current = setTimeout(() => commit(next), 1000)
+        }}
+        onBlur={() => commit(value)}
+      />
+    </div>
+  )
+}
+
+export const CRITERION_SEVERITY_OPTIONS: {
+  value: InspectionSeverity
+  label: string
+  active: string
+}[] = [
+  {
+    value: 'low',
+    label: 'Low',
+    active: 'border-slate-400 bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
+  },
+  {
+    value: 'medium',
+    label: 'Medium',
+    active:
+      'border-amber-400 bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700',
+  },
+  {
+    value: 'high',
+    label: 'High',
+    active:
+      'border-orange-400 bg-orange-100 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200 dark:border-orange-700',
+  },
+  {
+    value: 'critical',
+    label: 'Critical',
+    active:
+      'border-rose-400 bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200 dark:border-rose-700',
+  },
+]
+
+export function CriterionSeverityPicker({
+  severity,
+  onPick,
+  helper,
+}: {
+  severity: InspectionSeverity | null
+  onPick: (severity: InspectionSeverity) => void
+  helper?: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Severity</Label>
+      <div className="flex items-center gap-1.5">
+        {CRITERION_SEVERITY_OPTIONS.map((option) => {
+          const active = severity === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onPick(option.value)}
+              aria-pressed={active}
+              className={cn(
+                'min-h-10 flex-1 rounded-lg border text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5',
+                active
+                  ? option.active
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
+              )}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+      {helper}
+    </div>
+  )
+}
+
+function CriterionPhotoUploader({
+  recordId,
+  rowId,
+  addPhotos,
+  onDone,
+}: {
+  recordId: string
+  rowId: string
+  addPhotos: (formData: FormData) => Promise<void>
+  onDone: () => void
+}) {
+  const [pending, startTransition] = React.useTransition()
+  const [staged, setStaged] = React.useState<AttachedFile[]>([])
+
+  function attach() {
+    if (staged.length === 0 || pending) return
+    const formData = new FormData()
+    formData.set('recordId', recordId)
+    formData.set('rowId', rowId)
+    formData.set('attachmentIds', staged.map((file) => file.attachmentId).join(','))
+    startTransition(async () => {
+      try {
+        await addPhotos(formData)
+        setStaged([])
+        onDone()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to attach photos')
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-2">
+      <FileUpload variant="photo" value={staged} onChange={setStaged} />
+      {staged.length > 0 ? (
+        <Button type="button" size="sm" onClick={attach} disabled={pending}>
+          {pending ? (
+            'Attaching…'
+          ) : (
+            <>
+              <CheckCircle2 size={14} /> Attach {staged.length} photo
+              {staged.length === 1 ? '' : 's'}
+            </>
+          )}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+export function CriterionPhotosPanel({
+  photoPreviews,
+  editable,
+  recordId,
+  rowId,
+  addPhotos,
+  onDone,
+}: {
+  photoPreviews: { id: string; url: string; filename: string }[]
+  editable: boolean
+  recordId: string
+  rowId: string
+  addPhotos: (formData: FormData) => Promise<void>
+  onDone: () => void
+}) {
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+      {photoPreviews.length > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {photoPreviews.map((photo) => (
+            <a
+              key={photo.id}
+              href={photo.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
+            >
+              <RawImage
+                src={photo.url}
+                alt={photo.filename}
+                optimizationReason="authenticated"
+                className="h-full w-full object-cover"
+              />
+            </a>
+          ))}
+        </div>
+      ) : null}
+      {editable ? (
+        <CriterionPhotoUploader
+          recordId={recordId}
+          rowId={rowId}
+          addPhotos={addPhotos}
+          onDone={onDone}
+        />
+      ) : null}
+    </div>
+  )
+}

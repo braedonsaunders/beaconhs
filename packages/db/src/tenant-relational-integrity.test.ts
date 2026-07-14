@@ -119,27 +119,145 @@ const hardenedComplianceDispatchReferences = [
     reference: 'compliance_status.tenant_id,person_id->people.tenant_id,id',
     onDelete: 'cascade',
   },
+] as const
+
+const hardenedFormReferences = [
   {
-    reference: 'form_assignment_dispatches.tenant_id,assignment_id->form_assignments.tenant_id,id',
+    reference: 'hazid_assessment_app_responses.tenant_id,template_id->form_templates.tenant_id,id',
     onDelete: 'cascade',
   },
   {
     reference:
-      'inspection_assignment_compliance.tenant_id,assignment_id->inspection_assignments.tenant_id,id',
+      'hazid_assessment_app_responses.tenant_id,template_id,response_id->form_responses.tenant_id,template_id,id',
     onDelete: 'cascade',
   },
   {
-    reference: 'inspection_assignment_compliance.tenant_id,person_id->people.tenant_id,id',
+    reference: 'hazid_assessment_type_apps.tenant_id,template_id->form_templates.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_automations.tenant_id,template_id->form_templates.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_checkins.tenant_id,response_id->form_responses.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_comments.tenant_id,response_id->form_responses.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_participants.tenant_id,person_id->people.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_participants.tenant_id,template_id->form_templates.tenant_id,id',
     onDelete: 'cascade',
   },
   {
     reference:
-      'inspection_assignment_dispatches.tenant_id,assignment_id->inspection_assignments.tenant_id,id',
+      'form_response_participants.tenant_id,template_id,response_id->form_responses.tenant_id,template_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_scores.tenant_id,response_id->form_responses.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_steps.tenant_id,response_id->form_responses.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'form_response_steps.tenant_id,signed_by_person_id->people.tenant_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference: 'form_responses.tenant_id,site_org_unit_id->org_units.tenant_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference: 'form_responses.tenant_id,subject_person_id->people.tenant_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference: 'form_responses.tenant_id,template_id->form_templates.tenant_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference:
+      'form_responses.tenant_id,compliance_obligation_id->compliance_obligations.tenant_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference:
+      'form_responses.tenant_id,template_id,template_version_id->form_template_versions.tenant_id,template_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference: 'form_template_versions.tenant_id,template_id->form_templates.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'flow_gates.tenant_id,flow_id->form_automations.tenant_id,id',
+    onDelete: 'cascade',
+  },
+] as const
+
+const hardenedHazidReferences = [
+  {
+    reference:
+      'hazid_assessment_app_responses.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_hazards.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_photos.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_ppe.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_questions.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
     onDelete: 'cascade',
   },
   {
     reference:
-      'journal_assignment_dispatches.tenant_id,assignment_id->journal_assignments.tenant_id,id',
+      'hazid_assessment_signatures.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_tasks.tenant_id,assessment_id->hazid_assessments.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_type_apps.tenant_id,type_id->hazid_assessment_types.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessment_type_ppe.tenant_id,type_id->hazid_assessment_types.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference:
+      'hazid_assessment_type_questions.tenant_id,type_id->hazid_assessment_types.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_assessments.tenant_id,locked_by_tenant_user_id->tenant_users.tenant_id,id',
+    onDelete: 'no action',
+  },
+  {
+    reference: 'hazid_location_tasks.tenant_id,org_unit_id->org_units.tenant_id,id',
+    onDelete: 'cascade',
+  },
+  {
+    reference: 'hazid_location_tasks.tenant_id,task_id->hazid_tasks.tenant_id,id',
     onDelete: 'cascade',
   },
 ] as const
@@ -153,6 +271,8 @@ const hardenedCriticalReferences = [
   ...hardenedWorkflowPrincipalReferences,
   ...hardenedRoutingReferences.map(({ reference }) => reference),
   ...hardenedComplianceDispatchReferences.map(({ reference }) => reference),
+  ...hardenedFormReferences.map(({ reference }) => reference),
+  ...hardenedHazidReferences.map(({ reference }) => reference),
   'role_assignments.tenant_id,role_id->roles.tenant_id,id',
   'role_assignments.tenant_id,tenant_user_id->tenant_users.tenant_id,id',
   'role_dashboard_layouts.tenant_id,role_id->roles.tenant_id,id',
@@ -195,6 +315,8 @@ describe('tenant relational integrity', () => {
       })),
       ...hardenedRoutingReferences,
       ...hardenedComplianceDispatchReferences,
+      ...hardenedFormReferences,
+      ...hardenedHazidReferences,
     ]
 
     for (const { reference, onDelete } of expectedReferences) {
@@ -259,8 +381,8 @@ describe('tenant relational integrity', () => {
     // This is a deliberate ratchet, not acceptance that the residual edges are
     // safe. Any added, removed, or retargeted edge requires a fresh integrity
     // review. The architecture audit ranks the remaining conversion batches.
-    expect(residual).toHaveLength(274)
-    expect(digest).toBe('5da04fa62a6829afb61b4493c61d7e64863d809652ead952788d6b3ff30a4a69')
+    expect(residual).toHaveLength(22)
+    expect(digest).toBe('0db8a7b7190966ad47e0f41e2aec03faf1052ffd70758799f5f9c5cdd184a2f9')
     expect(residual).toMatchSnapshot()
   })
 })

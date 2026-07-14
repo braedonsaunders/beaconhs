@@ -27,6 +27,7 @@ import {
 import { mintWopiToken, type WopiDeckTarget } from '@/lib/wopi'
 import { tenantIsActive } from '@/lib/active-tenant'
 import { blankPptxBuffer } from '@/lib/pptx-blank'
+import { requireTrainingUuid } from '@/lib/training-mutation-validation'
 import { assertTrainingPptxAttachment } from '@/lib/training-pptx-policy'
 import { loadDeckMaster, parseDeckTarget } from './_lib'
 
@@ -59,6 +60,7 @@ export async function getPptxEditorSession(
   }
   const target = parseDeckTarget(targetRaw)
   if (!target) return { ok: false, error: 'unknown_target' }
+  targetId = requireTrainingUuid(targetId, 'Deck')
 
   const master = await loadDeckMaster(ctx.db, target, targetId)
   if (!master) return { ok: false, error: 'no_master' }
@@ -136,6 +138,7 @@ export async function getPptxAuthorPlaybackSession(
   assertCanManageModule(ctx, 'training')
   const target = parseDeckTarget(targetRaw)
   if (!target) return { ok: false, error: 'unknown_target' }
+  targetId = requireTrainingUuid(targetId, 'Deck')
   return createPlaybackSession({
     target,
     targetId,
@@ -158,6 +161,8 @@ export async function getPptxInstructorPlaybackSession(
   }
   const target = parseDeckTarget(targetRaw)
   if (!target) return { ok: false, error: 'unknown_target' }
+  targetId = requireTrainingUuid(targetId, 'Deck')
+  courseId = requireTrainingUuid(courseId, 'Course')
   const bound = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({ id: trainingLessons.id })
@@ -191,6 +196,8 @@ export async function getPptxLearnerPlaybackSession(
   enrollmentId: string,
 ): Promise<PptxSession> {
   const ctx = await requireRequestContext()
+  lessonId = requireTrainingUuid(lessonId, 'Lesson')
+  enrollmentId = requireTrainingUuid(enrollmentId, 'Enrollment')
   const binding = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -250,6 +257,7 @@ export async function createBlankDeckMaster(targetRaw: string, targetId: string)
   const tenantId = ctx.tenantId
   const target = parseDeckTarget(targetRaw)
   if (!target) throw new Error('Unknown deck target')
+  targetId = requireTrainingUuid(targetId, 'Deck')
 
   const pptx = blankPptxBuffer()
   assertTrainingPptxAttachment({

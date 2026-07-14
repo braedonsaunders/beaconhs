@@ -63,7 +63,7 @@ export function LogicBuilder({
   function setCombinator(next: 'and' | 'or') {
     if (clauses.length === 0) onChange(undefined)
     else if (clauses.length === 1) onChange(clauses[0])
-    else onChange({ op: next, rules: clauses as any })
+    else onChange({ op: next, rules: clauses })
   }
 
   function updateClause(i: number, patch: Partial<SimpleRule>) {
@@ -89,7 +89,7 @@ export function LogicBuilder({
   function emit(comb: 'and' | 'or', list: LogicRule[]) {
     if (list.length === 0) onChange(undefined)
     else if (list.length === 1) onChange(list[0])
-    else onChange({ op: comb, rules: list as any })
+    else onChange({ op: comb, rules: list })
   }
 
   if (availableFields.length === 0) {
@@ -185,20 +185,4 @@ function normalize(rule: LogicRule | undefined): {
     return { combinator: rule.op, clauses: rule.rules }
   }
   return { combinator: 'and', clauses: [rule] }
-}
-
-function describeRule(rule: LogicRule | undefined, fieldLookup: Record<string, string>): string {
-  if (!rule) return 'Always'
-  if ('rules' in rule) {
-    return rule.rules
-      .map((r) => describeRule(r, fieldLookup))
-      .join(` ${rule.op === 'or' ? 'OR' : 'AND'} `)
-  }
-  if ('rule' in rule) return `NOT (${describeRule(rule.rule, fieldLookup)})`
-  if (rule.op === 'isSet') return `${fieldLookup[rule.field] ?? rule.field} has value`
-  if (rule.op === 'isNotSet') return `${fieldLookup[rule.field] ?? rule.field} is empty`
-  // The remaining cases all carry a `value` (scalar or array). Cast to the
-  // value-bearing union so TS picks `value` off either variant.
-  const valued = rule as { field: string; op: string; value: unknown }
-  return `${fieldLookup[valued.field] ?? valued.field} ${OPS.find((o) => o.value === valued.op)?.label ?? valued.op} ${displayClauseValue(valued.value)}`
 }

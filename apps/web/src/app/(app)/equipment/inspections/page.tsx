@@ -20,6 +20,7 @@ import {
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
@@ -37,6 +38,7 @@ export const metadata = { title: 'Equipment inspections' }
 const BASE = '/equipment/inspections'
 const SORTS = ['occurred', 'reference', 'equipment', 'type', 'result', 'status'] as const
 type Sort = (typeof SORTS)[number]
+const STATUSES = ['draft', 'in_progress', 'submitted', 'closed'] as const
 
 const STATUS_VARIANT: Record<string, 'secondary' | 'warning' | 'success'> = {
   draft: 'secondary',
@@ -54,6 +56,7 @@ const STATUS_FILTERS = [
   { value: 'draft', label: 'Draft' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'submitted', label: 'Submitted' },
+  { value: 'closed', label: 'Closed' },
 ]
 
 export default async function EquipmentInspectionsPage({
@@ -68,8 +71,11 @@ export default async function EquipmentInspectionsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const statusFilter = pickString(sp.status) ?? ''
   const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.read.self')
+  const canInspect = can(ctx, 'equipment.inspect')
+  const rawStatus = pickString(sp.status) ?? ''
+  const statusFilter = STATUSES.includes(rawStatus as (typeof STATUSES)[number]) ? rawStatus : ''
 
   const sortCol: Record<Sort, AnyColumn> = {
     occurred: equipmentInspectionRecords.occurredAt,
@@ -80,11 +86,12 @@ export default async function EquipmentInspectionsPage({
     status: equipmentInspectionRecords.status,
   }
   const orderBy = params.dir === 'asc' ? asc(sortCol[params.sort]) : desc(sortCol[params.sort])
-  const filters: SQL<unknown>[] = [isNull(equipmentInspectionRecords.deletedAt)]
+  const filters: SQL<unknown>[] = [
+    eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
+    isNull(equipmentInspectionRecords.deletedAt),
+  ]
   if (statusFilter) {
-    filters.push(
-      eq(equipmentInspectionRecords.status, statusFilter as 'draft' | 'in_progress' | 'submitted'),
-    )
+    filters.push(eq(equipmentInspectionRecords.status, statusFilter as (typeof STATUSES)[number]))
   }
   if (params.q) {
     const term = `%${params.q}%`
@@ -113,10 +120,19 @@ export default async function EquipmentInspectionsPage({
     const [tot] = await tx
       .select({ n: count() })
       .from(equipmentInspectionRecords)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId))
+      .leftJoin(
+        equipmentItems,
+        and(
+          eq(equipmentItems.tenantId, equipmentInspectionRecords.tenantId),
+          eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+        ),
+      )
       .leftJoin(
         equipmentInspectionTypes,
-        eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        and(
+          eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
+          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        ),
       )
       .where(where)
     const rows = await tx
@@ -135,14 +151,35 @@ export default async function EquipmentInspectionsPage({
         inspectorText: equipmentInspectionRecords.inspectorText,
       })
       .from(equipmentInspectionRecords)
-      .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId))
+      .leftJoin(
+        equipmentItems,
+        and(
+          eq(equipmentItems.tenantId, equipmentInspectionRecords.tenantId),
+          eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+        ),
+      )
       .leftJoin(
         equipmentInspectionTypes,
-        eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        and(
+          eq(equipmentInspectionTypes.tenantId, equipmentInspectionRecords.tenantId),
+          eq(equipmentInspectionTypes.id, equipmentInspectionRecords.inspectionTypeId),
+        ),
       )
-      .leftJoin(tenantUsers, eq(tenantUsers.id, equipmentInspectionRecords.inspectorTenantUserId))
+      .leftJoin(
+        tenantUsers,
+        and(
+          eq(tenantUsers.tenantId, equipmentInspectionRecords.tenantId),
+          eq(tenantUsers.id, equipmentInspectionRecords.inspectorTenantUserId),
+        ),
+      )
       .leftJoin(user, eq(user.id, tenantUsers.userId))
-      .leftJoin(people, eq(people.id, equipmentInspectionRecords.inspectorPersonId))
+      .leftJoin(
+        people,
+        and(
+          eq(people.tenantId, equipmentInspectionRecords.tenantId),
+          eq(people.id, equipmentInspectionRecords.inspectorPersonId),
+        ),
+      )
       .where(where)
       .orderBy(orderBy)
       .limit(params.perPage)
@@ -160,11 +197,13 @@ export default async function EquipmentInspectionsPage({
             title="Inspections"
             description={`${total.toLocaleString()} record${total === 1 ? '' : 's'}`}
             actions={
-              <Link href="/equipment/inspections/new">
-                <Button>
-                  <Plus size={14} /> New inspection
-                </Button>
-              </Link>
+              canInspect ? (
+                <Link href="/equipment/inspections/new">
+                  <Button>
+                    <Plus size={14} /> New inspection
+                  </Button>
+                </Link>
+              ) : undefined
             }
           />
           <EquipmentSubNav active="inspections" />

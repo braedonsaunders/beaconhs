@@ -8,6 +8,7 @@
 
 import { createClient } from '@beaconhs/db'
 import { attachmentUrl } from '../src/lib/attachment-url'
+import { sanitizeTrainingHtml } from '../src/lib/training-rich-content'
 import {
   inspectPersistedValue,
   rewritePersistedValue,
@@ -57,9 +58,6 @@ type TrainingRow = {
   id: string
   tenant_id: string
   content_html: string | null
-  content_json: PersistedJson
-  content_json_sql_null: boolean
-  slides: PersistedJson
 }
 
 type FormResponseRow = {
@@ -74,8 +72,6 @@ type FormResponseRow = {
 
 type TrainingSnapshot = {
   contentHtml: string | null
-  contentJson: NullableJson
-  slides: PersistedJson
 }
 
 type FormResponseSnapshot = {
@@ -137,11 +133,7 @@ function nullableJsonEqual(left: NullableJson, right: NullableJson): boolean {
 }
 
 function trainingEqual(left: TrainingSnapshot, right: TrainingSnapshot): boolean {
-  return (
-    left.contentHtml === right.contentHtml &&
-    nullableJsonEqual(left.contentJson, right.contentJson) &&
-    jsonEqual(left.slides, right.slides)
-  )
+  return left.contentHtml === right.contentHtml
 }
 
 function formResponseEqual(left: FormResponseSnapshot, right: FormResponseSnapshot): boolean {
@@ -224,13 +216,11 @@ async function loadRows(): Promise<{
 }> {
   const [lessons, items, responses] = await Promise.all([
     sql<TrainingRow[]>`
-      select id::text, tenant_id::text, content_html, content_json,
-             content_json is null as content_json_sql_null, slides
+      select id::text, tenant_id::text, content_html
       from training_lessons order by id
     `,
     sql<TrainingRow[]>`
-      select id::text, tenant_id::text, content_html, content_json,
-             content_json is null as content_json_sql_null, slides
+      select id::text, tenant_id::text, content_html
       from training_content_items order by id
     `,
     sql<FormResponseRow[]>`
@@ -264,11 +254,7 @@ function inspectTrainingRow(
   row: TrainingRow,
 ): { row: InspectedRow; invalid: ReturnType<typeof inspectPersistedValue>['invalid'] } {
   const path = `${table}.${row.id}`
-  const cells = [
-    inspectCell(row.content_html, row.tenant_id, `${path}.content_html`),
-    inspectCell(row.content_json, row.tenant_id, `${path}.content_json`),
-    inspectCell(row.slides, row.tenant_id, `${path}.slides`),
-  ]
+  const cells = [inspectCell(row.content_html, row.tenant_id, `${path}.content_html`)]
   return {
     row: {
       table,
@@ -276,8 +262,6 @@ function inspectTrainingRow(
       tenantId: row.tenant_id,
       before: {
         contentHtml: row.content_html,
-        contentJson: { value: row.content_json, sqlNull: row.content_json_sql_null },
-        slides: row.slides,
       },
       references: cells.flatMap((cell) => cell.references),
     },
@@ -380,15 +364,19 @@ function rewriteInspectedRow(
     }
   }
   const before = row.before as TrainingSnapshot
-  const contentHtml = rewritePersistedValue(
+  const rewrittenContentHtml = rewritePersistedValue(
     before.contentHtml,
     row.tenantId,
     replace,
     `${row.table}.${row.id}.content_html`,
   )
-  if (contentHtml !== null && typeof contentHtml !== 'string') {
+  if (rewrittenContentHtml !== null && typeof rewrittenContentHtml !== 'string') {
     throw new Error(`${row.table}.${row.id}.content_html changed type during preflight`)
   }
+  const contentHtml =
+    typeof rewrittenContentHtml === 'string'
+      ? sanitizeTrainingHtml(rewrittenContentHtml)
+      : rewrittenContentHtml
   return {
     table: row.table,
     id: row.id,
@@ -396,21 +384,6 @@ function rewriteInspectedRow(
     before,
     after: {
       contentHtml,
-      contentJson: {
-        value: rewritePersistedValue(
-          before.contentJson.value,
-          row.tenantId,
-          replace,
-          `${row.table}.${row.id}.content_json`,
-        ),
-        sqlNull: before.contentJson.sqlNull,
-      },
-      slides: rewritePersistedValue(
-        before.slides,
-        row.tenantId,
-        replace,
-        `${row.table}.${row.id}.slides`,
-      ),
     },
   }
 }
@@ -562,24 +535,17 @@ async function applyPlans(plans: readonly RowPlan[]): Promise<number> {
         const currentRows =
           table === 'training_lessons'
             ? await tx<TrainingRow[]>`
-                select id::text, tenant_id::text, content_html, content_json,
-                       content_json is null as content_json_sql_null, slides
+                select id::text, tenant_id::text, content_html
                 from training_lessons where id = ${plan.id}::uuid for update
               `
             : await tx<TrainingRow[]>`
-                select id::text, tenant_id::text, content_html, content_json,
-                       content_json is null as content_json_sql_null, slides
+                select id::text, tenant_id::text, content_html
                 from training_content_items where id = ${plan.id}::uuid for update
               `
         const current = currentRows[0]
         if (!current) throw new Error(`${table} ${plan.id} disappeared during cutover`)
         const snapshot: TrainingSnapshot = {
           contentHtml: current.content_html,
-          contentJson: {
-            value: current.content_json,
-            sqlNull: current.content_json_sql_null,
-          },
-          slides: current.slides,
         }
         if (current.tenant_id !== plan.tenantId || !trainingEqual(snapshot, plan.before)) {
           throw new Error(`${table} ${plan.id} changed after preflight`)
@@ -589,31 +555,17 @@ async function applyPlans(plans: readonly RowPlan[]): Promise<number> {
             ? await tx<{ id: string }[]>`
                 update training_lessons
                 set content_html = ${plan.after.contentHtml},
-                    content_json = case when ${plan.after.contentJson.sqlNull} then null
-                                        else ${JSON.stringify(plan.after.contentJson.value)}::jsonb end,
-                    slides = ${JSON.stringify(plan.after.slides)}::jsonb,
                     updated_at = now()
                 where id = ${plan.id}::uuid and tenant_id = ${plan.tenantId}::uuid
                   and content_html is not distinct from ${plan.before.contentHtml}
-                  and content_json is not distinct from
-                      (case when ${plan.before.contentJson.sqlNull} then null
-                            else ${JSON.stringify(plan.before.contentJson.value)}::jsonb end)
-                  and slides is not distinct from ${JSON.stringify(plan.before.slides)}::jsonb
                 returning id::text
               `
             : await tx<{ id: string }[]>`
                 update training_content_items
                 set content_html = ${plan.after.contentHtml},
-                    content_json = case when ${plan.after.contentJson.sqlNull} then null
-                                        else ${JSON.stringify(plan.after.contentJson.value)}::jsonb end,
-                    slides = ${JSON.stringify(plan.after.slides)}::jsonb,
                     updated_at = now()
                 where id = ${plan.id}::uuid and tenant_id = ${plan.tenantId}::uuid
                   and content_html is not distinct from ${plan.before.contentHtml}
-                  and content_json is not distinct from
-                      (case when ${plan.before.contentJson.sqlNull} then null
-                            else ${JSON.stringify(plan.before.contentJson.value)}::jsonb end)
-                  and slides is not distinct from ${JSON.stringify(plan.before.slides)}::jsonb
                 returning id::text
               `
         if (updated.length !== 1)

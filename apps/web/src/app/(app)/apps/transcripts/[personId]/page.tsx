@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { FileText } from 'lucide-react'
 import { and, eq, isNull } from 'drizzle-orm'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import {
   Badge,
   DetailHeader,
@@ -72,13 +73,16 @@ export default async function FormTranscriptPage({
   const canReadAll = can(ctx, 'forms.response.read.all')
   const data = await ctx.db(async (tx) => {
     const [p] = await tx
-      .select()
+      .select({
+        person: people,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
+      })
       .from(people)
       .where(and(eq(people.id, personId), isNull(people.deletedAt)))
       .limit(1)
     if (!p) return null
-    if (!canReadAll && p.userId !== ctx.userId) return null
-    return p
+    if (!canReadAll && p.person.userId !== ctx.userId) return null
+    return { ...p.person, jobTitle: p.jobTitle }
   })
   if (!data) notFound()
   const person = data

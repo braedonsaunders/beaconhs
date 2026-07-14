@@ -3,8 +3,11 @@ import { and, count, eq, isNull } from 'drizzle-orm'
 import { DetailHeader } from '@beaconhs/ui'
 import { attachments, trainingContentItems, trainingLessons } from '@beaconhs/db/schema'
 import { requireModuleManage } from '@/lib/module-admin/guard'
+import { safeTrainingExternalUrl } from '@/lib/training-external-url'
+import { configuredTrainingBlockedOrigins } from '@/lib/training-external-url.server'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ContentItemEditor } from './_editor'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +18,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ContentItemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('training')
 
   const data = await ctx.db(async (tx) => {
@@ -40,6 +45,7 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
   })
 
   if (!data) notFound()
+  const trainingUrlOptions = { blockedOrigins: configuredTrainingBlockedOrigins() }
 
   return (
     <DetailPageLayout
@@ -60,8 +66,7 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
           tags: data.it.tags ?? [],
           durationMinutes: data.it.durationMinutes,
           attachmentId: data.it.attachmentId,
-          embedUrl: data.it.embedUrl,
-          contentJson: data.it.contentJson,
+          embedUrl: safeTrainingExternalUrl(data.it.embedUrl, trainingUrlOptions)?.url ?? null,
           contentHtml: data.it.contentHtml,
           sourceAttachmentId: data.it.sourceAttachmentId,
           sourceFilename: data.source?.filename ?? null,

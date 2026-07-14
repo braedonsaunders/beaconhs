@@ -10,8 +10,7 @@ import { ExternalLink } from 'lucide-react'
 import { VizRenderer } from './viz-renderer.client'
 import { AiCardView } from './ai-card-view.client'
 import type { CardRender } from '../_data'
-
-const UUID_RE = /^[0-9a-f-]{36}$/i
+import { isUuid } from '@/lib/list-params'
 
 export function CardCell({ render }: { render: CardRender }) {
   const selfTitled = render.vizType === 'scalar' || render.vizType === 'progress'
@@ -45,7 +44,7 @@ export function CardCell({ render }: { render: CardRender }) {
         <h3 className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
           {render.name}
         </h3>
-        {UUID_RE.test(render.id) ? (
+        {isUuid(render.id) ? (
           <Link
             href={`/insights/cards/${render.id}`}
             className="no-drag shrink-0 text-slate-300 transition hover:text-teal-600 dark:text-slate-600"

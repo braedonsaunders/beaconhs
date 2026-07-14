@@ -46,7 +46,7 @@ export function EquipmentCategoryDrawer({
       open={mode !== null}
       closeHref={closeHref}
       title={mode === 'edit' ? 'Edit category' : 'New category'}
-      description="Buckets that group equipment types — used in the rate matrix and reports."
+      description="Buckets that group equipment types — used to organize the register, filters, and reports."
       size="md"
     >
       <CategoryForm

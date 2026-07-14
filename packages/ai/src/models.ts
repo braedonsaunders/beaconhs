@@ -2,12 +2,15 @@
 // settings UI can offer dynamic dropdowns instead of free-text model ids.
 // Runs server-side only (the API key never leaves the server).
 
-import { providerSpec, type AiConfig } from './client'
+import { providerSpec, validateAiBaseUrl, type AiConfig } from './client'
+import { secureFetch } from '@beaconhs/sync/egress'
 
 export type ModelListItem = { id: string; label?: string }
 
 function trimSlash(u: string): string {
-  return u.replace(/\/+$/, '')
+  let end = u.length
+  while (end > 0 && u.charCodeAt(end - 1) === 47) end -= 1
+  return u.slice(0, end)
 }
 
 function dedupeSort(items: ModelListItem[]): ModelListItem[] {
@@ -19,7 +22,14 @@ function dedupeSort(items: ModelListItem[]): ModelListItem[] {
 }
 
 async function fetchJson(url: string, headers: Record<string, string>): Promise<unknown> {
-  const res = await fetch(url, { headers })
+  // Custom OpenAI-compatible endpoints are tenant-configured. Use the shared
+  // HTTPS/public-DNS transport so redirects, DNS rebinding, private networks,
+  // response size, and timeouts are enforced at the socket boundary.
+  const res = await secureFetch(url, {
+    headers,
+    timeoutMs: 15_000,
+    maxResponseBytes: 2 * 1024 * 1024,
+  })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(`${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 160)}` : ''}`)
@@ -95,7 +105,7 @@ export async function listModels(config: AiConfig): Promise<ModelListItem[]> {
       )
     }
     case 'openai-compatible': {
-      const baseURL = config.baseUrl?.trim() || spec.baseUrl
+      const baseURL = (await validateAiBaseUrl(config.provider, config.baseUrl)) || spec.baseUrl
       if (!baseURL) throw new Error('A base URL is required to list models.')
       const json = await fetchJson(`${trimSlash(baseURL)}/models`, {
         Authorization: `Bearer ${key}`,

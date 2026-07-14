@@ -15,8 +15,9 @@
   },
   "dependencies": {
     "@beaconhs/crypto": "workspace:*",
+    "@beaconhs/email-render": "workspace:*",
     "@beaconhs/sync": "workspace:*",
-    "nodemailer": "^9.0.1"
+    "nodemailer": "^9.0.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

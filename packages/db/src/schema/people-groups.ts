@@ -11,8 +11,9 @@
 // taxonomies.
 
 import { relations } from 'drizzle-orm'
-import { index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { check, foreignKey, index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
+import { catalogNameIsNonblankSql, normalizedCatalogNameSql } from '../catalog-name'
 import { tenants } from './core'
 import { people } from './org'
 
@@ -31,7 +32,12 @@ export const personGroups = pgTable(
   },
   (t) => ({
     tenantIdx: index('person_groups_tenant_idx').on(t.tenantId),
-    tenantNameUx: uniqueIndex('person_groups_tenant_name_ux').on(t.tenantId, t.name),
+    tenantIdIdUx: uniqueIndex('person_groups_tenant_id_id_ux').on(t.tenantId, t.id),
+    tenantNormalizedNameUx: uniqueIndex('person_groups_tenant_normalized_name_ux').on(
+      t.tenantId,
+      normalizedCatalogNameSql(t.name),
+    ),
+    nameNonblank: check('person_groups_name_nonblank_ck', catalogNameIsNonblankSql(t.name)),
   }),
 )
 
@@ -42,19 +48,29 @@ export const personGroupMemberships = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    groupId: uuid('group_id')
-      .notNull()
-      .references(() => personGroups.id, { onDelete: 'cascade' }),
-    personId: uuid('person_id')
-      .notNull()
-      .references(() => people.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id').notNull(),
+    personId: uuid('person_id').notNull(),
     ...timestamps,
   },
   (t) => ({
     tenantIdx: index('person_group_memberships_tenant_idx').on(t.tenantId),
-    groupIdx: index('person_group_memberships_group_idx').on(t.groupId),
-    personIdx: index('person_group_memberships_person_idx').on(t.personId),
-    uniqueMembership: uniqueIndex('person_group_memberships_unique_ux').on(t.groupId, t.personId),
+    groupIdx: index('person_group_memberships_group_idx').on(t.tenantId, t.groupId),
+    personIdx: index('person_group_memberships_person_idx').on(t.tenantId, t.personId),
+    uniqueMembership: uniqueIndex('person_group_memberships_unique_ux').on(
+      t.tenantId,
+      t.groupId,
+      t.personId,
+    ),
+    groupFk: foreignKey({
+      name: 'person_group_memberships_tenant_group_fk',
+      columns: [t.tenantId, t.groupId],
+      foreignColumns: [personGroups.tenantId, personGroups.id],
+    }).onDelete('cascade'),
+    personFk: foreignKey({
+      name: 'person_group_memberships_tenant_person_fk',
+      columns: [t.tenantId, t.personId],
+      foreignColumns: [people.tenantId, people.id],
+    }).onDelete('cascade'),
   }),
 )
 
@@ -69,11 +85,11 @@ export const personGroupMembershipsRelations = relations(personGroupMemberships,
     references: [tenants.id],
   }),
   group: one(personGroups, {
-    fields: [personGroupMemberships.groupId],
-    references: [personGroups.id],
+    fields: [personGroupMemberships.tenantId, personGroupMemberships.groupId],
+    references: [personGroups.tenantId, personGroups.id],
   }),
   person: one(people, {
-    fields: [personGroupMemberships.personId],
-    references: [people.id],
+    fields: [personGroupMemberships.tenantId, personGroupMemberships.personId],
+    references: [people.tenantId, people.id],
   }),
 }))

@@ -3,6 +3,7 @@
 // while preserving the native assessment as the parent work document.
 
 import { and, eq } from 'drizzle-orm'
+import type { Database } from '../client'
 import { formTemplates, formTemplateVersions } from '../schema'
 import type { FormSchemaV1 } from '../schema/forms'
 
@@ -376,8 +377,7 @@ const HAZID_ARC_FLASH_APP_SCHEMA: FormSchemaV1 = {
   workflow: { steps: [submitterStep('submit', 'Submit')] },
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DrizzleTx = any
+type DrizzleTx = Pick<Database, 'select' | 'insert'>
 
 async function ensureTemplate(
   tx: DrizzleTx,

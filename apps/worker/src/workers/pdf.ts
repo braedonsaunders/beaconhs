@@ -7,30 +7,24 @@
 // durable artifact of record.
 
 import type { Job } from 'bullmq'
-import { asc, desc, eq } from 'drizzle-orm'
-import { db, withTenant } from '@beaconhs/db'
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import {
+  db,
+  lockFormResponseForMutation,
+  MAX_DOCUMENT_BOOK_ITEMS,
+  resolveDocumentBookItems,
+  withTenant,
+} from '@beaconhs/db'
 import {
   attachments,
   documentBookItems,
   documentBooks,
   documentVersions,
   documents,
-  people,
+  formResponses,
   tenants,
-  trainingCertificates,
-  trainingCourses,
-  trainingRecords,
-  trainingSkillAssignments,
-  trainingSkillAuthorities,
-  trainingSkillCertificates,
-  trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import QRCode from 'qrcode'
-import {
-  renderCertificatePdf,
-  renderHtmlDocumentPdf,
-  renderRecordSummaryPdf,
-} from '@beaconhs/forms-pdf'
+import { renderHtmlDocumentPdf, renderRecordSummaryPdf } from '@beaconhs/forms-pdf'
 import {
   enqueueEmail,
   type PdfEmailPayload,
@@ -40,15 +34,30 @@ import {
 import {
   deleteObject,
   getObject,
+  headObject,
   newAttachmentKey,
   newTenantObjectKey,
-  presignGet,
   putObject,
 } from '@beaconhs/storage'
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
 import { pdfUnite } from '@beaconhs/office'
 import { audit } from '@beaconhs/audit'
-import { appBaseUrl } from '../lib/app-base-url'
+import { assertEmailAttachmentSize } from '../lib/email-attachment-policy'
+import { commitExternalArtifact } from '../lib/external-artifact-commit'
+import {
+  resolvePdfArtifactDisposition,
+  type PdfArtifactDisposition,
+} from '../lib/pdf-artifact-policy'
+
+const MAX_GENERATED_PDF_BYTES = 200 * 1024 * 1024
+const MAX_DOCUMENT_BOOK_SOURCE_BYTES = 50 * 1024 * 1024
+const MAX_DOCUMENT_BOOK_TOTAL_SOURCE_BYTES = 250 * 1024 * 1024
+
+function assertGeneratedPdf(pdf: Buffer): void {
+  if (pdf.length === 0 || pdf.length > MAX_GENERATED_PDF_BYTES) {
+    throw new Error('Generated PDF must be between 1 byte and 200 MiB.')
+  }
+}
 
 export async function processPdf(job: Job<PdfJobData, unknown>): Promise<unknown> {
   const data = job.data
@@ -67,10 +76,6 @@ export async function processPdf(job: Job<PdfJobData, unknown>): Promise<unknown
 
 async function dispatchPdf(data: PdfJobData): Promise<unknown> {
   switch (data.kind) {
-    case 'certificate':
-      return await renderCertificate(data.tenantId, data.certificateId)
-    case 'skill_certificate':
-      return await renderSkillCertificate(data.tenantId, data.skillCertificateId)
     case 'record_summary':
       return await renderRecordSummary(data)
     case 'template_pdf':
@@ -102,7 +107,17 @@ async function emailRenderedPdf(
   // A storage read failure must FAIL the job (BullMQ retries; renders are
   // idempotent transient artifacts) — swallowing it would silently drop the
   // flow's configured email while the job reports success.
+  assertEmailAttachmentSize(artifact.sizeBytes)
+  const metadata = await headObject({ key: artifact.r2Key })
+  if (!metadata) throw new Error('Rendered PDF object was not found before email delivery.')
+  assertEmailAttachmentSize(metadata.contentLength)
+  if (metadata.contentLength !== artifact.sizeBytes) {
+    throw new Error('Rendered PDF object size changed before email delivery.')
+  }
   const bytes = await getObject({ key: artifact.r2Key })
+  if (bytes.length !== artifact.sizeBytes) {
+    throw new Error('Rendered PDF object size changed during email delivery.')
+  }
   await enqueueEmail({
     to: email.to,
     subject: email.subject,
@@ -155,7 +170,7 @@ async function renderRecordSummary(
     scope: '_transient/pdfs/record-summary',
     filename: `${data.subjectId}-${stamp}.pdf`,
   })
-  return storeTransientPdfArtifact({
+  return storePdfArtifact({
     tenantId: data.tenantId,
     pdf,
     filename,
@@ -163,6 +178,7 @@ async function renderRecordSummary(
     entityType: data.entityType,
     entityId: data.subjectId,
     summary: `Rendered ${data.heading} PDF`,
+    disposition: resolvePdfArtifactDisposition(data),
   })
 }
 
@@ -183,7 +199,7 @@ async function renderTemplatePdf(
   const entityType = data.entityType ?? 'document'
   const entityId = data.entityId ?? 'doc'
   const filename = data.filename || `${entityType}-${stamp}.pdf`
-  return storeTransientPdfArtifact({
+  return storePdfArtifact({
     tenantId: data.tenantId,
     pdf,
     filename,
@@ -195,6 +211,7 @@ async function renderTemplatePdf(
     entityType,
     entityId,
     summary: 'Rendered PDF document template',
+    disposition: resolvePdfArtifactDisposition(data),
   })
 }
 
@@ -238,331 +255,6 @@ async function renderDocumentBundle(
   })
 }
 
-// --- certificate ----------------------------------------------------------
-
-// Verify-URL QR as a PNG data URL, embedded into both the certificate and
-// the wallet card. margin:2 keeps a quiet zone even where the template lays
-// the code straight onto the parchment background.
-async function makeVerifyQr(verifyUrl: string): Promise<string> {
-  return QRCode.toDataURL(verifyUrl, {
-    errorCorrectionLevel: 'M',
-    margin: 2,
-    scale: 8,
-    color: { dark: '#0f172a', light: '#ffffff' },
-  })
-}
-
-async function renderCertificate(tenantId: string, certificateId: string): Promise<void> {
-  const result = await withTenant(db, tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        cert: trainingCertificates,
-        record: trainingRecords,
-        person: people,
-        course: trainingCourses,
-        tenant: tenants,
-      })
-      .from(trainingCertificates)
-      .innerJoin(trainingRecords, eq(trainingRecords.id, trainingCertificates.recordId))
-      .innerJoin(people, eq(people.id, trainingRecords.personId))
-      .innerJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-      .innerJoin(tenants, eq(tenants.id, trainingCertificates.tenantId))
-      .where(eq(trainingCertificates.id, certificateId))
-      .limit(1)
-    if (!row) return null
-    // Resolve photo URL if any
-    let photoUrl: string | null = null
-    if (row.person.photoAttachmentId) {
-      const [photoAtt] = await tx
-        .select({ r2Key: attachments.r2Key })
-        .from(attachments)
-        .where(eq(attachments.id, row.person.photoAttachmentId))
-        .limit(1)
-      if (photoAtt) photoUrl = await presignGet({ key: photoAtt.r2Key, expiresInSeconds: 900 })
-    }
-    return { ...row, photoUrl }
-  })
-
-  if (!result) {
-    console.warn(`[pdf] certificate ${certificateId} not found`)
-    return
-  }
-  const { cert, record, person, course, tenant: t, photoUrl } = result
-
-  // Public verify URL — encoded into the QR + printed in the footer text.
-  const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
-  const qrDataUrl = await makeVerifyQr(verifyUrl)
-
-  const { certificate, wallet } = await renderCertificatePdf({
-    tenantName: t.name,
-    tenantLogoUrl: t.branding.logoUrl,
-    primaryColor: t.branding.primaryColor,
-    variant: 'completion',
-    recipient: {
-      fullName: `${person.firstName} ${person.lastName}`,
-      employeeNo: person.employeeNo,
-    },
-    credential: { code: course.code, name: course.name },
-    completedOn: record.completedOn,
-    expiresOn: record.expiresOn,
-    instructor: record.instructor,
-    grade: record.grade,
-    verifyUrl,
-    verifyToken: cert.verifyToken,
-    qrDataUrl,
-    certificateId: cert.id,
-    generatedAt: new Date(),
-    wallet: {
-      tenantName: t.name,
-      tenantLogoUrl: t.branding.logoUrl,
-      primaryColor: t.branding.primaryColor,
-      variant: 'completion',
-      recipient: {
-        fullName: `${person.firstName} ${person.lastName}`,
-        employeeNo: person.employeeNo,
-        photoUrl,
-      },
-      credential: { code: course.code, name: course.name },
-      completedOn: record.completedOn,
-      expiresOn: record.expiresOn,
-      verifyUrl,
-      verifyToken: cert.verifyToken,
-      qrDataUrl,
-      cardId: cert.id,
-    },
-  })
-
-  const stamp = Date.now()
-  const certFilename = `certificate-${course.code}-${person.lastName}-${stamp}.pdf`
-  const walletFilename = `wallet-${course.code}-${person.lastName}-${stamp}.pdf`
-  const certKey = newAttachmentKey({ tenantId, kind: 'document', filename: certFilename })
-  const walletKey = newAttachmentKey({ tenantId, kind: 'document', filename: walletFilename })
-
-  await Promise.all([
-    putObject({
-      key: certKey,
-      body: certificate,
-      contentType: 'application/pdf',
-      contentDisposition: 'inline',
-    }),
-    putObject({
-      key: walletKey,
-      body: wallet,
-      contentType: 'application/pdf',
-      contentDisposition: 'inline',
-    }),
-  ])
-
-  await withTenant(db, tenantId, async (tx) => {
-    const [certAtt] = await tx
-      .insert(attachments)
-      .values({
-        tenantId,
-        kind: 'document',
-        r2Key: certKey,
-        contentType: 'application/pdf',
-        sizeBytes: certificate.length,
-        filename: certFilename,
-      })
-      .returning()
-    const [walletAtt] = await tx
-      .insert(attachments)
-      .values({
-        tenantId,
-        kind: 'document',
-        r2Key: walletKey,
-        contentType: 'application/pdf',
-        sizeBytes: wallet.length,
-        filename: walletFilename,
-      })
-      .returning()
-    if (certAtt) {
-      await tx
-        .update(trainingCertificates)
-        .set({ pdfAttachmentId: certAtt.id })
-        .where(eq(trainingCertificates.id, certificateId))
-    }
-    await audit(tx, {
-      tenantId,
-      entityType: 'training_certificate',
-      entityId: certificateId,
-      action: 'export',
-      summary: `Rendered certificate + wallet PDFs for ${person.firstName} ${person.lastName} / ${course.code}`,
-      metadata: {
-        certificateAttachmentId: certAtt?.id,
-        walletAttachmentId: walletAtt?.id,
-        certificateBytes: certificate.length,
-        walletBytes: wallet.length,
-      },
-    })
-  })
-
-  console.log(
-    `[pdf] certificate ${certificateId} rendered (cert ${certificate.length}B, wallet ${wallet.length}B)`,
-  )
-}
-
-// --- skill certificate ------------------------------------------------------
-//
-// Same certificate + wallet pair as 'certificate', driven by a
-// training_skill_certificates row → skill assignment → skill type →
-// authority. Renders with variant 'qualification' so the templates swap the
-// headline + phrasing and print the issuing authority.
-
-async function renderSkillCertificate(tenantId: string, skillCertificateId: string): Promise<void> {
-  const result = await withTenant(db, tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        cert: trainingSkillCertificates,
-        assignment: trainingSkillAssignments,
-        skillType: trainingSkillTypes,
-        authority: trainingSkillAuthorities,
-        person: people,
-        tenant: tenants,
-      })
-      .from(trainingSkillCertificates)
-      .innerJoin(
-        trainingSkillAssignments,
-        eq(trainingSkillAssignments.id, trainingSkillCertificates.skillAssignmentId),
-      )
-      .innerJoin(
-        trainingSkillTypes,
-        eq(trainingSkillTypes.id, trainingSkillAssignments.skillTypeId),
-      )
-      .innerJoin(
-        trainingSkillAuthorities,
-        eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
-      )
-      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-      .innerJoin(tenants, eq(tenants.id, trainingSkillCertificates.tenantId))
-      .where(eq(trainingSkillCertificates.id, skillCertificateId))
-      .limit(1)
-    if (!row) return null
-    let photoUrl: string | null = null
-    if (row.person.photoAttachmentId) {
-      const [photoAtt] = await tx
-        .select({ r2Key: attachments.r2Key })
-        .from(attachments)
-        .where(eq(attachments.id, row.person.photoAttachmentId))
-        .limit(1)
-      if (photoAtt) photoUrl = await presignGet({ key: photoAtt.r2Key, expiresInSeconds: 900 })
-    }
-    return { ...row, photoUrl }
-  })
-
-  if (!result) {
-    console.warn(`[pdf] skill_certificate ${skillCertificateId} not found`)
-    return
-  }
-  const { cert, assignment, skillType, authority, person, tenant: t, photoUrl } = result
-
-  const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
-  const qrDataUrl = await makeVerifyQr(verifyUrl)
-  const fullName = `${person.firstName} ${person.lastName}`
-
-  const { certificate, wallet } = await renderCertificatePdf({
-    tenantName: t.name,
-    tenantLogoUrl: t.branding.logoUrl,
-    primaryColor: t.branding.primaryColor,
-    variant: 'qualification',
-    recipient: { fullName, employeeNo: person.employeeNo },
-    credential: { code: skillType.code, name: skillType.name },
-    authorityName: authority.name,
-    completedOn: assignment.grantedOn,
-    expiresOn: assignment.expiresOn,
-    verifyUrl,
-    verifyToken: cert.verifyToken,
-    qrDataUrl,
-    certificateId: cert.id,
-    generatedAt: new Date(),
-    wallet: {
-      tenantName: t.name,
-      tenantLogoUrl: t.branding.logoUrl,
-      primaryColor: t.branding.primaryColor,
-      variant: 'qualification',
-      recipient: { fullName, employeeNo: person.employeeNo, photoUrl },
-      credential: { code: skillType.code, name: skillType.name },
-      authorityName: authority.name,
-      completedOn: assignment.grantedOn,
-      expiresOn: assignment.expiresOn,
-      verifyUrl,
-      verifyToken: cert.verifyToken,
-      qrDataUrl,
-      cardId: cert.id,
-    },
-  })
-
-  const stamp = Date.now()
-  const safeSkill = (skillType.code || skillType.name).replace(/[^a-zA-Z0-9]+/g, '-').slice(0, 40)
-  const certFilename = `skill-certificate-${safeSkill}-${person.lastName}-${stamp}.pdf`
-  const walletFilename = `skill-wallet-${safeSkill}-${person.lastName}-${stamp}.pdf`
-  const certKey = newAttachmentKey({ tenantId, kind: 'document', filename: certFilename })
-  const walletKey = newAttachmentKey({ tenantId, kind: 'document', filename: walletFilename })
-
-  await Promise.all([
-    putObject({
-      key: certKey,
-      body: certificate,
-      contentType: 'application/pdf',
-      contentDisposition: 'inline',
-    }),
-    putObject({
-      key: walletKey,
-      body: wallet,
-      contentType: 'application/pdf',
-      contentDisposition: 'inline',
-    }),
-  ])
-
-  await withTenant(db, tenantId, async (tx) => {
-    const [certAtt] = await tx
-      .insert(attachments)
-      .values({
-        tenantId,
-        kind: 'document',
-        r2Key: certKey,
-        contentType: 'application/pdf',
-        sizeBytes: certificate.length,
-        filename: certFilename,
-      })
-      .returning()
-    const [walletAtt] = await tx
-      .insert(attachments)
-      .values({
-        tenantId,
-        kind: 'document',
-        r2Key: walletKey,
-        contentType: 'application/pdf',
-        sizeBytes: wallet.length,
-        filename: walletFilename,
-      })
-      .returning()
-    if (certAtt) {
-      await tx
-        .update(trainingSkillCertificates)
-        .set({ pdfAttachmentId: certAtt.id })
-        .where(eq(trainingSkillCertificates.id, skillCertificateId))
-    }
-    await audit(tx, {
-      tenantId,
-      entityType: 'training_skill_certificate',
-      entityId: skillCertificateId,
-      action: 'export',
-      summary: `Rendered skill certificate + wallet PDFs for ${fullName} / ${skillType.name}`,
-      metadata: {
-        certificateAttachmentId: certAtt?.id,
-        walletAttachmentId: walletAtt?.id,
-        certificateBytes: certificate.length,
-        walletBytes: wallet.length,
-      },
-    })
-  })
-
-  console.log(
-    `[pdf] skill_certificate ${skillCertificateId} rendered (cert ${certificate.length}B, wallet ${wallet.length}B)`,
-  )
-}
-
 // --- Shared helpers for on-demand PDF kinds --------------------------------
 //
 // On-demand PDFs are transient artifacts: the worker renders to object storage
@@ -572,7 +264,7 @@ async function renderSkillCertificate(tenantId: string, skillCertificateId: stri
 
 type StoredPdfResult = RenderedPdfArtifact
 
-async function storeTransientPdfArtifact(args: {
+type PdfArtifactInput = {
   tenantId: string
   pdf: Buffer
   filename: string
@@ -580,28 +272,151 @@ async function storeTransientPdfArtifact(args: {
   entityType: string
   entityId: string
   summary: string
-}): Promise<StoredPdfResult> {
-  await putObject({
-    key: args.r2Key,
-    body: args.pdf,
-    contentType: 'application/pdf',
-    contentDisposition: 'inline',
+}
+
+async function storePdfArtifact(
+  args: PdfArtifactInput & { disposition: PdfArtifactDisposition },
+): Promise<StoredPdfResult> {
+  if (args.disposition.kind === 'form_response') {
+    if (args.entityType !== 'form_response' || args.entityId !== args.disposition.responseId) {
+      throw new Error('Durable PDF target does not match the rendered form response.')
+    }
+    return storeFormResponsePdfArtifact(args, args.disposition.responseId)
+  }
+  return storeTransientPdfArtifact(args)
+}
+
+async function storeFormResponsePdfArtifact(
+  args: PdfArtifactInput,
+  responseId: string,
+): Promise<StoredPdfResult> {
+  assertGeneratedPdf(args.pdf)
+
+  const filename = `form-response-${responseId}.pdf`
+  // Generated PDFs are immutable storage artifacts. Always stage the
+  // replacement at a fresh key: overwriting the currently referenced key
+  // before the response/parent locks are acquired would make a rolled-back
+  // database transaction expose bytes that no longer match its metadata.
+  const r2Key = newAttachmentKey({ tenantId: args.tenantId, kind: 'document', filename })
+  const write = () =>
+    putObject({
+      key: r2Key,
+      body: args.pdf,
+      contentType: 'application/pdf',
+      contentDisposition: 'inline',
+    })
+  const persist = () =>
+    withTenant(db, args.tenantId, async (tx) => {
+      const locked = await lockFormResponseForMutation(tx, args.tenantId, responseId)
+      if (!locked) throw new Error(`Form response ${responseId} not found for durable PDF export.`)
+      const previousAttachmentId = locked.pdfAttachmentId
+      const [createdAttachment] = await tx
+        .insert(attachments)
+        .values({
+          tenantId: args.tenantId,
+          kind: 'document',
+          r2Key,
+          contentType: 'application/pdf',
+          sizeBytes: args.pdf.length,
+          filename,
+        })
+        .returning({ id: attachments.id })
+      if (!createdAttachment) throw new Error('Form response PDF attachment was not created.')
+      const attachmentId = createdAttachment.id
+
+      const [updatedResponse] = await tx
+        .update(formResponses)
+        .set({ pdfAttachmentId: attachmentId })
+        .where(
+          and(
+            eq(formResponses.id, responseId),
+            eq(formResponses.tenantId, args.tenantId),
+            isNull(formResponses.deletedAt),
+          ),
+        )
+        .returning({ id: formResponses.id })
+      if (!updatedResponse) throw new Error('Form response disappeared while its PDF was saving.')
+
+      if (previousAttachmentId && previousAttachmentId !== attachmentId) {
+        // form_responses.pdf_attachment_id is written only by this durable
+        // artifact path, so the previous row is owned by this response. The
+        // attachment deletion trigger records object removal in the durable
+        // outbox in this same transaction.
+        const [deletedAttachment] = await tx
+          .delete(attachments)
+          .where(
+            and(
+              eq(attachments.id, previousAttachmentId),
+              eq(attachments.tenantId, args.tenantId),
+              eq(attachments.kind, 'document'),
+            ),
+          )
+          .returning({ id: attachments.id })
+        if (!deletedAttachment) {
+          throw new Error('The previous form response PDF attachment could not be retired.')
+        }
+      }
+
+      await audit(tx, {
+        tenantId: args.tenantId,
+        entityType: args.entityType,
+        entityId: responseId,
+        action: 'export',
+        summary: args.summary,
+        metadata: {
+          attachmentId,
+          previousAttachmentId,
+          r2Key,
+          sizeBytes: args.pdf.length,
+          transient: false,
+        },
+      })
+      return attachmentId
+    })
+
+  const attachmentId = await commitExternalArtifact({
+    write,
+    persist,
+    rollback: () => deleteObject({ key: r2Key }),
   })
 
-  await withTenant(db, args.tenantId, async (tx) => {
-    await audit(tx, {
-      tenantId: args.tenantId,
-      entityType: args.entityType,
-      entityId: args.entityId,
-      action: 'export',
-      summary: args.summary,
-      metadata: {
-        attachmentId: null,
-        r2Key: args.r2Key,
-        sizeBytes: args.pdf.length,
-        transient: true,
-      },
-    })
+  return {
+    attachmentId,
+    r2Key,
+    sizeBytes: args.pdf.length,
+    filename,
+  }
+}
+
+async function storeTransientPdfArtifact(args: PdfArtifactInput): Promise<StoredPdfResult> {
+  assertGeneratedPdf(args.pdf)
+
+  await commitExternalArtifact({
+    write: () =>
+      putObject({
+        key: args.r2Key,
+        body: args.pdf,
+        contentType: 'application/pdf',
+        contentDisposition: 'inline',
+        lifecycle: 'transient',
+      }),
+    persist: () =>
+      withTenant(db, args.tenantId, async (tx) => {
+        await audit(tx, {
+          tenantId: args.tenantId,
+          entityType: args.entityType,
+          entityId: args.entityId,
+          action: 'export',
+          summary: args.summary,
+          metadata: {
+            attachmentId: null,
+            r2Key: args.r2Key,
+            sizeBytes: args.pdf.length,
+            transient: true,
+          },
+        })
+      }),
+    rollback: () => deleteObject({ key: args.r2Key }),
   })
 
   return {
@@ -616,10 +431,10 @@ async function storeTransientPdfArtifact(args: {
 
 // --- document_book ---------------------------------------------------------
 //
-// Books concatenate the members' published version PDFs (rendered from their
-// DOCX snapshots) behind a generated cover + table of contents. File-only
-// documents contribute their uploaded PDF; members without a published PDF are
-// listed in the contents as unavailable rather than silently dropped.
+// Published books concatenate the exact immutable versions pinned when the
+// book was published. Draft manager previews resolve each member's latest
+// published version. Missing pins, versions, attachment metadata, or PDF bytes
+// fail the render; a book must never silently omit part of its publication.
 
 function escapeBookHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -631,44 +446,129 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       .select({ b: documentBooks, tenant: tenants })
       .from(documentBooks)
       .innerJoin(tenants, eq(tenants.id, documentBooks.tenantId))
-      .where(eq(documentBooks.id, bookId))
+      .where(
+        and(
+          eq(documentBooks.id, bookId),
+          eq(documentBooks.tenantId, tenantId),
+          eq(tenants.id, tenantId),
+        ),
+      )
       .limit(1)
     if (!row) return null
+    if (row.b.status === 'published' && !row.b.publishedAt) {
+      throw new Error('Published document book is missing its publication timestamp.')
+    }
 
     const items = await tx
       .select({ item: documentBookItems, doc: documents })
       .from(documentBookItems)
-      .innerJoin(documents, eq(documents.id, documentBookItems.documentId))
-      .where(eq(documentBookItems.bookId, bookId))
+      .innerJoin(
+        documents,
+        and(
+          eq(documents.tenantId, documentBookItems.tenantId),
+          eq(documents.id, documentBookItems.documentId),
+        ),
+      )
+      .where(
+        and(
+          eq(documentBookItems.bookId, bookId),
+          eq(documentBookItems.tenantId, tenantId),
+          eq(documents.tenantId, tenantId),
+        ),
+      )
       .orderBy(asc(documentBookItems.position))
+      .limit(MAX_DOCUMENT_BOOK_ITEMS + 1)
+    if (items.length > MAX_DOCUMENT_BOOK_ITEMS) {
+      throw new Error(`Document books may contain at most ${MAX_DOCUMENT_BOOK_ITEMS} documents.`)
+    }
 
-    const entries = await Promise.all(
-      items.map(async (i) => {
-        const [v] = await tx
-          .select({
-            version: documentVersions.version,
-            pdfAttachmentId: documentVersions.pdfAttachmentId,
-            contentAttachmentId: documentVersions.contentAttachmentId,
-          })
-          .from(documentVersions)
-          .where(eq(documentVersions.documentId, i.doc.id))
-          .orderBy(desc(documentVersions.version))
-          .limit(1)
-        let pdfKey: string | null = null
-        const attachmentId = v?.pdfAttachmentId ?? v?.contentAttachmentId ?? null
-        if (attachmentId) {
-          const [att] = await tx
-            .select({ key: attachments.r2Key, contentType: attachments.contentType })
+    const documentIds = items.map((item) => item.doc.id)
+    const versions =
+      documentIds.length === 0
+        ? []
+        : row.b.status === 'published'
+          ? await (async () => {
+              const pinnedIds = items.map(({ item, doc }) => {
+                if (!item.documentVersionId) {
+                  throw new Error(`Published book item ${doc.key} has no pinned document version.`)
+                }
+                return item.documentVersionId
+              })
+              return tx
+                .select({
+                  id: documentVersions.id,
+                  documentId: documentVersions.documentId,
+                  version: documentVersions.version,
+                  pdfAttachmentId: documentVersions.pdfAttachmentId,
+                  contentAttachmentId: documentVersions.contentAttachmentId,
+                })
+                .from(documentVersions)
+                .where(
+                  and(
+                    eq(documentVersions.tenantId, tenantId),
+                    inArray(documentVersions.id, pinnedIds),
+                    isNotNull(documentVersions.publishedAt),
+                  ),
+                )
+            })()
+          : await tx
+              .selectDistinctOn([documentVersions.documentId], {
+                id: documentVersions.id,
+                documentId: documentVersions.documentId,
+                version: documentVersions.version,
+                pdfAttachmentId: documentVersions.pdfAttachmentId,
+                contentAttachmentId: documentVersions.contentAttachmentId,
+              })
+              .from(documentVersions)
+              .where(
+                and(
+                  eq(documentVersions.tenantId, tenantId),
+                  inArray(documentVersions.documentId, documentIds),
+                  isNotNull(documentVersions.publishedAt),
+                ),
+              )
+              .orderBy(asc(documentVersions.documentId), desc(documentVersions.version))
+    const attachmentIds = [
+      ...new Set(
+        versions
+          .map((version) => version.pdfAttachmentId ?? version.contentAttachmentId)
+          .filter((id): id is string => id !== null),
+      ),
+    ]
+    const attachmentRows =
+      attachmentIds.length === 0
+        ? []
+        : await tx
+            .select({
+              id: attachments.id,
+              key: attachments.r2Key,
+              kind: attachments.kind,
+              contentType: attachments.contentType,
+              sizeBytes: attachments.sizeBytes,
+            })
             .from(attachments)
-            .where(eq(attachments.id, attachmentId))
-            .limit(1)
-          if (att && (v?.pdfAttachmentId || att.contentType === 'application/pdf')) {
-            pdfKey = att.key
-          }
-        }
-        return { title: i.doc.title, key: i.doc.key, version: v?.version ?? null, pdfKey }
-      }),
-    )
+            .where(and(eq(attachments.tenantId, tenantId), inArray(attachments.id, attachmentIds)))
+    const resolvedItems = resolveDocumentBookItems({
+      mode: row.b.status === 'published' ? 'published-render' : 'draft-render',
+      items: items.map(({ item, doc }) => ({
+        itemId: item.id,
+        documentId: doc.id,
+        documentTitle: doc.title,
+        documentKey: doc.key,
+        documentStatus: doc.status,
+        documentDeletedAt: doc.deletedAt,
+        pinnedVersionId: item.documentVersionId,
+      })),
+      versions,
+      attachments: attachmentRows,
+    })
+    const entries = resolvedItems.map((item) => ({
+      title: item.documentTitle,
+      key: item.documentKey,
+      version: item.version,
+      pdfKey: item.attachmentKey,
+      sizeBytes: item.sizeBytes,
+    }))
 
     return { ...row, entries }
   })
@@ -681,9 +581,8 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
   const title = b.title
   const toc = data.entries
     .map((e, i) => {
-      const label = `${i + 1}. ${escapeBookHtml(e.title)}${e.version ? ` — v${e.version}` : ''}`
-      const note = e.pdfKey ? '' : ' <em>(no published PDF)</em>'
-      return `<li style="margin:4px 0">${label} <span style="color:#64748b">${escapeBookHtml(e.key)}</span>${note}</li>`
+      const label = `${i + 1}. ${escapeBookHtml(e.title)} — v${e.version}`
+      return `<li style="margin:4px 0">${label} <span style="color:#64748b">${escapeBookHtml(e.key)}</span></li>`
     })
     .join('')
   const coverHtml = `
@@ -702,10 +601,30 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     headerHtml: null,
     footerHtml: null,
   })
+  assertGeneratedPdf(coverPdf)
 
   const parts: Buffer[] = [coverPdf]
+  let totalSourceBytes = coverPdf.length
   for (const e of data.entries) {
-    if (e.pdfKey) parts.push(await getObject({ key: e.pdfKey }))
+    const metadata = await headObject({ key: e.pdfKey })
+    if (!metadata) throw new Error(`Published PDF object is missing for document ${e.key}.`)
+    if (
+      metadata.contentLength <= 0 ||
+      metadata.contentLength !== e.sizeBytes ||
+      metadata.contentLength > MAX_DOCUMENT_BOOK_SOURCE_BYTES ||
+      totalSourceBytes + metadata.contentLength > MAX_DOCUMENT_BOOK_TOTAL_SOURCE_BYTES
+    ) {
+      throw new Error(`Published PDF for document ${e.key} exceeds the document-book size limit.`)
+    }
+    const bytes = await getObject({ key: e.pdfKey })
+    if (
+      bytes.length !== metadata.contentLength ||
+      !bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))
+    ) {
+      throw new Error(`Published PDF for document ${e.key} is missing, truncated, or invalid.`)
+    }
+    totalSourceBytes += bytes.length
+    parts.push(bytes)
   }
   const pdf = await pdfUnite(parts)
 

@@ -10,19 +10,12 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { RemoteMultiSelect } from '@/components/remote-multi-select'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 
-type Person = { id: string; firstName: string; lastName: string; employeeNo?: string | null }
-
-function personOptions(people: Person[]) {
-  return people.map((p) => ({
-    value: p.id,
-    label: `${p.lastName}, ${p.firstName}`,
-    hint: p.employeeNo ?? undefined,
-  }))
-}
-
-// Array <-> comma-separated string helpers for the freeform legacy arrays.
+// Body parts remain descriptive free text; injury types are managed taxonomy
+// assignments and never pass through this comma-list helper.
 function toCommaList(arr: string[]): string {
   return arr.join(', ')
 }
@@ -36,7 +29,6 @@ function fromCommaList(s: string): string[] {
 // ---- People involved -------------------------------------------------------
 
 const INCIDENT_PERSON_ROLES = ['involved', 'witness', 'foreman', 'supervisor', 'other'] as const
-type IncidentPersonRole = (typeof INCIDENT_PERSON_ROLES)[number]
 
 export type PersonInput = {
   id?: string
@@ -55,7 +47,6 @@ export function PersonDrawer({
   defaults,
   action,
   mode,
-  people,
 }: {
   open: boolean
   closeHref: string
@@ -68,7 +59,6 @@ export function PersonDrawer({
   }
   action: PersonAction
   mode: 'create' | 'edit'
-  people: Person[]
 }) {
   const router = useRouter()
   const [personId, setPersonId] = useState(defaults?.personId ?? '')
@@ -127,10 +117,10 @@ export function PersonDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>Employee</Label>
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="incident-people"
             value={personId}
             onChange={(val) => setPersonId(val)}
-            options={personOptions(people)}
             placeholder="Select a person…"
             searchPlaceholder="Search active people…"
             sheetTitle="Select person"
@@ -177,8 +167,8 @@ export type InjuryInput = {
   incidentId: string
   personId: string | null
   personName: string | null
-  injuryTypeId: string | null
-  injuryTypes: string[]
+  injuryTypeIds: string[]
+  injuryResult: string | null
   bodyParts: string[]
   treatment: string | null
   treatedAtFacility: string | null
@@ -194,8 +184,6 @@ export function InjuryDrawer({
   defaults,
   action,
   mode,
-  people,
-  injuryTypeOptions,
 }: {
   open: boolean
   closeHref: string
@@ -204,8 +192,8 @@ export function InjuryDrawer({
     id: string
     personId: string | null
     personName: string | null
-    injuryTypeId: string | null
-    injuryTypes: string[]
+    assignedTypes: { id: string; name: string }[]
+    injuryResult: string | null
     bodyParts: string[]
     treatment: string | null
     treatedAtFacility: string | null
@@ -213,14 +201,14 @@ export function InjuryDrawer({
   }
   action: InjuryAction
   mode: 'create' | 'edit'
-  people: Person[]
-  injuryTypeOptions: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [personId, setPersonId] = useState(defaults?.personId ?? '')
   const [personName, setPersonName] = useState(defaults?.personName ?? '')
-  const [injuryTypeId, setInjuryTypeId] = useState(defaults?.injuryTypeId ?? '')
-  const [injuryTypes, setInjuryTypes] = useState(toCommaList(defaults?.injuryTypes ?? []))
+  const [selectedTypes, setSelectedTypes] = useState(
+    (defaults?.assignedTypes ?? []).map((type) => ({ value: type.id, label: type.name })),
+  )
+  const [injuryResult, setInjuryResult] = useState(defaults?.injuryResult ?? '')
   const [bodyParts, setBodyParts] = useState(toCommaList(defaults?.bodyParts ?? []))
   const [treatment, setTreatment] = useState(defaults?.treatment ?? '')
   const [treatedAtFacility, setTreatedAtFacility] = useState(defaults?.treatedAtFacility ?? '')
@@ -237,8 +225,8 @@ export function InjuryDrawer({
       return
     }
     const hoursNum = hours.trim() === '' ? null : Number(hours)
-    if (hoursNum != null && (Number.isNaN(hoursNum) || hoursNum < 0)) {
-      setError('Hours worked prior must be a non-negative number.')
+    if (hoursNum != null && (!Number.isSafeInteger(hoursNum) || hoursNum < 0 || hoursNum > 24)) {
+      setError('Hours worked prior must be a whole number from 0 to 24.')
       return
     }
     startTransition(async () => {
@@ -247,8 +235,8 @@ export function InjuryDrawer({
         incidentId,
         personId: personId || null,
         personName: personId ? null : personName.trim() || null,
-        injuryTypeId: injuryTypeId || null,
-        injuryTypes: fromCommaList(injuryTypes),
+        injuryTypeIds: selectedTypes.map((type) => type.value),
+        injuryResult: injuryResult.trim() || null,
         bodyParts: fromCommaList(bodyParts),
         treatment: treatment.trim() || null,
         treatedAtFacility: treatedAtFacility.trim() || null,
@@ -290,10 +278,10 @@ export function InjuryDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>Injured person</Label>
-          <SearchSelect
+          <RemoteSearchSelect
+            lookup="incident-people"
             value={personId}
             onChange={(val) => setPersonId(val)}
-            options={personOptions(people)}
             placeholder="Select a person…"
             searchPlaceholder="Search active people…"
             sheetTitle="Select injured person"
@@ -313,33 +301,34 @@ export function InjuryDrawer({
             />
           </div>
         ) : null}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="inj-type">Injury type</Label>
-            <Select
-              id="inj-type"
-              value={injuryTypeId}
-              onChange={(e) => setInjuryTypeId(e.currentTarget.value)}
-            >
-              <option value="">—</option>
-              {injuryTypeOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="inj-hours">Hours worked prior</Label>
-            <Input
-              id="inj-hours"
-              type="number"
-              min={0}
-              value={hours}
-              onChange={(e) => setHours(e.currentTarget.value)}
-              placeholder="e.g. 6"
-            />
-          </div>
+        <div className="space-y-1.5">
+          <Label>Injury types</Label>
+          <RemoteMultiSelect
+            lookup="incident-injury-types"
+            value={selectedTypes}
+            onChange={setSelectedTypes}
+            placeholder="Add an injury type…"
+            searchPlaceholder="Search injury types or OSHA codes…"
+            sheetTitle="Add injury type"
+            ariaLabel="Add injury type"
+            emptyLabel="No injury types selected."
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Select every applicable type from the managed injury taxonomy.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="inj-hours">Hours worked prior</Label>
+          <Input
+            id="inj-hours"
+            type="number"
+            min={0}
+            max={24}
+            step={1}
+            value={hours}
+            onChange={(e) => setHours(e.currentTarget.value)}
+            placeholder="e.g. 6"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="inj-body">Body part(s)</Label>
@@ -351,16 +340,20 @@ export function InjuryDrawer({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="inj-types">Injury label(s)</Label>
-          <Input
-            id="inj-types"
-            value={injuryTypes}
-            onChange={(e) => setInjuryTypes(e.currentTarget.value)}
-            placeholder="Comma-separated, e.g. Laceration, Bruise"
+          <Label htmlFor="inj-result">Injury result / outcome</Label>
+          <Textarea
+            id="inj-result"
+            value={injuryResult}
+            onChange={(e) => setInjuryResult(e.currentTarget.value)}
+            rows={3}
+            placeholder="Describe the outcome, such as x-rays clear, stitches required, or modified duty assigned."
           />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Record the descriptive outcome here. Do not repeat the injury types.
+          </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="inj-treatment">Treatment</Label>
+          <Label htmlFor="inj-treatment">Treatment details</Label>
           <Textarea
             id="inj-treatment"
             value={treatment}

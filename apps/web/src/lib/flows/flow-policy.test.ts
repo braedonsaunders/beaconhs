@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyAutomationGraph } from '@beaconhs/forms-core'
-import { normalizeFlowName, parseFlowGraph, parseFlowSubject } from './flow-policy'
+import { parseFlowName } from './flow-name-policy'
+import { parseFlowGraph, parseFlowSubject } from './flow-policy'
 
 describe('flow persistence policy', () => {
   it('accepts known modules and UUID form subjects only', () => {
@@ -18,9 +19,16 @@ describe('flow persistence policy', () => {
     ).not.toBeNull()
   })
 
-  it('normalizes blank and oversized names at the write boundary', () => {
-    expect(normalizeFlowName('   ')).toBe('Flow')
-    expect(normalizeFlowName(`  ${'x'.repeat(250)}  `)).toHaveLength(200)
+  it('defaults blank names but rejects oversized names at the write boundary', () => {
+    expect(parseFlowName('   ')).toEqual({ ok: true, name: 'Flow' })
+    expect(parseFlowName(`  ${'x'.repeat(200)}  `)).toEqual({
+      ok: true,
+      name: 'x'.repeat(200),
+    })
+    expect(parseFlowName('x'.repeat(201))).toEqual({
+      ok: false,
+      error: 'Flow name cannot exceed 200 characters',
+    })
   })
 
   it('allows an empty draft but rejects duplicate and dangling graph identities', () => {
@@ -88,6 +96,45 @@ describe('flow persistence policy', () => {
     expect(parseFlowGraph(graph)).toEqual({
       ok: false,
       error: 'Flow graph cannot contain more than 250 nodes',
+    })
+  })
+
+  it('removes unsupported plaintext webhook credentials and custom payloads', () => {
+    const result = parseFlowGraph({
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: 'trigger',
+          position: { x: 0, y: 0 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'webhook',
+          position: { x: 100, y: 0 },
+          data: {
+            kind: 'action',
+            action: {
+              action: 'webhook',
+              url: 'https://hooks.example.com/receive',
+              method: 'POST',
+              headers: { Authorization: 'secret-that-must-not-be-persisted' },
+              bodyTemplate: '{"custom":true}',
+            },
+          },
+        },
+      ],
+      edges: [{ id: 'edge', source: 'trigger', target: 'webhook', sourceHandle: 'next' }],
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    if (!result.ok) throw new Error(result.error)
+    expect(result.graph.nodes[1]?.data).toEqual({
+      kind: 'action',
+      action: {
+        action: 'webhook',
+        url: 'https://hooks.example.com/receive',
+        method: 'POST',
+      },
     })
   })
 })

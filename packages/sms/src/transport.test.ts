@@ -1,10 +1,33 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const secureFetchMock = vi.hoisted(() =>
+  vi.fn(
+    async (
+      url: string,
+      options: {
+        method?: string
+        headers?: Record<string, string>
+        body?: string | URLSearchParams | ArrayBuffer | Uint8Array | null
+      },
+    ) =>
+      globalThis.fetch(url, {
+        method: options.method,
+        headers: options.headers,
+        body: options.body,
+      }),
+  ),
+)
+
+vi.mock('@beaconhs/sync/egress', () => ({ secureFetch: secureFetchMock }))
+
 import { sealSecret } from '@beaconhs/crypto'
+import { isSmsProvider } from './providers'
 import {
   buildSmsTransport,
   resolveEffectiveSmsTransport,
   resolveSmsTransport,
   sendSmsVia,
+  validateStoredSmsConfig,
   type PlatformSmsConfig,
   type RawSmsConfig,
   type SendSmsInput,
@@ -20,6 +43,15 @@ function sealed(secret: string) {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  secureFetchMock.mockClear()
+})
+
+describe('isSmsProvider', () => {
+  it('accepts catalogue entries without accepting object prototype properties', () => {
+    expect(isSmsProvider('twilio')).toBe(true)
+    expect(isSmsProvider('toString')).toBe(false)
+    expect(isSmsProvider('__proto__')).toBe(false)
+  })
 })
 
 describe('buildSmsTransport', () => {
@@ -56,6 +88,7 @@ describe('buildSmsTransport', () => {
 describe('resolveSmsTransport (unseal)', () => {
   it('unseals the stored secret and builds the transport', () => {
     const raw: RawSmsConfig = {
+      enabled: true,
       provider: 'messagebird',
       fromNumber: 'BeaconHS',
       ...sealed('live_key'),
@@ -78,17 +111,53 @@ describe('resolveSmsTransport (unseal)', () => {
       }),
     ).toBeNull()
     expect(resolveSmsTransport({ fromNumber: 'X' })).toBeNull()
+    expect(
+      resolveSmsTransport({ provider: 'messagebird', fromNumber: 'X', ...sealed('x') }),
+    ).toBeNull()
+  })
+})
+
+describe('validateStoredSmsConfig', () => {
+  it('requires complete provider fields and a paired sealed credential when live', () => {
+    expect(() =>
+      validateStoredSmsConfig({
+        enabled: true,
+        provider: 'twilio',
+        fromNumber: '+15551234567',
+        ...sealed('token'),
+      }),
+    ).toThrow('Twilio account SID')
+
+    expect(() =>
+      validateStoredSmsConfig({
+        enabled: true,
+        provider: 'messagebird',
+        fromNumber: 'BeaconHS',
+        keyCiphertext: 'ciphertext',
+      }),
+    ).toThrow('credential is incomplete')
+  })
+
+  it('validates fields in disabled drafts and rejects unknown platform policies', () => {
+    expect(() =>
+      validateStoredSmsConfig({ enabled: false, provider: 'messagebird', fromNumber: 'bad\nfrom' }),
+    ).toThrow('SMS sender')
+    expect(() =>
+      validateStoredSmsConfig({ mode: 'unknown' } as unknown as PlatformSmsConfig),
+    ).toThrow('platform SMS policy')
   })
 })
 
 describe('resolveEffectiveSmsTransport (platform → tenant precedence)', () => {
   const platform: PlatformSmsConfig = {
+    enabled: true,
     provider: 'twilio',
     fromNumber: '+1platform',
     twilioAccountSid: 'ACplatform',
     ...sealed('pm-token'),
   }
   const tenant: RawSmsConfig = {
+    enabled: true,
     provider: 'messagebird',
     fromNumber: 'Tenant',
     ...sealed('tenant-key'),
@@ -145,6 +214,23 @@ describe('resolveEffectiveSmsTransport (platform → tenant precedence)', () => 
       }),
     ).toMatchObject({ kind: 'transport', source: 'platform' })
   })
+
+  it('fails closed for an unknown policy and a corrupt explicitly enabled override', () => {
+    expect(
+      resolveEffectiveSmsTransport(
+        { ...platform, mode: 'unknown' } as unknown as PlatformSmsConfig,
+        tenant,
+        { tenantScoped: true },
+      ),
+    ).toEqual({ kind: 'unconfigured' })
+    expect(
+      resolveEffectiveSmsTransport(
+        { ...platform, mode: 'tenant_optional' },
+        { enabled: true, provider: 'messagebird', fromNumber: 'Tenant' },
+        { tenantScoped: true },
+      ),
+    ).toEqual({ kind: 'unconfigured' })
+  })
 })
 
 describe('sendSmsVia (HTTP providers)', () => {
@@ -158,6 +244,15 @@ describe('sendSmsVia (HTTP providers)', () => {
     expect(url).toBe('https://api.twilio.com/2010-04-01/Accounts/AC9/Messages.json')
     expect((init!.headers as Record<string, string>).Authorization).toMatch(/^Basic /)
     expect(String(init!.body)).toContain('From=%2B1999')
+    expect(secureFetchMock).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        maxRedirects: 0,
+        maxRequestBytes: 16 * 1_024,
+        maxResponseBytes: 64 * 1_024,
+        timeoutMs: 15_000,
+      }),
+    )
   })
 
   it('twilio → routes a Messaging Service SID into MessagingServiceSid', async () => {
@@ -175,7 +270,12 @@ describe('sendSmsVia (HTTP providers)', () => {
         status: 200,
       }),
     )
-    const t: SmsTransport = { provider: 'vonage', apiKey: 'k', apiSecret: 's', from: 'B' }
+    const t: SmsTransport = {
+      provider: 'vonage',
+      apiKey: 'vonage-api-key',
+      apiSecret: 'vonage-api-secret',
+      from: 'B',
+    }
     await expect(sendSmsVia(t, INPUT)).rejects.toThrow(/Vonage: bad key/)
   })
 
@@ -185,5 +285,32 @@ describe('sendSmsVia (HTTP providers)', () => {
     )
     const t: SmsTransport = { provider: 'telnyx', apiKey: 'bad', from: '+1' }
     await expect(sendSmsVia(t, INPUT)).rejects.toThrow(/Telnyx: nope/)
+  })
+
+  it('rejects malformed input and provider success without a durable message id', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 201 }))
+    const t: SmsTransport = { provider: 'twilio', accountSid: 'AC9', authToken: 'k', from: '+1999' }
+    await expect(sendSmsVia(t, { to: '5551234', body: 'Hello' })).rejects.toThrow(/E\.164/)
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(sendSmsVia(t, INPUT)).rejects.toThrow(/without a message id/)
+  })
+
+  it('redacts provider credentials echoed in an error response', async () => {
+    const token = 'super-secret-twilio-token'
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: `Rejected credential ${token}` }), { status: 401 }),
+    )
+    const transport: SmsTransport = {
+      provider: 'twilio',
+      accountSid: 'AC9',
+      authToken: token,
+      from: '+1999',
+    }
+
+    await expect(sendSmsVia(transport, INPUT)).rejects.toThrow(
+      'Twilio: Rejected credential [redacted]',
+    )
   })
 })

@@ -6,17 +6,18 @@
 // `onApply` that consumes a finished assistant message's structured `data`.
 // The conversation list + thread + persistence are handled here.
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
-import { Check, History, Loader2, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react'
+import { Check, History, Loader2, Plus, Search, Send, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Drawer, Textarea } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import {
   deleteConversation,
-  getConversationMessages,
-  listConversations,
+  getConversationMessagePage,
+  listConversationPage,
   type AiChatMessage,
-  type AiConversationSummary,
+  type AiConversationPage,
 } from '@/lib/ai-conversations'
+import { AI_CONVERSATION_SEARCH_MAX_CHARS } from '@/lib/ai-conversation-pagination'
 
 type AiSendResult = {
   ok: boolean
@@ -49,39 +50,86 @@ export function AiAssistant({
   onSend: (conversationId: string | null, prompt: string) => Promise<AiSendResult>
   onApply: (data: Record<string, unknown>) => void
 }) {
-  const [conversations, setConversations] = useState<AiConversationSummary[]>([])
+  const [conversationPage, setConversationPage] = useState<AiConversationPage>({
+    items: [],
+    nextCursor: null,
+  })
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<AiChatMessage[]>([])
+  const [olderCursor, setOlderCursor] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [showHistory, setShowHistory] = useState(false)
+  const [historyQuery, setHistoryQuery] = useState('')
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [loadingConversation, setLoadingConversation] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [pending, start] = useTransition()
   const threadRef = useRef<HTMLDivElement>(null)
+  const historyRequestRef = useRef(0)
+  const optimisticSequenceRef = useRef(0)
+  const optimisticIdPrefix = useId()
 
-  const refreshConversations = useCallback(() => {
-    listConversations(scope, scopeRefId)
-      .then(setConversations)
-      .catch(() => {})
-  }, [scope, scopeRefId])
+  const refreshConversations = useCallback(
+    async (query: string) => {
+      const requestId = ++historyRequestRef.current
+      setLoadingHistory(true)
+      setHistoryError(null)
+      try {
+        const page = await listConversationPage({ scope, scopeRefId, query })
+        if (historyRequestRef.current === requestId) setConversationPage(page)
+      } catch {
+        if (historyRequestRef.current === requestId) {
+          setHistoryError('Conversation history could not be loaded.')
+        }
+      } finally {
+        if (historyRequestRef.current === requestId) setLoadingHistory(false)
+      }
+    },
+    [scope, scopeRefId],
+  )
 
   useEffect(() => {
-    if (open) refreshConversations()
+    if (!open) return
+    const timer = window.setTimeout(() => void refreshConversations(''), 0)
+    return () => window.clearTimeout(timer)
   }, [open, refreshConversations])
 
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight })
-  }, [messages])
+    if (!open || !showHistory) return
+    const timer = window.setTimeout(() => void refreshConversations(historyQuery), 250)
+    return () => window.clearTimeout(timer)
+  }, [historyQuery, open, refreshConversations, showHistory])
 
-  const loadConversation = (id: string) => {
-    setConversationId(id)
+  const scrollToBottom = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight })
+    })
+  }, [])
+
+  const loadConversation = async (id: string) => {
     setShowHistory(false)
-    getConversationMessages(id)
-      .then(setMessages)
-      .catch(() => setMessages([]))
+    setLoadingConversation(true)
+    setHistoryError(null)
+    try {
+      const page = await getConversationMessagePage({ conversationId: id })
+      setConversationId(id)
+      setMessages(page.items)
+      setOlderCursor(page.olderCursor)
+      scrollToBottom()
+    } catch {
+      setShowHistory(true)
+      toast.error('This conversation could not be loaded.')
+    } finally {
+      setLoadingConversation(false)
+    }
   }
 
   const newChat = () => {
     setConversationId(null)
     setMessages([])
+    setOlderCursor(null)
     setShowHistory(false)
     setInput('')
   }
@@ -90,31 +138,100 @@ export function AiAssistant({
     const prompt = text.trim()
     if (prompt.length < 2 || pending) return
     setInput('')
+    optimisticSequenceRef.current += 1
+    const optimisticId = `${optimisticIdPrefix}_${optimisticSequenceRef.current}`
     // Optimistic user bubble.
     setMessages((m) => [
       ...m,
-      { id: `tmp_${m.length}`, role: 'user', content: prompt, data: null, createdAt: '' },
+      { id: optimisticId, role: 'user', content: prompt, data: null, createdAt: '' },
     ])
+    scrollToBottom()
     start(async () => {
-      const res = await onSend(conversationId, prompt)
-      if (!res.ok) {
-        toast.error(res.error ?? 'The assistant could not respond')
+      try {
+        const res = await onSend(conversationId, prompt)
+        if (!res.ok) toast.error(res.error ?? 'The assistant could not respond')
+        const cid = res.conversationId ?? conversationId
+        if (cid) {
+          setConversationId(cid)
+          const page = await getConversationMessagePage({ conversationId: cid })
+          setMessages(page.items)
+          setOlderCursor(page.olderCursor)
+          scrollToBottom()
+        } else {
+          setMessages((current) => current.filter((message) => message.id !== optimisticId))
+        }
+        await refreshConversations(historyQuery)
+      } catch {
+        setMessages((current) => current.filter((message) => message.id !== optimisticId))
+        toast.error('The assistant could not respond. Please try again.')
       }
-      const cid = res.conversationId ?? conversationId
-      if (cid) {
-        setConversationId(cid)
-        const msgs = await getConversationMessages(cid)
-        setMessages(msgs)
-      }
-      refreshConversations()
     })
+  }
+
+  const loadOlderMessages = async () => {
+    if (!conversationId || !olderCursor || loadingOlder) return
+    const scroller = threadRef.current
+    const previousHeight = scroller?.scrollHeight ?? 0
+    const previousTop = scroller?.scrollTop ?? 0
+    setLoadingOlder(true)
+    try {
+      const page = await getConversationMessagePage({
+        conversationId,
+        cursor: olderCursor,
+      })
+      setMessages((current) => {
+        const ids = new Set(page.items.map((message) => message.id))
+        return [...page.items, ...current.filter((message) => !ids.has(message.id))]
+      })
+      setOlderCursor(page.olderCursor)
+      window.requestAnimationFrame(() => {
+        if (scroller) scroller.scrollTop = previousTop + scroller.scrollHeight - previousHeight
+      })
+    } catch {
+      toast.error('Older messages could not be loaded.')
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
+  const loadMoreConversations = async () => {
+    if (!conversationPage.nextCursor || loadingMore) return
+    setLoadingMore(true)
+    setHistoryError(null)
+    try {
+      const next = await listConversationPage({
+        scope,
+        scopeRefId,
+        query: historyQuery,
+        cursor: conversationPage.nextCursor,
+      })
+      setConversationPage((current) => {
+        const seen = new Set(current.items.map((item) => item.id))
+        return {
+          items: [...current.items, ...next.items.filter((item) => !seen.has(item.id))],
+          nextCursor: next.nextCursor,
+        }
+      })
+    } catch {
+      setHistoryError('More conversations could not be loaded.')
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
   const removeConversation = (id: string) => {
     start(async () => {
-      await deleteConversation(id)
-      if (id === conversationId) newChat()
-      refreshConversations()
+      try {
+        await deleteConversation(id)
+        if (id === conversationId) newChat()
+        setConversationPage((page) => ({
+          ...page,
+          items: page.items.filter((item) => item.id !== id),
+        }))
+        await refreshConversations(historyQuery)
+      } catch {
+        toast.error('The conversation could not be deleted.')
+      }
     })
   }
 
@@ -150,12 +267,32 @@ export function AiAssistant({
 
         {showHistory ? (
           <div className="app-scroll min-h-0 flex-1 space-y-1 overflow-y-auto py-2">
-            {conversations.length === 0 ? (
+            <label className="relative mb-2 block">
+              <span className="sr-only">Search chats</span>
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={historyQuery}
+                maxLength={AI_CONVERSATION_SEARCH_MAX_CHARS}
+                onChange={(event) => setHistoryQuery(event.target.value)}
+                placeholder="Search chats"
+                className="h-9 w-full rounded-md border border-slate-200 bg-white pr-8 pl-8 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+              {loadingHistory ? (
+                <Loader2 className="absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-400" />
+              ) : null}
+            </label>
+            {historyError ? (
+              <p role="alert" className="px-1 py-2 text-xs text-red-600 dark:text-red-400">
+                {historyError}
+              </p>
+            ) : null}
+            {!loadingHistory && conversationPage.items.length === 0 ? (
               <p className="px-1 py-4 text-center text-xs text-slate-400 dark:text-slate-500">
-                No conversations yet.
+                {historyQuery ? 'No matching chats.' : 'No conversations yet.'}
               </p>
             ) : (
-              conversations.map((c) => (
+              conversationPage.items.map((c) => (
                 <div
                   key={c.id}
                   className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
@@ -166,7 +303,7 @@ export function AiAssistant({
                 >
                   <button
                     type="button"
-                    onClick={() => loadConversation(c.id)}
+                    onClick={() => void loadConversation(c.id)}
                     className="min-w-0 flex-1 truncate text-left text-slate-700 dark:text-slate-200"
                     title={c.title}
                   >
@@ -186,6 +323,19 @@ export function AiAssistant({
                 </div>
               ))
             )}
+            {conversationPage.nextCursor ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 w-full justify-center"
+                disabled={loadingMore}
+                onClick={() => void loadMoreConversations()}
+              >
+                {loadingMore ? <Loader2 size={14} className="animate-spin" /> : null}
+                Load more
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>
@@ -193,7 +343,12 @@ export function AiAssistant({
               ref={threadRef}
               className="app-scroll min-h-0 flex-1 space-y-3 overflow-y-auto py-3"
             >
-              {messages.length === 0 ? (
+              {loadingConversation ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+                  <span className="sr-only">Loading conversation</span>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="space-y-2 px-1 pt-2">
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     Ask me to build or change this app — I&apos;ll draft it, then you Apply.
@@ -210,34 +365,50 @@ export function AiAssistant({
                   ))}
                 </div>
               ) : (
-                messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-                        m.role === 'user'
-                          ? 'bg-teal-600 text-white'
-                          : 'border border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{m.content}</p>
-                      {m.role === 'assistant' && m.data ? (
-                        <Button
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => {
-                            onApply(m.data as Record<string, unknown>)
-                            onClose()
-                          }}
-                        >
-                          <Check size={13} /> {applyLabel}
-                        </Button>
-                      ) : null}
+                <>
+                  {olderCursor ? (
+                    <div className="flex justify-center pb-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={loadingOlder}
+                        onClick={() => void loadOlderMessages()}
+                      >
+                        {loadingOlder ? <Loader2 size={14} className="animate-spin" /> : null}
+                        Load older messages
+                      </Button>
                     </div>
-                  </div>
-                ))
+                  ) : null}
+                  {messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+                          m.role === 'user'
+                            ? 'bg-teal-600 text-white'
+                            : 'border border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">{m.content}</p>
+                        {m.role === 'assistant' && m.data ? (
+                          <Button
+                            size="sm"
+                            className="mt-2"
+                            onClick={() => {
+                              onApply(m.data as Record<string, unknown>)
+                              onClose()
+                            }}
+                          >
+                            <Check size={13} /> {applyLabel}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
 
@@ -245,6 +416,7 @@ export function AiAssistant({
               <Textarea
                 rows={2}
                 value={input}
+                maxLength={8_000}
                 placeholder={placeholder}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {

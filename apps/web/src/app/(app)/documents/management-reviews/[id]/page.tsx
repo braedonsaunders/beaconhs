@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { Gavel, Trash2 } from 'lucide-react'
 import {
   Badge,
@@ -14,7 +14,9 @@ import {
 } from '@beaconhs/ui'
 import {
   correctiveActions,
+  documentManagementReviewDocuments,
   documentManagementReviews,
+  documentVersions,
   documents,
   tenantUsers,
   users as userTable,
@@ -25,6 +27,7 @@ import { DetailGrid } from '@/components/detail-grid'
 import { Section } from '@/components/section'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { DetailPageLayout } from '@/components/page-layout'
+import { isUuid } from '@/lib/list-params'
 import { ActionItemsPicker, DocumentMultiPicker } from './_components/document-multi-picker'
 import { OverviewEditor } from './_components/overview-editor'
 import { deleteManagementReviewAndRedirect } from './actions'
@@ -47,6 +50,8 @@ export default async function ManagementReviewDetailPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
   const ctx = await requireRequestContext()
@@ -62,44 +67,36 @@ export default async function ManagementReviewDetailPage({
       .limit(1)
     if (!review) return null
 
-    const [allDocs, allCAs, tenantMembers] = await Promise.all([
-      tx
-        .select({ id: documents.id, title: documents.title, status: documents.status })
-        .from(documents)
-        .where(isNull(documents.deletedAt))
-        .orderBy(asc(documents.title))
-        .limit(500),
-      tx
-        .select({
-          id: correctiveActions.id,
-          reference: correctiveActions.reference,
-          title: correctiveActions.title,
-          status: correctiveActions.status,
-        })
-        .from(correctiveActions)
-        .where(isNull(correctiveActions.deletedAt))
-        .orderBy(asc(correctiveActions.reference))
-        .limit(500),
-      tx
-        .select({
-          id: tenantUsers.id,
-          displayName: tenantUsers.displayName,
-          accountName: userTable.name,
-          email: userTable.email,
-        })
-        .from(tenantUsers)
-        .leftJoin(userTable, eq(userTable.id, tenantUsers.userId))
-        .where(eq(tenantUsers.status, 'active'))
-        .orderBy(asc(tenantUsers.displayName)),
-    ])
-
-    const reviewedDocs =
-      review.documentsReviewed.length > 0
-        ? await tx
-            .select({ id: documents.id, title: documents.title, status: documents.status })
-            .from(documents)
-            .where(inArray(documents.id, review.documentsReviewed))
-        : []
+    const reviewedDocs = await tx
+      .select({
+        id: documents.id,
+        title: documents.title,
+        status: documents.status,
+        documentVersionId: documentVersions.id,
+        version: documentVersions.version,
+      })
+      .from(documentManagementReviewDocuments)
+      .innerJoin(
+        documents,
+        and(
+          eq(documents.tenantId, documentManagementReviewDocuments.tenantId),
+          eq(documents.id, documentManagementReviewDocuments.documentId),
+        ),
+      )
+      .innerJoin(
+        documentVersions,
+        and(
+          eq(documentVersions.tenantId, documentManagementReviewDocuments.tenantId),
+          eq(documentVersions.documentId, documentManagementReviewDocuments.documentId),
+          eq(documentVersions.id, documentManagementReviewDocuments.documentVersionId),
+        ),
+      )
+      .where(
+        and(
+          eq(documentManagementReviewDocuments.tenantId, ctx.tenantId),
+          eq(documentManagementReviewDocuments.managementReviewId, id),
+        ),
+      )
     const reviewedCAs =
       review.actionItemsCreated.length > 0
         ? await tx
@@ -125,12 +122,11 @@ export default async function ManagementReviewDetailPage({
             .where(inArray(tenantUsers.id, review.participants))
         : []
 
-    return { review, allDocs, allCAs, tenantMembers, reviewedDocs, reviewedCAs, participantMembers }
+    return { review, reviewedDocs, reviewedCAs, participantMembers }
   })
 
   if (!data) notFound()
-  const { review, allDocs, allCAs, tenantMembers, reviewedDocs, reviewedCAs, participantMembers } =
-    data
+  const { review, reviewedDocs, reviewedCAs, participantMembers } = data
   const basePath = `/documents/management-reviews/${id}`
 
   const participantNames = review.participants
@@ -177,7 +173,7 @@ export default async function ManagementReviewDetailPage({
             {
               key: 'documents',
               label: 'Documents reviewed',
-              count: review.documentsReviewed.length,
+              count: reviewedDocs.length,
             },
             { key: 'decisions', label: 'Decisions' },
             {
@@ -207,7 +203,7 @@ export default async function ManagementReviewDetailPage({
                   },
                   {
                     label: 'Documents reviewed',
-                    value: `${review.documentsReviewed.length}`,
+                    value: `${reviewedDocs.length}`,
                   },
                   {
                     label: 'Action items linked',
@@ -228,10 +224,9 @@ export default async function ManagementReviewDetailPage({
                 decisions: review.decisions ?? '',
                 participants: review.participants,
               }}
-              members={tenantMembers.map((m) => ({
+              members={participantMembers.map((m) => ({
                 id: m.id,
                 label: m.displayName ?? m.accountName ?? m.id.slice(0, 8),
-                hint: m.email ?? undefined,
               }))}
             />
           </>
@@ -245,8 +240,11 @@ export default async function ManagementReviewDetailPage({
             <CardContent className="space-y-4">
               <DocumentMultiPicker
                 reviewId={id}
-                initial={review.documentsReviewed}
-                available={allDocs.map((d) => ({ id: d.id, label: `${d.title} (${d.status})` }))}
+                initial={reviewedDocs.map((document) => document.id)}
+                available={reviewedDocs.map((d) => ({
+                  id: d.id,
+                  label: `${d.title} (v${d.version})`,
+                }))}
               />
               {reviewedDocs.length > 0 ? (
                 <div className="space-y-2">
@@ -261,7 +259,7 @@ export default async function ManagementReviewDetailPage({
                           href={`/documents/${d.id}`}
                           className="text-teal-700 hover:underline dark:text-teal-400"
                         >
-                          {d.title}
+                          {d.title} · v{d.version}
                         </Link>
                         <Badge variant="outline">{d.status}</Badge>
                       </li>
@@ -296,7 +294,7 @@ export default async function ManagementReviewDetailPage({
               <ActionItemsPicker
                 reviewId={id}
                 initial={review.actionItemsCreated}
-                available={allCAs.map((ca) => ({
+                available={reviewedCAs.map((ca) => ({
                   id: ca.id,
                   label: `${ca.reference} — ${ca.title} (${ca.status})`,
                 }))}

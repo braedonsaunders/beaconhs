@@ -4,6 +4,7 @@
 
 export * from './providers'
 export * from './transport'
+export * from '@beaconhs/email-render/delivery-input'
 
 // --- Templates -----------------------------------------------------------
 

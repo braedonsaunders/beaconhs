@@ -7,13 +7,11 @@
 // (web: ctx.db, worker: withTenant). Each returns groups + summary.
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import { primaryPersonTitleName, type Database } from '@beaconhs/db'
 import {
   complianceObligations,
   complianceStatus,
   correctiveActions,
-  documentAcknowledgments,
-  documentAssignments,
   documentCategories,
   documents,
   equipmentInspectionSchedules,
@@ -81,9 +79,7 @@ async function queryTrainingMatrixExpiring(
   return extractRows(result) as TrainingMatrixRow[]
 }
 
-/** Training-kind obligations in the unified compliance engine. The legacy
- *  training_audience_assignment_records table is decommissioned — the
- *  materialized compliance scoreboard is the live source of truth. */
+/** Training-kind obligations in the unified compliance engine. */
 const TRAINING_COMPLIANCE_KINDS = ['training', 'cert_requirement'] as const
 
 // --- incidents_summary ------------------------------------------------------
@@ -860,8 +856,7 @@ export async function queryTrainingComplianceSnapshot(
   _filters: Filters,
 ): Promise<ReportRunResult> {
   // Materialized compliance scoreboard for training-kind obligations, grouped by
-  // obligation × status. The legacy training_audience_assignment_records table is
-  // decommissioned — compliance_status is the live source of truth.
+  // obligation × status.
   const rows = await tx
     .select({
       obligationId: complianceObligations.id,
@@ -962,48 +957,67 @@ export async function queryDocumentComplianceSnapshot(
 ): Promise<ReportRunResult> {
   const rows = await tx
     .select({
-      assignmentId: documentAssignments.id,
-      title: documentAssignments.title,
-      documentId: documentAssignments.documentId,
+      obligationId: complianceObligations.id,
+      title: complianceObligations.title,
       documentTitle: documents.title,
-      dueOn: documentAssignments.dueOn,
-      ackCount: sql<number>`COUNT(DISTINCT ${documentAcknowledgments.personId})::int`,
+      dueAt: complianceObligations.nextDueAt,
+      total: sql<number>`COUNT(DISTINCT ${complianceStatus.subjectKey})::int`,
+      completed: sql<number>`COUNT(DISTINCT ${complianceStatus.subjectKey}) FILTER (WHERE ${complianceStatus.status} IN ('completed', 'waived', 'not_applicable'))::int`,
+      overdue: sql<number>`COUNT(DISTINCT ${complianceStatus.subjectKey}) FILTER (WHERE ${complianceStatus.status} = 'overdue')::int`,
     })
-    .from(documentAssignments)
-    .innerJoin(documents, eq(documents.id, documentAssignments.documentId))
-    .leftJoin(
-      documentAcknowledgments,
-      eq(documentAcknowledgments.documentId, documentAssignments.documentId),
+    .from(complianceObligations)
+    .innerJoin(
+      documents,
+      eq(documents.id, sql<string>`${complianceObligations.targetRef}->>'documentId'`),
     )
-    .where(and(isNull(documentAssignments.deletedAt), isNull(documents.deletedAt)))
+    .leftJoin(complianceStatus, eq(complianceStatus.obligationId, complianceObligations.id))
+    .where(
+      and(
+        eq(complianceObligations.sourceModule, 'document'),
+        isNull(complianceObligations.deletedAt),
+        isNull(documents.deletedAt),
+      ),
+    )
     .groupBy(
-      documentAssignments.id,
-      documentAssignments.title,
-      documentAssignments.documentId,
+      complianceObligations.id,
+      complianceObligations.title,
       documents.title,
-      documentAssignments.dueOn,
+      complianceObligations.nextDueAt,
     )
-    .orderBy(asc(documentAssignments.dueOn))
+    .orderBy(asc(complianceObligations.nextDueAt), asc(complianceObligations.title))
 
   const groups: ReportGroup[] = [
     {
-      title: 'Document acknowledgments per assignment',
-      columns: ['Assignment', 'Document', 'Due', 'Acknowledged (distinct people)'],
-      rows: rows.map((r) => [
-        r.title ?? r.documentTitle,
-        r.documentTitle,
-        r.dueOn,
-        Number(r.ackCount),
-      ]),
+      title: 'Document acknowledgment compliance',
+      columns: ['Obligation', 'Document', 'Due', 'Completed', 'Overdue', 'Total', '%'],
+      rows: rows.map((row) => {
+        const total = Number(row.total)
+        const completed = Number(row.completed)
+        return [
+          row.title,
+          row.documentTitle,
+          dayString(row.dueAt),
+          completed,
+          Number(row.overdue),
+          total,
+          total === 0 ? '—' : `${Math.round((completed / total) * 100)}%`,
+        ]
+      }),
       isEmpty: rows.length === 0,
     },
   ]
 
+  const total = rows.reduce((sum, row) => sum + Number(row.total), 0)
+  const completed = rows.reduce((sum, row) => sum + Number(row.completed), 0)
   return {
     groups,
     summary: [
-      { label: 'Assignments', value: rows.length },
-      { label: 'Total acks', value: rows.reduce((acc, r) => acc + Number(r.ackCount), 0) },
+      { label: 'Obligations', value: rows.length },
+      { label: 'Subjects', value: total },
+      {
+        label: 'Overall %',
+        value: total === 0 ? '—' : `${Math.round((completed / total) * 100)}%`,
+      },
     ],
     rowCount: rows.length,
   }
@@ -1116,7 +1130,11 @@ export async function queryOsha300Log(
 
   if (incidentIds.length > 0) {
     const injRows = await tx
-      .select({ inj: incidentInjuries, person: people })
+      .select({
+        inj: incidentInjuries,
+        person: people,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
+      })
       .from(incidentInjuries)
       .leftJoin(people, eq(people.id, incidentInjuries.personId))
       .where(inArray(incidentInjuries.incidentId, incidentIds))
@@ -1126,7 +1144,7 @@ export async function queryOsha300Log(
         const name = r.person ? `${r.person.lastName}, ${r.person.firstName}` : r.inj.personName
         injuryByIncident.set(r.inj.incidentId, {
           personName: name,
-          jobTitle: r.person?.jobTitle ?? null,
+          jobTitle: r.jobTitle ?? null,
         })
       }
     }

@@ -294,6 +294,7 @@ const INCIDENT = wrap(
       ['Person', '{{person_name}}'],
       ['Body part(s)', '{{body_parts}}'],
       ['Injury type(s)', '{{injury_types}}'],
+      ['Result / outcome', '{{injury_result}}'],
       ['Treatment', '{{treatment}}'],
       ['Facility', '{{treated_at_facility}}'],
       ['Hours prior', '{{worked_hours_prior_to}}', RIGHT + 'width:8%;'],
@@ -483,6 +484,7 @@ const REVIEW = wrap(
     ]) +
     collection('Documents reviewed', 'documents_reviewed', [
       ['Document', '{{title}}'],
+      ['Version', '{{version}}', 'width:12%;'],
       ['Status', '{{status}}', 'width:20%;'],
     ]) +
     collection('Action items', 'action_items', [
@@ -830,7 +832,7 @@ export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise
         update pdf_templates set name=${tpl.name},
           record_subject_type='module', record_subject_key=${tpl.subjectKey},
           orientation=${tpl.orientation}, header_html=${tpl.header}, footer_html=${footer},
-          compiled_html=${compiled}, source_html=${tpl.html}, design='{}'::jsonb,
+          compiled_html=${compiled}, source_html=${tpl.html},
           is_active=true,
           is_module_default=(is_module_default or ${noDefaultExists(tenantId, tpl.subjectKey)}),
           updated_at=now()

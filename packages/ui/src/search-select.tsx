@@ -39,6 +39,11 @@ export function SearchSelect({
   className,
   triggerClassName,
   searchable,
+  remote = false,
+  loading = false,
+  statusMessage,
+  statusTone = 'muted',
+  onSearchChange,
   invalid = false,
   id,
 }: {
@@ -60,6 +65,16 @@ export function SearchSelect({
   triggerClassName?: string
   /** Force the search box on/off. Defaults to auto: shown when >7 options or any groups. */
   searchable?: boolean
+  /** Preserve server ordering and forward search text instead of filtering stale local rows. */
+  remote?: boolean
+  /** Announces a remote lookup without disabling an already selected value. */
+  loading?: boolean
+  /** Remote error or refinement guidance rendered below the option rows. */
+  statusMessage?: string
+  /** Visual treatment for the remote status message. */
+  statusTone?: 'muted' | 'error'
+  /** Called when the in-menu search changes or resets. */
+  onSearchChange?: (query: string) => void
   /** Renders the trigger in an error state. */
   invalid?: boolean
   id?: string
@@ -93,32 +108,30 @@ export function SearchSelect({
   const showSearch = searchable ?? (allOptions.length > 7 || allOptions.some((o) => o.group))
 
   const filtered = useMemo(() => {
+    if (remote) return allOptions
     const q = query.trim().toLowerCase()
     if (!q) return allOptions
     return allOptions.filter(
       (o) => o.label.toLowerCase().includes(q) || o.group?.toLowerCase().includes(q),
     )
-  }, [query, allOptions])
+  }, [allOptions, query, remote])
 
-  // Next non-disabled index from `from` in direction `dir`; stays put if none.
-  function nextEnabled(from: number, dir: 1 | -1) {
-    let i = from
-    while (true) {
-      i += dir
-      if (i < 0 || i >= filtered.length) return from
-      if (!filtered[i]?.disabled) return i
-    }
-  }
-  function firstEnabled(start: number) {
-    if (start >= 0 && start < filtered.length && !filtered[start]?.disabled) return start
-    const fwd = filtered.findIndex((o) => !o.disabled)
+  function firstEnabled(items: SelectOption[], start: number) {
+    if (start >= 0 && start < items.length && !items[start]?.disabled) return start
+    const fwd = items.findIndex((o) => !o.disabled)
     return fwd === -1 ? 0 : fwd
   }
 
   function openMenu() {
     if (disabled) return
     setQuery('')
-    setHighlight(firstEnabled(filtered.findIndex((o) => o.value === value)))
+    onSearchChange?.('')
+    setHighlight(
+      firstEnabled(
+        allOptions,
+        allOptions.findIndex((o) => o.value === value),
+      ),
+    )
     setOpen(true)
     setTimeout(() => searchRef.current?.focus(), 60)
   }
@@ -140,6 +153,14 @@ export function SearchSelect({
   // Keyboard nav + scroll-lock on the mobile sheet.
   useEffect(() => {
     if (!open) return
+    const nextEnabled = (from: number, dir: 1 | -1) => {
+      let index = from
+      while (true) {
+        index += dir
+        if (index < 0 || index >= filtered.length) return from
+        if (!filtered[index]?.disabled) return index
+      }
+    }
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false)
       else if (e.key === 'ArrowDown') {
@@ -151,7 +172,10 @@ export function SearchSelect({
       } else if (e.key === 'Enter') {
         e.preventDefault()
         const o = filtered[highlight]
-        if (o && !o.disabled) choose(o.value)
+        if (o && !o.disabled) {
+          onChange(o.value)
+          setOpen(false)
+        }
       }
     }
     document.addEventListener('keydown', onKey)
@@ -167,28 +191,31 @@ export function SearchSelect({
       document.removeEventListener('keydown', onKey)
       restore?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isDesktop, filtered, highlight])
+  }, [filtered, highlight, isDesktop, onChange, open])
 
   const optionList = (
-    <ul role="listbox" className="py-1">
-      {filtered.length === 0 ? (
-        <li className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-          No matches
-        </li>
-      ) : null}
-      {filtered.map((o, i) => {
-        const active = o.value === value
-        const prevGroup = i > 0 ? filtered[i - 1]?.group : undefined
-        const header = o.group && o.group !== prevGroup ? o.group : null
-        return (
-          <div key={o.value || `__opt-${i}`}>
-            {header ? (
-              <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase lg:px-3 dark:text-slate-500">
-                {header}
-              </div>
-            ) : null}
-            <li>
+    <>
+      <ul role="listbox" className="py-1">
+        {filtered.length === 0 && !loading ? (
+          <li
+            role="option"
+            aria-disabled="true"
+            className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500"
+          >
+            No matches
+          </li>
+        ) : null}
+        {filtered.map((o, i) => {
+          const active = o.value === value
+          const prevGroup = i > 0 ? filtered[i - 1]?.group : undefined
+          const header = o.group && o.group !== prevGroup ? o.group : null
+          return (
+            <li key={o.value || `__opt-${i}`} role="presentation">
+              {header ? (
+                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase lg:px-3 dark:text-slate-500">
+                  {header}
+                </div>
+              ) : null}
               <button
                 type="button"
                 role="option"
@@ -220,10 +247,23 @@ export function SearchSelect({
                 {active ? <Check size={17} className="shrink-0 text-teal-600" /> : null}
               </button>
             </li>
-          </div>
-        )
-      })}
-    </ul>
+          )
+        })}
+      </ul>
+      {loading || statusMessage ? (
+        <div
+          role={statusTone === 'error' ? 'alert' : 'status'}
+          className={cn(
+            'border-t border-slate-100 px-3 py-2 text-xs dark:border-slate-800',
+            statusTone === 'error'
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-slate-500 dark:text-slate-400',
+          )}
+        >
+          {loading ? 'Searching…' : statusMessage}
+        </div>
+      ) : null}
+    </>
   )
 
   const searchBox = (largeText: boolean) => (
@@ -236,10 +276,14 @@ export function SearchSelect({
         ref={searchRef}
         value={query}
         onChange={(e) => {
-          setQuery(e.target.value)
+          const next = e.target.value
+          setQuery(next)
+          onSearchChange?.(next)
           setHighlight(0)
         }}
         placeholder={searchPlaceholder}
+        aria-label={searchPlaceholder}
+        aria-busy={loading || undefined}
         className={cn(
           'w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900',
           // 16px below sm — anything smaller makes iOS Safari zoom on focus.

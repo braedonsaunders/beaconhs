@@ -12,11 +12,14 @@ import { VizRenderer } from '../../_viz/viz-renderer.client'
 import { AiCardView } from '../../_viz/ai-card-view.client'
 import { CardToolbar } from '../_studio/card-toolbar.client'
 import { isTrustedSystemCard } from '../../_system-cards'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireRequestContext()
   if (!canViewInsights(ctx)) redirect('/dashboard')
   const card = await loadCard(ctx, id)

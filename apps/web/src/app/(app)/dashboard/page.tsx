@@ -11,8 +11,7 @@ import { loadCardsForPalette } from '../insights/cards/_data'
 import { loadDashboardCardRenders } from '../insights/_data'
 import { ensureSystemCards } from '../insights/_system-cards'
 import { CardCell } from '../insights/_viz/card-cell.client'
-
-const UUID_RE = /^[0-9a-f-]{36}$/i
+import { isUuid } from '@/lib/list-params'
 
 export const metadata = { title: 'Dashboard' }
 export const dynamic = 'force-dynamic'
@@ -63,7 +62,7 @@ export default async function DashboardPage() {
     cardsToRun.set(card.id, { ...card, kind: 'question', config: null })
   }
   const uuidIds = widgets
-    .filter((w) => !(w.id in WIDGETS) && !widgetToCardId.has(w.id) && UUID_RE.test(w.id))
+    .filter((w) => !(w.id in WIDGETS) && !widgetToCardId.has(w.id) && isUuid(w.id))
     .map((w) => w.id)
   if (uuidIds.length > 0) {
     const byId = new Map((await loadCardsForPalette(ctx)).map((c) => [c.id, c]))

@@ -160,11 +160,11 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Answer the checklist',
-        body: 'Work through each item. Anything that fails, note what you saw and add a photo — that is what gets fixed.',
+        body: 'Work through each item. Tap Pass / Fail / N/A, Yes / No, pick one configured choice, or enter the requested text or number. Anything that fails, note what you saw and add a photo — that is what gets fixed.',
       },
       {
         title: 'Draft or submit',
-        body: 'You can save a draft and finish later. Submitting locks in your answers and notifies whoever follows up.',
+        body: 'You can save a draft and finish later. Submit when every item is complete; closing locks the record. If a submitted item needs correction, fix it and submit again.',
       },
     ],
   },
@@ -239,7 +239,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Inspect an item',
-        body: 'Open the item and start its inspection. Answer each check honestly — a failed strap found now is a life saved later.',
+        body: 'Open the item and start its inspection. Answer each check honestly, describe every failure, and add photo evidence when the checklist requires it.',
       },
       {
         title: 'Damaged gear',
@@ -251,18 +251,18 @@ export const WALKTHROUGHS: Walkthrough[] = [
     id: 'my-training',
     title: 'Your training & tickets',
     description: 'Take assigned courses and find your certificates.',
-    startPath: '/training',
+    startPath: '/my/training',
     defaultEnabled: true,
     defaultAutoStart: false,
     steps: [
       {
-        path: '/training',
-        title: 'Training',
-        body: 'Courses assigned to you show here. Some are online lessons with a quiz; some are in-person classes you are enrolled in.',
+        path: '/my/training',
+        title: 'My training',
+        body: 'The Courses tab shows training you can take or review. The Assigned tab uses the same requirements as My compliance, puts overdue work first, and opens assigned assessments with the correct requirement attached.',
       },
       {
         title: 'Take a course',
-        body: 'Open the course and work through it. Your progress saves as you go, so you can finish on a break.',
+        body: 'Open the course and work through it. If it is due again, Renew course starts the new period without removing your earlier certificate. Your progress saves as you go.',
       },
       {
         title: 'Your tickets',

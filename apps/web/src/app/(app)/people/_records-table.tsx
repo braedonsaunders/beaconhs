@@ -1,23 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@beaconhs/ui'
+import { RowSelectionButton, SelectVisibleRowsButton } from '@/components/row-selection-buttons'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
-import {
-  BulkPeopleBar,
-  HeaderSelectAll,
-  SelectionCheckbox,
-  type DepartmentOption,
-  type GroupOption,
-} from './_bulk-bar'
+import { useRowSelection } from '@/lib/row-selection'
+import { BulkPeopleBar, type DepartmentOption, type GroupOption } from './_bulk-bar'
 
 export type PeopleTableRow = {
   id: string
   firstName: string
   lastName: string
   employeeNo: string | null
+  primaryTitleName: string | null
   departmentName: string | null
   tradeName: string | null
   hireDate: string | null
@@ -47,32 +43,9 @@ export function PeopleRecordsTable({
   /** Viewer may export the selected rows to CSV. */
   canExport: boolean
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   // No bulk action is available to this viewer — skip the selection UI entirely.
   const canBulk = canManage || canExport
-
-  const allSelected = useMemo(
-    () => rows.length > 0 && rows.every((r) => selected.has(r.id)),
-    [rows, selected],
-  )
-
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  function toggleAll() {
-    setSelected((prev) => {
-      if (rows.length > 0 && rows.every((r) => prev.has(r.id))) return new Set()
-      return new Set(rows.map((r) => r.id))
-    })
-  }
-  function clear() {
-    setSelected(new Set())
-  }
+  const { selected, selectedIds, allSelected, toggleOne, toggleAll, clear } = useRowSelection(rows)
 
   const sortProps = { basePath, currentParams, sort, dir }
 
@@ -86,7 +59,7 @@ export function PeopleRecordsTable({
             href={`/people/${r.id}`}
             leading={
               canBulk ? (
-                <SelectionCheckbox id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
+                <RowSelectionButton id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
               ) : undefined
             }
             avatarName={`${r.lastName}, ${r.firstName}`}
@@ -106,7 +79,12 @@ export function PeopleRecordsTable({
             }
             title={`${r.lastName}, ${r.firstName}`}
             meta={
-              [r.departmentName, r.tradeName, r.hireDate ? `Hired ${r.hireDate}` : null]
+              [
+                r.primaryTitleName,
+                r.departmentName,
+                r.tradeName,
+                r.hireDate ? `Hired ${r.hireDate}` : null,
+              ]
                 .filter(Boolean)
                 .join(' · ') || undefined
             }
@@ -121,7 +99,7 @@ export function PeopleRecordsTable({
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               {canBulk ? (
                 <th className="w-8 px-3 py-2">
-                  <HeaderSelectAll allSelected={allSelected} onToggleAll={toggleAll} />
+                  <SelectVisibleRowsButton allSelected={allSelected} onToggleAll={toggleAll} />
                 </th>
               ) : null}
               <SortTh column="name" {...sortProps}>
@@ -129,6 +107,9 @@ export function PeopleRecordsTable({
               </SortTh>
               <SortTh column="employee_no" {...sortProps}>
                 Employee #
+              </SortTh>
+              <SortTh column="title" {...sortProps}>
+                Primary job title
               </SortTh>
               <SortTh column="department" {...sortProps}>
                 Department
@@ -158,7 +139,7 @@ export function PeopleRecordsTable({
                 >
                   {canBulk ? (
                     <td className="w-8 px-3 py-2">
-                      <SelectionCheckbox id={r.id} selected={isSelected} onToggle={toggleOne} />
+                      <RowSelectionButton id={r.id} selected={isSelected} onToggle={toggleOne} />
                     </td>
                   ) : null}
                   <td className="px-3 py-2">
@@ -171,6 +152,9 @@ export function PeopleRecordsTable({
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.employeeNo ?? '—'}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    {r.primaryTitleName ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                     {r.departmentName ?? '—'}
@@ -202,7 +186,7 @@ export function PeopleRecordsTable({
       </div>
       {canBulk ? (
         <BulkPeopleBar
-          selectedIds={Array.from(selected)}
+          selectedIds={selectedIds}
           onClear={clear}
           groups={groups}
           departments={departments}

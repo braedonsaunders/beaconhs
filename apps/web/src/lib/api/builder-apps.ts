@@ -17,6 +17,11 @@ import {
   type SQL,
 } from 'drizzle-orm'
 import {
+  isFormResponseParentLockedError,
+  lockFormResponseForMutation,
+  type Database,
+} from '@beaconhs/db'
+import {
   formResponseScores,
   formResponses,
   formResponseStatus,
@@ -27,12 +32,13 @@ import {
   type FormField,
   type FormSchemaV1,
 } from '@beaconhs/db/schema'
-import { extractScores, validateResponse } from '@beaconhs/forms-core'
+import { extractScores, normalizeFormResponseData, validateResponse } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { recordAudit } from '@/lib/audit'
 import { submitFormResponseLifecycle } from '@/lib/forms/form-response-lifecycle'
+import { materializeFormResponseEvidenceChange } from '@/lib/forms/form-response-evidence'
 import { ApiError } from './errors'
 import { isUuid } from './records'
 
@@ -98,9 +104,16 @@ type BuilderAppResponsePage = {
 const MAX_LIMIT = 1000
 const DEFAULT_LIMIT = 50
 
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
-  message: 'Expected a uuid',
-})
+async function lockApiResponseForMutation(tx: Database, ctx: RequestContext, responseId: string) {
+  try {
+    return await lockFormResponseForMutation(tx, ctx.tenantId, responseId)
+  } catch (error) {
+    if (isFormResponseParentLockedError(error)) throw ApiError.invalid(error.message)
+    throw error
+  }
+}
+
+const uuid = z.string().refine(isUuid, { message: 'Expected a uuid' })
 const responseData = z.record(z.string(), z.unknown())
 const createBody = z
   .object({
@@ -201,7 +214,10 @@ function schemaFieldSummaries(schema: FormSchemaV1): BuilderAppFieldSummary[] {
 function allowedDataKeys(schema: FormSchemaV1): Set<string> {
   const allowed = new Set<string>()
   for (const section of schema.sections) {
-    if (section.repeating) allowed.add(section.id)
+    if (section.repeating) {
+      allowed.add(section.id)
+      continue
+    }
     for (const field of section.fields) allowed.add(field.id)
   }
   return allowed
@@ -241,7 +257,7 @@ function appSummary(app: BuilderAppOpenApiEntity): BuilderAppSummary {
 
 function formatResponse(
   row: typeof formResponses.$inferSelect,
-  app: Pick<BuilderAppOpenApiEntity, 'id' | 'key' | 'name' | 'version'>,
+  app: Pick<BuilderAppOpenApiEntity, 'id' | 'key' | 'name' | 'version' | 'schema'>,
   versionId = row.templateVersionId,
 ): BuilderAppResponse {
   return {
@@ -263,7 +279,7 @@ function formatResponse(
     monitor_status: row.monitorStatus,
     created_at: iso(row.createdAt) ?? new Date(0).toISOString(),
     updated_at: iso(row.updatedAt) ?? new Date(0).toISOString(),
-    data: (row.data ?? {}) as Record<string, unknown>,
+    data: normalizeFormResponseData(app.schema, (row.data ?? {}) as Record<string, unknown>),
   }
 }
 
@@ -497,8 +513,13 @@ export async function listBuilderAppResponses(
   return ctx.db(async (tx) => {
     const where = and(...filters)
     const rows = await tx
-      .select()
+      .select({
+        response: formResponses,
+        schema: formTemplateVersions.schema,
+        version: formTemplateVersions.version,
+      })
       .from(formResponses)
+      .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, formResponses.templateVersionId))
       .where(where)
       .orderBy(order === 'asc' ? asc(sortColumn) : desc(sortColumn))
       .limit(limit)
@@ -507,7 +528,9 @@ export async function listBuilderAppResponses(
       .select({ total: count() })
       .from(formResponses)
       .where(where)
-    const data = rows.map((row) => formatResponse(row, app))
+    const data = rows.map((row) =>
+      formatResponse(row.response, { ...app, schema: row.schema, version: row.version }),
+    )
     return {
       data,
       pagination: {
@@ -528,8 +551,13 @@ export async function getBuilderAppResponse(
   if (!isUuid(id)) throw ApiError.invalid('Response id must be a uuid')
   return ctx.db(async (tx) => {
     const [row] = await tx
-      .select()
+      .select({
+        response: formResponses,
+        schema: formTemplateVersions.schema,
+        version: formTemplateVersions.version,
+      })
       .from(formResponses)
+      .innerJoin(formTemplateVersions, eq(formTemplateVersions.id, formResponses.templateVersionId))
       .where(
         and(
           eq(formResponses.id, id),
@@ -538,7 +566,9 @@ export async function getBuilderAppResponse(
         ),
       )
       .limit(1)
-    return row ? formatResponse(row, app) : null
+    return row
+      ? formatResponse(row.response, { ...app, schema: row.schema, version: row.version })
+      : null
   })
 }
 
@@ -554,13 +584,19 @@ export async function createBuilderAppResponse(
   await ensureSite(ctx, body.siteOrgUnitId)
   await ensurePerson(ctx, body.subjectPersonId)
 
-  const result = await submitFormResponseLifecycle(ctx, {
-    templateId: app.id,
-    data: body.data,
-    siteOrgUnitId: body.siteOrgUnitId,
-    subjectPersonId: body.subjectPersonId,
-    responseId: body.responseId,
-  })
+  let result: Awaited<ReturnType<typeof submitFormResponseLifecycle>>
+  try {
+    result = await submitFormResponseLifecycle(ctx, {
+      templateId: app.id,
+      data: body.data,
+      siteOrgUnitId: body.siteOrgUnitId,
+      subjectPersonId: body.subjectPersonId,
+      responseId: body.responseId,
+    })
+  } catch (error) {
+    if (isFormResponseParentLockedError(error)) throw ApiError.invalid(error.message)
+    throw error
+  }
   if (!result.ok) throw ApiError.invalid('Validation failed', result.errors)
 
   revalidatePath('/apps/responses')
@@ -586,6 +622,10 @@ export async function updateBuilderAppResponse(
   await ensurePerson(ctx, body.subjectPersonId)
 
   const result = await ctx.db(async (tx) => {
+    const mutable = await lockApiResponseForMutation(tx, ctx, id)
+    if (!mutable || mutable.templateId !== app.id) {
+      throw ApiError.notFound(`No response with id ${id}`)
+    }
     const [row] = await tx
       .select({
         response: formResponses,
@@ -607,12 +647,16 @@ export async function updateBuilderAppResponse(
     if (!row) throw ApiError.notFound(`No response with id ${id}`)
     if (row.response.locked) throw ApiError.invalid('Response is locked and cannot be updated')
 
-    const nextData = body.data
+    const rawNextData = body.data
       ? body.data
       : { ...((row.response.data ?? {}) as Record<string, unknown>), ...(body.fields ?? {}) }
-    assertKnownDataKeys(row.schema, nextData)
+    assertKnownDataKeys(row.schema, rawNextData)
     const validationStage =
       row.response.status === 'draft' || row.response.status === 'in_progress' ? 'draft' : 'submit'
+    const rawErrors = validateResponse(row.schema, rawNextData, validationStage)
+    if (rawErrors.length > 0) throw ApiError.invalid('Validation failed', rawErrors)
+
+    const nextData = normalizeFormResponseData(row.schema, rawNextData)
     const errors = validateResponse(row.schema, nextData, validationStage)
     if (errors.length > 0) throw ApiError.invalid('Validation failed', errors)
 
@@ -635,6 +679,7 @@ export async function updateBuilderAppResponse(
       .where(eq(formResponses.id, id))
       .returning()
     if (!updated) throw new ApiError(500, 'internal', 'Failed to update response')
+    await materializeFormResponseEvidenceChange(tx, ctx.tenantId, row.response, updated)
 
     await tx.delete(formResponseScores).where(eq(formResponseScores.responseId, id))
     const scores = extractScores(row.schema, nextData)
@@ -668,7 +713,7 @@ export async function updateBuilderAppResponse(
       submitterPersonId: submitterPerson?.id ?? null,
     })
 
-    return { before: row.response, updated, version: row.version }
+    return { before: row.response, updated, version: row.version, schema: row.schema }
   })
 
   await recordAudit(ctx, {
@@ -689,7 +734,11 @@ export async function updateBuilderAppResponse(
   })
   revalidatePath('/apps/responses')
   revalidatePath(`/apps/responses/${id}`)
-  return formatResponse(result.updated, { ...app, version: result.version })
+  return formatResponse(result.updated, {
+    ...app,
+    version: result.version,
+    schema: result.schema,
+  })
 }
 
 export async function deleteBuilderAppResponse(
@@ -699,22 +748,20 @@ export async function deleteBuilderAppResponse(
 ): Promise<{ id: string; template_key: string; deleted: true; deleted_at: string }> {
   if (!isUuid(id)) throw ApiError.invalid('Response id must be a uuid')
   const result = await ctx.db(async (tx) => {
-    const [before] = await tx
-      .select()
-      .from(formResponses)
-      .where(
-        and(
-          eq(formResponses.id, id),
-          eq(formResponses.templateId, app.id),
-          isNull(formResponses.deletedAt),
-        ),
-      )
-      .limit(1)
-    if (!before) throw ApiError.notFound(`No response with id ${id}`)
+    const before = await lockApiResponseForMutation(tx, ctx, id)
+    if (!before || before.templateId !== app.id) {
+      throw ApiError.notFound(`No response with id ${id}`)
+    }
     if (before.locked) throw ApiError.invalid('Response is locked and cannot be archived')
     const deletedAt = new Date()
-    await tx.update(formResponses).set({ deletedAt }).where(eq(formResponses.id, id))
-    return { before, deletedAt }
+    const [archived] = await tx
+      .update(formResponses)
+      .set({ deletedAt })
+      .where(eq(formResponses.id, id))
+      .returning()
+    if (!archived) throw new ApiError(500, 'internal', 'Failed to archive response')
+    await materializeFormResponseEvidenceChange(tx, ctx.tenantId, before, archived)
+    return { before, deletedAt: archived.deletedAt ?? deletedAt }
   })
 
   await recordAudit(ctx, {
@@ -770,7 +817,7 @@ function fieldOpenApiSchema(field: FormField): Record<string, unknown> {
         },
       }
     case 'pass_fail_na':
-      return { type: 'string', enum: ['pass', 'fail', 'na'] }
+      return { type: 'string', enum: ['pass', 'fail', 'n_a'] }
     default:
       return { type: 'string' }
   }

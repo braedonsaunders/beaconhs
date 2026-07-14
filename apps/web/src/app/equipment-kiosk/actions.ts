@@ -6,15 +6,9 @@
 // an inline audit row (no RequestContext on this path). Rules come from the
 // shared core so the in-app station and the kiosk behave identically.
 
-import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, count, eq, isNull, sql } from 'drizzle-orm'
 import { db, normalizeKioskPin, verifyKioskPin, type Database } from '@beaconhs/db'
-import {
-  auditLog,
-  equipmentItems,
-  equipmentStationSettings,
-  orgUnits,
-  people,
-} from '@beaconhs/db/schema'
+import { auditLog, equipmentItems, equipmentStationSettings, orgUnits } from '@beaconhs/db/schema'
 import {
   searchStationCore,
   stationScanCore,
@@ -30,6 +24,13 @@ import {
 } from '@/lib/public-pin-rate-limit'
 import { resolveActiveTenant } from '@/lib/active-tenant'
 import { isUuid } from '@/lib/list-params'
+import {
+  equipmentStationPickerKind,
+  equipmentStationPickerQuery,
+  loadEquipmentStationPickerOptions,
+  parseEquipmentStationPickerSearchInput,
+} from '@/lib/equipment-station-picker'
+import type { PickerOptionsResponse } from '@/lib/picker-options'
 
 type Settings = {
   pin: string | null
@@ -42,8 +43,6 @@ export type EquipmentKioskConfig = {
   soundEnabled: boolean
   requireConditionOnCheckin: boolean
   homeLocationName: string | null
-  people: { id: string; name: string; employeeNo: string | null; jobTitle: string | null }[]
-  locations: { id: string; name: string; level: string; isBase: boolean }[]
   availableCount: number
 }
 
@@ -102,6 +101,64 @@ export async function searchKioskScan(input: {
   })
 }
 
+export async function searchEquipmentKioskPicker(
+  input: unknown,
+): Promise<({ ok: true } & PickerOptionsResponse) | { ok: false; error: string }> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, error: 'Invalid kiosk request' }
+  }
+  const record = input as Record<string, unknown>
+  const allowed = new Set(['tenantId', 'pin', 'kind', 'query', 'selected'])
+  if (Object.keys(record).some((key) => !allowed.has(key))) {
+    return { ok: false, error: 'Invalid kiosk request' }
+  }
+  const tenantId = typeof record.tenantId === 'string' ? record.tenantId : ''
+  const pinValue = typeof record.pin === 'string' ? record.pin : ''
+  const kind = equipmentStationPickerKind(record.kind)
+  if (!isUuid(tenantId) || !kind) return { ok: false, error: 'Invalid kiosk request' }
+
+  let pickerInput: ReturnType<typeof parseEquipmentStationPickerSearchInput>
+  try {
+    pickerInput = parseEquipmentStationPickerSearchInput({
+      query: record.query,
+      selected: record.selected,
+    })
+  } catch {
+    return { ok: false, error: 'Invalid kiosk request' }
+  }
+  const pin = normalizeKioskPin(pinValue)
+  if (!pin) return { ok: false, error: 'PIN required' }
+  const pinLimit = await guardPublicPinRateLimit('equipment-kiosk', tenantId)
+  if (!pinLimit.ok) return { ok: false, error: pinLimit.error }
+
+  try {
+    return await db.transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Database
+      const loaded = await loadSettings(tx, tenantId)
+      if (!loaded.tenantActive) return { ok: false as const, error: 'Workspace unavailable' }
+      if (!loaded.settings?.pin) {
+        return { ok: false as const, error: 'Kiosk is not enabled for this tenant' }
+      }
+      if (!(await verifyKioskPin(loaded.settings.pin, pin))) {
+        const recorded = await recordPublicPinFailure(pinLimit.handle)
+        if (!recorded.ok) return { ok: false as const, error: recorded.error }
+        return { ok: false as const, error: 'Invalid PIN' }
+      }
+      await resetPublicPinRateLimit(pinLimit.handle)
+      const response = await loadEquipmentStationPickerOptions(
+        tx,
+        tenantId,
+        kind,
+        equipmentStationPickerQuery(pickerInput),
+      )
+      return { ok: true as const, ...response }
+    })
+  } catch (error) {
+    console.error('[equipment-kiosk] picker query failed', { kind, error })
+    return { ok: false, error: 'Kiosk search is temporarily unavailable.' }
+  }
+}
+
 export async function unlockEquipmentKiosk(input: {
   tenantId: string
   pin: string
@@ -147,39 +204,26 @@ export async function unlockEquipmentKiosk(input: {
       ? await tx
           .select({ name: orgUnits.name })
           .from(orgUnits)
-          .where(eq(orgUnits.id, fullSettings.defaultCheckInOrgUnitId))
+          .where(
+            and(
+              eq(orgUnits.tenantId, input.tenantId),
+              eq(orgUnits.id, fullSettings.defaultCheckInOrgUnitId),
+              isNull(orgUnits.deletedAt),
+            ),
+          )
           .limit(1)
       : []
 
-    const [peopleRows, locationRows, availableRows] = await Promise.all([
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-          jobTitle: people.jobTitle,
-        })
-        .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
-        .orderBy(people.lastName, people.firstName),
-      tx
-        .select({
-          id: orgUnits.id,
-          name: orgUnits.name,
-          level: orgUnits.level,
-          isBase: orgUnits.isEquipmentBase,
-        })
-        .from(orgUnits)
-        .where(isNull(orgUnits.deletedAt))
-        .orderBy(desc(orgUnits.isEquipmentBase), orgUnits.name),
-      tx
-        .select({ c: count() })
-        .from(equipmentItems)
-        .where(
-          and(eq(equipmentItems.isAvailableForCheckout, true), isNull(equipmentItems.deletedAt)),
+    const availableRows = await tx
+      .select({ c: count() })
+      .from(equipmentItems)
+      .where(
+        and(
+          eq(equipmentItems.tenantId, input.tenantId),
+          eq(equipmentItems.isAvailableForCheckout, true),
+          isNull(equipmentItems.deletedAt),
         ),
-    ])
+      )
 
     return {
       ok: true,
@@ -188,13 +232,6 @@ export async function unlockEquipmentKiosk(input: {
         soundEnabled: fullSettings?.soundEnabled ?? true,
         requireConditionOnCheckin: fullSettings?.requireConditionOnCheckin ?? false,
         homeLocationName: homeRow?.name ?? null,
-        people: peopleRows.map((p) => ({
-          id: p.id,
-          name: `${p.lastName}, ${p.firstName}`,
-          employeeNo: p.employeeNo,
-          jobTitle: p.jobTitle,
-        })),
-        locations: locationRows,
         availableCount: Number(availableRows[0]?.c ?? 0),
       },
     }

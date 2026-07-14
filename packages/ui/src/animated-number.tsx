@@ -30,29 +30,24 @@ export function AnimatedNumber({
 }) {
   const reduce = useReducedMotion()
   const mv = useMotionValue(reduce ? value : from)
-  const [display, setDisplay] = React.useState(() =>
-    formatValue(reduce ? value : from, format, decimals),
-  )
+  const [displayValue, setDisplayValue] = React.useState(reduce ? value : from)
 
   React.useEffect(() => {
     if (reduce) {
-      setDisplay(formatValue(value, format, decimals))
+      setDisplayValue(value)
       return
     }
     const controls = animate(mv, value, {
       duration,
       ease: [0.22, 0.61, 0.36, 1],
-      onUpdate: (latest) => setDisplay(formatValue(latest, format, decimals)),
+      onUpdate: setDisplayValue,
     })
     return () => controls.stop()
-    // We intentionally re-run when `value` changes so the number re-animates
-    // to the new target. format/decimals are stable in practice.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, duration, reduce])
+  }, [duration, mv, reduce, value])
 
   return (
     <span className={className} aria-label={String(value)}>
-      {display}
+      {formatValue(displayValue, format, decimals)}
     </span>
   )
 }

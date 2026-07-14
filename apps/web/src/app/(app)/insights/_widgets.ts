@@ -211,10 +211,6 @@ const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
 
 export const INSIGHT_WIDGET_MAP = new Map(INSIGHT_WIDGETS.map((w) => [w.id, w]))
 
-function insightWidget(id: string): InsightWidgetMeta | undefined {
-  return INSIGHT_WIDGET_MAP.get(id)
-}
-
 /** A sensible starter dashboard for first-time users. */
 export const DEFAULT_INSIGHT_LAYOUT: InsightDashboardLayout = {
   widgets: [
@@ -614,9 +610,8 @@ export const BUILTIN_QUERIES: Record<
       ],
     },
   },
-  // Training compliance % — off the unified compliance engine's scoreboard
-  // (compliance_status), filtered to training + cert obligations via the
-  // obligation FK. Replaces the decommissioned legacy assignment-records table.
+  // Training compliance % — the unified compliance scoreboard filtered to
+  // training and certification obligations through the obligation FK.
   'kpi-training-compliance': {
     vizType: 'scalar',
     vizSettings: { valueField: 'pct', decimals: 0, suffix: '%' },

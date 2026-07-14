@@ -9,6 +9,7 @@ import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { renderPersonBadgePdf } from '@/lib/person-badge'
 import { pdfResponse } from '@/lib/training-credential-pdf'
+import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -18,6 +19,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id: personId } = await params
+  if (!isUuid(personId)) {
+    return NextResponse.json({ error: 'Person not found.' }, { status: 404 })
+  }
+
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) {
     return NextResponse.json({ error: 'No active tenant' }, { status: 400 })

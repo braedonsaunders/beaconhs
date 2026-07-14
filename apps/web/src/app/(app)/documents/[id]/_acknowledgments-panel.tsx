@@ -1,36 +1,21 @@
 'use client'
 
-// The Acknowledgments tab body: a searchable / sortable / paginated roster of
-// everyone who has signed, the current user's self-acknowledge action (with an
-// optional signature), and an entry point to the group sign-off sheet. Acks per
-// document are bounded, so filtering/sorting/paging happen in-component for an
-// instant feel with no cross-tab URL-param juggling.
+// The Acknowledgments tab body: a URL-driven, server-paged roster of everyone
+// who has signed, the current user's self-acknowledge action (with an optional
+// signature), and an entry point to the group sign-off sheet.
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import {
-  ArrowDownUp,
-  BadgeCheck,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  PenLine,
-  Search,
-  Users,
-} from 'lucide-react'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Button,
-  Input,
-  SignaturePad,
-} from '@beaconhs/ui'
+import { BadgeCheck, Check, PenLine, Users } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle, Badge, Button, SignaturePad } from '@beaconhs/ui'
 import { acknowledgeDocument } from './_ack-actions'
-import { uploadSignatureDataUrl } from '@/lib/upload-signature'
+import { RawImage } from '@/components/raw-image'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { TableToolbar } from '@/components/table-toolbar'
 
 export type AckRow = {
   ackId: string
@@ -43,9 +28,6 @@ export type AckRow = {
 }
 
 type SelfStatus = 'can' | 'acked' | 'unpublished' | 'no-person'
-type SortKey = 'recent' | 'name'
-
-const PER_PAGE = 12
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -59,6 +41,11 @@ export function AcknowledgmentsPanel({
   versionId,
   signOffHref,
   acks,
+  total,
+  filteredTotal,
+  page,
+  perPage,
+  currentParams,
   selfStatus,
   selfAckedAt,
   canManageSignOff,
@@ -67,39 +54,26 @@ export function AcknowledgmentsPanel({
   versionId: string | null
   signOffHref: string
   acks: AckRow[]
+  total: number
+  filteredTotal: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
   selfStatus: SelfStatus
   selfAckedAt: string | null
   /** Group sign-off is a documents.manage surface — hide the entry for readers. */
   canManageSignOff: boolean
 }) {
   const router = useRouter()
-  const [q, setQ] = useState('')
-  const [sort, setSort] = useState<SortKey>('recent')
-  const [page, setPage] = useState(1)
   const [sig, setSig] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase()
-    const rows = term ? acks.filter((a) => a.name.toLowerCase().includes(term)) : acks.slice()
-    rows.sort((a, b) =>
-      sort === 'name'
-        ? a.name.localeCompare(b.name)
-        : b.acknowledgedAt.localeCompare(a.acknowledgedAt),
-    )
-    return rows
-  }, [acks, q, sort])
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
-  const current = Math.min(page, pageCount)
-  const pageRows = filtered.slice((current - 1) * PER_PAGE, current * PER_PAGE)
+  const basePath = `/documents/${documentId}`
 
   function submitSelfAck() {
     if (!versionId) return
     startTransition(async () => {
       try {
-        const signatureAttachmentId = sig ? await uploadSignatureDataUrl(sig) : null
-        const res = await acknowledgeDocument({ documentId, signatureAttachmentId })
+        const res = await acknowledgeDocument({ documentId, signatureDataUrl: sig })
         if (!res.ok) {
           toast.error(res.error)
           return
@@ -166,52 +140,58 @@ export function AcknowledgmentsPanel({
 
       {/* Roster */}
       <div>
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            Signed by {acks.length}
+            Signed by {total}
           </h3>
-          <button
-            type="button"
-            onClick={() => setSort((s) => (s === 'recent' ? 'name' : 'recent'))}
-            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            title="Toggle sort"
-          >
-            <ArrowDownUp size={12} /> {sort === 'recent' ? 'Most recent' : 'Name'}
-          </button>
         </div>
 
-        {acks.length > 6 ? (
-          <div className="relative mb-2">
-            <Search
-              size={14}
-              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
-            />
-            <Input
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value)
-                setPage(1)
-              }}
-              placeholder="Search people…"
-              className="pl-8"
-            />
-          </div>
-        ) : null}
+        <TableToolbar className="mb-2">
+          <SearchInput
+            placeholder="Search people or sessions…"
+            paramKey="ackQ"
+            pageParamKey="ackPage"
+          />
+          <FilterChips
+            basePath={basePath}
+            currentParams={currentParams}
+            paramKey="ackType"
+            pageParamKey="ackPage"
+            label="Source"
+            options={[
+              { value: 'individual', label: 'Individual' },
+              { value: 'group', label: 'Group sign-off' },
+            ]}
+          />
+          <FilterChips
+            basePath={basePath}
+            currentParams={currentParams}
+            paramKey="ackSort"
+            pageParamKey="ackPage"
+            label="Order"
+            defaultValue="recent"
+            hideAll
+            options={[
+              { value: 'recent', label: 'Most recent' },
+              { value: 'name', label: 'Name' },
+            ]}
+          />
+        </TableToolbar>
 
-        {filtered.length === 0 ? (
+        {acks.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            {acks.length === 0 ? (
+            {total === 0 ? (
               <span className="flex flex-col items-center gap-1">
                 <BadgeCheck size={20} className="text-slate-300 dark:text-slate-600" />
                 No acknowledgments yet
               </span>
             ) : (
-              'No people match your search.'
+              'No acknowledgments match these filters.'
             )}
           </div>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {pageRows.map((row) => (
+            {acks.map((row) => (
               <li key={row.ackId} className="flex items-center gap-3 py-2">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {initials(row.name)}
@@ -239,10 +219,10 @@ export function AcknowledgmentsPanel({
                   </div>
                 </div>
                 {row.signatureUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <RawImage
                     src={row.signatureUrl}
                     alt={`${row.name} signature`}
+                    optimizationReason="authenticated"
                     className="h-8 w-16 shrink-0 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
                   />
                 ) : null}
@@ -251,33 +231,14 @@ export function AcknowledgmentsPanel({
           </ul>
         )}
 
-        {pageCount > 1 ? (
-          <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>
-              Page {current} of {pageCount}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={current <= 1}
-                className="rounded-md border border-slate-200 p-1 enabled:hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:enabled:hover:bg-slate-800"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                disabled={current >= pageCount}
-                className="rounded-md border border-slate-200 p-1 enabled:hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:enabled:hover:bg-slate-800"
-                aria-label="Next page"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <Pagination
+          basePath={basePath}
+          currentParams={currentParams}
+          total={filteredTotal}
+          page={page}
+          perPage={perPage}
+          pageParamKey="ackPage"
+        />
       </div>
     </div>
   )

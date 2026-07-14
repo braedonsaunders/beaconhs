@@ -1,22 +1,24 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
-import { Check, Copy, Home, Search } from 'lucide-react'
-import { Button, Input, Label, SearchSelect } from '@beaconhs/ui'
-import { saveStationSettings, type StationSettingsInput } from './_actions'
+import { useState, useTransition } from 'react'
+import { Check, Copy, Home } from 'lucide-react'
+import { Button, Input, Label } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
+import type { PickerOption } from '@/lib/picker-options'
+import { saveStationSettings } from './_actions'
+import type { StationSettingsInput } from './_policy'
 
-type Location = { id: string; name: string; level: string }
 type StationSettingsInitial = Omit<StationSettingsInput, 'stationPin' | 'clearStationPin'> & {
   stationPinConfigured: boolean
 }
 
 export function StationSettingsForm({
-  locations,
   initial,
+  initialHomeOption,
   kioskUrl,
 }: {
-  locations: Location[]
   initial: StationSettingsInitial
+  initialHomeOption?: PickerOption
   kioskUrl: string | null
 }) {
   const [home, setHome] = useState(initial.defaultCheckInOrgUnitId ?? '')
@@ -26,29 +28,9 @@ export function StationSettingsForm({
   const [requireHolder, setRequireHolder] = useState(initial.requireHolderOnCheckout)
   const [requireCondition, setRequireCondition] = useState(initial.requireConditionOnCheckin)
   const [soundEnabled, setSoundEnabled] = useState(initial.soundEnabled)
-  const [baseIds, setBaseIds] = useState<Set<string>>(new Set(initial.baseLocationIds))
-  const [filter, setFilter] = useState('')
   const [pending, start] = useTransition()
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
   const [copied, setCopied] = useState(false)
-
-  const locationOptions = useMemo(
-    () => locations.map((l) => ({ value: l.id, label: l.name, hint: l.level })),
-    [locations],
-  )
-  const filteredLocations = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    return q ? locations.filter((l) => l.name.toLowerCase().includes(q)) : locations
-  }, [filter, locations])
-
-  function toggleBase(id: string) {
-    setBaseIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   function save() {
     setMsg(null)
@@ -61,7 +43,6 @@ export function StationSettingsForm({
         requireHolderOnCheckout: requireHolder,
         requireConditionOnCheckin: requireCondition,
         soundEnabled,
-        baseLocationIds: Array.from(baseIds),
       })
       setMsg(res.ok ? { tone: 'ok', text: 'Saved.' } : { tone: 'err', text: res.error })
     })
@@ -81,56 +62,19 @@ export function StationSettingsForm({
           Where assets return to on check-in. Operators never pick this — every check-in snaps the
           asset back here automatically.
         </p>
-        <SearchSelect
+        <RemoteSearchSelect
+          lookup="equipment-station-locations"
           value={home}
           onChange={setHome}
-          options={locationOptions}
+          initialOption={initialHomeOption}
           clearable
           emptyLabel="— No default —"
           placeholder="Select a location…"
+          searchPlaceholder="Search locations…"
+          sheetTitle="Default check-in location"
+          ariaLabel="Default check-in location"
           className="max-w-md"
         />
-      </section>
-
-      {/* Base locations */}
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Locations that count as “checked in”
-        </h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Assets sitting at any of these — your shop, yard or crib — are reported as at base / in
-          stock. Everywhere else counts as deployed.
-        </p>
-        <div className="relative max-w-md">
-          <Search size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400" />
-          <Input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter locations…"
-            className="pl-9"
-          />
-        </div>
-        <div className="max-h-72 max-w-md divide-y overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-          {filteredLocations.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-slate-400">No locations match.</div>
-          ) : (
-            filteredLocations.map((l) => (
-              <label
-                key={l.id}
-                className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              >
-                <input
-                  type="checkbox"
-                  checked={baseIds.has(l.id)}
-                  onChange={() => toggleBase(l.id)}
-                  className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <span className="font-medium text-slate-800 dark:text-slate-200">{l.name}</span>
-                <span className="ml-auto text-xs text-slate-400">{l.level}</span>
-              </label>
-            ))
-          )}
-        </div>
       </section>
 
       {/* Scan behaviour */}
@@ -190,6 +134,7 @@ export function StationSettingsForm({
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
             inputMode="numeric"
+            maxLength={12}
             disabled={clearStationPin}
             placeholder={
               initial.stationPinConfigured ? 'Leave blank to keep current PIN' : 'e.g. 4821'

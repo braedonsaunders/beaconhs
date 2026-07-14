@@ -16,7 +16,11 @@ type ComplianceLink = { href: string; prefetch: boolean }
 export function resolveComplianceLink(
   kind: string,
   targetRef: ComplianceTargetRef | null | undefined,
-  opts: { personId?: string | null } = {},
+  opts: {
+    personId?: string | null
+    obligationId?: string | null
+    responseId?: string | null
+  } = {},
 ): ComplianceLink | null {
   const ref = targetRef ?? {}
   switch (kind) {
@@ -30,13 +34,33 @@ export function resolveComplianceLink(
       // The journals workspace is where today's entry is logged.
       return { href: '/journals', prefetch: true }
     case 'form':
+      if (opts.responseId) {
+        return { href: `/apps/responses/${encodeURIComponent(opts.responseId)}`, prefetch: true }
+      }
       return ref.formTemplateId
-        ? { href: `/apps/templates/${ref.formTemplateId}/fill`, prefetch: false }
+        ? {
+            href: `/apps/templates/${ref.formTemplateId}/fill${
+              opts.obligationId ? `?obligationId=${encodeURIComponent(opts.obligationId)}` : ''
+            }`,
+            prefetch: false,
+          }
         : null
     case 'training':
     case 'cert_requirement':
-      return ref.courseId
-        ? { href: `/training/learn/${ref.courseId}`, prefetch: true }
+      if (ref.courseId) return { href: `/training/learn/${ref.courseId}`, prefetch: true }
+      if (ref.assessmentTypeId && opts.personId) {
+        const params = new URLSearchParams({
+          typeId: ref.assessmentTypeId,
+          personId: opts.personId,
+        })
+        if (opts.obligationId) params.set('obligationId', opts.obligationId)
+        return {
+          href: `/training/assessments/new?${params.toString()}`,
+          prefetch: true,
+        }
+      }
+      return ref.skillTypeId
+        ? { href: '/my/wallet', prefetch: true }
         : { href: '/my/training', prefetch: true }
     case 'inspection':
       // `new?typeId=` starts a draft + redirects — never prefetch it.

@@ -3,7 +3,7 @@ import 'server-only'
 // Inspections FlowSubjectAdapter. Field-map keys mirror
 // MODULE_FLOW_PROFILES.inspections.
 
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import {
   attachments,
@@ -18,6 +18,7 @@ import {
 } from '@beaconhs/db/schema'
 import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { inspectionCriterionDisplayAnswer } from '@/lib/inspection-response-config'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDateTime, personName, titleize } from '../format'
@@ -67,19 +68,65 @@ export function createInspectionFlowAdapter(
             customerSignatureKey: attachments.r2Key,
           })
           .from(inspectionRecords)
-          .leftJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
-          .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
-          .leftJoin(inspTU, eq(inspTU.id, inspectionRecords.inspectorTenantUserId))
+          .leftJoin(
+            inspectionTypes,
+            and(
+              eq(inspectionTypes.tenantId, inspectionRecords.tenantId),
+              eq(inspectionTypes.id, inspectionRecords.typeId),
+            ),
+          )
+          .leftJoin(
+            orgUnits,
+            and(
+              eq(orgUnits.tenantId, inspectionRecords.tenantId),
+              eq(orgUnits.id, inspectionRecords.siteOrgUnitId),
+            ),
+          )
+          .leftJoin(
+            inspTU,
+            and(
+              eq(inspTU.tenantId, inspectionRecords.tenantId),
+              eq(inspTU.id, inspectionRecords.inspectorTenantUserId),
+            ),
+          )
           .leftJoin(inspU, eq(inspU.id, inspTU.userId))
-          .leftJoin(supTU, eq(supTU.id, inspectionRecords.supervisorTenantUserId))
+          .leftJoin(
+            supTU,
+            and(
+              eq(supTU.tenantId, inspectionRecords.tenantId),
+              eq(supTU.id, inspectionRecords.supervisorTenantUserId),
+            ),
+          )
           .leftJoin(supU, eq(supU.id, supTU.userId))
-          .leftJoin(customerOU, eq(customerOU.id, inspectionRecords.customerOrgUnitId))
-          .leftJoin(contact, eq(contact.id, inspectionRecords.customerContactPersonId))
+          .leftJoin(
+            customerOU,
+            and(
+              eq(customerOU.tenantId, inspectionRecords.tenantId),
+              eq(customerOU.id, inspectionRecords.customerOrgUnitId),
+            ),
+          )
+          .leftJoin(
+            contact,
+            and(
+              eq(contact.tenantId, inspectionRecords.tenantId),
+              eq(contact.id, inspectionRecords.customerContactPersonId),
+            ),
+          )
           .leftJoin(
             attachments,
-            eq(attachments.id, inspectionRecords.customerSignatureAttachmentId),
+            and(
+              eq(attachments.tenantId, inspectionRecords.tenantId),
+              eq(attachments.id, inspectionRecords.customerSignatureAttachmentId),
+              eq(attachments.kind, 'signature'),
+            ),
           )
-          .where(eq(inspectionRecords.id, recordId))
+          .where(
+            and(
+              eq(inspectionRecords.tenantId, ctx.tenantId),
+              eq(inspectionRecords.id, recordId),
+              isNull(inspectionRecords.deletedAt),
+            ),
+          )
           .limit(1),
       )
       if (!head) return {}
@@ -91,21 +138,43 @@ export function createInspectionFlowAdapter(
             .select({
               groupLabel: inspectionRecordCriteria.groupLabelSnapshot,
               question: inspectionRecordCriteria.questionTextSnapshot,
+              responseType: inspectionRecordCriteria.responseType,
               answer: inspectionRecordCriteria.answer,
+              choiceOptions: inspectionRecordCriteria.choiceOptionsSnapshot,
+              choiceAnswer: inspectionRecordCriteria.choiceAnswer,
+              textAnswer: inspectionRecordCriteria.textAnswer,
+              numberAnswer: inspectionRecordCriteria.numberAnswer,
               severity: inspectionRecordCriteria.severity,
               nonCompliance: inspectionRecordCriteria.nonComplianceDescription,
               actionTaken: inspectionRecordCriteria.actionTaken,
             })
             .from(inspectionRecordCriteria)
-            .where(eq(inspectionRecordCriteria.recordId, recordId))
+            .where(
+              and(
+                eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+                eq(inspectionRecordCriteria.recordId, recordId),
+              ),
+            )
             .orderBy(asc(inspectionRecordCriteria.sequence)),
         ),
         ctx.db((tx) =>
           tx
             .select({ caption: inspectionRecordAttachments.caption, r2Key: attachments.r2Key })
             .from(inspectionRecordAttachments)
-            .innerJoin(attachments, eq(attachments.id, inspectionRecordAttachments.attachmentId))
-            .where(eq(inspectionRecordAttachments.recordId, recordId)),
+            .innerJoin(
+              attachments,
+              and(
+                eq(attachments.tenantId, inspectionRecordAttachments.tenantId),
+                eq(attachments.id, inspectionRecordAttachments.attachmentId),
+                eq(attachments.kind, 'image'),
+              ),
+            )
+            .where(
+              and(
+                eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+                eq(inspectionRecordAttachments.recordId, recordId),
+              ),
+            ),
         ),
       ])
 
@@ -146,7 +215,16 @@ export function createInspectionFlowAdapter(
         criteria: criteria.map((c) => ({
           group: c.groupLabel ?? '',
           question: c.question ?? '',
-          answer: titleize(c.answer),
+          response_type: c.responseType,
+          options: c.choiceOptions.join(' | '),
+          answer:
+            inspectionCriterionDisplayAnswer({
+              responseType: c.responseType,
+              outcomeAnswer: c.answer,
+              choiceAnswer: c.choiceAnswer,
+              textAnswer: c.textAnswer,
+              numberAnswer: c.numberAnswer,
+            }) ?? '',
           severity: titleize(c.severity),
           non_compliance: c.nonCompliance ?? '',
           action_taken: c.actionTaken ?? '',
@@ -165,7 +243,13 @@ export function createInspectionFlowAdapter(
         tx
           .select({ tuid: inspectionRecords.inspectorTenantUserId })
           .from(inspectionRecords)
-          .where(eq(inspectionRecords.id, recordId))
+          .where(
+            and(
+              eq(inspectionRecords.tenantId, ctx.tenantId),
+              eq(inspectionRecords.id, recordId),
+              isNull(inspectionRecords.deletedAt),
+            ),
+          )
           .limit(1),
       )
       const tuid = r?.tuid ?? null
@@ -177,7 +261,7 @@ export function createInspectionFlowAdapter(
             .select({ email: users.email, userId: users.id })
             .from(tenantUsers)
             .innerJoin(users, eq(users.id, tenantUsers.userId))
-            .where(eq(tenantUsers.id, tuid))
+            .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, tuid)))
             .limit(1),
         )
         email = u?.email ?? null

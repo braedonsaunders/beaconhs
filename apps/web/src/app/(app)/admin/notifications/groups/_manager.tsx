@@ -15,34 +15,34 @@ import {
   EmptyState,
   Input,
   Label,
-  SearchSelect,
   Select,
   type SelectOption,
 } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
+import { Pagination } from '@/components/pagination'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
+import { SearchInput } from '@/components/search-input'
+import type { PickerLookup } from '@/lib/picker-options'
 import type { AudienceOptions } from './_options'
 import { createGroup, deleteGroup, previewGroup, updateGroup } from './_actions'
+import {
+  NOTIFICATION_GROUP_COLORS,
+  NOTIFICATION_GROUP_LIMITS,
+  NOTIFICATION_GROUP_MEMBER_KINDS,
+  type NotificationGroupMember,
+  type NotificationGroupMemberKind,
+} from './_policy'
 
-type MemberKind =
-  | 'everyone'
-  | 'person'
-  | 'role'
-  | 'department'
-  | 'org_unit'
-  | 'trade'
-  | 'crew'
-  | 'person_group'
-type Member = { kind: MemberKind; entityKey: string; mode: 'include' | 'exclude' }
 export type GroupRow = {
   id: string
   name: string
   description: string | null
   color: string | null
-  members: Member[]
+  members: NotificationGroupMember[]
 }
 
-const KIND_LABEL: Record<MemberKind, string> = {
+const KIND_LABEL: Record<NotificationGroupMemberKind, string> = {
   role: 'Role',
   department: 'Department',
   org_unit: 'Site / org unit',
@@ -52,19 +52,12 @@ const KIND_LABEL: Record<MemberKind, string> = {
   person: 'Person',
   everyone: 'Everyone',
 }
-const KIND_OPTIONS: MemberKind[] = [
-  'role',
-  'department',
-  'org_unit',
-  'crew',
-  'trade',
-  'person_group',
-  'person',
+const KIND_OPTIONS: NotificationGroupMemberKind[] = [
+  ...NOTIFICATION_GROUP_MEMBER_KINDS.filter((kind) => kind !== 'everyone'),
   'everyone',
 ]
-const SWATCHES = ['#0f766e', '#1d4ed8', '#b45309', '#b91c1c', '#7c3aed', '#0369a1', '#475569']
 
-function optionsFor(kind: MemberKind, o: AudienceOptions): SelectOption[] {
+function optionsFor(kind: NotificationGroupMemberKind, o: AudienceOptions): SelectOption[] {
   switch (kind) {
     case 'person':
       return o.people.map((p) => ({ value: p.id, label: p.name }))
@@ -85,7 +78,26 @@ function optionsFor(kind: MemberKind, o: AudienceOptions): SelectOption[] {
   }
 }
 
-function memberSummary(members: Member[]): string {
+function lookupFor(kind: Exclude<NotificationGroupMemberKind, 'everyone'>): PickerLookup {
+  switch (kind) {
+    case 'person':
+      return 'notification-group-people'
+    case 'role':
+      return 'notification-group-roles'
+    case 'department':
+      return 'notification-group-departments'
+    case 'org_unit':
+      return 'notification-group-org-units'
+    case 'trade':
+      return 'notification-group-trades'
+    case 'crew':
+      return 'notification-group-crews'
+    case 'person_group':
+      return 'notification-group-person-groups'
+  }
+}
+
+function memberSummary(members: NotificationGroupMember[]): string {
   if (members.length === 0) return 'No members yet'
   const inc = members.filter((m) => m.mode === 'include').length
   const exc = members.filter((m) => m.mode === 'exclude').length
@@ -95,25 +107,53 @@ function memberSummary(members: Member[]): string {
 export function NotificationGroupsManager({
   groups,
   options,
+  total,
+  page,
+  perPage,
+  currentParams,
+  hasSearch,
+  basePath,
 }: {
   groups: GroupRow[]
   options: AudienceOptions
+  total: number
+  page: number
+  perPage: number
+  currentParams: Record<string, string | string[] | undefined>
+  hasSearch: boolean
+  basePath: string
 }) {
   const router = useRouter()
   const [editing, setEditing] = React.useState<GroupRow | 'new' | null>(null)
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {groups.length} group{groups.length === 1 ? '' : 's'}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput placeholder="Search group name or description…" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {total.toLocaleString()} {hasSearch ? 'matching ' : ''}group
+            {total === 1 ? '' : 's'}
+          </p>
+        </div>
         <Button onClick={() => setEditing('new')}>
           <Plus size={14} /> New group
         </Button>
       </div>
 
-      {groups.length === 0 ? (
+      {groups.length === 0 && total > 0 ? (
+        <EmptyState
+          icon={<Users size={24} />}
+          title="This page is past the end of the results"
+          description="Use the pagination control below to return to the last page."
+        />
+      ) : groups.length === 0 && hasSearch ? (
+        <EmptyState
+          icon={<Users size={24} />}
+          title="No notification groups match your search"
+          description="Try a different group name or description."
+        />
+      ) : groups.length === 0 ? (
         <EmptyState
           icon={<Users size={24} />}
           title="No notification groups yet"
@@ -158,6 +198,16 @@ export function NotificationGroupsManager({
         </ul>
       )}
 
+      {total > 0 ? (
+        <Pagination
+          basePath={basePath}
+          currentParams={currentParams}
+          total={total}
+          page={page}
+          perPage={perPage}
+        />
+      ) : null}
+
       <GroupEditor
         key={editing === 'new' ? 'new' : (editing?.id ?? 'closed')}
         open={editing !== null}
@@ -188,8 +238,11 @@ function GroupEditor({
 }) {
   const [name, setName] = React.useState(group?.name ?? '')
   const [description, setDescription] = React.useState(group?.description ?? '')
-  const [color, setColor] = React.useState(group?.color ?? SWATCHES[0]!)
-  const [members, setMembers] = React.useState<Member[]>(group?.members ?? [])
+  const [color, setColor] = React.useState(
+    NOTIFICATION_GROUP_COLORS.find((candidate) => candidate === group?.color) ??
+      NOTIFICATION_GROUP_COLORS[0],
+  )
+  const [members, setMembers] = React.useState<NotificationGroupMember[]>(group?.members ?? [])
   const [pending, start] = React.useTransition()
   const [preview, setPreview] = React.useState<{
     count: number
@@ -197,16 +250,33 @@ function GroupEditor({
     sample: string[]
   } | null>(null)
   const [previewing, setPreviewing] = React.useState(false)
+  const [previewError, setPreviewError] = React.useState<string | null>(null)
+  const previewEligible =
+    members.length > 0 &&
+    members.every((member) => member.kind === 'everyone' || Boolean(member.entityKey))
 
   // Live preview — debounced resolve of the current member set.
   React.useEffect(() => {
-    if (members.length === 0) return
+    if (!previewEligible) return
     let cancelled = false
     const t = setTimeout(() => {
       setPreviewing(true)
+      setPreviewError(null)
       previewGroup(members)
         .then((result) => {
-          if (!cancelled) setPreview(result)
+          if (cancelled) return
+          if (result.ok) {
+            setPreview({ count: result.count, withEmail: result.withEmail, sample: result.sample })
+          } else {
+            setPreview(null)
+            setPreviewError(result.error)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPreview(null)
+            setPreviewError('Could not resolve this preview. Please try again.')
+          }
         })
         .finally(() => {
           if (!cancelled) setPreviewing(false)
@@ -216,14 +286,20 @@ function GroupEditor({
       cancelled = true
       clearTimeout(t)
     }
-  }, [members])
+  }, [members, previewEligible])
 
-  const resolvedPreview = members.length === 0 ? null : preview
+  const resolvedPreview = previewEligible ? preview : null
+  const resolvedPreviewError = previewEligible ? previewError : null
+  const resolvedPreviewing = previewEligible && previewing
 
   function addMember() {
+    if (members.length >= NOTIFICATION_GROUP_LIMITS.memberCount) {
+      toast.error(`A group can have no more than ${NOTIFICATION_GROUP_LIMITS.memberCount} members.`)
+      return
+    }
     setMembers((m) => [...m, { kind: 'role', entityKey: '', mode: 'include' }])
   }
-  function updateMember(i: number, patch: Partial<Member>) {
+  function updateMember(i: number, patch: Partial<NotificationGroupMember>) {
     setMembers((m) => m.map((x, j) => (j === i ? { ...x, ...patch } : x)))
   }
   function removeMember(i: number) {
@@ -304,6 +380,7 @@ function GroupEditor({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Site Supervisors"
+            maxLength={NOTIFICATION_GROUP_LIMITS.nameLength}
             autoFocus
           />
         </div>
@@ -313,12 +390,13 @@ function GroupEditor({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Optional — what this group is for"
+            maxLength={NOTIFICATION_GROUP_LIMITS.descriptionLength}
           />
         </div>
         <div className="space-y-1.5">
           <Label>Colour</Label>
           <div className="flex items-center gap-1.5">
-            {SWATCHES.map((c) => (
+            {NOTIFICATION_GROUP_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"
@@ -333,8 +411,15 @@ function GroupEditor({
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Members</Label>
-            <Button variant="outline" size="sm" onClick={addMember}>
+            <Label>
+              Members ({members.length}/{NOTIFICATION_GROUP_LIMITS.memberCount})
+            </Label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addMember}
+              disabled={members.length >= NOTIFICATION_GROUP_LIMITS.memberCount}
+            >
               <Plus size={13} /> Add member
             </Button>
           </div>
@@ -363,7 +448,10 @@ function GroupEditor({
                     value={m.kind}
                     triggerClassName="w-40"
                     onChange={(e) =>
-                      updateMember(i, { kind: e.target.value as MemberKind, entityKey: '' })
+                      updateMember(i, {
+                        kind: e.target.value as NotificationGroupMemberKind,
+                        entityKey: '',
+                      })
                     }
                   >
                     {KIND_OPTIONS.map((k) => (
@@ -374,11 +462,15 @@ function GroupEditor({
                   </Select>
                   {m.kind !== 'everyone' ? (
                     <div className="min-w-[10rem] flex-1">
-                      <SearchSelect
+                      <RemoteSearchSelect
+                        lookup={lookupFor(m.kind)}
                         value={m.entityKey}
-                        options={optionsFor(m.kind, options)}
+                        initialOption={optionsFor(m.kind, options).find(
+                          (candidate) => candidate.value === m.entityKey,
+                        )}
                         placeholder={`Choose a ${KIND_LABEL[m.kind].toLowerCase()}`}
                         searchPlaceholder="Search…"
+                        sheetTitle={`Choose a ${KIND_LABEL[m.kind].toLowerCase()}`}
                         ariaLabel={KIND_LABEL[m.kind]}
                         onChange={(v) => updateMember(i, { entityKey: v })}
                       />
@@ -405,8 +497,10 @@ function GroupEditor({
         <div className="rounded-md border border-teal-200 bg-teal-50/60 p-3 text-sm dark:border-teal-900 dark:bg-teal-950/30">
           <div className="flex items-center gap-2 font-medium text-teal-900 dark:text-teal-200">
             <Users size={14} />
-            {previewing ? (
+            {resolvedPreviewing ? (
               <span className="text-slate-500">Resolving…</span>
+            ) : resolvedPreviewError ? (
+              <span className="text-rose-700 dark:text-rose-300">{resolvedPreviewError}</span>
             ) : resolvedPreview ? (
               <span>
                 Reaches {resolvedPreview.count} {resolvedPreview.count === 1 ? 'person' : 'people'}{' '}

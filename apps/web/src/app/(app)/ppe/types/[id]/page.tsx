@@ -20,6 +20,8 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recentActivityForEntity } from '@/lib/audit'
 import { DetailPageLayout } from '@/components/page-layout'
 import { ActivityFeed } from '@/components/activity-feed'
+import { isUuid } from '@/lib/list-params'
+import { countScopedCustomFields } from '@/lib/custom-fields/subtype-retirement'
 import { PpeTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +33,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function PpeTypeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!isUuid(id)) notFound()
+
   const ctx = await requireModuleManage('ppe')
 
   const data = await ctx.db(async (tx) => {
@@ -76,11 +80,19 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
       .select({ c: count() })
       .from(ppeItems)
       .where(eq(ppeItems.typeId, id))
-    return { type, groups, criteria, banks, itemCount: Number(itemTally?.c ?? 0) }
+    const customFieldCount = await countScopedCustomFields(tx, ctx.tenantId, 'ppe', id)
+    return {
+      type,
+      groups,
+      criteria,
+      banks,
+      itemCount: Number(itemTally?.c ?? 0),
+      customFieldCount,
+    }
   })
 
   if (!data) notFound()
-  const { type, groups, criteria, banks, itemCount } = data
+  const { type, groups, criteria, banks, itemCount, customFieldCount } = data
   const activity = await recentActivityForEntity(ctx, 'ppe_type', id, 50)
 
   return (
@@ -100,6 +112,11 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
               <Badge variant="secondary">
                 {itemCount} item{itemCount === 1 ? '' : 's'}
               </Badge>
+              {customFieldCount > 0 ? (
+                <Badge variant="secondary">
+                  {customFieldCount} custom field{customFieldCount === 1 ? '' : 's'}
+                </Badge>
+              ) : null}
             </div>
           }
         />
@@ -120,6 +137,7 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
         criteria={criteria}
         banks={banks}
         itemCount={itemCount}
+        customFieldCount={customFieldCount}
         activitySlot={<ActivityFeed entries={activity} timeZone={ctx.timezone} />}
       />
     </DetailPageLayout>

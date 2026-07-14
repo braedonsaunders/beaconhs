@@ -9,6 +9,7 @@
 import { useState, useTransition } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button, SignaturePad } from '@beaconhs/ui'
+import { RawImage } from '@/components/raw-image'
 import { toast } from '@/lib/toast'
 import { clearMySignature, saveMySignature } from './actions'
 
@@ -67,10 +68,10 @@ export function SignatureSection({
           <p className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
             Current signature
           </p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <RawImage
             src={currentUrl}
             alt="Your saved signature"
+            optimizationReason="authenticated"
             className="max-h-20 w-full max-w-xs rounded border border-slate-200 bg-white object-contain p-1 dark:border-slate-700"
           />
         </div>

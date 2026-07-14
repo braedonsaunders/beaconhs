@@ -5,7 +5,7 @@
 // hand), with quick filters, On-This-Day memories, and the activity heatmap.
 
 import { useEffect, useState } from 'react'
-import { CalendarClock, ChevronRight, Plus, Search, Sparkles, X } from 'lucide-react'
+import { CalendarClock, ChevronRight, Loader2, Plus, Search, Sparkles, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import {
   GROUP_BY_OPTIONS,
@@ -47,10 +47,12 @@ export function SidebarTree({
   filters,
   selectedId,
   loading,
+  loadingMore = false,
   authorMode = false,
   onGroupByChange,
   onFiltersChange,
   onSelect,
+  onLoadMore,
   onNewEntry,
   onPickDate,
 }: {
@@ -59,11 +61,13 @@ export function SidebarTree({
   filters: JournalFilters
   selectedId: string | null
   loading?: boolean
+  loadingMore?: boolean
   /** Records "Open full entry" flyout: browsing another author — hide create. */
   authorMode?: boolean
   onGroupByChange: (g: GroupBy) => void
   onFiltersChange: (f: Partial<JournalFilters>) => void
   onSelect: (entryId: string) => void
+  onLoadMore: () => void
   onNewEntry: () => void
   onPickDate: (dateISO: string) => void
 }) {
@@ -225,8 +229,20 @@ export function SidebarTree({
                 selectedId={selectedId}
                 onToggle={toggle}
                 onSelect={onSelect}
+                countsPartial={data.treeHasMore}
               />
             ))}
+            {data.treeHasMore ? (
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={loadingMore}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {loadingMore ? <Loader2 size={13} className="animate-spin" /> : null}
+                {loadingMore ? 'Loading older entries…' : 'Load older entries'}
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -252,6 +268,7 @@ function TreeRow({
   selectedId,
   onToggle,
   onSelect,
+  countsPartial,
 }: {
   node: TreeNode
   depth: number
@@ -259,6 +276,7 @@ function TreeRow({
   selectedId: string | null
   onToggle: (key: string) => void
   onSelect: (id: string) => void
+  countsPartial: boolean
 }) {
   const isBranch = !!node.children && node.children.length > 0
   const isOpen = expanded.has(node.key)
@@ -310,6 +328,7 @@ function TreeRow({
         <span className="truncate">{node.label}</span>
         <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums dark:text-slate-500">
           {node.count}
+          {countsPartial ? '+' : ''}
         </span>
       </button>
       {isBranch && isOpen ? (
@@ -323,6 +342,7 @@ function TreeRow({
               selectedId={selectedId}
               onToggle={onToggle}
               onSelect={onSelect}
+              countsPartial={countsPartial}
             />
           ))}
         </div>

@@ -47,11 +47,11 @@ export type ComputeFormScoreResult = {
 function deriveDefaultScore(
   schema: FormSchemaV1,
   values: Record<string, unknown>,
+  rows: Record<string, Array<Record<string, unknown>>>,
 ): { score: number; failedFieldKeys: string[]; hasAnyScorable: boolean } {
   let pass = 0
   let fail = 0
-  const failedFieldKeys: string[] = []
-  let hasAnyScorable = false
+  const failedFieldKeys = new Set<string>()
 
   for (const section of schema.sections) {
     for (const field of section.fields) {
@@ -59,22 +59,28 @@ function deriveDefaultScore(
       // Only pass/fail-shaped types contribute to default scoring; rating /
       // traffic_light / risk_matrix don't have a binary pass-fail axis.
       if (field.type !== 'pass_fail_na' && field.type !== 'yes_no_comment') continue
-      hasAnyScorable = true
 
-      let answer: string | null = null
-      const raw = values[field.id]
-      if (field.type === 'pass_fail_na') {
-        answer = raw == null ? null : String(raw)
-      } else {
-        // yes_no_comment stores `{ answer: 'yes' | 'no' | 'na', comment?: string }`
-        const v = raw as { answer?: string } | undefined
-        answer = v?.answer ?? null
-      }
+      const fieldValues = section.repeating
+        ? (rows[section.id] ?? []).map((row) => row[field.id])
+        : [values[field.id]]
+      for (const raw of fieldValues) {
+        let answer: string | null = null
+        if (field.type === 'pass_fail_na') {
+          answer = raw == null ? null : String(raw)
+        } else {
+          // yes_no_comment stores `{ answer: 'yes' | 'no' | 'na', comment?: string }`
+          const v = raw as { answer?: string } | undefined
+          answer = v?.answer ?? null
+        }
 
-      if (answer === 'pass' || answer === 'yes') pass += 1
-      else if (answer === 'fail' || answer === 'no') {
-        fail += 1
-        failedFieldKeys.push(field.id)
+        if (answer === 'pass' || answer === 'yes') pass += 1
+        else if (answer === 'fail' || answer === 'no') {
+          fail += 1
+          // The public result contains field ids, not response-row addresses.
+          // Keep it unique so React keys, CAPA links, and hard-fail merging are
+          // deterministic even when several rows fail the same check.
+          failedFieldKeys.add(field.id)
+        }
       }
       // N/A or missing — skip
     }
@@ -82,28 +88,38 @@ function deriveDefaultScore(
 
   const denom = pass + fail
   const score = denom > 0 ? Math.round((pass / denom) * 10000) / 100 : 100
-  return { score, failedFieldKeys, hasAnyScorable: hasAnyScorable && denom > 0 }
+  return { score, failedFieldKeys: [...failedFieldKeys], hasAnyScorable: denom > 0 }
 }
 
 // --- Hard-fail rule evaluation ---------------------------------------------
 
-function evaluateHardFailRules(rules: HardFailRule[], values: Record<string, unknown>): string[] {
-  const trigger: string[] = []
+function evaluateHardFailRules(
+  rules: HardFailRule[],
+  values: Record<string, unknown>,
+  rows: Record<string, Array<Record<string, unknown>>>,
+): string[] {
+  const trigger = new Set<string>()
   for (const rule of rules) {
     for (const key of rule.fieldKeys) {
-      const raw = values[key]
-      if (raw === undefined || raw === null) continue
-      const s =
-        typeof raw === 'string'
-          ? raw
-          : typeof raw === 'object' && raw && 'answer' in raw
-            ? String((raw as { answer?: string }).answer ?? '')
-            : String(raw)
-      if (rule.kind === 'any_field_eq' && s === rule.value) trigger.push(key)
-      if (rule.kind === 'any_field_in' && rule.values.includes(s)) trigger.push(key)
+      const candidates = [values[key]]
+      for (const sectionRows of Object.values(rows)) {
+        for (const row of sectionRows) candidates.push(row[key])
+      }
+
+      for (const raw of candidates) {
+        if (raw === undefined || raw === null) continue
+        const s =
+          typeof raw === 'string'
+            ? raw
+            : typeof raw === 'object' && 'answer' in raw
+              ? String((raw as { answer?: string }).answer ?? '')
+              : String(raw)
+        if (rule.kind === 'any_field_eq' && s === rule.value) trigger.add(key)
+        if (rule.kind === 'any_field_in' && rule.values.includes(s)) trigger.add(key)
+      }
     }
   }
-  return trigger
+  return [...trigger]
 }
 
 // --- Entry point -----------------------------------------------------------
@@ -118,7 +134,7 @@ export function computeFormScore(
 
   // 1. Resolve the numeric score.
   let score: number
-  const defaultDerivation = deriveDefaultScore(schema, values)
+  const defaultDerivation = deriveDefaultScore(schema, values, rows)
   if (routing?.scoreFormula) {
     const raw = evaluateFormulaTree(routing.scoreFormula as FormulaExpression, evalCtx)
     const n = Number(raw)
@@ -131,11 +147,11 @@ export function computeFormScore(
   //    has a list of items to surface, even when a custom formula produced
   //    the headline number.
   const failedFieldKeys = [...defaultDerivation.failedFieldKeys]
-  if (routing?.hardFailRules) {
-    const hardFailKeys = evaluateHardFailRules(routing.hardFailRules, values)
-    for (const k of hardFailKeys) {
-      if (!failedFieldKeys.includes(k)) failedFieldKeys.push(k)
-    }
+  const hardFailKeys = routing?.hardFailRules
+    ? evaluateHardFailRules(routing.hardFailRules, values, rows)
+    : []
+  for (const k of hardFailKeys) {
+    if (!failedFieldKeys.includes(k)) failedFieldKeys.push(k)
   }
 
   // 3. Compute status.
@@ -145,8 +161,7 @@ export function computeFormScore(
   //    - Otherwise threshold check.
   let status: ComplianceStatus = 'compliant'
 
-  const hardFailTriggered =
-    !!routing?.hardFailRules && evaluateHardFailRules(routing.hardFailRules, values).length > 0
+  const hardFailTriggered = hardFailKeys.length > 0
 
   if (hardFailTriggered) {
     status = 'non_compliant'

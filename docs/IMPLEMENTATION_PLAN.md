@@ -31,7 +31,7 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 
 - ✅ Schema + Zod validation (`FormSchemaV1`, every field type, conditional logic, multi-step workflow)
 - ✅ Field-type registry (40+ types), conditional-logic evaluator, scoring extractor, formula evaluator (with tests)
-- ✅ Form template list + detail page (schema browser, version history, assignments, recent responses, raw-JSON debug)
+- ✅ Form template list + detail page (schema browser, version history, compliance requirements, recent responses, raw-JSON debug)
 - ✅ Form response detail page (renders any response against any version's schema, including repeating sections)
 - ✅ Form responses list with filters / search / pagination
 - ✅ **Form designer UI** — three-pane editor (palette / canvas / properties), section + field CRUD, reorder, choice-option editor, validation min/max, repeating sections, **visual logic-rule builder** (any/all combinator + per-clause field/op/value), preview pane, immutable-version publish flow
@@ -39,7 +39,7 @@ Updated as work lands. `✅` = done, `🟡` = in progress / stub, `⬜` = not ye
 - ✅ **File storage** — `@beaconhs/storage` (S3-compatible, MinIO in dev, R2 in prod), presigned PUT, attachment finalize, `FileUpload` client component, `PhotoGallery` lightbox
 - 🟡 Auto-PDF renderer (Puppeteer pipeline exists; needs to fetch attachments + sign URLs for PDF embed)
 - ⬜ Workflow step transitions (multi-step assignee handoff)
-- ⬜ Assignment dispatcher (scheduled / event-triggered tick consumer)
+- ✅ Unified compliance scheduler and materializer (scheduled requirements, exact response linkage, overdue transitions, and notification dispatch)
 
 ### Phase 2 — Form-driven modules
 
@@ -51,7 +51,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 | Corrective Actions | ✅           | ✅ General + Work form (audit-logged) + status workflow (audit-logged) + activity feed + source-link                                                                       | ✅ New CA form (preserves source link via query)       |
 | Inspections        | ✅           | ✅ Lists form-template-driven inspection responses + per-template "new" entry points                                                                                       | (uses Forms designer + renderer)                       |
 | Toolbox talks      | (uses Forms) | (uses Forms)                                                                                                                                                               | (uses Forms)                                           |
-| Forms — Templates  | ✅           | ✅ Overview + schema browser + versions + assignments + recent responses + raw JSON                                                                                        | ✅ **Designer** (three-pane) + ✅ **Filler** (stepper) |
+| Forms — Templates  | ✅           | ✅ Overview + schema browser + versions + compliance requirements + recent responses + raw JSON                                                                            | ✅ **Designer** (three-pane) + ✅ **Filler** (stepper) |
 | Forms — Responses  | ✅           | ✅ Schema-aware render with repeating sections + workflow steps                                                                                                            | —                                                      |
 
 ### Phase 3 — Specialty modules
@@ -77,7 +77,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 
 ### Phase 5 — Migration + cutover
 
-- ⬜ Project-specific ETL adapters
+- ⬜ Private project-specific ETL adapters (not shipped in this repository)
 - ⬜ Validation harness
 - ⬜ Dry runs + cutover
 
@@ -94,7 +94,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 
 ### Cross-cutting
 
-- ✅ **Container-app shell**: AppShell is `h-screen overflow-hidden`. Pages choose `PageContainer` (whole-page scroll), `ListPageLayout` (sticky header + scrolling body), `DetailPageLayout` (sticky header + subtabs + scrolling body), `DetailSplitLayout` (sticky header + sticky sidebar + scrolling body), or `WizardLayout` (sticky header + scrolling body + sticky footer for forms).
+- ✅ **Container-app shell**: AppShell is `h-screen overflow-hidden`. Pages choose `PageContainer` (whole-page scroll), `ListPageLayout` (sticky header + scrolling body), `DetailPageLayout` (sticky header + subtabs + scrolling body), or `WizardLayout` (sticky header + scrolling body + sticky footer for forms).
 - ✅ **Horizontal subtabs everywhere**: Incident (Overview/Medical/Injuries/Investigation/Photos/Activity), Corrective Action (Overview/Work/Status/Activity), PPE (Overview/Inspections/Issues/History/Status), Confined Space (Overview/Atmospheric readings), Lone Worker (Overview/Check-ins), Document (Overview/Versions/Acknowledgments/Reviews), Forms Template (Overview/Schema/Assignments/Recent responses/Raw JSON), plus existing tabs on People, Equipment, Locations.
 - ✅ **Notifications inbox** at /notifications + bell-icon unread count in header + mark-read / mark-all-read actions
 - ✅ App-shell sidebar grouped: Overview / Frontline (Forms / Inspections / Inspection Banks / Incidents / CAs) / Programs (Training + Skills + Authorities / Documents / CS + Sensors / Lone Worker) / Assets & people (People / Locations / Equipment / PPE) / Insight / Settings
@@ -107,7 +107,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 - ✅ **Inspection Banks** (`/inspections/banks`): reusable inspection-criteria templates with criteria CRUD, sequence reorder, response-type + photo/comment-required flags.
 - ✅ **Training Skill Authorities** (`/training/authorities`) and **Skill Types** (`/training/skills`): full competency hierarchy with skill assignments per person + expiry tracking.
 - ✅ **Atmospheric Sensors** (`/confined-space/sensors`): calibration history + next-due tracking + overdue alarms.
-- ✅ **PDF rendering pipeline**: Puppeteer worker handles `form_response`, `incident`, and `certificate` kinds (full cert + wallet card). Uploads via `putObject`, sets pdfAttachmentId, audit-logs. Public routes at `/incidents/[id]/pdf`, `/apps/responses/[id]/pdf`, `/training/records/[id]/certificate?format=cert|wallet` enqueue and 302 to the signed URL.
+- ✅ **PDF rendering pipeline**: the worker renders bounded record summaries, configured document templates, office/document conversions, bundles, and slide imports; durable form-response exports are attached atomically. Module PDF routes use the same bounded queue contract for transient downloads. Training certificates and wallet cards render directly from the selected Card Studio output on authenticated routes, so there is one credential-design path and no stale generated attachment copy.
 
 ### Wave 3 — legacy-parity rebuild (13 first-class modules built out properly)
 
@@ -117,11 +117,11 @@ detail page with multiple tabs, library/admin pages, and every server action
 audit-logged — matching the depth of the legacy Laravel modules.
 
 - ✅ **HazID / JSHA** (`/hazid`) — **NOT a form template**, a real module. 18 new tables (hazid_assessments + 17 join/library tables). 11-tab detail page: Overview / PPE / Q&A / Tasks / Hazards / Working at Heights / Confined Space (with sketchpad diagram + atmospheric-reading log + entry log) / Arc Flash (with CSA-Z462 reference table) / Signatures (role-flagged Internal/External + ConfinedSpaceEntrant/Attendant/Rescue) / Photos / Activity. Library admin: hazards / hazard-types / hazard-sets / tasks / assessment-types (with default PPE + default questions). Signed-report builder bundling N completed assessments into one PDF.
-- ✅ **Equipment full expansion** — work-orders, truck-log, scheduled inspections (from Wave 2) + new: equipment-types CRUD, equipment-categories, equipment-rates (per-type hourly/daily/weekly/monthly), equipment-expenses (per-item ledger), equipment-log (freeform notes), equipment-inspection-types (per-type pass-fail criteria with auto-WO-on-fail), check-in/check-out workflow with overdue alerts, bulk QR generator (4×3 printable label grid), reports (fleet / ROI / upcoming-inspections / upcoming-oil-change / charges).
-- ✅ **Documentation full** (`/documents`) — books (with HTML5 drag-reorder), reference library + types/categories, document-types CRUD, document-categories tree, **document-assignments with compliance % rollup** + per-person tick matrix + send-reminder action, **management-review records** (annual board review with multi-doc + decisions + action-items tabs).
-- ✅ **Inspections legacy-style** (`/inspections/records`) — separate from the form-builder inspections. New `inspection_types` (admin-defined templates, link to existing `inspection_banks` as question banks), `inspection_records` with per-criterion responses (pass/fail/n_a + severity + non-compliance description + per-row photos + assignment + auto-spawned CA on fail+high-severity), customer signature pad, foreman field, "pass all" shortcut, `inspection_assignments` with compliance rollup.
-- ✅ **Training full** — `/training/assessments` (test banks with multi-type questions, server-side grading, auto-cert on pass + auto training_record on pass-of-course-linked-type), `/training/assignments` (audience-based with compliance %), `/training/matrix` (person × course grid with valid/expiring/expired/never), `/training/transcripts/[personId]` (per-person history), `/training/reports/cwb` (CWB welder roster).
-- ✅ **Toolbox Talks / Journals** (`/toolbox`) — new top-level module. List/detail with attendee signatures + photos, `/toolbox/assignments` with cron + compliance %, `/toolbox/transcripts/[personId]` (per-person history of journals they attended).
+- ✅ **Equipment operational expansion** — work orders, truck log, scheduled inspections, equipment types/categories, freeform equipment log, criteria-driven inspection types with auto-WO-on-fail, check-in/check-out with overdue alerts, bulk QR labels, and operational fleet/usage/maintenance reports. Billing rates, expenses, charges, and other financial records are intentionally owned by the external financial system rather than duplicated in BeaconHS.
+- ✅ **Documentation full** (`/documents`) — exact-version books, document-types CRUD, document-categories tree, canonical document-acknowledgment obligations with per-person compliance, and **management-review records** (annual board review with multi-doc + decisions + action-items tabs).
+- ✅ **Inspections legacy-style** (`/inspections/records`) — separate from the form-builder inspections. New `inspection_types` (admin-defined templates, link to existing `inspection_banks` as question banks), `inspection_records` with per-criterion responses (pass/fail/n_a + severity + non-compliance description + per-row photos + assignment + auto-spawned CA on fail+high-severity), customer signature pad, foreman field, and "pass all" shortcut. Inspection cadence and rollup are canonical unified compliance obligations.
+- ✅ **Training full** — `/training/assessments` (test banks with multi-type questions, server-side grading, exact compliance-obligation provenance, auto-cert on pass + auto training_record on pass-of-course-linked-type), canonical audience requirements under `/compliance/obligations`, `/training/matrix` (person × course grid with valid/expiring/expired/never), `/training/transcripts/[personId]` (per-person history), `/training/reports/cwb` (CWB welder roster).
+- ✅ **Toolbox Talks / Journals** (`/toolbox`) — new top-level module. List/detail with attendee signatures + photos and `/toolbox/transcripts/[personId]` (per-person history of journals they attended). Individual journal cadences and rollups are canonical unified compliance obligations.
 - ✅ **Incidents depth** — new `incident_classifications` (hierarchical), `incident_injury_types`, `incident_hours_periods`. 16 new columns on incidents (EMS arrived/discharged, hospital trail, MOL trail, police+insurance, severity rating, damage estimate). Reports: TRIR (frequency rate), DART (severity rate), OSHA-300A log, monthly trends with inline SVG chart. Lost-time tab with explicit add-row form. Send-email + Copy header actions.
 - ✅ **People depth** — `/people/departments` (table + drawer), `/people/groups`, `/people/titles` (with Job Description tab + task list + per-task acknowledgement matrix), per-title PDF. Detail page adds Groups / Title / Compliance tabs (compliance shows training% + doc-ack% + PPE roster + overdue count).
 - ✅ **PPE depth** — `/ppe/types` admin with per-type inspection criteria + sizing scheme, `/ppe/inspection-criteria` cross-type overview, `/ppe/issue` dashboard-level issuance with single-tx ledger+state mutation, `/ppe/reports/{expired,expiring,by-person,inspection-due}`, **annual third-party recertification records** with certificate attachment, **auto-CA spawn** on inspection fail with severity≥high.
@@ -141,7 +141,6 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 - ✅ **Equipment Truck Log** (`/equipment/truck-log`): month calendar grid + entry form (km in/out, driver, manpower, site) + summary matrix with grand totals + CSV export.
 - ✅ **Equipment Scheduled Inspections** (`/equipment/inspections`): overdue pre-use + annual rollup + start-inspection link wired to the appropriate equipment-inspection template.
 - ✅ **Document Books** (`/documents/books`): orderable groupings of documents with publish + render-book-as-one-PDF actions.
-- ✅ **Document Reference Library** (`/documents/reference`): external file/URL pointers for SDS / manuals / regulatory references.
 - ✅ **Kiosk mode** (`/kiosk?t=<slug>`): full-screen kiosk page outside AppShell — workers sign in/out on a shared tablet with an employee picker, optional site + crew pickers, PIN-gated by tenant; records to `kiosk_scans`.
 - ✅ **Training Classes** (`/training/classes`): schedule classes for courses, roster attendees, mark-complete spawns `training_records` per attendee.
 - ✅ **CSV export route handlers** on 12 list pages (people, equipment, incidents, CAs, documents, PPE, locations, lone-worker, confined-space, inspections, forms/responses, training/courses). Each is a Route Handler streaming a properly-formatted download, audit-logged as `action: 'export'`.
@@ -162,7 +161,7 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 
 **What we're building:** A from-scratch, multi-tenant H&S SaaS platform that replicates the existing BeaconHS feature surface (Incidents, HazID/JSHA, Inspections, Training, Equipment, PPE, Documentation, Corrective Actions) and adds a powerful freeform form builder, configurable risk matrices, a tenant-aware plugin/integration framework, an in-app dashboard widget builder, and a public REST API.
 
-**Strategy:** Hard cutover for private adopters that need historical migration. The public platform ships with generic ETL scaffolding; tenant-specific source mappings and cutover notes stay outside the repository. The deployment shape is self-host friendly and sized for small-to-midmarket HSE programs with room to grow.
+**Strategy:** Hard cutover for private adopters that need historical migration. The public platform does not ship an ETL package. Authorized maintainers keep company-specific migration code, source mappings, and cutover notes in the ignored local `packages/etl` directory. The deployment shape is self-host friendly and sized for small-to-midmarket HSE programs with room to grow.
 
 **Stack:** TypeScript / Node.js / Next.js (App Router) full-stack + React + PostgreSQL + BullMQ on Redis + Cloudflare R2 + Postgres full-text search.
 
@@ -259,9 +258,12 @@ Monorepo with Turborepo. Single deploy target (Next.js) for v1.
   /api-types      Public REST API types (OpenAPI-emit)
   /jobs           Job definitions consumed by worker
   /seeds          Starter content packs
-/migrations             ETL scripts (beaconhs → new app)
 /docs
 ```
+
+Private company migration tooling may exist locally at ignored `packages/etl`,
+but it is not a workspace package and is never part of the public repository or
+application image.
 
 ### 3.2 Tech choices (concrete)
 
@@ -322,8 +324,8 @@ Sites carry lat/long + geofence radius for the GPS auto-suggest feature.
 
 - `form_templates` — id, tenant_id, key (slug, stable across versions), name, category, status
 - `form_template_versions` — template_id, version, schema JSONB (sections, fields, logic, layout), published_at, published_by
-- `form_assignments` — template_id, scope (people/role/site/all), schedule (cron-ish), trigger_event (nullable), due_offset
-- `form_responses` — id, tenant_id, template_version_id, status (draft/in_progress/submitted/in_review/closed), current_step, assigned_to, submitted_by, submitted_at, site_id, data JSONB
+- Form requirements use the canonical `compliance_obligations` + `compliance_audience` model; the obligation target identifies the form template and its schedule is an exact five-field cron expression with an optional due offset.
+- `form_responses` — id, tenant_id, template_version_id, compliance_obligation_id (nullable for on-demand entries), status (draft/in_progress/submitted/in_review/closed/rejected/non_compliant), current_step, submitted_by, submitted_at, site_org_unit_id, data JSONB
 - `form_response_steps` — response_id, step_key, assignee, signed_at, signature_attachment_id, comment
 - `form_response_search` — tsvector index on response.data + key fields
 
@@ -332,7 +334,7 @@ JSONB for response data (flexible across template versions). Selected indexed co
 ### 4.4 Specialty modules (first-class data, beyond pure forms)
 
 - **Incidents** — `incidents` + `incident_classifications`, `incident_injuries`, `incident_lost_time_events`, `incident_investigations`. Investigation is itself a form-template instance but the parent Incident record carries the structured taxonomy.
-- **Training** — `training_courses`, `training_classes`, `training_class_attendees`, `training_assignments` (role/trade matrix), `training_records` (a person earned a course), `training_certificates` (PDF + verification token + expiry), `training_skills`, `training_skill_evaluations`.
+- **Training** — `training_courses`, `training_classes`, `training_class_attendees`, `training_records` (a person earned a course), `training_certificates` (verification token + expiry), `training_skills`, and `training_skill_evaluations`. Course, assessment, and certification requirements use unified compliance obligations.
 - **Equipment** — `equipment_items`, `equipment_types`, `equipment_location_history`, `equipment_work_orders`. Inspections are form responses with FK to `equipment_id`.
 - **PPE** — `ppe_items` (sub-type of equipment OR separate, lean toward separate to keep lifecycle distinct), `ppe_issues`, `ppe_returns`, `ppe_inspections` (form responses).
 - **Documentation** — `documents`, `document_versions`, `document_acknowledgments`, `document_reviews`, `document_books`, `document_book_acknowledgments`.
@@ -446,13 +448,13 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Admin can supply custom CSS / custom header HTML / footer HTML per template.
 - PDF generation is a queued job (BullMQ) — returns a presigned R2 URL.
 
-### 5.7 Assignment & workflow
+### 5.7 Requirements & workflow
 
-- Assignment shapes:
-  - **On-demand:** worker browses "Available forms" list, scoped to their role and site.
-  - **Scheduled:** repeats on a cadence (daily / weekly / monthly / cron). Creates an assignment row that's "due" today, surfaces in the worker's inbox, generates overdue notification if missed.
-  - **Event-triggered:** an event (e.g. `incident.created`) generates an assignment to a specific role/person.
-  - **Manual:** admin assigns a template instance to specific people/sites with a due date.
+- Requirement shapes:
+  - **On-demand:** a worker browses the published app catalogue and starts an unassigned response.
+  - **Scheduled:** one canonical compliance obligation repeats on a daily, weekly, monthly, yearly, or exact cron cadence. It materializes a per-person status, links the submitted response to that exact obligation, and emits overdue transitions when missed.
+  - **Event-triggered:** a form Flow reacts to a domain event without creating a second assignment store.
+  - **Manual:** an admin creates a one-time canonical obligation for the required audience and due date.
 - Workflow steps: each step has an assignee (literal user, role, or expression like `$foreman_of_site`), optional signature required, optional fields visible at that step only. Until the final step's submission, the response is "in_progress".
 - Step transitions emit events (consumed by notifications + plugin framework).
 
@@ -638,7 +640,7 @@ Plugin-era packages, tables, routes, and compatibility redirects are retired.
 
 ### 11.2 ETL architecture
 
-- Standalone Node migration project (`/migrations` in the monorepo, but doesn't ship in the app image).
+- Standalone private Node migration project in ignored local `packages/etl`; it is excluded from the pnpm workspace, public lockfile, repository, and app image.
 - Reads from SQL Server via `mssql` driver.
 - Writes to the new Postgres via Drizzle.
 - Per-entity migrators, idempotent, can be run repeatedly during dry runs.
@@ -744,7 +746,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 
 ### Phase 5 — Migration + Cutover (4–6 weeks of overlap)
 
-- ETL build + dry runs.
+- Private ETL build + dry runs.
 - Validation harness.
 - Beta with an internal tenant on staging.
 - Cutover weekend.

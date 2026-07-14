@@ -10,12 +10,11 @@
 // Controlled component: the parent owns `value: AudienceItem[]` and gets
 // `onChange`. The resolved people set is the UNION of every row (deduped).
 //
-// Kind-aware: pass `allowedTypes` to restrict the type dropdown. In Milestone 1
-// the hub writes to LEGACY per-module tables, and each table only supports a
-// subset of audience kinds — so the obligation form narrows `allowedTypes` by
-// kind to avoid silently dropping unsupported targets. The unified
-// `compliance_audience` table (M3) supports all six for every kind.
+// Kind-aware: pass `allowedTypes` to restrict the type dropdown. Each obligation
+// kind exposes only audience dimensions its evaluator can resolve, while every
+// persisted target uses the unified `compliance_audience` table.
 
+import { useState } from 'react'
 import { Plus, Trash2, Users } from 'lucide-react'
 import {
   Badge,
@@ -26,9 +25,10 @@ import {
   CardTitle,
   Input,
   Label,
-  SearchSelect,
   Select,
 } from '@beaconhs/ui'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
+import type { PickerLookup, PickerOption } from '@/lib/picker-options'
 
 export type AudienceType = 'everyone' | 'role' | 'trade' | 'department' | 'person' | 'org_unit'
 
@@ -60,9 +60,24 @@ const TYPE_LABEL: Record<AudienceType, string> = {
   org_unit: 'Site / project',
 }
 
-// `everyone` carries a sentinel entityKey ('all') to match the documents
-// convention; the unified audience table later normalises this.
+// `everyone` carries a UI sentinel entityKey ('all'); obligation actions
+// normalize it to the canonical empty key when persisting the audience row.
 export const EVERYONE_KEY = 'all'
+
+function lookupFor(type: Exclude<AudienceType, 'everyone'>): PickerLookup {
+  switch (type) {
+    case 'role':
+      return 'compliance-obligation-audience-roles'
+    case 'trade':
+      return 'compliance-obligation-audience-trades'
+    case 'department':
+      return 'compliance-obligation-audience-departments'
+    case 'person':
+      return 'compliance-obligation-audience-people'
+    case 'org_unit':
+      return 'compliance-obligation-audience-org-units'
+  }
+}
 
 export function AudiencePicker({
   value,
@@ -86,20 +101,46 @@ export function AudiencePicker({
   onPendingValueChange: (v: string) => void
 }) {
   const types = ALL_AUDIENCE_TYPES.filter((t) => allowedTypes.includes(t))
+  const [resolvedOptions, setResolvedOptions] = useState(options)
 
   function valueOptions(): { value: string; label: string }[] {
-    if (pendingType === 'role') return options.roles.map((r) => ({ value: r.key, label: r.name }))
-    if (pendingType === 'trade') return options.trades.map((t) => ({ value: t.id, label: t.label }))
+    if (pendingType === 'role')
+      return resolvedOptions.roles.map((r) => ({ value: r.key, label: r.name }))
+    if (pendingType === 'trade')
+      return resolvedOptions.trades.map((t) => ({ value: t.id, label: t.label }))
     if (pendingType === 'department')
-      return options.departments.map((d) => ({ value: d.id, label: d.label }))
+      return resolvedOptions.departments.map((d) => ({ value: d.id, label: d.label }))
     if (pendingType === 'org_unit')
-      return options.orgUnits.map((o) => ({ value: o.id, label: o.label }))
+      return resolvedOptions.orgUnits.map((o) => ({ value: o.id, label: o.label }))
     if (pendingType === 'person')
-      return options.people.map((p) => ({
+      return resolvedOptions.people.map((p) => ({
         value: p.id,
         label: `${p.label}${p.sub ? ' · ' + p.sub : ''}`,
       }))
     return []
+  }
+
+  function rememberOption(type: Exclude<AudienceType, 'everyone'>, option?: PickerOption) {
+    if (!option) return
+    setResolvedOptions((current) => {
+      if (type === 'role') {
+        if (current.roles.some((row) => row.key === option.value)) return current
+        return { ...current, roles: [...current.roles, { key: option.value, name: option.label }] }
+      }
+      const key =
+        type === 'trade'
+          ? 'trades'
+          : type === 'department'
+            ? 'departments'
+            : type === 'org_unit'
+              ? 'orgUnits'
+              : 'people'
+      if (current[key].some((row) => row.id === option.value)) return current
+      return {
+        ...current,
+        [key]: [...current[key], { id: option.value, label: option.label }],
+      }
+    })
   }
 
   function add() {
@@ -159,31 +200,24 @@ export function AudiencePicker({
                 disabled
                 className="bg-slate-50 dark:bg-slate-900"
               />
-            ) : pendingType === 'person' ? (
-              <SearchSelect
+            ) : (
+              <RemoteSearchSelect
+                id="aud-value"
+                lookup={lookupFor(pendingType)}
                 value={pendingValue}
                 onChange={onPendingValueChange}
-                options={valueOptions()}
+                onOptionChange={(option) => rememberOption(pendingType, option)}
+                initialOption={valueOptions().find((option) => option.value === pendingValue)}
+                excludedValues={value
+                  .filter((item) => item.type === pendingType)
+                  .map((item) => item.entityKey)}
                 placeholder="— pick —"
-                searchPlaceholder="Search people…"
-                sheetTitle="Select a person"
-                ariaLabel="Pick a person"
+                searchPlaceholder={`Search ${TYPE_LABEL[pendingType].toLowerCase()}…`}
+                sheetTitle={`Select a ${TYPE_LABEL[pendingType].toLowerCase()}`}
+                ariaLabel={`Pick a ${TYPE_LABEL[pendingType].toLowerCase()}`}
                 clearable
                 emptyLabel="— pick —"
               />
-            ) : (
-              <Select
-                id="aud-value"
-                value={pendingValue}
-                onChange={(e) => onPendingValueChange(e.target.value)}
-              >
-                <option value="">— pick —</option>
-                {valueOptions().map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
             )}
           </div>
           <Button type="button" variant="outline" onClick={add}>
@@ -205,7 +239,7 @@ export function AudiencePicker({
                 <span className="flex items-center gap-2">
                   <Badge variant="secondary">{TYPE_LABEL[a.type]}</Badge>
                   <span className="text-slate-900 dark:text-slate-100">
-                    {audienceLabel(a, options)}
+                    {audienceLabel(a, resolvedOptions)}
                   </span>
                 </span>
                 <Button
@@ -237,18 +271,4 @@ function audienceLabel(row: AudienceItem, options: AudienceOptions): string {
   if (row.type === 'org_unit')
     return options.orgUnits.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
   return options.people.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
-}
-
-/** One-line summary of an audience for list/detail rows. */
-function summariseAudience(value: AudienceItem[]): string {
-  if (value.length === 0) return '—'
-  if (value.some((a) => a.type === 'everyone')) return 'Everyone'
-  const counts = new Map<AudienceType, number>()
-  for (const a of value) counts.set(a.type, (counts.get(a.type) ?? 0) + 1)
-  const parts: string[] = []
-  for (const [type, n] of counts) {
-    const noun = TYPE_LABEL[type].toLowerCase()
-    parts.push(`${n} ${noun}${n === 1 ? '' : 's'}`)
-  }
-  return parts.join(', ')
 }

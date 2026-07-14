@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
+import { primaryPersonTitleName } from '@beaconhs/db'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -17,7 +18,15 @@ import { PeopleRecordsTable, type PeopleTableRow } from './_records-table'
 
 export const metadata = { title: 'People' }
 
-const SORTS = ['name', 'employee_no', 'hire_date', 'department', 'trade', 'status'] as const
+const SORTS = [
+  'name',
+  'employee_no',
+  'title',
+  'hire_date',
+  'department',
+  'trade',
+  'status',
+] as const
 const STATUS_FILTERS = ['active', 'inactive', 'terminated', 'all'] as const
 type StatusFilter = (typeof STATUS_FILTERS)[number]
 
@@ -40,6 +49,7 @@ export default async function PeoplePage({
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'admin.users.manage')
 
   const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
+    const primaryTitleName = primaryPersonTitleName(people.id, people.tenantId)
     const baseFilters: SQL<unknown>[] = [isNull(people.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -47,6 +57,7 @@ export default async function PeoplePage({
         ilike(people.firstName, term),
         ilike(people.lastName, term),
         ilike(people.employeeNo, term),
+        ilike(primaryTitleName, term),
       )
       if (cond) baseFilters.push(cond)
     }
@@ -65,13 +76,15 @@ export default async function PeoplePage({
           : [desc(people.lastName), desc(people.firstName)]
         : params.sort === 'employee_no'
           ? [dirFn(people.employeeNo)]
-          : params.sort === 'hire_date'
-            ? [dirFn(people.hireDate)]
-            : params.sort === 'department'
-              ? [dirFn(departments.name)]
-              : params.sort === 'status'
-                ? [dirFn(people.status)]
-                : [dirFn(trades.name)]
+          : params.sort === 'title'
+            ? [dirFn(primaryTitleName)]
+            : params.sort === 'hire_date'
+              ? [dirFn(people.hireDate)]
+              : params.sort === 'department'
+                ? [dirFn(departments.name)]
+                : params.sort === 'status'
+                  ? [dirFn(people.status)]
+                  : [dirFn(trades.name)]
 
     const [tot] = await tx.select({ c: count() }).from(people).where(whereClause)
     const data = await tx
@@ -79,6 +92,7 @@ export default async function PeoplePage({
         person: people,
         department: departments,
         trade: trades,
+        primaryTitleName,
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
@@ -112,16 +126,19 @@ export default async function PeoplePage({
     ? (departmentOptions.find((d) => d.id === departmentFilter)?.name ?? 'Unknown')
     : null
 
-  const tableRows: PeopleTableRow[] = rows.map(({ person, department, trade }) => ({
-    id: person.id,
-    firstName: person.firstName,
-    lastName: person.lastName,
-    employeeNo: person.employeeNo,
-    departmentName: department?.name ?? null,
-    tradeName: trade?.name ?? null,
-    hireDate: person.hireDate,
-    status: person.status,
-  }))
+  const tableRows: PeopleTableRow[] = rows.map(
+    ({ person, department, trade, primaryTitleName }) => ({
+      id: person.id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      employeeNo: person.employeeNo,
+      primaryTitleName,
+      departmentName: department?.name ?? null,
+      tradeName: trade?.name ?? null,
+      hireDate: person.hireDate,
+      status: person.status,
+    }),
+  )
 
   return (
     <ListPageLayout
@@ -147,7 +164,7 @@ export default async function PeoplePage({
           />
           <PeopleSubNav active="directory" />
           <div className="flex flex-wrap items-center gap-3">
-            <SearchInput placeholder="Search by name or employee #" />
+            <SearchInput placeholder="Search by name, employee #, or job title" />
             <FilterChips
               basePath="/people"
               currentParams={{ ...sp, status: statusFilter }}
