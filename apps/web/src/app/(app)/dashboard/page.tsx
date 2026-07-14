@@ -1,4 +1,5 @@
 import { requireRequestContext } from '@/lib/auth'
+import { getTranslations } from 'next-intl/server'
 import { PageContainer } from '@/components/page-layout'
 import { loadDashboardMetrics } from './_metrics'
 import { loadDashboardLayout } from './_load-layout'
@@ -30,6 +31,7 @@ export const dynamic = 'force-dynamic'
  */
 export default async function DashboardPage() {
   const ctx = await requireRequestContext()
+  const t = await getTranslations('Dashboard')
   const today = new Date()
   const todayIso = today.toISOString().slice(0, 10)
 
@@ -97,13 +99,15 @@ export default async function DashboardPage() {
     }
   }
 
-  const greeting = buildGreeting(today, ctx.timezone, ctx.membership?.displayName ?? null)
+  const greeting = buildGreeting(today, ctx.timezone, ctx.membership?.displayName ?? null, {
+    morning: t('goodMorning'),
+    afternoon: t('goodAfternoon'),
+    evening: t('goodEvening'),
+  })
   // The tenant rollup is org data — omit it for self-only viewers (they'd have
   // no org cards either, so the number would be the only leak).
   const tenantSummary = canSeeOrgAggregates(ctx)
-    ? `${data.peopleCount.toLocaleString()} active people · ${
-        data.incidents30
-      } incident${data.incidents30 === 1 ? '' : 's'} in the last 30 days`
+    ? t('tenantSummary', { people: data.peopleCount, incidents: data.incidents30 })
     : null
 
   return (
@@ -117,7 +121,12 @@ export default async function DashboardPage() {
   )
 }
 
-function buildGreeting(now: Date, timeZone: string, name: string | null): string {
+function buildGreeting(
+  now: Date,
+  timeZone: string,
+  name: string | null,
+  copy: { morning: string; afternoon: string; evening: string },
+): string {
   // Read the hour in the USER's timezone, not the server's. This renders in a
   // Server Component, so a bare now.getHours() uses the deploy container's clock
   // (UTC in prod) and greets "morning" during someone's evening. Mirrors the
@@ -129,7 +138,7 @@ function buildGreeting(now: Date, timeZone: string, name: string | null): string
   }).formatToParts(now)
   const raw = Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
   const hour = raw === 24 ? 0 : raw // some platforms emit '24' for midnight
-  const stem = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const stem = hour < 12 ? copy.morning : hour < 17 ? copy.afternoon : copy.evening
   const firstName = firstNameFrom(name)
   return firstName ? `${stem}, ${firstName}` : stem
 }

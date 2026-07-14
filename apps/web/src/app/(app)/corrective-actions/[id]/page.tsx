@@ -450,7 +450,8 @@ export default async function CorrectiveActionPage({
           <Alert variant="warning">
             <AlertTitle>This action is locked</AlertTitle>
             <AlertDescription>
-              Closed on {ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone) : '—'}.
+              Closed on{' '}
+              {ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale) : '—'}.
               Reopen from the header to edit.
             </AlertDescription>
           </Alert>
@@ -746,7 +747,7 @@ export default async function CorrectiveActionPage({
                 description="Edits and status changes show up here."
               />
             ) : (
-              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
             )}
           </Section>
         </section>

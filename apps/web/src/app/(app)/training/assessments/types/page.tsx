@@ -311,7 +311,9 @@ export default async function AssessmentTypesPage({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
-                      {type.updatedAt ? formatDate(new Date(type.updatedAt), ctx.timezone) : '—'}
+                      {type.updatedAt
+                        ? formatDate(new Date(type.updatedAt), ctx.timezone, ctx.locale)
+                        : '—'}
                     </TableCell>
                   </TableRow>
                 )

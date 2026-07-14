@@ -260,7 +260,7 @@ export default async function MyIncidentsPage({
                     </Link>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(incident.occurredAt), ctx.timezone)}
+                    {formatDate(new Date(incident.occurredAt), ctx.timezone, ctx.locale)}
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
                     {incident.type.replace('_', ' ')}

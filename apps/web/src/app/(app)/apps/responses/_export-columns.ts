@@ -5,6 +5,7 @@ import {
   type FormSchemaV1,
   type FormSection,
 } from '@beaconhs/forms-core'
+import { DEFAULT_LOCALE, localizeText, type AppLocale } from '@beaconhs/i18n'
 import type { ExportColumn } from '@/lib/export-columns'
 
 export type ResponseExportColumn = ExportColumn & {
@@ -69,12 +70,14 @@ const RESPONSE_EXPORT_BASE_COLUMNS: ResponseExportColumn[] = [
 
 export function buildResponseExportColumns(
   schemas: readonly FormSchemaV1[],
+  locale: AppLocale = DEFAULT_LOCALE,
+  defaultLocale: AppLocale = DEFAULT_LOCALE,
 ): ResponseExportColumn[] {
   const columns: ResponseExportColumn[] = [...RESPONSE_EXPORT_BASE_COLUMNS]
   const seen = new Set(columns.map((column) => column.key))
   for (const schema of schemas) {
     for (const section of schema.sections) {
-      const sectionLabel = sectionTitle(section)
+      const sectionLabel = sectionTitle(section, locale, defaultLocale)
       if (section.repeating) {
         const key = `section:${section.id}`
         if (!seen.has(key)) {
@@ -97,7 +100,7 @@ export function buildResponseExportColumns(
         seen.add(key)
         columns.push({
           key,
-          label: `${sectionLabel} / ${fieldLabel(field)}`,
+          label: `${sectionLabel} / ${fieldLabel(field, locale, defaultLocale)}`,
           description: field.type,
           source: 'field',
           fieldId: field.id,
@@ -170,12 +173,12 @@ function isDataField(field: FormField): boolean {
   return storesResponseValue(field)
 }
 
-function fieldLabel(field: FormField): string {
-  return field.label?.en ?? Object.values(field.label ?? {})[0] ?? field.id
+function fieldLabel(field: FormField, locale: AppLocale, defaultLocale: AppLocale): string {
+  return localizeText(field.label, locale, field.id, defaultLocale)
 }
 
-function sectionTitle(section: FormSection): string {
-  return section.title?.en ?? Object.values(section.title ?? {})[0] ?? section.id
+function sectionTitle(section: FormSection, locale: AppLocale, defaultLocale: AppLocale): string {
+  return localizeText(section.title, locale, section.id, defaultLocale)
 }
 
 function formatExportValue(value: unknown): string | number | null | undefined {

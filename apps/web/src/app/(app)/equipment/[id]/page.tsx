@@ -1385,7 +1385,7 @@ export default async function EquipmentDetailPage({
                 const parts: string[] = []
                 if (item.missingReportedAt) {
                   parts.push(
-                    `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone)}`,
+                    `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
                   )
                 }
                 if (missingReporter?.name) {
@@ -1399,7 +1399,7 @@ export default async function EquipmentDetailPage({
                 }
                 const headline = parts.length
                   ? parts.join(' ')
-                  : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone) : '—'}`
+                  : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
                 return (
                   <>
                     <div>{headline}.</div>
@@ -1631,7 +1631,7 @@ export default async function EquipmentDetailPage({
                               field={f.field}
                               label={
                                 f.field === 'currentHours' || f.field === 'currentOdometer'
-                                  ? `${f.label}${item.metersUpdatedAt ? ` · read ${formatDate(new Date(item.metersUpdatedAt), ctx.timezone)}` : ''}`
+                                  ? `${f.label}${item.metersUpdatedAt ? ` · read ${formatDate(new Date(item.metersUpdatedAt), ctx.timezone, ctx.locale)}` : ''}`
                                   : f.label
                               }
                               type={f.type}
@@ -1747,11 +1747,11 @@ export default async function EquipmentDetailPage({
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  {formatDate(new Date(w.openedAt), ctx.timezone)}
+                                  {formatDate(new Date(w.openedAt), ctx.timezone, ctx.locale)}
                                 </TableCell>
                                 <TableCell>
                                   {w.closedAt
-                                    ? formatDate(new Date(w.closedAt), ctx.timezone)
+                                    ? formatDate(new Date(w.closedAt), ctx.timezone, ctx.locale)
                                     : '—'}
                                 </TableCell>
                               </TableRow>
@@ -1877,14 +1877,14 @@ export default async function EquipmentDetailPage({
                                   {dest?.name ?? '—'}
                                 </TableCell>
                                 <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {formatDate(new Date(co.checkedOutAt), ctx.timezone)}
+                                  {formatDate(new Date(co.checkedOutAt), ctx.timezone, ctx.locale)}
                                 </TableCell>
                                 <TableCell className="text-slate-600 dark:text-slate-300">
                                   {co.expectedReturnOn ?? '—'}
                                 </TableCell>
                                 <TableCell className="text-slate-600 dark:text-slate-300">
                                   {co.returnedAt
-                                    ? formatDate(new Date(co.returnedAt), ctx.timezone)
+                                    ? formatDate(new Date(co.returnedAt), ctx.timezone, ctx.locale)
                                     : '—'}
                                 </TableCell>
                                 <TableCell>
@@ -1953,7 +1953,11 @@ export default async function EquipmentDetailPage({
                             {history.map((row) => (
                               <TableRow key={row.history.id}>
                                 <TableCell>
-                                  {formatDateTime(new Date(row.history.recordedAt), ctx.timezone)}
+                                  {formatDateTime(
+                                    new Date(row.history.recordedAt),
+                                    ctx.timezone,
+                                    ctx.locale,
+                                  )}
                                 </TableCell>
                                 <TableCell>{row.site?.name ?? '—'}</TableCell>
                                 <TableCell>
@@ -2053,7 +2057,7 @@ export default async function EquipmentDetailPage({
                                   {humanSize(a.sizeBytes)}
                                 </TableCell>
                                 <TableCell>
-                                  {formatDate(new Date(a.createdAt), ctx.timezone)}
+                                  {formatDate(new Date(a.createdAt), ctx.timezone, ctx.locale)}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center justify-end gap-3">
@@ -2268,7 +2272,11 @@ export default async function EquipmentDetailPage({
                           label="Last pre-use inspection"
                           value={
                             item.lastPreUseInspectionAt
-                              ? formatDateTime(new Date(item.lastPreUseInspectionAt), ctx.timezone)
+                              ? formatDateTime(
+                                  new Date(item.lastPreUseInspectionAt),
+                                  ctx.timezone,
+                                  ctx.locale,
+                                )
                               : '—'
                           }
                         />
@@ -2442,7 +2450,11 @@ export default async function EquipmentDetailPage({
                                 </TableCell>
                                 <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
                                   {record.occurredAt
-                                    ? formatDate(new Date(record.occurredAt), ctx.timezone)
+                                    ? formatDate(
+                                        new Date(record.occurredAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
                                     : '—'}
                                 </TableCell>
                                 <TableCell>
@@ -2580,7 +2592,7 @@ export default async function EquipmentDetailPage({
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+                    <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
                   </CardContent>
                 </Card>
               ) : null}

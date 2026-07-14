@@ -427,7 +427,7 @@ export default async function TruckLogDetailPage({
                 ]}
               />
             </TableToolbar>
-            <ActivityFeed entries={activityData.rows} timeZone={ctx.timezone} />
+            <ActivityFeed entries={activityData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
             <Pagination
               basePath={basePath}
               currentParams={sp}

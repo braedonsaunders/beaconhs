@@ -25,6 +25,7 @@ import {
   type ReportRunRequestSnapshot,
 } from '@beaconhs/db/schema'
 import { assertReportRunJobData, enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
+import { resolveLocalePreferences } from '@beaconhs/i18n'
 import {
   computeRangeFor,
   refineEntityMapForDocuments,
@@ -436,6 +437,7 @@ async function resolveScheduledEntityMap(
       userId: tenantUsers.userId,
       displayName: tenantUsers.displayName,
       status: tenantUsers.status,
+      localeOverride: tenantUsers.localeOverride,
       timezone: users.timezone,
       isSuperAdmin: users.isSuperAdmin,
       personId: people.id,
@@ -461,6 +463,20 @@ async function resolveScheduledEntityMap(
   if (!principal || principal.status !== 'active') {
     throw new Error('Scheduled report run-as membership is no longer active')
   }
+  const [tenantLocale] = await tx
+    .select({
+      defaultLanguage: tenants.defaultLanguage,
+      enabledLanguages: tenants.enabledLanguages,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1)
+  if (!tenantLocale) throw new Error('Scheduled report tenant no longer exists')
+  const localePolicy = resolveLocalePreferences({
+    defaultLocale: tenantLocale.defaultLanguage,
+    enabledLocales: tenantLocale.enabledLanguages,
+    userLocale: principal.localeOverride,
+  })
 
   const resolved = await resolveMembershipAccess(tx, principal.id, snapshot.runAsRoleId)
   if (snapshot.runAsRoleId && resolved.appliedRoleId !== snapshot.runAsRoleId) {
@@ -471,6 +487,7 @@ async function resolveScheduledEntityMap(
     tenantId,
     isSuperAdmin: principal.isSuperAdmin,
     timezone: principal.timezone,
+    ...localePolicy,
     membership: { id: principal.id, displayName: principal.displayName ?? principal.userId },
     personId: principal.personId ?? null,
     permissions: resolved.permissions,

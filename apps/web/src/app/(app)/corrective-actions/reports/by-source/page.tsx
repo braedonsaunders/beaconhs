@@ -311,7 +311,7 @@ export default async function BySourceReport({
                     {r.closed}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
-                    {r.costImpact > 0 ? formatMoney(r.costImpact) : '—'}
+                    {r.costImpact > 0 ? formatMoney(r.costImpact, ctx.locale) : '—'}
                   </td>
                 </tr>
               ))}
@@ -330,6 +330,10 @@ export default async function BySourceReport({
   )
 }
 
-function formatMoney(n: number): string {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
+function formatMoney(n: number, locale: string): string {
+  return n.toLocaleString(locale, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  })
 }

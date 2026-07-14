@@ -55,7 +55,9 @@ export default async function PlatformUserDetailPage({
   const { id } = await params
   const sessionUserId = await getCurrentUserId()
   if (!sessionUserId) redirect('/login')
-  const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
+  const requestContext = await getRequestContext()
+  const timeZone = requestContext?.timezone ?? 'UTC'
+  const locale = requestContext?.locale ?? 'en'
   const sp = await searchParams
   const error = typeof sp.error === 'string' ? sp.error : undefined
   const notice = typeof sp.notice === 'string' ? sp.notice : undefined
@@ -269,30 +271,15 @@ export default async function PlatformUserDetailPage({
                   <Label htmlFor="name">Name</Label>
                   <Input id="name" name="name" defaultValue={account.name} required />
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="locale">Language</Label>
-                    <Select id="locale" name="locale" defaultValue={account.locale}>
-                      <option value="en">English</option>
-                      <option value="fr">French</option>
-                      <option value="es">Spanish</option>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="timezone">Time zone</Label>
-                    <Select
-                      id="timezone"
-                      name="timezone"
-                      defaultValue={account.timezone}
-                      searchable
-                    >
-                      {timezones.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="timezone">Time zone</Label>
+                  <Select id="timezone" name="timezone" defaultValue={account.timezone} searchable>
+                    {timezones.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit" variant="outline">
@@ -306,7 +293,7 @@ export default async function PlatformUserDetailPage({
                 <dd className="col-span-2 text-slate-900 dark:text-slate-100">{account.email}</dd>
                 <dt className="text-slate-500 dark:text-slate-400">Created</dt>
                 <dd className="col-span-2 text-slate-900 dark:text-slate-100">
-                  {formatDate(new Date(account.createdAt), timeZone)}
+                  {formatDate(new Date(account.createdAt), timeZone, locale)}
                 </dd>
               </dl>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -442,7 +429,7 @@ export default async function PlatformUserDetailPage({
                           </td>
                           <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                             {membership.joinedAt
-                              ? formatDate(new Date(membership.joinedAt), timeZone)
+                              ? formatDate(new Date(membership.joinedAt), timeZone, locale)
                               : '—'}
                           </td>
                           <td className="px-3 py-2">

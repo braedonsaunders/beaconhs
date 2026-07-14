@@ -48,7 +48,7 @@ export default async function TitlePdfPage({ params }: { params: Promise<{ id: s
   })
   if (!data) notFound()
   const { row, tasks, assigned } = data
-  const today = formatDate(new Date(), ctx.timezone)
+  const today = formatDate(new Date(), ctx.timezone, ctx.locale)
 
   return (
     <div className="mx-auto max-w-[210mm] bg-white p-8 text-sm text-slate-900 print:p-0">

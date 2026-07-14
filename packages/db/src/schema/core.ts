@@ -2,9 +2,10 @@
 // The user/session/account/verification tables match Better-Auth 1.6.x's
 // expected default schema (camelCase column names, singular table names).
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   index,
   jsonb,
   pgEnum,
@@ -44,6 +45,16 @@ export const tenants = pgTable(
   },
   (t) => ({
     slugUx: uniqueIndex('tenants_slug_ux').on(t.slug),
+    defaultLanguageSupported: check(
+      'tenants_default_language_supported_check',
+      sql`${t.defaultLanguage} in ('en', 'fr', 'es')`,
+    ),
+    enabledLanguagesValid: check(
+      'tenants_enabled_languages_valid_check',
+      sql`jsonb_typeof(${t.enabledLanguages}) = 'array'
+          and ${t.enabledLanguages} <@ '["en", "fr", "es"]'::jsonb
+          and ${t.enabledLanguages} ? ${t.defaultLanguage}`,
+    ),
   }),
 )
 
@@ -64,7 +75,6 @@ export const users = pgTable(
     name: text('name').notNull(),
     image: text('image'),
     isSuperAdmin: boolean('isSuperAdmin').default(false).notNull(),
-    locale: text('locale').default('en').notNull(),
     timezone: text('timezone').default('America/Toronto').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updatedAt', { withTimezone: true }).defaultNow().notNull(),
@@ -165,6 +175,10 @@ export const tenantUsers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     displayName: text('display_name'),
+    // Null means "inherit the active tenant's default language". This belongs
+    // to the membership rather than the global identity so the same account can
+    // use an appropriate language in each tenant.
+    localeOverride: text('locale_override'),
     status: tenantUserStatus('status').default('active').notNull(),
     invitedAt: timestamp('invited_at', { withTimezone: true }),
     invitedBy: text('invited_by').references(() => users.id),
@@ -176,6 +190,10 @@ export const tenantUsers = pgTable(
     tenantIdIdUx: uniqueIndex('tenant_users_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantIdx: index('tenant_users_tenant_idx').on(t.tenantId),
     userIdx: index('tenant_users_user_idx').on(t.userId),
+    localeSupported: check(
+      'tenant_users_locale_override_supported_check',
+      sql`${t.localeOverride} is null or ${t.localeOverride} in ('en', 'fr', 'es')`,
+    ),
   }),
 )
 

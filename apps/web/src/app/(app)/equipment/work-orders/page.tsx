@@ -461,11 +461,11 @@ export default async function WorkOrdersPage({
                       {assigneeUser?.name ?? assignee?.displayName ?? '—'}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                      {formatDate(new Date(wo.openedAt), ctx.timezone)}
+                      {formatDate(new Date(wo.openedAt), ctx.timezone, ctx.locale)}
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                       {wo.closedAt ? (
-                        formatDate(new Date(wo.closedAt), ctx.timezone)
+                        formatDate(new Date(wo.closedAt), ctx.timezone, ctx.locale)
                       ) : (
                         <span className="text-slate-400 dark:text-slate-500">—</span>
                       )}

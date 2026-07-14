@@ -24,6 +24,8 @@ import {
 import type { SidebarNavGroup, SidebarNavItem } from '@/components/sidebar-nav'
 import {
   buildDefaultNavConfig,
+  defaultNavGroupMessageKey,
+  defaultNavModuleMessageKey,
   moduleByKey,
   PINNED_FORM_DEFAULT_ICON,
   withMissingModules,
@@ -137,7 +139,13 @@ export async function resolveNavGroups(
       const resolved = resolveItem(item, ctx, formMeta)
       if (resolved) items.push(resolved)
     }
-    if (items.length > 0) groups.push({ label: g.label, items })
+    if (items.length > 0) {
+      groups.push({
+        label: g.label,
+        labelKey: defaultNavGroupMessageKey(g.id, g.label),
+        items,
+      })
+    }
   }
   return groups
 }
@@ -157,6 +165,7 @@ function resolveItem(
     return {
       href: mod.href,
       label: item.label ?? mod.label,
+      labelKey: item.label ? undefined : defaultNavModuleMessageKey(mod.key),
       iconKey: item.iconKey ?? mod.iconKey,
     }
   }

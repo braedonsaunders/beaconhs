@@ -28,6 +28,7 @@ import {
   useTransition,
 } from 'react'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle,
   Bold,
@@ -88,6 +89,7 @@ import {
   type TableColumn,
   type TableConfig,
 } from '@beaconhs/forms-core'
+import { localizeText } from '@beaconhs/i18n'
 import {
   analyzePhotos,
   createDraftResponse,
@@ -246,6 +248,7 @@ export function FormRenderer({
   // parent page owns all chrome. `initialResponseId` is always present here.
   inlineAutosave?: boolean
 }) {
+  const locale = useLocale()
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
   // Per-mount org-unit options cache shared by every org-unit picker in this
@@ -978,7 +981,7 @@ export function FormRenderer({
                         : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
                     }`}
                   >
-                    {t.title?.en ?? t.id}
+                    {localizeText(t.title, locale, t.id)}
                   </button>
                 ))}
               </div>
@@ -988,9 +991,13 @@ export function FormRenderer({
               return (
                 <Section
                   key={sec.id}
-                  title={sec.title?.en ?? sec.id}
+                  title={localizeText(sec.title, locale, sec.id)}
                   subtitle={
-                    sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)
+                    localizeText(
+                      sec.description,
+                      locale,
+                      sec.repeating ? 'Repeatable section' : '',
+                    ) || undefined
                   }
                 >
                   <div className="space-y-4">
@@ -1203,7 +1210,9 @@ export function FormRenderer({
                               >
                                 {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
                               </span>
-                              <span className="truncate">{s.title?.en ?? s.key}</span>
+                              <span className="truncate">
+                                {localizeText(s.title, locale, s.key)}
+                              </span>
                             </button>
                           </li>
                         )
@@ -1305,7 +1314,7 @@ export function FormRenderer({
                         : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
                     }`}
                   >
-                    {t.title?.en ?? t.id}
+                    {localizeText(t.title, locale, t.id)}
                   </button>
                 ))}
               </div>
@@ -1313,7 +1322,7 @@ export function FormRenderer({
 
             {renderedSections.length === 0 ? (
               <PremiumSection
-                title={step.title?.en ?? step.key}
+                title={localizeText(step.title, locale, step.key)}
                 icon={<ClipboardList size={20} />}
                 tone="slate"
               >
@@ -1331,9 +1340,13 @@ export function FormRenderer({
                 return (
                   <PremiumSection
                     key={sec.id}
-                    title={sec.title?.en ?? sec.id}
+                    title={localizeText(sec.title, locale, sec.id)}
                     subtitle={
-                      sec.description?.en ?? (sec.repeating ? 'Repeatable section' : undefined)
+                      localizeText(
+                        sec.description,
+                        locale,
+                        sec.repeating ? 'Repeatable section' : '',
+                      ) || undefined
                     }
                     icon={<ClipboardList size={20} />}
                     tone={SECTION_TONES[i % SECTION_TONES.length]}
@@ -1590,20 +1603,21 @@ function FieldRow({
   // rendered inside one.
   onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
+  const locale = useLocale()
+  const formT = useTranslations('Forms')
+  const helpText = localizeText(field.helpText, locale, '')
   return (
     <div className="space-y-1">
       <Label>
-        {field.label?.en ?? field.id}
+        {localizeText(field.label, locale, field.id)}
         {field.required || field.validation?.required ? (
           <span className="text-red-600"> *</span>
         ) : null}
         {loading ? (
-          <span className="ml-2 text-[10px] font-normal text-slate-400">Looking up…</span>
+          <span className="ml-2 text-[10px] font-normal text-slate-400">{formT('lookingUp')}</span>
         ) : null}
       </Label>
-      {field.helpText?.en ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText.en}</p>
-      ) : null}
+      {helpText ? <p className="text-xs text-slate-500 dark:text-slate-400">{helpText}</p> : null}
       <FieldInput
         field={field}
         value={value}
@@ -1733,6 +1747,9 @@ function InlineFieldRow({
   // Saves a whole array (table / repeating) by id. Resolves to {ok}.
   saveArray: (id: string, arr: unknown) => Promise<{ ok: boolean; error?: string }>
 }) {
+  const locale = useLocale()
+  const formT = useTranslations('Forms')
+  const helpText = localizeText(field.helpText, locale, '')
   const nonSaving = INLINE_NON_SAVING_TYPES.has(field.type)
   const isTable = field.type === 'table'
 
@@ -1764,19 +1781,19 @@ function InlineFieldRow({
     <div className="space-y-1" onBlur={() => commit(value)}>
       <div className="flex items-center justify-between gap-2">
         <Label>
-          {field.label?.en ?? field.id}
+          {localizeText(field.label, locale, field.id)}
           {field.required || field.validation?.required ? (
             <span className="text-red-600"> *</span>
           ) : null}
           {loading ? (
-            <span className="ml-2 text-[10px] font-normal text-slate-400">Looking up…</span>
+            <span className="ml-2 text-[10px] font-normal text-slate-400">
+              {formT('lookingUp')}
+            </span>
           ) : null}
         </Label>
         {nonSaving ? null : <InlineSaveDot state={state} />}
       </div>
-      {field.helpText?.en ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText.en}</p>
-      ) : null}
+      {helpText ? <p className="text-xs text-slate-500 dark:text-slate-400">{helpText}</p> : null}
       <FieldInput
         field={field}
         value={value}
@@ -1805,6 +1822,7 @@ function FieldInput({
   evalCtx: EvalContext
   onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
+  const locale = useLocale()
   // Formula fields are render-only: recompute the value on every render via
   // the evaluator and pass through to the display input. When the formula
   // resolves to null (e.g. an `entity_attr` whose picker is empty) we show
@@ -2049,7 +2067,7 @@ function FieldInput({
           <option value="">—</option>
           {opts.map((o) => (
             <option key={o.value} value={o.value}>
-              {o.label?.en ?? o.value}
+              {localizeText(o.label, locale, o.value)}
             </option>
           ))}
         </Select>
@@ -2082,7 +2100,7 @@ function FieldInput({
                 >
                   {sel ? <span className="h-2.5 w-2.5 rounded-full bg-teal-600" /> : null}
                 </span>
-                {o.label?.en ?? o.value}
+                {localizeText(o.label, locale, o.value)}
               </button>
             )
           })}
@@ -2118,7 +2136,7 @@ function FieldInput({
                 >
                   {sel ? <Check size={13} /> : null}
                 </span>
-                {o.label?.en ?? o.value}
+                {localizeText(o.label, locale, o.value)}
               </button>
             )
           })}
@@ -2358,9 +2376,17 @@ function FieldInput({
         />
       )
     case 'heading':
-      return <h3 className="text-base font-semibold text-slate-800">{field.label?.en}</h3>
+      return (
+        <h3 className="text-base font-semibold text-slate-800">
+          {localizeText(field.label, locale, field.id)}
+        </h3>
+      )
     case 'paragraph':
-      return <p className="text-sm text-slate-600">{field.helpText?.en ?? field.label?.en}</p>
+      return (
+        <p className="text-sm text-slate-600">
+          {localizeText(field.helpText ?? field.label, locale, field.id)}
+        </p>
+      )
     case 'divider':
       return <hr className="border-slate-200" />
     case 'typed_attestation':
@@ -2760,11 +2786,12 @@ function TypedAttestationField({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const locale = useLocale()
   const v = (value ?? {}) as { name?: string; agreed?: boolean }
   const statement =
     (field.config?.statement as string | undefined) ??
-    field.helpText?.en ??
-    'I attest that the information above is true and accurate.'
+    (localizeText(field.helpText, locale, '') ||
+      'I attest that the information above is true and accurate.')
   return (
     <div className="space-y-2">
       <Input
@@ -3054,6 +3081,8 @@ function DataTableInput({
   onChange: (v: unknown) => void
   evalCtx: EvalContext
 }) {
+  const locale = useLocale()
+  const formT = useTranslations('Forms')
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
   const hasCascade = !!b?.filterByField && !!b?.filterColumn
@@ -3179,7 +3208,9 @@ function DataTableInput({
           value={search}
           onChange={(event) => setSearch(event.target.value.slice(0, 100))}
           placeholder="Search records…"
-          aria-label={`Search ${field.label?.en ?? 'data table'} records`}
+          aria-label={formT('searchRecords', {
+            field: localizeText(field.label, locale, 'data table'),
+          })}
           className="h-9 pr-3 pl-8"
         />
       </div>
@@ -3711,10 +3742,11 @@ function RankingInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const locale = useLocale()
   const opts = field.validation?.options ?? []
   const labelOf = (v: string) => {
     const o = opts.find((x) => x.value === v)
-    return o ? (o.label?.en ?? o.value) : v
+    return o ? localizeText(o.label, locale, o.value) : v
   }
   const current = Array.isArray(value) ? (value as string[]) : []
   // Start from the saved order, then append any options not yet ranked + drop

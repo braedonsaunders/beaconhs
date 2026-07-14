@@ -97,7 +97,7 @@ export default async function OutboundIntegrationPage({
             <p className="text-xs text-red-600 dark:text-red-400">Last error: {row.lastError}</p>
           ) : row.lastRunAt ? (
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              Last run {formatDateTime(new Date(row.lastRunAt), ctx.timezone)}
+              Last run {formatDateTime(new Date(row.lastRunAt), ctx.timezone, ctx.locale)}
             </p>
           ) : null}
         </header>

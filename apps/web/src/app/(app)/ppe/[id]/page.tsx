@@ -1905,7 +1905,9 @@ export default async function PpeDetailPage({
                 <TableBody>
                   {issueReports.map((r) => (
                     <TableRow key={r.id}>
-                      <TableCell>{formatDate(new Date(r.reportedAt), ctx.timezone)}</TableCell>
+                      <TableCell>
+                        {formatDate(new Date(r.reportedAt), ctx.timezone, ctx.locale)}
+                      </TableCell>
                       <TableCell className="text-slate-700">{r.description}</TableCell>
                       <TableCell className="text-slate-600">{r.source}</TableCell>
                       <TableCell>
@@ -1988,7 +1990,7 @@ export default async function PpeDetailPage({
                   {issuesLog.map((row) => (
                     <TableRow key={row.issue.id}>
                       <TableCell>
-                        {formatDate(new Date(row.issue.occurredAt), ctx.timezone)}
+                        {formatDate(new Date(row.issue.occurredAt), ctx.timezone, ctx.locale)}
                       </TableCell>
                       <TableCell>
                         <Badge

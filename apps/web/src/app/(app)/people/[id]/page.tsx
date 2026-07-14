@@ -1266,7 +1266,11 @@ export default async function PersonDetailPage({
                           {ppeIssueLog.map((row) => (
                             <TableRow key={row.issue.id}>
                               <TableCell>
-                                {formatDate(new Date(row.issue.occurredAt), ctx.timezone)}
+                                {formatDate(
+                                  new Date(row.issue.occurredAt),
+                                  ctx.timezone,
+                                  ctx.locale,
+                                )}
                               </TableCell>
                               <TableCell>
                                 <Badge variant="secondary">
@@ -1346,7 +1350,7 @@ export default async function PersonDetailPage({
                                 )}
                               </TableCell>
                               <TableCell className="text-xs text-slate-600">
-                                {formatDate(new Date(file.uploadedAt), ctx.timezone)}
+                                {formatDate(new Date(file.uploadedAt), ctx.timezone, ctx.locale)}
                               </TableCell>
                               <TableCell>
                                 {canEditFiles ? (
@@ -1406,7 +1410,7 @@ export default async function PersonDetailPage({
                               </Link>
                             </TableCell>
                             <TableCell>
-                              {formatDate(new Date(incident.occurredAt), ctx.timezone)}
+                              {formatDate(new Date(incident.occurredAt), ctx.timezone, ctx.locale)}
                             </TableCell>
                             <TableCell>{incident.title}</TableCell>
                             <TableCell>
@@ -1432,7 +1436,7 @@ export default async function PersonDetailPage({
                   <CardTitle>Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+                  <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
                 </CardContent>
               </Card>
             ) : null}

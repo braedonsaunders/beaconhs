@@ -230,7 +230,9 @@ export default async function TrainingClassesPage({
                 return (
                   <TableRow key={row.cls.id}>
                     <TableCell className="text-slate-600 dark:text-slate-400">
-                      <div className="text-sm">{formatDate(startedAt, ctx.timezone)}</div>
+                      <div className="text-sm">
+                        {formatDate(startedAt, ctx.timezone, ctx.locale)}
+                      </div>
                       <div className="text-xs text-slate-400">
                         {startedAt.toLocaleTimeString([], {
                           hour: '2-digit',

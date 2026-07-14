@@ -133,6 +133,9 @@ export default async function FormDesignerPage({
       canGenerate={can(ctx, 'forms.ai.generate')}
       canPin={canPin}
       pinned={data.pinned}
+      locale={ctx.locale}
+      defaultLocale={ctx.defaultLocale}
+      enabledLocales={ctx.enabledLocales}
     />
   )
 }

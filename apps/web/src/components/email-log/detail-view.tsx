@@ -72,8 +72,10 @@ export async function EmailLogDetailView({
         <DetailHeader
           back={back}
           title={log.subject}
-          subtitle={`Queued ${formatDateTime(new Date(log.createdAt), ctx.timezone)}${
-            log.sentAt ? ` · Sent ${formatDateTime(new Date(log.sentAt), ctx.timezone)}` : ''
+          subtitle={`Queued ${formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale)}${
+            log.sentAt
+              ? ` · Sent ${formatDateTime(new Date(log.sentAt), ctx.timezone, ctx.locale)}`
+              : ''
           }`}
           badge={
             <div className="flex items-center gap-2">
@@ -158,19 +160,25 @@ export async function EmailLogDetailView({
             rows={[
               {
                 label: 'Created (queued)',
-                value: formatDateTime(new Date(log.createdAt), ctx.timezone),
+                value: formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale),
               },
               {
                 label: 'Sent',
-                value: log.sentAt ? formatDateTime(new Date(log.sentAt), ctx.timezone) : '—',
+                value: log.sentAt
+                  ? formatDateTime(new Date(log.sentAt), ctx.timezone, ctx.locale)
+                  : '—',
               },
               {
                 label: 'Opened',
-                value: log.openedAt ? formatDateTime(new Date(log.openedAt), ctx.timezone) : '—',
+                value: log.openedAt
+                  ? formatDateTime(new Date(log.openedAt), ctx.timezone, ctx.locale)
+                  : '—',
               },
               {
                 label: 'Bounced',
-                value: log.bouncedAt ? formatDateTime(new Date(log.bouncedAt), ctx.timezone) : '—',
+                value: log.bouncedAt
+                  ? formatDateTime(new Date(log.bouncedAt), ctx.timezone, ctx.locale)
+                  : '—',
               },
               {
                 label: 'Provider message id',

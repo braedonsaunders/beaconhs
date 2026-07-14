@@ -4,7 +4,9 @@
 // metadata, summary, tags and photos.
 
 import { Briefcase, MapPin } from 'lucide-react'
+import { useLocale } from 'next-intl'
 import { cn } from '@beaconhs/ui'
+import type { AppLocale } from '@beaconhs/i18n'
 import { RawImage } from '@/components/raw-image'
 import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { tagSwatch } from '../_tag-colors'
@@ -46,8 +48,8 @@ function Avatar({ name, size = 44 }: { name: string | null; size?: number }) {
   )
 }
 
-function fmtTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+function fmtTimestamp(iso: string, locale: AppLocale): string {
+  return new Date(iso).toLocaleString(locale, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -63,7 +65,8 @@ export function JournalView({
   entry: JournalEntryDetail
   tagColors: Map<string, string | null>
 }) {
-  const status = statusMeta(entry.status)
+  const locale = useLocale() as AppLocale
+  const status = statusMeta(entry.status, locale)
   // Sanitise at render too (defence in depth for rows written before the
   // server-side write sanitiser existed) — never inject stored HTML raw.
   const html =
@@ -90,7 +93,8 @@ export function JournalView({
             </span>
           </div>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {formatLongDate(entry.entryDate)} · <span className="font-mono">{entry.reference}</span>
+            {formatLongDate(entry.entryDate, locale)} ·{' '}
+            <span className="font-mono">{entry.reference}</span>
           </p>
         </div>
       </div>
@@ -103,8 +107,10 @@ export function JournalView({
         <span className="inline-flex items-center gap-1.5 capitalize">
           <Briefcase size={13} className="text-slate-400" /> {entry.definition}
         </span>
-        {entry.submittedAt ? <span>Submitted {fmtTimestamp(entry.submittedAt)}</span> : null}
-        <span>Updated {fmtTimestamp(entry.updatedAt)}</span>
+        {entry.submittedAt ? (
+          <span>Submitted {fmtTimestamp(entry.submittedAt, locale)}</span>
+        ) : null}
+        <span>Updated {fmtTimestamp(entry.updatedAt, locale)}</span>
       </div>
 
       {entry.title ? (

@@ -15,12 +15,10 @@ import { RunMaintenanceButton } from './_run-button'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Database maintenance' }
 
-const numberFmt = new Intl.NumberFormat('en-US')
-
-function formatRows(rows: number): string {
+function formatRows(rows: number, locale: string): string {
   if (rows >= 1_000_000) return `${(rows / 1_000_000).toFixed(1)}M`
   if (rows >= 10_000) return `${(rows / 1_000).toFixed(0)}K`
-  return numberFmt.format(rows)
+  return new Intl.NumberFormat(locale).format(rows)
 }
 
 // Authorization is enforced once by /platform/layout.tsx (super-admin only).
@@ -30,7 +28,10 @@ export default async function PlatformDatabasePage() {
     getMaintenanceTableSizes(),
   ])
   const sizeByTable = new Map<string, MaintenanceTableSize>(sizes.map((s) => [s.table, s]))
-  const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
+  const requestContext = await getRequestContext()
+  const timeZone = requestContext?.timezone ?? 'UTC'
+  const locale = requestContext?.locale ?? 'en'
+  const numberFmt = new Intl.NumberFormat(locale)
   const lastRun = settings.lastRun
 
   return (
@@ -86,7 +87,7 @@ export default async function PlatformDatabasePage() {
                             className="px-3 py-2 text-right text-slate-600 tabular-nums dark:text-slate-300"
                             title={size ? numberFmt.format(size.rows) : undefined}
                           >
-                            {size ? formatRows(size.rows) : '—'}
+                            {size ? formatRows(size.rows, locale) : '—'}
                           </td>
                           <td className="px-3 py-2">
                             <Input
@@ -141,7 +142,7 @@ export default async function PlatformDatabasePage() {
                     {lastRun.ok ? 'Completed' : 'Completed with errors'}
                   </span>
                   <span className="text-slate-600 dark:text-slate-300">
-                    {formatDateTime(new Date(lastRun.at), timeZone)}
+                    {formatDateTime(new Date(lastRun.at), timeZone, locale)}
                   </span>
                   <span className="text-slate-400 dark:text-slate-500">
                     {lastRun.trigger === 'manual' ? 'Manual' : 'Scheduled'} ·{' '}

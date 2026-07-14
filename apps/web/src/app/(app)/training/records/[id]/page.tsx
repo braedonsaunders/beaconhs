@@ -428,7 +428,9 @@ export default async function TrainingRecordPage({
                           <TableCell className="text-slate-600 dark:text-slate-400">
                             {humanSize(a.sizeBytes)}
                           </TableCell>
-                          <TableCell>{formatDate(new Date(a.createdAt), ctx.timezone)}</TableCell>
+                          <TableCell>
+                            {formatDate(new Date(a.createdAt), ctx.timezone, ctx.locale)}
+                          </TableCell>
                           <TableCell>
                             <a
                               href={attachmentUrl(a.id)}
@@ -463,7 +465,7 @@ export default async function TrainingRecordPage({
               <CardTitle>Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
             </CardContent>
           </Card>
         ) : null}

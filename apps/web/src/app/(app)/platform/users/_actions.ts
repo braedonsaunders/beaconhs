@@ -35,9 +35,6 @@ import { upsertRoleAssignments } from '@/lib/role-assignment-upsert'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
-// Same locale whitelist the self-service account form enforces.
-const LOCALES = new Set(['en', 'fr', 'es'])
-
 /** Platform actions are reserved for super-admins — no tenant permission applies. */
 async function gate(): Promise<Ctx> {
   const ctx = await requireRequestContext()
@@ -79,11 +76,9 @@ export async function updateIdentity(formData: FormData): Promise<void> {
   const ctx = await gate()
   const userId = String(formData.get('userId') ?? '')
   const name = String(formData.get('name') ?? '').trim()
-  const locale = String(formData.get('locale') ?? '').trim()
   const timezone = String(formData.get('timezone') ?? '').trim()
   if (!userId) return
   if (!name) backToUser(userId, { error: 'Name is required.' })
-  if (!LOCALES.has(locale)) backToUser(userId, { error: 'Choose a supported language.' })
   // A typo'd time zone silently breaks every server-rendered local-time display
   // for the target user, so reject anything Intl can't format — mirrors the
   // self-service account action.
@@ -98,7 +93,6 @@ export async function updateIdentity(formData: FormData): Promise<void> {
       .select({
         email: users.email,
         name: users.name,
-        locale: users.locale,
         timezone: users.timezone,
       })
       .from(users)
@@ -107,7 +101,7 @@ export async function updateIdentity(formData: FormData): Promise<void> {
     if (!u) return null
     await tx
       .update(users)
-      .set({ name, locale, timezone, updatedAt: new Date() })
+      .set({ name, timezone, updatedAt: new Date() })
       .where(eq(users.id, userId))
     return u
   })
@@ -117,8 +111,8 @@ export async function updateIdentity(formData: FormData): Promise<void> {
     entityType: 'platform',
     action: 'update',
     summary: `Updated identity for ${before.email} (platform)`,
-    before: { name: before.name, locale: before.locale, timezone: before.timezone },
-    after: { name, locale, timezone },
+    before: { name: before.name, timezone: before.timezone },
+    after: { name, timezone },
     metadata: { via: 'platform', targetUserId: userId },
   })
   revalidatePath(userPath(userId))

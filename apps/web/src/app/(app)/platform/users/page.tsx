@@ -73,7 +73,9 @@ export default async function PlatformUsersPage({
   // The /platform layout already gates super-admin; this just needs a session.
   const userId = await getCurrentUserId()
   if (!userId) redirect('/login')
-  const timeZone = (await getRequestContext())?.timezone ?? 'UTC'
+  const requestContext = await getRequestContext()
+  const timeZone = requestContext?.timezone ?? 'UTC'
+  const locale = requestContext?.locale ?? 'en'
 
   const sp = await searchParams
   const listParams = parseListParams(sp, {
@@ -297,7 +299,7 @@ export default async function PlatformUsersPage({
                         <TenantChips tenants={r.tenants} />
                       </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {formatDate(new Date(r.createdAt), timeZone)}
+                        {formatDate(new Date(r.createdAt), timeZone, locale)}
                       </td>
                     </tr>
                   ))}

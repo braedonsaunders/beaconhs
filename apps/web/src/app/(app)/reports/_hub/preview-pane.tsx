@@ -303,7 +303,7 @@ async function OverviewPane({
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
                         {schedule.nextRunAt && schedule.active
-                          ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
+                          ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
                           : '—'}
                       </TableCell>
                       <TableCell>
@@ -355,7 +355,7 @@ async function OverviewPane({
                         <div className="text-xs text-slate-400">{schedule.name}</div>
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
-                        {formatDateTime(new Date(run.startedAt), ctx.timezone)}
+                        {formatDateTime(new Date(run.startedAt), ctx.timezone, ctx.locale)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={run.status} />

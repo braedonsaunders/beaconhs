@@ -298,7 +298,9 @@ export default async function HazardSetsPage({
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {r.updatedAt ? formatDate(new Date(r.updatedAt), ctx.timezone) : '—'}
+                      {r.updatedAt
+                        ? formatDate(new Date(r.updatedAt), ctx.timezone, ctx.locale)
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link

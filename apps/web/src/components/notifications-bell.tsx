@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { Bell, ExternalLink, Settings } from 'lucide-react'
 import { Popover } from '@beaconhs/ui'
 
@@ -13,6 +14,7 @@ import { Popover } from '@beaconhs/ui'
  */
 export function NotificationsBell({ unread }: { unread: number }) {
   const [open, setOpen] = useState(false)
+  const t = useTranslations('Shell')
   return (
     <Popover
       open={open}
@@ -23,7 +25,7 @@ export function NotificationsBell({ unread }: { unread: number }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Notifications"
+          aria-label={t('notifications')}
           aria-expanded={open}
           aria-haspopup="menu"
           className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
@@ -39,13 +41,13 @@ export function NotificationsBell({ unread }: { unread: number }) {
     >
       <div role="menu">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-          <div className="text-sm font-medium">Notifications</div>
+          <div className="text-sm font-medium">{t('notifications')}</div>
           {unread > 0 ? (
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {unread > 99 ? '99+' : unread} unread
+              {t('unread', { count: unread > 99 ? 99 : unread })}
             </span>
           ) : (
-            <span className="text-xs text-slate-400 dark:text-slate-500">All read</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{t('allRead')}</span>
           )}
         </div>
         <Link
@@ -55,7 +57,7 @@ export function NotificationsBell({ unread }: { unread: number }) {
           className="flex items-center gap-2 px-3 py-2 text-sm text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800/60"
         >
           <ExternalLink size={14} className="text-slate-500 dark:text-slate-400" />
-          <span>View inbox</span>
+          <span>{t('viewInbox')}</span>
         </Link>
         <Link
           href="/my/notifications"
@@ -64,7 +66,7 @@ export function NotificationsBell({ unread }: { unread: number }) {
           className="flex items-center gap-2 px-3 py-2 text-sm text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800/60"
         >
           <Settings size={14} className="text-slate-500 dark:text-slate-400" />
-          <span>Preferences</span>
+          <span>{t('preferences')}</span>
         </Link>
       </div>
     </Popover>

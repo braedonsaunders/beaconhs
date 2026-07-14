@@ -394,7 +394,7 @@ export async function AssessmentsListPage({
                           {scope || type?.name || 'Hazard assessment'}
                         </div>
                         <div className="mt-1 text-xs text-slate-500">
-                          {formatDate(a.occurredAt, ctx.timezone)}
+                          {formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
                           {site ? ` · ${site.name}` : ''}
                           {type?.name && scope ? ` · ${type.name}` : ''}
                         </div>
@@ -455,7 +455,7 @@ export async function AssessmentsListPage({
                             </Link>
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                            {formatDate(a.occurredAt, ctx.timezone)}
+                            {formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400">
                             {type?.name ?? '—'}

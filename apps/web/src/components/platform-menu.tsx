@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Building2, Check, ChevronDown, Shield } from 'lucide-react'
 import { Popover, cn } from '@beaconhs/ui'
 
@@ -12,22 +13,23 @@ import { Popover, cn } from '@beaconhs/ui'
 // use-platform-nav.ts); the dropdown itself is just the two modes, not a page list.
 export function PlatformMenu() {
   const [open, setOpen] = useState(false)
+  const t = useTranslations('Shell')
   const onPlatform = (usePathname() ?? '').startsWith('/platform')
 
   const options = [
     {
       key: 'tenant',
       href: '/dashboard',
-      label: 'Tenant workspace',
-      desc: 'Modules for the active tenant',
+      label: t('tenantWorkspace'),
+      desc: t('modulesForTenant'),
       icon: <Building2 size={15} />,
       active: !onPlatform,
     },
     {
       key: 'platform',
       href: '/platform',
-      label: 'Platform',
-      desc: 'Deployment-wide super-admin tools',
+      label: t('platform'),
+      desc: t('deploymentTools'),
       icon: <Shield size={15} />,
       active: onPlatform,
     },
@@ -43,7 +45,7 @@ export function PlatformMenu() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Switch workspace"
+          aria-label={t('switchWorkspace')}
           aria-expanded={open}
           aria-haspopup="menu"
           className={cn(
@@ -54,13 +56,13 @@ export function PlatformMenu() {
           )}
         >
           <Shield size={14} className="shrink-0" />
-          <span className="hidden sm:inline">Platform</span>
+          <span className="hidden sm:inline">{t('platform')}</span>
           <ChevronDown size={14} className="shrink-0 text-amber-500 dark:text-amber-400/70" />
         </button>
       }
     >
       <div className="border-b border-slate-100 px-3 py-2 text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-        Switch workspace
+        {t('switchWorkspace')}
       </div>
       <ul className="py-1" role="menu">
         {options.map((o) => (

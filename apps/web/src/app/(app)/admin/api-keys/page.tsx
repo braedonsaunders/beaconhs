@@ -402,13 +402,17 @@ export default async function ApiKeysPage({
                     <TableCell>{permissionSummary(k.permissions ?? [])}</TableCell>
                     <TableCell className="font-mono text-xs">{k.prefix}…</TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatDate(new Date(k.createdAt), ctx.timezone)}
+                      {formatDate(new Date(k.createdAt), ctx.timezone, ctx.locale)}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {k.expiresAt ? formatDate(new Date(k.expiresAt), ctx.timezone) : '—'}
+                      {k.expiresAt
+                        ? formatDate(new Date(k.expiresAt), ctx.timezone, ctx.locale)
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {k.lastUsedAt ? formatDateTime(new Date(k.lastUsedAt), ctx.timezone) : '—'}
+                      {k.lastUsedAt
+                        ? formatDateTime(new Date(k.lastUsedAt), ctx.timezone, ctx.locale)
+                        : '—'}
                     </TableCell>
                     <TableCell>
                       {k.revokedAt ? (

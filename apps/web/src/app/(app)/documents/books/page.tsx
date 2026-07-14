@@ -238,7 +238,7 @@ export default async function DocumentBooksPage({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatDate(new Date(b.updatedAt), ctx.timezone)}
+                      {formatDate(new Date(b.updatedAt), ctx.timezone, ctx.locale)}
                     </TableCell>
                   </TableRow>
                 )

@@ -89,7 +89,7 @@ export default async function AssessmentCertificatePage({
             {person?.firstName} {person?.lastName}
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            on {completed ? formatDate(completed, ctx.timezone) : '—'}
+            on {completed ? formatDate(completed, ctx.timezone, ctx.locale) : '—'}
           </p>
         </div>
 

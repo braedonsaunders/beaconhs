@@ -6,6 +6,7 @@ const drizzleFolder = new URL('../drizzle/', import.meta.url)
 const metaFolder = new URL('../drizzle/meta/', import.meta.url)
 const cutoverSql = readFileSync(new URL('0005_production_cutover.sql', drizzleFolder), 'utf8')
 const finalSection = readProductionCutoverSection('0023_flaky_squirrel_girl.sql')
+const languageSection = readProductionCutoverSection('0035_tenant_language_policy.sql')
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -55,7 +56,7 @@ describe('production cutover migration integrity', () => {
       expect(snapshots[index]!.prevId).toBe(snapshots[index - 1]!.id)
       expect(snapshots[index]!.id).not.toBe(snapshots[index]!.prevId)
     }
-    expect([...cutoverSql.matchAll(/^-- Squashed source:/gm)]).toHaveLength(30)
+    expect([...cutoverSql.matchAll(/^-- Squashed source:/gm)]).toHaveLength(31)
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {
@@ -151,5 +152,46 @@ describe('production cutover migration integrity', () => {
       finalSection.indexOf('ALTER TABLE "training_extra_fields" DROP COLUMN "owner_id"'),
     )
     expect(firstRestore).toBeGreaterThan(finalSection.indexOf('DROP INDEX "documents_key_idx"'))
+  })
+
+  it('moves language preferences to tenant memberships without bypassing forced RLS', () => {
+    function localePosition(fragment: string): number {
+      const value = languageSection.indexOf(fragment)
+      expect(value, fragment).toBeGreaterThan(-1)
+      return value
+    }
+
+    const addOverride = localePosition(
+      'ALTER TABLE "tenant_users" ADD COLUMN "locale_override" text',
+    )
+    const relaxMemberships = localePosition(
+      'ALTER TABLE "tenant_users" NO FORCE ROW LEVEL SECURITY',
+    )
+    const relaxTenants = localePosition('ALTER TABLE "tenants" NO FORCE ROW LEVEL SECURITY')
+    const normalizePolicy = localePosition('SET "enabled_languages" = COALESCE')
+    const backfillOverride = localePosition('SET "locale_override" = identity."locale"')
+    const dropGlobalLocale = localePosition('ALTER TABLE "user" DROP COLUMN "locale"')
+    const restoreMemberships = localePosition('ALTER TABLE "tenant_users" FORCE ROW LEVEL SECURITY')
+    const restoreTenants = localePosition('ALTER TABLE "tenants" FORCE ROW LEVEL SECURITY')
+    const addMembershipConstraint = localePosition(
+      'ADD CONSTRAINT "tenant_users_locale_override_supported_check"',
+    )
+    const addTenantConstraint = localePosition(
+      'ADD CONSTRAINT "tenants_enabled_languages_valid_check"',
+    )
+
+    const orderedPositions = [
+      addOverride,
+      relaxMemberships,
+      relaxTenants,
+      normalizePolicy,
+      backfillOverride,
+      dropGlobalLocale,
+      restoreMemberships,
+      restoreTenants,
+      addMembershipConstraint,
+      addTenantConstraint,
+    ]
+    expect(orderedPositions).toEqual([...orderedPositions].sort((left, right) => left - right))
   })
 })

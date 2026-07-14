@@ -1,4 +1,5 @@
 import { Activity, Check, Pencil, Plus, Signature, Trash2 } from 'lucide-react'
+import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
 
 type ActivityEntry = {
   id: string
@@ -21,14 +22,17 @@ const ACTION_ICONS: Record<string, { icon: typeof Activity; tone: string }> = {
 export function ActivityFeed({
   entries,
   timeZone,
+  locale = DEFAULT_LOCALE,
 }: {
   entries: ActivityEntry[]
   timeZone: string
+  locale?: AppLocale
 }) {
+  const copy = COPY[locale]
   if (entries.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-        No activity recorded yet.
+        {copy.empty}
       </div>
     )
   }
@@ -57,18 +61,18 @@ export function ActivityFeed({
                   {e.summary ?? humanise(e.action)}
                 </span>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {formatRel(e.occurredAt, timeZone)}
+                  {formatRel(e.occurredAt, timeZone, locale)}
                 </span>
               </div>
               {e.actor ? (
                 <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  by {e.actor}
+                  {copy.by} {e.actor}
                 </div>
               ) : null}
               {e.after && Object.keys(e.after).length > 0 ? (
                 <details className="mt-2 text-xs text-slate-600 dark:text-slate-300">
                   <summary className="cursor-pointer text-slate-500 select-none hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-                    show changes
+                    {copy.showChanges}
                   </summary>
                   <pre className="mt-1 overflow-x-auto rounded bg-slate-50 p-2 text-[11px] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
                     {JSON.stringify(e.after, null, 2)}
@@ -87,15 +91,30 @@ function humanise(action: string): string {
   return action.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function formatRel(d: Date | string, timeZone: string): string {
+function formatRel(d: Date | string, timeZone: string, locale: AppLocale): string {
   const date = typeof d === 'string' ? new Date(d) : d
   const ms = Date.now() - date.getTime()
   const mins = Math.round(ms / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  if (mins < 1) return relative.format(0, 'minute')
+  if (mins < 60) return relative.format(-mins, 'minute')
   const hrs = Math.round(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
+  if (hrs < 24) return relative.format(-hrs, 'hour')
   const days = Math.round(hrs / 24)
-  if (days < 30) return `${days}d ago`
-  return date.toLocaleDateString(undefined, { timeZone })
+  if (days < 30) return relative.format(-days, 'day')
+  return date.toLocaleDateString(locale, { timeZone })
+}
+
+const COPY: Record<AppLocale, { empty: string; by: string; showChanges: string }> = {
+  en: { empty: 'No activity recorded yet.', by: 'by', showChanges: 'show changes' },
+  fr: {
+    empty: 'Aucune activité enregistrée.',
+    by: 'par',
+    showChanges: 'afficher les modifications',
+  },
+  es: {
+    empty: 'Aún no hay actividad registrada.',
+    by: 'por',
+    showChanges: 'mostrar cambios',
+  },
 }

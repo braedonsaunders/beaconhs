@@ -363,7 +363,9 @@ export default async function TaskLibraryPage({
                       <Badge variant="secondary">{Number(usageCount ?? 0)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {task.updatedAt ? formatDate(new Date(task.updatedAt), ctx.timezone) : '—'}
+                      {task.updatedAt
+                        ? formatDate(new Date(task.updatedAt), ctx.timezone, ctx.locale)
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-right">
                       <Link

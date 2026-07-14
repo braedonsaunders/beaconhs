@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto'
 import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { apiKeys, tenants } from '@beaconhs/db/schema'
+import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { consumeRateLimit } from '@beaconhs/jobs/rate-limit'
 import { makeTenantContext, type RequestContext } from '@beaconhs/tenant'
 import { ApiError } from './errors'
@@ -43,7 +44,12 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
 
   const result = await withSuperAdmin(db, async (tx) => {
     const [match] = await tx
-      .select({ key: apiKeys, tenantStatus: tenants.status })
+      .select({
+        key: apiKeys,
+        tenantStatus: tenants.status,
+        defaultLanguage: tenants.defaultLanguage,
+        enabledLanguages: tenants.enabledLanguages,
+      })
       .from(apiKeys)
       .innerJoin(tenants, eq(tenants.id, apiKeys.tenantId))
       .where(eq(apiKeys.keyHash, keyHash))
@@ -57,7 +63,11 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
       return { error: 'tenant_unavailable' } as const
     }
 
-    return { key: match.key } as const
+    return {
+      key: match.key,
+      defaultLanguage: match.defaultLanguage,
+      enabledLanguages: match.enabledLanguages,
+    } as const
   })
 
   if ('error' in result) {
@@ -69,6 +79,10 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     throw ApiError.unauthorized()
   }
   const row = result.key
+  const localePolicy = resolveLocalePreferences({
+    defaultLocale: result.defaultLanguage,
+    enabledLocales: result.enabledLanguages,
+  })
 
   let rate
   try {
@@ -112,6 +126,7 @@ export async function authenticateApiKey(req: Request): Promise<ApiAuth> {
     // No human user behind an API key — default to the platform timezone. It only
     // affects server-rendered local-time display, which JSON API responses don't use.
     timezone: 'America/Toronto',
+    ...localePolicy,
     membership: null,
     // No human employee behind an API key — record visibility is full-tenant.
     personId: null,

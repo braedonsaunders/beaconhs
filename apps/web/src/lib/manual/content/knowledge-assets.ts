@@ -617,6 +617,8 @@ Each unit's QR page has a **Download label PDF** button — a print-ready tag at
 
 Some yards run a tablet at the door in kiosk mode.
 
+The shared kiosk uses the workspace's **Default language** because no member is signed in.
+
 1. Walk up to the tablet. If it is locked, enter the yard PIN and tap **Unlock kiosk**.
 2. Scan your badge or search **Active holder**.
 3. Search **Check-out destination**, then scan your units — the same check-out steps as above.

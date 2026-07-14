@@ -304,7 +304,7 @@ export default async function TrainingClassPage({
         <DetailHeader
           back={{ href: '/training/classes', label: 'Back to classes' }}
           title={cls.title}
-          subtitle={`${course?.name ?? 'Course'} · ${formatDateTime(startsAt, ctx.timezone)}`}
+          subtitle={`${course?.name ?? 'Course'} · ${formatDateTime(startsAt, ctx.timezone, ctx.locale)}`}
           badge={
             isCancelled ? (
               <Badge variant="destructive">Cancelled</Badge>
@@ -516,8 +516,8 @@ export default async function TrainingClassPage({
               {isCompleted ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   Class was marked complete on{' '}
-                  {formatDateTime(new Date(cls.completedAt!), ctx.timezone)}. Training records have
-                  been created for everyone who passed.
+                  {formatDateTime(new Date(cls.completedAt!), ctx.timezone, ctx.locale)}. Training
+                  records have been created for everyone who passed.
                 </p>
               ) : isCancelled ? (
                 <p className="text-sm text-slate-600 dark:text-slate-400">

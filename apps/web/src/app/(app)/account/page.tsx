@@ -1,4 +1,5 @@
 import { headers } from 'next/headers'
+import { getTranslations } from 'next-intl/server'
 import { eq } from 'drizzle-orm'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, PageHeader } from '@beaconhs/ui'
 import { getAuth } from '@beaconhs/auth'
@@ -16,6 +17,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AccountPage() {
   const ctx = await requireRequestContext()
+  const t = await getTranslations('Account')
 
   // `users` is global (not tenant-scoped) — read on the super pool, like every
   // other identity read in getRequestContext / the platform user surfaces.
@@ -25,7 +27,6 @@ export default async function AccountPage() {
         name: users.name,
         email: users.email,
         timezone: users.timezone,
-        locale: users.locale,
       })
       .from(users)
       .where(eq(users.id, ctx.userId))
@@ -63,31 +64,30 @@ export default async function AccountPage() {
   return (
     <PageContainer>
       <div className="mx-auto w-full max-w-2xl space-y-6">
-        <PageHeader title="Account" description="Manage your profile, time zone, and password." />
+        <PageHeader title={t('title')} description={t('description')} />
 
         <Card>
           <CardHeader>
-            <CardTitle>Profile</CardTitle>
-            <CardDescription>
-              Your name, language, and the time zone used for dates across the app.
-            </CardDescription>
+            <CardTitle>{t('profile')}</CardTitle>
+            <CardDescription>{t('profileDescription')}</CardDescription>
           </CardHeader>
           <CardContent>
             <ProfileForm
               name={account.name}
               email={account.email}
               timezone={account.timezone}
-              locale={account.locale}
+              localeOverride={ctx.localeOverride}
+              defaultLocale={ctx.defaultLocale}
+              enabledLocales={ctx.enabledLocales}
+              canOverrideLocale={ctx.membership !== null}
             />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Signature</CardTitle>
-            <CardDescription>
-              Draw the signature used when you sign off forms, inspections, and lift plans.
-            </CardDescription>
+            <CardTitle>{t('signature')}</CardTitle>
+            <CardDescription>{t('signatureDescription')}</CardDescription>
           </CardHeader>
           <CardContent>
             <SignatureSection currentUrl={signatureUrl} linked={ctx.personId != null} />
@@ -96,11 +96,9 @@ export default async function AccountPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Password</CardTitle>
+            <CardTitle>{t('password')}</CardTitle>
             <CardDescription>
-              {hasPassword
-                ? 'Change the password you use to sign in.'
-                : 'Add a password so you can sign in with your email as well as magic links.'}
+              {hasPassword ? t('passwordChangeDescription') : t('passwordAddDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@beaconhs/db": "workspace:*",
+    "@beaconhs/i18n": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

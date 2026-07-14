@@ -1,6 +1,8 @@
 'use client'
 
 import { useActionState, useMemo } from 'react'
+import { useTranslations } from 'next-intl'
+import type { AppLocale } from '@beaconhs/i18n'
 import { Alert, AlertDescription, Button, Input, Label, Select } from '@beaconhs/ui'
 import { updateProfile } from './actions'
 
@@ -8,14 +10,23 @@ export function ProfileForm({
   name,
   email,
   timezone,
-  locale,
+  localeOverride,
+  defaultLocale,
+  enabledLocales,
+  canOverrideLocale,
 }: {
   name: string
   email: string
   timezone: string
-  locale: string
+  localeOverride: AppLocale | null
+  defaultLocale: AppLocale
+  enabledLocales: readonly AppLocale[]
+  canOverrideLocale: boolean
 }) {
   const [state, action, pending] = useActionState(updateProfile, null)
+  const t = useTranslations('Account')
+  const common = useTranslations('Common')
+  const languages = useTranslations('Languages')
 
   // Full IANA list (searchable Select). `supportedValuesOf('timeZone')` omits the
   // bare 'UTC' alias in some engines, and could omit the user's stored value, so
@@ -37,21 +48,19 @@ export function ProfileForm({
   return (
     <form action={action} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="acc-name">Name</Label>
+        <Label htmlFor="acc-name">{t('name')}</Label>
         <Input id="acc-name" name="name" defaultValue={name} required />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="acc-email">Email</Label>
+        <Label htmlFor="acc-email">{t('email')}</Label>
         <Input id="acc-email" value={email} disabled readOnly />
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Email changes are handled by an administrator.
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('emailHelp')}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="acc-tz">Time zone</Label>
+          <Label htmlFor="acc-tz">{t('timeZone')}</Label>
           <Select id="acc-tz" name="timezone" defaultValue={timezone} searchable>
             {timezones.map((t) => (
               <option key={t} value={t}>
@@ -59,17 +68,26 @@ export function ProfileForm({
               </option>
             ))}
           </Select>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Used for dates and greetings across the app.
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('timeZoneHelp')}</p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="acc-locale">Language</Label>
-          <Select id="acc-locale" name="locale" defaultValue={locale}>
-            <option value="en">English</option>
-            <option value="fr">French</option>
-            <option value="es">Spanish</option>
+          <Label htmlFor="acc-locale">{t('language')}</Label>
+          <Select
+            id="acc-locale"
+            name="locale"
+            defaultValue={localeOverride ?? ''}
+            disabled={!canOverrideLocale}
+          >
+            <option value="">
+              {common('useTenantDefault', { language: languages(defaultLocale) })}
+            </option>
+            {enabledLocales.map((supportedLocale) => (
+              <option key={supportedLocale} value={supportedLocale}>
+                {languages(supportedLocale)}
+              </option>
+            ))}
           </Select>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('languageHelp')}</p>
         </div>
       </div>
 
@@ -80,12 +98,12 @@ export function ProfileForm({
       ) : null}
       {state?.ok ? (
         <Alert variant="success">
-          <AlertDescription>Profile updated.</AlertDescription>
+          <AlertDescription>{t('profileUpdated')}</AlertDescription>
         </Alert>
       ) : null}
 
       <Button type="submit" disabled={pending}>
-        {pending ? 'Saving…' : 'Save changes'}
+        {pending ? common('saving') : t('saveChanges')}
       </Button>
     </form>
   )

@@ -3,6 +3,7 @@ import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
+import { resolveLocalePreferences } from '@beaconhs/i18n'
 import {
   people,
   roleAssignments,
@@ -27,6 +28,17 @@ export const ACTIVE_TENANT_COOKIE = 'bhs-active-tenant'
 // The single role a multi-role user has switched into. Cleared whenever the
 // active tenant changes (a role id only means something inside one tenant).
 export const ACTIVE_ROLE_COOKIE = 'bhs-active-role'
+
+function localeContext(
+  tenant: { defaultLanguage: string; enabledLanguages: string[] },
+  localeOverride: string | null | undefined,
+) {
+  return resolveLocalePreferences({
+    defaultLocale: tenant.defaultLanguage,
+    enabledLocales: tenant.enabledLanguages,
+    userLocale: localeOverride,
+  })
+}
 
 /**
  * Resolve the person (employee) record linked to a login account in one tenant.
@@ -217,6 +229,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         tenantId: tenant.id,
         isSuperAdmin: true,
         timezone: u.timezone,
+        ...localeContext(tenant, m?.localeOverride),
         membership: m ? { id: m.id, displayName: m.displayName ?? u.name } : null,
         personId: await resolvePersonId(tx as unknown as Database, userId, tenant.id),
         permissions,
@@ -267,6 +280,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       tenantId: active.tenant.id,
       isSuperAdmin: false,
       timezone: u.timezone,
+      ...localeContext(active.tenant, active.membership.localeOverride),
       membership: {
         id: active.membership.id,
         displayName: active.membership.displayName ?? u.name,
@@ -307,7 +321,11 @@ async function resolveImpersonation(
   // A suspended or archived tenant cannot be reached through an existing
   // impersonation pointer, including by a platform super-admin.
   const [activeTenant] = await tx
-    .select({ id: tenants.id })
+    .select({
+      id: tenants.id,
+      defaultLanguage: tenants.defaultLanguage,
+      enabledLanguages: tenants.enabledLanguages,
+    })
     .from(tenants)
     .where(activeTenantPredicate(s.tenantId))
     .limit(1)
@@ -324,7 +342,11 @@ async function resolveImpersonation(
 
   // The target must still be an active member of the pinned tenant.
   const [m] = await tx
-    .select({ id: tenantUsers.id, displayName: tenantUsers.displayName })
+    .select({
+      id: tenantUsers.id,
+      displayName: tenantUsers.displayName,
+      localeOverride: tenantUsers.localeOverride,
+    })
     .from(tenantUsers)
     .where(
       and(
@@ -342,6 +364,7 @@ async function resolveImpersonation(
     tenantId: s.tenantId,
     isSuperAdmin: false,
     timezone: target.timezone,
+    ...localeContext(activeTenant, m.localeOverride),
     membership: { id: m.id, displayName: m.displayName ?? target.name },
     personId: await resolvePersonId(tx, target.id, s.tenantId),
     permissions,

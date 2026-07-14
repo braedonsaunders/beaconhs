@@ -70,7 +70,7 @@ export default async function RunDetailPage({
             href: `/reports/schedules/${id}`,
             label: 'Back to schedule',
           }}
-          title={`Run · ${formatDateTime(new Date(row.run.startedAt), ctx.timezone)}`}
+          title={`Run · ${formatDateTime(new Date(row.run.startedAt), ctx.timezone, ctx.locale)}`}
           subtitle={`${row.schedule.name} — ${definition?.name ?? 'Unknown report'}`}
           badge={<StatusBadge status={row.run.status} />}
           actions={
@@ -101,11 +101,11 @@ export default async function RunDetailPage({
                 <Badge variant="outline">{row.run.status}</Badge>
               </Detail>
               <Detail label="Started">
-                {formatDateTime(new Date(row.run.startedAt), ctx.timezone)}
+                {formatDateTime(new Date(row.run.startedAt), ctx.timezone, ctx.locale)}
               </Detail>
               <Detail label="Finished">
                 {row.run.finishedAt
-                  ? formatDateTime(new Date(row.run.finishedAt), ctx.timezone)
+                  ? formatDateTime(new Date(row.run.finishedAt), ctx.timezone, ctx.locale)
                   : '—'}
               </Detail>
               <Detail label="Duration">{duration !== null ? `${duration}s` : '—'}</Detail>
@@ -133,7 +133,7 @@ export default async function RunDetailPage({
                 <Detail label="Size">{Math.round(row.attachment.sizeBytes / 1024)} KB</Detail>
                 <Detail label="Content type">{row.attachment.contentType}</Detail>
                 <Detail label="Uploaded">
-                  {formatDateTime(new Date(row.attachment.createdAt), ctx.timezone)}
+                  {formatDateTime(new Date(row.attachment.createdAt), ctx.timezone, ctx.locale)}
                 </Detail>
               </dl>
               <div className="mt-4">

@@ -198,13 +198,13 @@ export default async function ScheduleDetailPage({
                     Next run:{' '}
                     <strong>
                       {schedule.nextRunAt
-                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
+                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
                         : '—'}
                     </strong>{' '}
                     · Last run:{' '}
                     <strong>
                       {schedule.lastRunAt
-                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone)
+                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
                         : 'never'}
                     </strong>
                   </p>
@@ -231,12 +231,12 @@ export default async function ScheduleDetailPage({
                 <ConfigItem label="Timezone">{schedule.timezone}</ConfigItem>
                 <ConfigItem label="Next run">
                   {schedule.nextRunAt
-                    ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
+                    ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
                     : '—'}
                 </ConfigItem>
                 <ConfigItem label="Last run">
                   {schedule.lastRunAt
-                    ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone)
+                    ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
                     : 'never'}
                 </ConfigItem>
               </dl>
@@ -293,11 +293,13 @@ export default async function ScheduleDetailPage({
                           href={`/reports/schedules/${id}/runs/${r.id}`}
                           className="hover:underline"
                         >
-                          {formatDateTime(new Date(r.startedAt), ctx.timezone)}
+                          {formatDateTime(new Date(r.startedAt), ctx.timezone, ctx.locale)}
                         </Link>
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">
-                        {r.finishedAt ? formatDateTime(new Date(r.finishedAt), ctx.timezone) : '—'}
+                        {r.finishedAt
+                          ? formatDateTime(new Date(r.finishedAt), ctx.timezone, ctx.locale)
+                          : '—'}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={r.status} />

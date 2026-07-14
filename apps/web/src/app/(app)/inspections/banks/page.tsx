@@ -233,7 +233,7 @@ export default async function InspectionBanksPage({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(bank.createdAt), ctx.timezone)}
+                    {formatDate(new Date(bank.createdAt), ctx.timezone, ctx.locale)}
                   </TableCell>
                 </TableRow>
               ))}

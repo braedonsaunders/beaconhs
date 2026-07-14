@@ -7,29 +7,35 @@
 import { AlertTriangle, BarChart3, MapPin, ScanLine, Sparkles, Star } from 'lucide-react'
 import { Input, Select, Textarea } from '@beaconhs/ui'
 import type { FormField } from '@beaconhs/forms-core'
+import { localizeText, type AppLocale } from '@beaconhs/i18n'
 
 function cfg(field: FormField): Record<string, unknown> {
   return (field.config as Record<string, unknown> | undefined) ?? {}
 }
 
-function optionLabels(field: FormField): string[] {
+function optionLabels(field: FormField, locale: AppLocale, defaultLocale: AppLocale): string[] {
   const opts =
     (field.validation?.options as { value: string; label: unknown }[] | undefined) ??
     (cfg(field).options as { value: string; label: unknown }[] | undefined) ??
     []
   return opts.map((o) =>
-    typeof o.label === 'string' ? o.label : ((o.label as { en?: string })?.en ?? o.value),
+    localizeText(o.label as Record<string, string>, locale, o.value, defaultLocale),
   )
 }
 
 export function ElementPreview({
   field,
+  locale,
+  defaultLocale,
   compact = false,
 }: {
   field: FormField
+  locale: AppLocale
+  defaultLocale: AppLocale
   compact?: boolean
 }) {
-  const label = field.label?.en ?? field.id
+  const label = localizeText(field.label, locale, field.id, defaultLocale)
+  const helpText = localizeText(field.helpText, locale, '', defaultLocale)
   const t = field.type
 
   // Content elements ARE their content — no separate field label.
@@ -42,17 +48,25 @@ export function ElementPreview({
         {label}
         {field.required ? <span className="text-rose-500"> *</span> : null}
       </div>
-      <ElementInput field={field} compact={compact} />
-      {field.helpText?.en ? (
-        <p className="text-[10px] text-slate-400">{field.helpText.en}</p>
-      ) : null}
+      <ElementInput field={field} locale={locale} defaultLocale={defaultLocale} compact={compact} />
+      {helpText ? <p className="text-[10px] text-slate-400">{helpText}</p> : null}
     </div>
   )
 }
 
-function ElementInput({ field, compact }: { field: FormField; compact?: boolean }) {
+function ElementInput({
+  field,
+  locale,
+  defaultLocale,
+  compact,
+}: {
+  field: FormField
+  locale: AppLocale
+  defaultLocale: AppLocale
+  compact?: boolean
+}) {
   const t = field.type
-  const labels = optionLabels(field)
+  const labels = optionLabels(field, locale, defaultLocale)
   const choices = labels.length ? labels : ['Option A', 'Option B']
 
   switch (t) {
@@ -294,7 +308,7 @@ function ElementInput({ field, compact }: { field: FormField; compact?: boolean 
         </div>
       )
     case 'ranking': {
-      const ls = optionLabels(field)
+      const ls = optionLabels(field, locale, defaultLocale)
       const itemsR = ls.length ? ls : ['Option A', 'Option B', 'Option C']
       return (
         <ol className="space-y-1">

@@ -320,8 +320,10 @@ export default async function WorkOrderDetailPage({
         <DetailHeader
           back={{ href: '/equipment/work-orders', label: 'Back to work orders' }}
           title={wo.summary}
-          subtitle={`${wo.reference} · opened ${formatDate(new Date(wo.openedAt), ctx.timezone)}${
-            wo.closedAt ? ` · closed ${formatDate(new Date(wo.closedAt), ctx.timezone)}` : ''
+          subtitle={`${wo.reference} · opened ${formatDate(new Date(wo.openedAt), ctx.timezone, ctx.locale)}${
+            wo.closedAt
+              ? ` · closed ${formatDate(new Date(wo.closedAt), ctx.timezone, ctx.locale)}`
+              : ''
           }`}
           badge={
             <div className="flex items-center gap-2">
@@ -417,11 +419,13 @@ export default async function WorkOrderDetailPage({
                   },
                   {
                     label: 'Reported at',
-                    value: formatDateTime(new Date(wo.openedAt), ctx.timezone),
+                    value: formatDateTime(new Date(wo.openedAt), ctx.timezone, ctx.locale),
                   },
                   {
                     label: 'Completed at',
-                    value: wo.closedAt ? formatDateTime(new Date(wo.closedAt), ctx.timezone) : '—',
+                    value: wo.closedAt
+                      ? formatDateTime(new Date(wo.closedAt), ctx.timezone, ctx.locale)
+                      : '—',
                   },
                   { label: 'Cost', value: wo.cost ? `$${wo.cost}` : '—' },
                 ]}
@@ -574,7 +578,7 @@ export default async function WorkOrderDetailPage({
 
         {active === 'activity' ? (
           <Section title={`Activity (${activity.length})`}>
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
           </Section>
         ) : null}
       </div>

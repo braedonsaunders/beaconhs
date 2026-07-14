@@ -96,6 +96,8 @@ const ICONS: Record<string, LucideIcon> = {
 export type SidebarNavItem = {
   href: string
   label: string
+  /** Built-in message key. Omitted for tenant-authored/custom labels. */
+  labelKey?: string
   iconKey: keyof typeof ICONS | string
   /** When set, the item is active ONLY on an exact path match (no greedy
    * prefix). Used for hub/overview links that are a prefix of their siblings. */
@@ -104,6 +106,8 @@ export type SidebarNavItem = {
 
 export type SidebarNavGroup = {
   label: string
+  /** Built-in message key. Omitted for tenant-authored/custom labels. */
+  labelKey?: string
   items: SidebarNavItem[]
 }
 

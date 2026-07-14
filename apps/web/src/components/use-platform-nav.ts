@@ -6,22 +6,71 @@
 // tenant-customisable. Consumed by AppSidebar, MobileNavToggle and MobileTabBar.
 
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import type { SidebarNavGroup } from './sidebar-nav'
 
 const PLATFORM_NAV_GROUPS: SidebarNavGroup[] = [
   {
     label: 'Platform',
+    labelKey: 'Shell.platform',
     items: [
-      { href: '/platform', label: 'Overview', iconKey: 'grid', exact: true },
-      { href: '/platform/tenants', label: 'Tenants', iconKey: 'building', exact: true },
-      { href: '/platform/tenants/new', label: 'Create tenant', iconKey: 'plus' },
-      { href: '/platform/users', label: 'Users', iconKey: 'users' },
-      { href: '/platform/email', label: 'Platform email', iconKey: 'mail' },
-      { href: '/platform/sms', label: 'SMS provider', iconKey: 'message' },
-      { href: '/platform/ai', label: 'AI provider', iconKey: 'sparkles' },
-      { href: '/platform/email-log', label: 'Email log', iconKey: 'scroll' },
-      { href: '/platform/sms-log', label: 'SMS log', iconKey: 'scroll' },
-      { href: '/platform/database', label: 'Database maintenance', iconKey: 'database' },
+      {
+        href: '/platform',
+        label: 'Overview',
+        labelKey: 'PlatformNav.overview',
+        iconKey: 'grid',
+        exact: true,
+      },
+      {
+        href: '/platform/tenants',
+        label: 'Tenants',
+        labelKey: 'PlatformNav.tenants',
+        iconKey: 'building',
+        exact: true,
+      },
+      {
+        href: '/platform/tenants/new',
+        label: 'Create tenant',
+        labelKey: 'PlatformNav.createTenant',
+        iconKey: 'plus',
+      },
+      { href: '/platform/users', label: 'Users', labelKey: 'PlatformNav.users', iconKey: 'users' },
+      {
+        href: '/platform/email',
+        label: 'Platform email',
+        labelKey: 'PlatformNav.platformEmail',
+        iconKey: 'mail',
+      },
+      {
+        href: '/platform/sms',
+        label: 'SMS provider',
+        labelKey: 'PlatformNav.smsProvider',
+        iconKey: 'message',
+      },
+      {
+        href: '/platform/ai',
+        label: 'AI provider',
+        labelKey: 'PlatformNav.aiProvider',
+        iconKey: 'sparkles',
+      },
+      {
+        href: '/platform/email-log',
+        label: 'Email log',
+        labelKey: 'PlatformNav.emailLog',
+        iconKey: 'scroll',
+      },
+      {
+        href: '/platform/sms-log',
+        label: 'SMS log',
+        labelKey: 'PlatformNav.smsLog',
+        iconKey: 'scroll',
+      },
+      {
+        href: '/platform/database',
+        label: 'Database maintenance',
+        labelKey: 'PlatformNav.databaseMaintenance',
+        iconKey: 'database',
+      },
     ],
   },
 ]
@@ -33,5 +82,14 @@ function useIsPlatform(): boolean {
 
 /** The nav groups to render: platform nav under /platform, else the tenant nav. */
 export function useNavGroups(tenantGroups: SidebarNavGroup[]): SidebarNavGroup[] {
-  return useIsPlatform() ? PLATFORM_NAV_GROUPS : tenantGroups
+  const t = useTranslations()
+  const groups = useIsPlatform() ? PLATFORM_NAV_GROUPS : tenantGroups
+  return groups.map((group) => ({
+    ...group,
+    label: group.labelKey ? t(group.labelKey as never) : group.label,
+    items: group.items.map((item) => ({
+      ...item,
+      label: item.labelKey ? t(item.labelKey as never) : item.label,
+    })),
+  }))
 }

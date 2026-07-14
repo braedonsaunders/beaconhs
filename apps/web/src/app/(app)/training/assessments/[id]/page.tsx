@@ -147,13 +147,13 @@ export default async function AssessmentAttemptDetailPage({
             {
               label: 'Started',
               value: attempt.startedAt
-                ? formatDateTime(new Date(attempt.startedAt), ctx.timezone)
+                ? formatDateTime(new Date(attempt.startedAt), ctx.timezone, ctx.locale)
                 : '—',
             },
             {
               label: 'Completed',
               value: attempt.completedAt
-                ? formatDateTime(new Date(attempt.completedAt), ctx.timezone)
+                ? formatDateTime(new Date(attempt.completedAt), ctx.timezone, ctx.locale)
                 : '—',
             },
           ]}
@@ -269,7 +269,7 @@ export default async function AssessmentAttemptDetailPage({
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     This attempt is locked. Submitted at{' '}
                     {attempt.completedAt
-                      ? formatDateTime(new Date(attempt.completedAt), ctx.timezone)
+                      ? formatDateTime(new Date(attempt.completedAt), ctx.timezone, ctx.locale)
                       : '—'}
                     .
                   </div>

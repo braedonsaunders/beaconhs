@@ -23,6 +23,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
+import { localizeText, type AppLocale } from '@beaconhs/i18n'
 import {
   formResponses,
   formTemplateVersions,
@@ -93,13 +94,18 @@ const DEFAULT_COLUMNS: ListColumnConfig[] = [
 
 type SchemaField = {
   id: string
-  label?: { en?: string }
+  label?: Record<string, string>
   type?: string
-  validation?: { options?: { value: string; label?: { en?: string } }[] }
+  validation?: { options?: { value: string; label?: Record<string, string> }[] }
 }
 
 // Lightweight cell formatter for app-field columns (scalars / selects / arrays).
-function formatListCell(field: SchemaField | undefined, raw: unknown): string {
+function formatListCell(
+  field: SchemaField | undefined,
+  raw: unknown,
+  locale: AppLocale,
+  defaultLocale: AppLocale,
+): string {
   if (raw == null || raw === '') return '—'
   if (Array.isArray(raw)) return raw.map((v) => String(v)).join(', ') || '—'
   if (typeof raw === 'object') {
@@ -111,7 +117,7 @@ function formatListCell(field: SchemaField | undefined, raw: unknown): string {
   const opts = field?.validation?.options
   if (opts) {
     const match = opts.find((o) => o.value === raw)
-    if (match) return match.label?.en ?? String(raw)
+    if (match) return localizeText(match.label, locale, String(raw), defaultLocale)
   }
   return String(raw)
 }
@@ -326,7 +332,7 @@ export default async function AppRecordsPage({
     col.label ??
     (col.source === 'builtin'
       ? (BUILTIN_LABEL[col.key] ?? col.key)
-      : (fieldMap.get(col.key)?.label?.en ?? col.key))
+      : localizeText(fieldMap.get(col.key)?.label, ctx.locale, col.key, ctx.defaultLocale))
 
   return (
     <ListPageLayout
@@ -407,7 +413,12 @@ export default async function AppRecordsPage({
                   if (col.source === 'field') {
                     return (
                       <span className="text-xs text-slate-600">
-                        {formatListCell(fieldMap.get(col.key), data[col.key])}
+                        {formatListCell(
+                          fieldMap.get(col.key),
+                          data[col.key],
+                          ctx.locale,
+                          ctx.defaultLocale,
+                        )}
                       </span>
                     )
                   }
@@ -448,7 +459,7 @@ export default async function AppRecordsPage({
                       return (
                         <span className="text-xs text-slate-600 tabular-nums">
                           {response.createdAt
-                            ? formatDate(new Date(response.createdAt), ctx.timezone)
+                            ? formatDate(new Date(response.createdAt), ctx.timezone, ctx.locale)
                             : '—'}
                         </span>
                       )
@@ -456,7 +467,7 @@ export default async function AppRecordsPage({
                       return (
                         <span className="text-xs text-slate-600 tabular-nums">
                           {response.submittedAt
-                            ? formatDate(new Date(response.submittedAt), ctx.timezone)
+                            ? formatDate(new Date(response.submittedAt), ctx.timezone, ctx.locale)
                             : '—'}
                         </span>
                       )

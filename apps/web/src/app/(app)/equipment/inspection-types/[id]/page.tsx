@@ -118,7 +118,9 @@ export default async function EquipmentInspectionTypeDetailPage({
         groups={groups}
         criteria={criteria}
         appliesToOptions={allTypes}
-        activitySlot={<ActivityFeed entries={activity} timeZone={ctx.timezone} />}
+        activitySlot={
+          <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+        }
       />
     </DetailPageLayout>
   )

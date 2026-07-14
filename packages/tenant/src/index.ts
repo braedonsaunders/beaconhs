@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { type Database, withSuperAdmin, withTenant } from '@beaconhs/db'
+import type { AppLocale } from '@beaconhs/i18n'
 import {
   PERMISSION_CATALOGUE,
   roleAssignments,
@@ -37,6 +38,14 @@ export type RequestContext = {
   // render on the deploy container's clock (UTC in prod), so any local-time
   // display — greetings, "today", date headers — must format against this.
   timezone: string
+  // Effective UI/content locale for this active tenant. A membership override
+  // is used only while it remains enabled by the tenant; otherwise this is the
+  // tenant default. Keeping the policy on context prevents every page, worker,
+  // and renderer from independently re-resolving language settings.
+  locale: AppLocale
+  defaultLocale: AppLocale
+  enabledLocales: readonly AppLocale[]
+  localeOverride: AppLocale | null
   // The active tenant_user membership (id, display name)
   membership: { id: string; displayName: string } | null
   // The active user's linked person record in this tenant, resolved once at

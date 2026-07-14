@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useState, useTransition } from 'react'
+import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { ScanLine } from 'lucide-react'
 import { StationClient } from '@/app/(app)/equipment/station/_station-client'
 import type { RemoteSearchLoader } from '@/components/remote-search-select'
@@ -13,12 +14,18 @@ import {
 } from './actions'
 
 export function EquipmentKioskClient(props: { tenantId: string; tenantName: string }) {
+  const t = useTranslations('EquipmentKiosk')
+  const locale = useLocale()
   const { tenantId } = props
   const [pin, setPin] = useState<string | null>(null)
   const [config, setConfig] = useState<EquipmentKioskConfig | null>(null)
   const [pinInput, setPinInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
 
   const loadPicker = useCallback(
     async (kind: 'holder' | 'location', input: Parameters<RemoteSearchLoader>[0]) => {
@@ -55,7 +62,7 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
     setError(null)
     const candidate = pinInput.trim()
     if (!candidate) {
-      setError('Enter the kiosk PIN to continue')
+      setError(t('enterPinError'))
       return
     }
     start(async () => {
@@ -83,7 +90,7 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
               <ScanLine size={24} />
             </div>
             <h1 className="text-xl font-semibold">{props.tenantName}</h1>
-            <p className="text-sm text-slate-400">Equipment kiosk · enter PIN to unlock</p>
+            <p className="text-sm text-slate-400">{t('pinPrompt')}</p>
           </header>
           <input
             type="password"
@@ -101,7 +108,7 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
             disabled={pending}
             className="w-full rounded-lg bg-amber-500 px-4 py-3 text-base font-semibold text-white hover:bg-amber-400 disabled:opacity-50"
           >
-            {pending ? 'Checking…' : 'Unlock kiosk'}
+            {pending ? t('checking') : t('unlock')}
           </button>
         </form>
       </div>

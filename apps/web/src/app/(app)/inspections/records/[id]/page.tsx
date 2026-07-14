@@ -1354,7 +1354,7 @@ export default async function InspectionRecordDetailPage({
         <DetailHeader
           back={{ href: '/inspections/records', label: 'Back to inspection records' }}
           title={`${type.name}`}
-          subtitle={`${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone)}`}
+          subtitle={`${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)}`}
           badge={
             <div className="flex items-center gap-2">
               <Badge
@@ -1423,7 +1423,7 @@ export default async function InspectionRecordDetailPage({
                   <>
                     Closed on{' '}
                     {record.closedAt
-                      ? formatDate(new Date(record.closedAt), ctx.timezone)
+                      ? formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
                       : 'an unknown date'}
                     . Unlocking reopens it as Submitted so you can make an approved correction.
                   </>
@@ -1601,12 +1601,18 @@ export default async function InspectionRecordDetailPage({
               <Meta
                 label="Submitted"
                 value={
-                  record.submittedAt ? formatDate(new Date(record.submittedAt), ctx.timezone) : '—'
+                  record.submittedAt
+                    ? formatDate(new Date(record.submittedAt), ctx.timezone, ctx.locale)
+                    : '—'
                 }
               />
               <Meta
                 label="Closed"
-                value={record.closedAt ? formatDate(new Date(record.closedAt), ctx.timezone) : '—'}
+                value={
+                  record.closedAt
+                    ? formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
+                    : '—'
+                }
               />
             </dl>
           </Section>
@@ -1798,7 +1804,7 @@ export default async function InspectionRecordDetailPage({
             tone="slate"
             defaultOpen={false}
           >
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
           </Section>
         </section>
       </div>

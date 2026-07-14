@@ -248,12 +248,12 @@ export default async function SchedulesListPage({
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
                       {schedule.nextRunAt && schedule.active
-                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone)
+                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
                         : '—'}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
                       {schedule.lastRunAt
-                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone)
+                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
                         : 'never'}
                     </TableCell>
                     <TableCell>

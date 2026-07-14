@@ -14,6 +14,7 @@ import {
   type FormField,
   type FormSchemaV1,
 } from '@beaconhs/forms-core'
+import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
 
 function fieldKind(field: FormField): FlowFieldKind {
   if (field.type === 'number' || field.type === 'slider' || field.type === 'rating') return 'number'
@@ -36,6 +37,8 @@ export function formFlowProfile(
   templateId: string,
   label: string,
   schema: FormSchemaV1,
+  locale: AppLocale = DEFAULT_LOCALE,
+  defaultLocale: AppLocale = DEFAULT_LOCALE,
 ): FlowSubjectProfile {
   const fields = schema.sections.flatMap((section) =>
     section.repeating
@@ -44,7 +47,7 @@ export function formFlowProfile(
           .filter((field) => !SKIP_FIELD_TYPES.has(field.type))
           .map((field) => ({
             key: field.id,
-            label: labelText(field.label, field.id),
+            label: labelText(field.label, field.id, locale, defaultLocale),
             kind: fieldKind(field),
             writable: storesResponseValue(field),
             photoSource: isAttachmentArrayField(field.type) || hasPhotosCompanion(field.type),

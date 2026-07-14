@@ -291,7 +291,9 @@ export default async function FormsPage({
                     <span>
                       {responseCount} response{responseCount === 1 ? '' : 's'}
                     </span>
-                    {last ? <span>· last {formatDate(new Date(last), ctx.timezone)}</span> : null}
+                    {last ? (
+                      <span>· last {formatDate(new Date(last), ctx.timezone, ctx.locale)}</span>
+                    ) : null}
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">

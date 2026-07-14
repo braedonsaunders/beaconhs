@@ -73,7 +73,7 @@ export async function ensureFormPdfTemplate(
   const schema = ver?.schema as FormSchemaV1 | undefined
   if (!schema) return { created: false, templateId: null }
 
-  const gen = generateFormPdfTemplate(schema, form.name)
+  const gen = generateFormPdfTemplate(schema, form.name, ctx.defaultLocale)
   const compiled = compileBuilderHtml(gen.sourceHtml)
 
   const newId = await ctx.db(async (tx) => {

@@ -740,7 +740,7 @@ export default async function HazidAssessmentDetailPage({
           <DetailHeader
             back={{ href: '/hazard-assessments', label: 'Back to assessments' }}
             title={type?.name ?? 'Hazard assessment'}
-            subtitle={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone)}`}
+            subtitle={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`}
             badge={
               <div className="flex items-center gap-2">
                 {locked ? (
@@ -774,8 +774,8 @@ export default async function HazidAssessmentDetailPage({
             <Alert variant="warning">
               <AlertTitle>This assessment is locked</AlertTitle>
               <AlertDescription>
-                Locked on {a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone) : '—'}. Unlock to
-                make edits (existing signatures will be cleared on unlock).
+                Locked on {a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'}.
+                Unlock to make edits (existing signatures will be cleared on unlock).
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1216,7 +1216,8 @@ export default async function HazidAssessmentDetailPage({
                             <span>{item.template.name}</span>
                             {item.response?.updatedAt ? (
                               <span>
-                                Updated {formatDateTime(item.response.updatedAt, ctx.timezone)}
+                                Updated{' '}
+                                {formatDateTime(item.response.updatedAt, ctx.timezone, ctx.locale)}
                               </span>
                             ) : null}
                           </div>
@@ -1351,7 +1352,7 @@ export default async function HazidAssessmentDetailPage({
                       </div>
                       <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500 dark:border-slate-800">
                         {s.row.signedAt
-                          ? `Signed ${formatDateTime(s.row.signedAt, ctx.timezone)}`
+                          ? `Signed ${formatDateTime(s.row.signedAt, ctx.timezone, ctx.locale)}`
                           : 'Awaiting signature'}
                       </div>
                     </li>
@@ -1369,7 +1370,7 @@ export default async function HazidAssessmentDetailPage({
             icon={<History size={20} />}
             tone="slate"
           >
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
           </Section>
         </section>
       </div>

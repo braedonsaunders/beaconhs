@@ -1,4 +1,5 @@
 import { ShieldAlert } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { AccountMenu } from './account-menu'
 import { TenantSwitcher } from './tenant-switcher'
 import { RoleSwitcher } from './role-switcher'
@@ -55,6 +56,7 @@ export function AppShell({
   canUseAssistant?: boolean
   children: React.ReactNode
 }) {
+  const t = useTranslations('Shell')
   return (
     <div className="flex h-screen overflow-hidden">
       <ServiceWorkerRegistrar unreadCount={unreadCount} />
@@ -73,7 +75,7 @@ export function AppShell({
             <div className="flex shrink-0 items-center gap-2 border-b border-amber-300 bg-amber-50 px-4 py-1 text-xs text-amber-900 sm:px-6 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
               <ShieldAlert size={14} className="shrink-0" />
               <span className="truncate">
-                Super-admin · scoped to <strong>{ctx.tenantName}</strong>
+                {t('superAdminScopedTo')} <strong>{ctx.tenantName}</strong>
               </span>
             </div>
           ) : null}

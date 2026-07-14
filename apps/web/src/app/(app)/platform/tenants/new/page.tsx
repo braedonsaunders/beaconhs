@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { Button, Input, Label, PageHeader, Select } from '@beaconhs/ui'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
+import { LOCALE_OPTIONS, normalizeLocalePolicy } from '@beaconhs/i18n'
 import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
@@ -35,14 +36,15 @@ async function createTenant(formData: FormData): Promise<void> {
   const customSlug = String(formData.get('slug') ?? '').trim() || null
   const region = String(formData.get('region') ?? 'ca-central-1').trim()
   const defaultLanguage = String(formData.get('defaultLanguage') ?? 'en').trim()
-  const enabledLanguagesRaw = String(formData.get('enabledLanguages') ?? 'en').trim()
   if (!name) return
 
   const slug = customSlug ? slugify(customSlug) : slugify(name)
-  const enabledLanguages = enabledLanguagesRaw
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
+  const languagePolicy = normalizeLocalePolicy({
+    defaultLocale: defaultLanguage,
+    enabledLocales: LOCALE_OPTIONS.map((language) => language.value).filter(
+      (locale) => formData.get(`language_${locale}`) === 'on',
+    ),
+  })
 
   await withSuperAdmin(db, async (tx) => {
     const [created] = await tx
@@ -52,8 +54,8 @@ async function createTenant(formData: FormData): Promise<void> {
         slug,
         status: 'active',
         region,
-        defaultLanguage,
-        enabledLanguages: enabledLanguages.length > 0 ? enabledLanguages : [defaultLanguage],
+        defaultLanguage: languagePolicy.defaultLocale,
+        enabledLanguages: languagePolicy.enabledLocales,
       })
       .returning({ id: tenants.id })
     if (created) {
@@ -67,7 +69,13 @@ async function createTenant(formData: FormData): Promise<void> {
         entityId: created.id,
         action: 'create',
         summary: `Created tenant "${name}" (${slug})`,
-        after: { name, slug, region, defaultLanguage, enabledLanguages },
+        after: {
+          name,
+          slug,
+          region,
+          defaultLanguage: languagePolicy.defaultLocale,
+          enabledLanguages: languagePolicy.enabledLocales,
+        },
       })
       // Seed every built-in form template that's required on day-one. Done
       // inside the same transaction so a seeder failure rolls back the
@@ -129,10 +137,24 @@ export default function NewTenantPage() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="enabledLanguages">Enabled languages</Label>
-            <Input id="enabledLanguages" name="enabledLanguages" defaultValue="en" />
+            <Label>Enabled languages</Label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {LOCALE_OPTIONS.map((language) => (
+                <label
+                  key={language.value}
+                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
+                >
+                  <input
+                    type="checkbox"
+                    name={`language_${language.value}`}
+                    defaultChecked={language.value === 'en'}
+                  />
+                  {language.nativeLabel}
+                </label>
+              ))}
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Comma-separated ISO codes, e.g. <code>en,fr</code>
+              The default language is always enabled automatically.
             </p>
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">

@@ -320,7 +320,9 @@ export default async function HazardsLibraryPage({
                     <Badge variant="secondary">{Number(usageCount ?? 0)}</Badge>
                   </TableCell>
                   <TableCell className="text-xs text-slate-500 tabular-nums">
-                    {h.updatedAt ? formatDate(new Date(h.updatedAt), ctx.timezone) : '—'}
+                    {h.updatedAt
+                      ? formatDate(new Date(h.updatedAt), ctx.timezone, ctx.locale)
+                      : '—'}
                   </TableCell>
                   <TableCell className="text-right">
                     <Link

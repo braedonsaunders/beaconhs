@@ -365,7 +365,9 @@ export async function GET(req: Request): Promise<NextResponse> {
       items: data.incidentRows.map((r) => ({
         id: r.id,
         label: `${r.reference} — ${r.title}`,
-        sublabel: r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone) : undefined,
+        sublabel: r.occurredAt
+          ? formatDate(new Date(r.occurredAt), ctx.timezone, ctx.locale)
+          : undefined,
         href: `/incidents/${r.id}`,
       })),
     })
@@ -429,7 +431,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         label: r.reference,
         sublabel:
           htmlToSnippet(r.jobScope, 100) ||
-          (r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone) : undefined),
+          (r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone, ctx.locale) : undefined),
         href: `/hazard-assessments/${r.id}`,
       })),
     })

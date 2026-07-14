@@ -189,7 +189,7 @@ export default async function AdminUserDetailPage({
                     <dt className="text-slate-500 dark:text-slate-400">Joined</dt>
                     <dd className="col-span-2 text-slate-900 dark:text-slate-100">
                       {member.membership.joinedAt
-                        ? formatDate(new Date(member.membership.joinedAt), ctx.timezone)
+                        ? formatDate(new Date(member.membership.joinedAt), ctx.timezone, ctx.locale)
                         : '—'}
                     </dd>
                   </dl>
@@ -544,7 +544,9 @@ export default async function AdminUserDetailPage({
           </div>
         ) : null}
 
-        {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
+        {active === 'activity' ? (
+          <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+        ) : null}
       </div>
     </PageContainer>
   )

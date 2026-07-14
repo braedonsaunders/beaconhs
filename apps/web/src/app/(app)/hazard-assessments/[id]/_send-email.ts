@@ -125,7 +125,7 @@ export async function sendHazidEmail(
     `HAZARD ASSESSMENT`,
     `${data.a.reference}${data.type ? ` · ${data.type.name}` : ''}`,
     ``,
-    `Occurred: ${formatDateTime(data.a.occurredAt, ctx.timezone)}`,
+    `Occurred: ${formatDateTime(data.a.occurredAt, ctx.timezone, ctx.defaultLocale)}`,
     `Site: ${data.site?.name ?? '—'}`,
     `Location on site: ${data.a.locationOnSite ?? '—'}`,
     `Supervisor: ${supervisorName}`,
@@ -141,7 +141,7 @@ export async function sendHazidEmail(
       const name = s.person
         ? `${s.person.firstName} ${s.person.lastName}`
         : (s.row.externalName ?? 'Unknown')
-      return `  - ${name}${s.row.signedAt ? ` (signed ${formatDateTime(s.row.signedAt, ctx.timezone)})` : ' (not signed)'}`
+      return `  - ${name}${s.row.signedAt ? ` (signed ${formatDateTime(s.row.signedAt, ctx.timezone, ctx.defaultLocale)})` : ' (not signed)'}`
     }),
   ]
     .filter((s) => s !== '')
@@ -199,7 +199,7 @@ export async function sendHazidEmail(
       <h2 style="margin:0 0 4px;font-size:18px;">Hazard Assessment ${escapeHtml(data.a.reference)}</h2>
       <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
         ${data.type ? escapeHtml(data.type.name) + ' · ' : ''}
-        ${escapeHtml(formatDateTime(data.a.occurredAt, ctx.timezone))} ·
+        ${escapeHtml(formatDateTime(data.a.occurredAt, ctx.timezone, ctx.defaultLocale))} ·
         ${data.a.locked ? 'locked / completed' : 'in progress'}
       </div>
       ${
@@ -228,7 +228,7 @@ export async function sendHazidEmail(
                 const name = s.person
                   ? `${escapeHtml(s.person.firstName)} ${escapeHtml(s.person.lastName)}`
                   : escapeHtml(s.row.externalName ?? 'Unknown')
-                return `<li>${name}${s.row.signedAt ? ` (signed ${escapeHtml(formatDateTime(s.row.signedAt, ctx.timezone))})` : ' (not signed)'}</li>`
+                return `<li>${name}${s.row.signedAt ? ` (signed ${escapeHtml(formatDateTime(s.row.signedAt, ctx.timezone, ctx.defaultLocale))})` : ' (not signed)'}</li>`
               })
               .join('')}</ul>`
       }

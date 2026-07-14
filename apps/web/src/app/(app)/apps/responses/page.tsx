@@ -326,12 +326,12 @@ export default async function FormResponsesPage({
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 tabular-nums">
                         {response.createdAt
-                          ? formatDate(new Date(response.createdAt), ctx.timezone)
+                          ? formatDate(new Date(response.createdAt), ctx.timezone, ctx.locale)
                           : '—'}
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 tabular-nums">
                         {response.submittedAt
-                          ? formatDate(new Date(response.submittedAt), ctx.timezone)
+                          ? formatDate(new Date(response.submittedAt), ctx.timezone, ctx.locale)
                           : '—'}
                       </TableCell>
                       <TableCell className="text-xs text-slate-600">
@@ -339,7 +339,7 @@ export default async function FormResponsesPage({
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 tabular-nums">
                         {response.closedAt
-                          ? formatDate(new Date(response.closedAt), ctx.timezone)
+                          ? formatDate(new Date(response.closedAt), ctx.timezone, ctx.locale)
                           : '—'}
                       </TableCell>
                       <TableCell>

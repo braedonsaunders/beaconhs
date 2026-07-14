@@ -34,6 +34,7 @@ import {
 } from '@beaconhs/db/schema'
 import { extractScores, normalizeFormResponseData, validateResponse } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import { DEFAULT_LOCALE, localizeText, type AppLocale } from '@beaconhs/i18n'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { repopulateParticipants } from '@/app/(app)/apps/_lib/participants'
 import { recordAudit } from '@/lib/audit'
@@ -147,16 +148,18 @@ function validationError(error: z.ZodError): ApiError {
   )
 }
 
-function labelText(value: unknown, fallback: string): string {
-  if (typeof value === 'string' && value.trim()) return value
-  if (value && typeof value === 'object') {
-    const i18n = value as Record<string, unknown>
-    if (typeof i18n.en === 'string' && i18n.en.trim()) return i18n.en
-    for (const candidate of Object.values(i18n)) {
-      if (typeof candidate === 'string' && candidate.trim()) return candidate
-    }
-  }
-  return fallback
+function labelText(
+  value: unknown,
+  fallback: string,
+  locale: AppLocale = DEFAULT_LOCALE,
+  defaultLocale: AppLocale = DEFAULT_LOCALE,
+): string {
+  return localizeText(
+    value as Record<string, string> | string | undefined,
+    locale,
+    fallback,
+    defaultLocale,
+  )
 }
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -192,14 +195,20 @@ function hasOwn<T extends object, K extends PropertyKey>(
   return Object.prototype.hasOwnProperty.call(value, key)
 }
 
-function schemaFieldSummaries(schema: FormSchemaV1): BuilderAppFieldSummary[] {
+function schemaFieldSummaries(
+  schema: FormSchemaV1,
+  locale: AppLocale,
+  defaultLocale: AppLocale,
+): BuilderAppFieldSummary[] {
   const fields: BuilderAppFieldSummary[] = []
   for (const section of schema.sections) {
-    const sectionLabel = section.title ? labelText(section.title, section.id) : null
+    const sectionLabel = section.title
+      ? labelText(section.title, section.id, locale, defaultLocale)
+      : null
     for (const field of section.fields) {
       fields.push({
         id: field.id,
-        label: labelText(field.label, field.id),
+        label: labelText(field.label, field.id, locale, defaultLocale),
         type: field.type,
         section_id: section.id,
         section_label: sectionLabel,
@@ -246,10 +255,14 @@ function repeatingRows(
   return rows
 }
 
-function appSummary(app: BuilderAppOpenApiEntity): BuilderAppSummary {
+function appSummary(
+  app: BuilderAppOpenApiEntity,
+  locale: AppLocale,
+  defaultLocale: AppLocale,
+): BuilderAppSummary {
   return {
     ...app,
-    fields: schemaFieldSummaries(app.schema),
+    fields: schemaFieldSummaries(app.schema, locale, defaultLocale),
     endpoint: `/api/v1/apps/${encodeURIComponent(app.key)}`,
     responses_endpoint: `/api/v1/apps/${encodeURIComponent(app.key)}/responses`,
   }
@@ -426,7 +439,7 @@ export async function listBuilderApps(
     return apps
   })
 
-  return rows.map(appSummary)
+  return rows.map((app) => appSummary(app, ctx.locale, ctx.defaultLocale))
 }
 
 export async function listBuilderAppOpenApiEntities(
@@ -823,7 +836,11 @@ function fieldOpenApiSchema(field: FormField): Record<string, unknown> {
   }
 }
 
-export function responseDataOpenApiSchema(schema: FormSchemaV1): Record<string, unknown> {
+export function responseDataOpenApiSchema(
+  schema: FormSchemaV1,
+  locale: AppLocale = DEFAULT_LOCALE,
+  defaultLocale: AppLocale = DEFAULT_LOCALE,
+): Record<string, unknown> {
   const properties: Record<string, unknown> = {}
   const required: string[] = []
   for (const section of schema.sections) {
@@ -833,7 +850,9 @@ export function responseDataOpenApiSchema(schema: FormSchemaV1): Record<string, 
       properties[section.id] = {
         type: 'array',
         items: { type: 'object', properties: rowProperties, additionalProperties: false },
-        description: section.title ? labelText(section.title, section.id) : section.id,
+        description: section.title
+          ? labelText(section.title, section.id, locale, defaultLocale)
+          : section.id,
       }
       if (section.minRows && section.minRows > 0) required.push(section.id)
       continue
@@ -841,7 +860,7 @@ export function responseDataOpenApiSchema(schema: FormSchemaV1): Record<string, 
     for (const field of section.fields) {
       properties[field.id] = {
         ...fieldOpenApiSchema(field),
-        description: labelText(field.label, field.id),
+        description: labelText(field.label, field.id, locale, defaultLocale),
       }
       if (field.required || field.validation?.required) required.push(field.id)
     }

@@ -14,6 +14,7 @@
 // seed backfill — keep it dependency-free (pure string building).
 
 import type { FormSchemaV1 } from './schema'
+import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
 import {
   SKIP_FIELD_TYPES,
   hasImageCompanion,
@@ -41,6 +42,30 @@ const VAL =
 const TABLE = 'width:100%;border-collapse:collapse;margin:0 0 10px;'
 const ROW = 'page-break-inside:avoid;'
 const HEAD_CELL = 'border:none;padding:14px 0 6px;'
+
+const PDF_COPY: Record<
+  AppLocale,
+  { recordReport: string; complianceStatus: string; complianceScore: string; details: string }
+> = {
+  en: {
+    recordReport: 'Record report',
+    complianceStatus: 'Compliance status',
+    complianceScore: 'Compliance score',
+    details: 'Details',
+  },
+  fr: {
+    recordReport: 'Rapport de dossier',
+    complianceStatus: 'État de conformité',
+    complianceScore: 'Note de conformité',
+    details: 'Détails',
+  },
+  es: {
+    recordReport: 'Informe del registro',
+    complianceStatus: 'Estado de cumplimiento',
+    complianceScore: 'Puntuación de cumplimiento',
+    details: 'Detalles',
+  },
+}
 
 function esc(s: string): string {
   return s
@@ -154,27 +179,29 @@ export type GeneratedFormPdfTemplate = {
 export function generateFormPdfTemplate(
   schema: FormSchemaV1,
   formName: string,
+  locale: AppLocale = DEFAULT_LOCALE,
 ): GeneratedFormPdfTemplate {
   const blocks: string[] = []
+  const copy = PDF_COPY[locale]
 
   // Letterhead: app name + a compliance line when the response carries one.
   blocks.push(
     `<div style="border-bottom:3px solid #0f172a;padding-bottom:8px;margin-bottom:12px;">` +
       `<h1 style="${H1}">${esc(formName)}</h1>` +
-      `<p style="${SUB}">Record report</p>` +
+      `<p style="${SUB}">${esc(copy.recordReport)}</p>` +
       `</div>`,
   )
   blocks.push(
     `<table style="${TABLE}">` +
-      `<tr data-if="compliance_status" style="${ROW}"><td style="${LBL}">Compliance status</td><td colspan="3" style="${VAL}">{{compliance_status}}</td></tr>` +
-      `<tr data-if="compliance_score" style="${ROW}"><td style="${LBL}">Compliance score</td><td colspan="3" style="${VAL}">{{compliance_score}}</td></tr>` +
+      `<tr data-if="compliance_status" style="${ROW}"><td style="${LBL}">${esc(copy.complianceStatus)}</td><td colspan="3" style="${VAL}">{{compliance_status}}</td></tr>` +
+      `<tr data-if="compliance_score" style="${ROW}"><td style="${LBL}">${esc(copy.complianceScore)}</td><td colspan="3" style="${VAL}">{{compliance_score}}</td></tr>` +
       `</table>`,
   )
 
   for (const sec of schema.sections ?? []) {
     const fields = (sec.fields ?? []).filter((f) => !SKIP_FIELD_TYPES.has(f.type))
     if (fields.length === 0) continue
-    const secTitle = labelText(sec.title, 'Details')
+    const secTitle = labelText(sec.title, copy.details, locale, locale)
 
     // Repeating section → one collection table keyed by the section id.
     if (sec.repeating) {
@@ -182,7 +209,7 @@ export function generateFormPdfTemplate(
         collectionTable(secTitle, sec.id, [
           { header: '#', cell: '{{@number}}' },
           ...fields.map((f) => ({
-            header: labelText(f.label, f.id),
+            header: labelText(f.label, f.id, locale, locale),
             cell: `{{${f.id}}}`,
           })),
         ]),
@@ -193,7 +220,7 @@ export function generateFormPdfTemplate(
     const kv: KvRow[] = []
     const trailing: string[] = []
     for (const f of fields) {
-      const label = labelText(f.label, f.id)
+      const label = labelText(f.label, f.id, locale, locale)
 
       if (f.type === 'signature') {
         kv.push(

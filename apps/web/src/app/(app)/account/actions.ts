@@ -7,10 +7,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
-import { eq } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
+import { and, eq } from 'drizzle-orm'
 import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { attachments, people, users } from '@beaconhs/db/schema'
+import { attachments, people, tenantUsers, users } from '@beaconhs/db/schema'
+import { parseAppLocale } from '@beaconhs/i18n'
 import { assertNotImpersonating } from '@beaconhs/tenant'
 import { newAttachmentKey, putObject } from '@beaconhs/storage'
 import { getSessionUser, requireRequestContext } from '@/lib/auth'
@@ -20,8 +22,6 @@ const DATA_URL_RE = /^data:([^;,]+)(?:;[^,]*)?,(.*)$/s
 
 type Result = { ok?: boolean; error?: string }
 
-const LOCALES = new Set(['en', 'fr', 'es'])
-
 async function reqHeaders(): Promise<Headers> {
   return (await headers()) as unknown as Headers
 }
@@ -29,38 +29,66 @@ async function reqHeaders(): Promise<Headers> {
 export async function updateProfile(_prev: Result | null, formData: FormData): Promise<Result> {
   const ctx = await requireRequestContext()
   assertNotImpersonating(ctx, 'account')
+  const t = await getTranslations('Account')
 
   const name = String(formData.get('name') ?? '').trim()
   const timezone = String(formData.get('timezone') ?? '').trim()
-  const locale = LOCALES.has(String(formData.get('locale') ?? ''))
-    ? String(formData.get('locale'))
-    : 'en'
-  if (!name) return { error: 'Name is required.' }
+  const rawLocale = String(formData.get('locale') ?? '')
+  const localeOverride = rawLocale ? parseAppLocale(rawLocale) : null
+  if (!name) return { error: t('nameRequired') }
+  if (
+    rawLocale &&
+    (!localeOverride || !ctx.enabledLocales.includes(localeOverride) || !ctx.membership)
+  ) {
+    return { error: t('invalidLanguage') }
+  }
 
   // A typo'd time zone silently breaks every server-rendered local-time display
   // (this is exactly the greeting bug), so reject anything Intl can't format.
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: timezone })
   } catch {
-    return { error: 'Choose a valid time zone.' }
+    return { error: t('invalidTimeZone') }
   }
 
   // `users` is a global identity table — write it on the super pool, matching
   // how /platform/users and getRequestContext read/write it.
   const before = await withSuperAdmin(db, async (tx) => {
     const [existing] = await tx
-      .select({ name: users.name, timezone: users.timezone, locale: users.locale })
+      .select({ name: users.name, timezone: users.timezone })
       .from(users)
       .where(eq(users.id, ctx.userId))
       .limit(1)
     if (!existing) return null
+    let previousLocaleOverride: string | null = null
+    if (ctx.membership) {
+      const [membership] = await tx
+        .select({ localeOverride: tenantUsers.localeOverride })
+        .from(tenantUsers)
+        .where(
+          and(
+            eq(tenantUsers.id, ctx.membership.id),
+            eq(tenantUsers.tenantId, ctx.tenantId),
+            eq(tenantUsers.userId, ctx.userId),
+          ),
+        )
+        .limit(1)
+      if (!membership) return null
+      previousLocaleOverride = membership.localeOverride
+    }
     await tx
       .update(users)
-      .set({ name, timezone, locale, updatedAt: new Date() })
+      .set({ name, timezone, updatedAt: new Date() })
       .where(eq(users.id, ctx.userId))
-    return existing
+    if (ctx.membership) {
+      await tx
+        .update(tenantUsers)
+        .set({ localeOverride, updatedAt: new Date() })
+        .where(eq(tenantUsers.id, ctx.membership.id))
+    }
+    return { ...existing, localeOverride: previousLocaleOverride }
   })
-  if (!before) return { error: 'Your account could not be found.' }
+  if (!before) return { error: t('accountNotFound') }
 
   // Sync Better-Auth's session copy of the name so the header + account menu
   // reflect it immediately (its 5-min cookie cache would otherwise lag).
@@ -76,7 +104,7 @@ export async function updateProfile(_prev: Result | null, formData: FormData): P
     action: 'update',
     summary: 'Updated own account profile',
     before,
-    after: { name, timezone, locale },
+    after: { name, timezone, localeOverride },
   })
 
   revalidatePath('/', 'layout')

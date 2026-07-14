@@ -229,7 +229,9 @@ export default async function HazardTypesPage({
                     <Badge variant="secondary">{Number(hazardCount ?? 0)}</Badge>
                   </TableCell>
                   <TableCell className="text-xs text-slate-500 tabular-nums">
-                    {type.createdAt ? formatDate(new Date(type.createdAt), ctx.timezone) : '—'}
+                    {type.createdAt
+                      ? formatDate(new Date(type.createdAt), ctx.timezone, ctx.locale)
+                      : '—'}
                   </TableCell>
                   <TableCell className="text-right">
                     <Link

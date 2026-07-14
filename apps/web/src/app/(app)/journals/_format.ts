@@ -1,21 +1,22 @@
 // Client-safe formatting helpers for the Journals UI.
 
 import type { JournalStatus } from './_types'
+import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
 
 function parse(iso: string): Date {
   return new Date(`${iso}T00:00:00`)
 }
 
 /** "Fri · Jun 5" */
-export function formatDate(iso: string): string {
+export function formatDate(iso: string, locale: AppLocale = DEFAULT_LOCALE): string {
   const d = parse(iso)
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  return d.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 /** "Friday, June 5, 2026" */
-export function formatLongDate(iso: string): string {
+export function formatLongDate(iso: string, locale: AppLocale = DEFAULT_LOCALE): string {
   const d = parse(iso)
-  return d.toLocaleDateString('en-US', {
+  return d.toLocaleDateString(locale, {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -36,17 +37,18 @@ export function isToday(iso: string): boolean {
 }
 
 /** "now", "5m", "2h", "3d", else date. */
-export function relativeTime(isoTs: string): string {
+export function relativeTime(isoTs: string, locale: AppLocale = DEFAULT_LOCALE): string {
   const then = new Date(isoTs).getTime()
   const diff = Date.now() - then
   const m = Math.floor(diff / 60000)
-  if (m < 1) return 'now'
-  if (m < 60) return `${m}m ago`
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  if (m < 1) return relative.format(0, 'minute')
+  if (m < 60) return relative.format(-m, 'minute')
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
+  if (h < 24) return relative.format(-h, 'hour')
   const d = Math.floor(h / 24)
-  if (d < 7) return `${d}d ago`
-  return new Date(isoTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (d < 7) return relative.format(-d, 'day')
+  return new Date(isoTs).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }
 
 /**
@@ -66,25 +68,35 @@ export function textToHtml(text: string | null | undefined): string {
     .join('')
 }
 
-export function statusMeta(status: JournalStatus): { label: string; className: string } {
+export function statusMeta(
+  status: JournalStatus,
+  locale: AppLocale = DEFAULT_LOCALE,
+): { label: string; className: string } {
+  const labels = STATUS_LABELS[locale]
   switch (status) {
     case 'submitted':
       return {
-        label: 'Submitted',
+        label: labels.submitted,
         className:
           'bg-teal-100 text-teal-800 ring-teal-600/20 dark:bg-teal-500/15 dark:text-teal-200 dark:ring-teal-500/25',
       }
     case 'archived':
       return {
-        label: 'Archived',
+        label: labels.archived,
         className:
           'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-400/25',
       }
     default:
       return {
-        label: 'Draft',
+        label: labels.draft,
         className:
           'bg-amber-100 text-amber-800 ring-amber-600/20 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/25',
       }
   }
+}
+
+const STATUS_LABELS: Record<AppLocale, Record<JournalStatus, string>> = {
+  en: { draft: 'Draft', submitted: 'Submitted', archived: 'Archived' },
+  fr: { draft: 'Brouillon', submitted: 'Soumis', archived: 'Archivé' },
+  es: { draft: 'Borrador', submitted: 'Enviado', archived: 'Archivado' },
 }

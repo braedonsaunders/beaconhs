@@ -104,7 +104,7 @@ export async function sendPpeIssueEmail(
     data.openReport
       ? [
           `OPEN ISSUE REPORT`,
-          `Reported: ${formatDateTime(new Date(data.openReport.report.reportedAt), ctx.timezone)}`,
+          `Reported: ${formatDateTime(new Date(data.openReport.report.reportedAt), ctx.timezone, ctx.defaultLocale)}`,
           `Reported by: ${reporterName}`,
           `Description:`,
           data.openReport.report.description,
@@ -132,7 +132,7 @@ export async function sendPpeIssueEmail(
           ? `<h3 style="margin:18px 0 4px;font-size:14px;color:#b91c1c">Open issue report</h3>
            <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
              <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Reported</td>
-                 <td style="padding:4px 0;">${escapeHtml(formatDateTime(new Date(data.openReport.report.reportedAt), ctx.timezone))}</td></tr>
+                 <td style="padding:4px 0;">${escapeHtml(formatDateTime(new Date(data.openReport.report.reportedAt), ctx.timezone, ctx.defaultLocale))}</td></tr>
              <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Reported by</td>
                  <td style="padding:4px 0;">${escapeHtml(reporterName)}</td></tr>
            </table>

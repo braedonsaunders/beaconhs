@@ -126,7 +126,7 @@ export default async function MyInProgressPage() {
                         {meta.label}
                       </span>
                       <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {relativeTime(e.updatedAt)}
+                        {relativeTime(e.updatedAt, ctx.locale)}
                       </span>
                     </div>
                     <div className="mt-4 line-clamp-3 text-base font-semibold text-slate-900 dark:text-slate-100">

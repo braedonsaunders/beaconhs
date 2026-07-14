@@ -88,8 +88,10 @@ export async function sendWorkOrderEmail(
     `Equipment: ${equipmentLine}`,
     `Assignee: ${assigneeName}`,
     `Reported by: ${reporterName}`,
-    `Opened: ${formatDateTime(new Date(data.wo.openedAt), ctx.timezone)}`,
-    data.wo.closedAt ? `Closed: ${formatDateTime(new Date(data.wo.closedAt), ctx.timezone)}` : '',
+    `Opened: ${formatDateTime(new Date(data.wo.openedAt), ctx.timezone, ctx.defaultLocale)}`,
+    data.wo.closedAt
+      ? `Closed: ${formatDateTime(new Date(data.wo.closedAt), ctx.timezone, ctx.defaultLocale)}`
+      : '',
     data.wo.cost ? `Cost: $${Number(data.wo.cost).toLocaleString()}` : '',
     ``,
     options?.messageOverride ? `Note: ${options.messageOverride}\n` : '',
@@ -109,7 +111,7 @@ export async function sendWorkOrderEmail(
         <span style="font-family:monospace">${escapeHtml(data.wo.reference)}</span> ·
         priority ${escapeHtml(data.wo.priority)} ·
         status ${escapeHtml(data.wo.status)}
-        ${data.wo.closedAt ? ` · closed ${escapeHtml(formatDateTime(new Date(data.wo.closedAt), ctx.timezone))}` : ''}
+        ${data.wo.closedAt ? ` · closed ${escapeHtml(formatDateTime(new Date(data.wo.closedAt), ctx.timezone, ctx.defaultLocale))}` : ''}
       </div>
       ${
         options?.messageOverride
@@ -124,7 +126,7 @@ export async function sendWorkOrderEmail(
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Reported by</td>
             <td style="padding:4px 0;">${escapeHtml(reporterName)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Opened</td>
-            <td style="padding:4px 0;">${escapeHtml(formatDateTime(new Date(data.wo.openedAt), ctx.timezone))}</td></tr>
+            <td style="padding:4px 0;">${escapeHtml(formatDateTime(new Date(data.wo.openedAt), ctx.timezone, ctx.defaultLocale))}</td></tr>
         ${
           data.wo.cost
             ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">Cost</td>

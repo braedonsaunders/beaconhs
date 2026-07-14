@@ -19,6 +19,7 @@ import {
   type FormSchemaV1,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { localizeText, type AppLocale } from '@beaconhs/i18n'
 import { recordAudit } from '@/lib/audit'
 
 function esc(s: string | null | undefined): string {
@@ -30,9 +31,8 @@ function esc(s: string | null | undefined): string {
     .replace(/"/g, '&quot;')
 }
 
-function label(field: FormField): string {
-  const l = field.label as Record<string, string> | undefined
-  return l?.en ?? field.id
+function label(field: FormField, locale: AppLocale): string {
+  return localizeText(field.label, locale, field.id, locale)
 }
 
 // Render a scalar field value to a short string. Pickers/media/signatures are
@@ -136,7 +136,14 @@ export async function sendFormResponseRecapEmail(
   if (to.length === 0) return 0
 
   const { row, parts, schema, siteName } = data
-  const date = row.response.submittedAt ? row.response.submittedAt.toISOString().slice(0, 10) : ''
+  const locale = ctx.defaultLocale
+  const copy = RECAP_COPY[locale]
+  const date = row.response.submittedAt
+    ? new Intl.DateTimeFormat(locale, {
+        timeZone: ctx.timezone,
+        dateStyle: 'medium',
+      }).format(row.response.submittedAt)
+    : ''
   const subject = `${row.templateName}${date ? ` · ${date}` : ''}`
   const signedCount = parts.filter((p) => p.signed).length
 
@@ -146,22 +153,22 @@ export async function sendFormResponseRecapEmail(
     if (section.repeating) continue
     for (const field of section.fields) {
       const v = formatScalar(field, row.response.data[field.id])
-      if (v) detailRows.push({ label: label(field), value: v })
+      if (v) detailRows.push({ label: label(field, locale), value: v })
     }
   }
 
   const attendeeNames = parts.map(
-    (p) => `${p.last ?? ''}${p.last ? ', ' : ''}${p.first ?? ''}`.trim() || '(unnamed)',
+    (p) => `${p.last ?? ''}${p.last ? ', ' : ''}${p.first ?? ''}`.trim() || copy.unnamed,
   )
 
   const text = [
     row.templateName,
     '',
-    siteName ? `Site: ${siteName}` : '',
+    siteName ? `${copy.site}: ${siteName}` : '',
     ...detailRows.map((d) => `${d.label}: ${d.value}`),
     '',
-    parts.length ? `Attendees: ${parts.length} (${signedCount} signed)` : '',
-    ...parts.map((p, i) => `  - ${attendeeNames[i]}${p.signed ? ' (signed)' : ''}`),
+    parts.length ? `${copy.attendees}: ${parts.length} (${signedCount} ${copy.signed})` : '',
+    ...parts.map((p, i) => `  - ${attendeeNames[i]}${p.signed ? ` (${copy.signed})` : ''}`),
   ]
     .filter((l) => l !== '')
     .join('\n')
@@ -184,13 +191,13 @@ export async function sendFormResponseRecapEmail(
       </table>
       ${
         parts.length
-          ? `<h3 style="margin:18px 0 4px;font-size:14px;">Attendees (${parts.length}, ${signedCount} signed)</h3>
+          ? `<h3 style="margin:18px 0 4px;font-size:14px;">${copy.attendees} (${parts.length}, ${signedCount} ${copy.signed})</h3>
         <ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">
           ${parts
             .map(
               (p, i) =>
                 `<li>${esc(attendeeNames[i])}${
-                  p.signed ? ' <span style="color:#15803d;">(signed)</span>' : ''
+                  p.signed ? ` <span style="color:#15803d;">(${copy.signed})</span>` : ''
                 }</li>`,
             )
             .join('\n')}
@@ -221,4 +228,13 @@ export async function sendFormResponseRecapEmail(
     summary: `Emailed recap to ${to.length} recipient${to.length === 1 ? '' : 's'}`,
   })
   return to.length
+}
+
+const RECAP_COPY: Record<
+  AppLocale,
+  { site: string; attendees: string; signed: string; unnamed: string }
+> = {
+  en: { site: 'Site', attendees: 'Attendees', signed: 'signed', unnamed: '(unnamed)' },
+  fr: { site: 'Site', attendees: 'Participants', signed: 'signés', unnamed: '(sans nom)' },
+  es: { site: 'Sitio', attendees: 'Asistentes', signed: 'firmados', unnamed: '(sin nombre)' },
 }

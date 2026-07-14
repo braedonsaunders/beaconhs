@@ -397,7 +397,7 @@ export default async function InspectionRecordsPage({
                       </Badge>
                     }
                     person={r.inspectorName}
-                    meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone)}${
+                    meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}${
                       r.site?.name ? ` · ${r.site.name}` : ''
                     }`}
                     footer={
@@ -483,7 +483,7 @@ export default async function InspectionRecordsPage({
                           </Link>
                         </TableCell>
                         <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                          {formatDate(new Date(r.record.occurredAt), ctx.timezone)}
+                          {formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-400">
                           {r.site?.name ?? '—'}

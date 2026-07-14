@@ -1,6 +1,8 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { headers } from 'next/headers'
+import { NextIntlClientProvider } from 'next-intl'
+import { getLocale, getMessages, getTimeZone } from 'next-intl/server'
 import { AppLinkProvider } from '@/components/app-link-provider'
 import { SplashScreen } from '@/components/brand-splash'
 
@@ -35,9 +37,15 @@ export const dynamic = 'force-dynamic'
 const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme')||'system';var m=window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',t==='dark'||(t==='system'&&m));}catch(e){}})();`
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get('x-nonce') ?? undefined
+  const [headerStore, locale, messages, timeZone] = await Promise.all([
+    headers(),
+    getLocale(),
+    getMessages(),
+    getTimeZone(),
+  ])
+  const nonce = headerStore.get('x-nonce') ?? undefined
   return (
-    <html lang="en" className="h-full" suppressHydrationWarning>
+    <html lang={locale} className="h-full" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials" />
         <script
@@ -47,7 +55,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
-        <AppLinkProvider>{children}</AppLinkProvider>
+        <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone}>
+          <AppLinkProvider>{children}</AppLinkProvider>
+        </NextIntlClientProvider>
         <SplashScreen />
       </body>
     </html>

@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
+import createNextIntlPlugin from 'next-intl/plugin'
 import { staticSecurityHeaders } from './src/lib/security-headers'
 
 const nextConfig: NextConfig = {
@@ -25,6 +26,7 @@ const nextConfig: NextConfig = {
     '@beaconhs/audit',
     '@beaconhs/emails',
     '@beaconhs/integrations',
+    '@beaconhs/i18n',
     '@beaconhs/jobs',
     '@beaconhs/storage',
     '@beaconhs/sync',
@@ -60,6 +62,8 @@ const nextConfig: NextConfig = {
   ],
 }
 
-export default withSentryConfig(nextConfig, {
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
+
+export default withSentryConfig(withNextIntl(nextConfig), {
   silent: true,
 })

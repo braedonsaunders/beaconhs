@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState, useTransition, useMemo } from
 import { SmartBackLink } from '@/components/smart-back-link'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   AlignLeft,
   ArrowDown,
@@ -28,6 +29,7 @@ import {
   ClipboardCheck,
   Eye,
   FileText,
+  Globe2,
   GripVertical,
   Hash,
   Image as ImageIcon,
@@ -87,6 +89,7 @@ import {
   type TableColumn,
   type TableConfig,
 } from '@beaconhs/forms-core'
+import { localizeText, type AppLocale } from '@beaconhs/i18n'
 import { toast } from '@/lib/toast'
 import { publishNewVersion, updateAppOverview, updateAppPermissions } from './actions'
 import { RecordBehaviorPanel, type RecordConfig } from './_record-behavior-panel'
@@ -298,6 +301,9 @@ export function FormDesigner({
   canGenerate = false,
   canPin = false,
   pinned = false,
+  locale,
+  defaultLocale,
+  enabledLocales,
 }: {
   templateId: string
   templateName: string
@@ -317,8 +323,12 @@ export function FormDesigner({
   canGenerate?: boolean
   canPin?: boolean
   pinned?: boolean
+  locale: AppLocale
+  defaultLocale: AppLocale
+  enabledLocales: readonly AppLocale[]
 }) {
   const router = useRouter()
+  const languages = useTranslations('Languages')
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
   const [appName, setAppName] = useState(templateName)
   // Unified editor: left rail tab + right surface.
@@ -344,6 +354,7 @@ export function FormDesigner({
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [changelog, setChangelog] = useState('')
+  const [contentLocale, setContentLocale] = useState<AppLocale>(locale)
 
   // Selectable fields for the records-list "List" tab — real answer fields only
   // (content-only display elements carry no data to show in a column).
@@ -353,10 +364,13 @@ export function FormDesigner({
     for (const sec of schema.sections)
       for (const f of sec.fields) {
         if (skip.has(f.type)) continue
-        out.push({ id: f.id, label: f.label?.en?.trim() || f.id })
+        out.push({
+          id: f.id,
+          label: localizeText(f.label, contentLocale, f.id, defaultLocale),
+        })
       }
     return out
-  }, [schema])
+  }, [contentLocale, defaultLocale, schema])
 
   // Current records-list config lives under recordConfig.list (the page passes
   // the full recordConfig jsonb; its type omits `list`, but it's there at runtime).
@@ -366,8 +380,8 @@ export function FormDesigner({
   // Repeating children are not top-level response fields and must not be offered
   // as condition or action targets.
   const flowProfile = useMemo(
-    () => formFlowProfile(templateId, appName, schema),
-    [templateId, appName, schema],
+    () => formFlowProfile(templateId, appName, schema, contentLocale, defaultLocale),
+    [templateId, appName, schema, contentLocale, defaultLocale],
   )
 
   let selectedField: { section: FormSchemaV1['sections'][number]; field: FormField } | null = null
@@ -439,10 +453,10 @@ export function FormDesigner({
     setDesignerTab(id)
   }
 
-  function renameTab(id: string, en: string) {
+  function renameTab(id: string, title: string) {
     update((draft) => {
       const t = draft.tabs?.find((x) => x.id === id)
-      if (t) t.title = { en }
+      if (t) t.title = { ...t.title, [contentLocale]: title }
       return draft
     })
   }
@@ -673,6 +687,21 @@ export function FormDesigner({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <Globe2 size={14} />
+            <Select
+              value={contentLocale}
+              onChange={(event) => setContentLocale(event.target.value as AppLocale)}
+              className="h-8 min-w-28 text-xs"
+              aria-label="Content language"
+            >
+              {enabledLocales.map((enabledLocale) => (
+                <option key={enabledLocale} value={enabledLocale}>
+                  {languages(enabledLocale)}
+                </option>
+              ))}
+            </Select>
+          </label>
           {canGenerate ? (
             <Button
               size="sm"
@@ -882,6 +911,8 @@ export function FormDesigner({
                   {selection.kind === 'workflow' ? (
                     <WorkflowEditor
                       schema={schema}
+                      locale={contentLocale}
+                      defaultLocale={defaultLocale}
                       onChange={(steps) => setSchema((s) => ({ ...s, workflow: { steps } }))}
                     />
                   ) : null}
@@ -894,7 +925,10 @@ export function FormDesigner({
                         type="button"
                         onClick={() => setDesignerTab(t.id)}
                         onDoubleClick={() => {
-                          const next = window.prompt('Rename tab', t.title?.en ?? '')
+                          const next = window.prompt(
+                            'Rename tab',
+                            localizeText(t.title, contentLocale, '', defaultLocale),
+                          )
                           if (next != null) renameTab(t.id, next.trim() || 'Tab')
                         }}
                         title="Open · double-click to rename"
@@ -904,7 +938,7 @@ export function FormDesigner({
                             : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                         }`}
                       >
-                        {t.title?.en ?? 'Tab'}
+                        {localizeText(t.title, contentLocale, 'Tab', defaultLocale)}
                         {appTabs.length > 1 ? (
                           <Trash2
                             size={11}
@@ -945,7 +979,12 @@ export function FormDesigner({
                             className="flex-1 text-left"
                           >
                             <CardTitle className="text-base">
-                              {sec.title?.en ?? 'Untitled section'}{' '}
+                              {localizeText(
+                                sec.title,
+                                contentLocale,
+                                'Untitled section',
+                                defaultLocale,
+                              )}{' '}
                               {sec.repeating ? <Badge variant="secondary">repeating</Badge> : null}
                               {sec.showIf ? (
                                 <Badge variant="outline" className="text-[10px]">
@@ -954,7 +993,7 @@ export function FormDesigner({
                               ) : null}
                               {sec.step ? (
                                 <Badge variant="outline" className="text-[10px]">
-                                  step · {stepLabel(schema, sec.step)}
+                                  step · {stepLabel(schema, sec.step, contentLocale, defaultLocale)}
                                 </Badge>
                               ) : null}
                             </CardTitle>
@@ -986,6 +1025,8 @@ export function FormDesigner({
                           {sec.canvas ? (
                             <CanvasEditor
                               section={sec}
+                              locale={contentLocale}
+                              defaultLocale={defaultLocale}
                               selectedFieldId={
                                 selection.kind === 'field' && selection.sectionId === sec.id
                                   ? selection.fieldId
@@ -1014,6 +1055,8 @@ export function FormDesigner({
                                 <FieldRow
                                   key={f.id}
                                   field={f}
+                                  locale={contentLocale}
+                                  defaultLocale={defaultLocale}
                                   isSelected={
                                     selection.kind === 'field' && selection.fieldId === f.id
                                   }
@@ -1056,6 +1099,8 @@ export function FormDesigner({
             sectionId={selectedField.section.id}
             field={selectedField.field}
             schema={schema}
+            locale={contentLocale}
+            defaultLocale={defaultLocale}
             onChange={(patch) =>
               updateField(selectedField.section.id, selectedField.field.id, patch)
             }
@@ -1065,6 +1110,8 @@ export function FormDesigner({
             key={selectedSection.id}
             section={selectedSection}
             schema={schema}
+            locale={contentLocale}
+            defaultLocale={defaultLocale}
             onChange={(patch) => updateSection(selectedSection.id, patch)}
           />
         ) : null}
@@ -1078,7 +1125,7 @@ export function FormDesigner({
         description="How the filler will see this form."
         size="lg"
       >
-        <Preview schema={schema} />
+        <Preview schema={schema} locale={contentLocale} defaultLocale={defaultLocale} />
       </Drawer>
 
       <Drawer
@@ -1159,9 +1206,14 @@ export function FormDesigner({
   )
 }
 
-function stepLabel(schema: FormSchemaV1, stepKey: string): string {
+function stepLabel(
+  schema: FormSchemaV1,
+  stepKey: string,
+  locale: AppLocale,
+  defaultLocale: AppLocale,
+): string {
   const step = schema.workflow.steps.find((s) => s.key === stepKey)
-  return step?.title?.en ?? stepKey
+  return localizeText(step?.title, locale, stepKey, defaultLocale)
 }
 
 function FieldPaletteGroup({
@@ -1235,6 +1287,8 @@ function IconButton({
 // up/down arrows remain as a keyboard-accessible fallback.
 function FieldRow({
   field,
+  locale,
+  defaultLocale,
   isSelected,
   typeLabel,
   onSelect,
@@ -1245,6 +1299,8 @@ function FieldRow({
   canDown,
 }: {
   field: FormField
+  locale: AppLocale
+  defaultLocale: AppLocale
   isSelected: boolean
   typeLabel: string
   onSelect: () => void
@@ -1280,7 +1336,7 @@ function FieldRow({
           {typeLabel}
         </span>
         <span className="text-sm font-medium">
-          {field.label?.en ?? field.id}
+          {localizeText(field.label, locale, field.id, defaultLocale)}
           {field.required || field.validation?.required ? (
             <span className="text-red-600"> *</span>
           ) : null}
@@ -1317,9 +1373,13 @@ function FieldRow({
 
 function WorkflowEditor({
   schema,
+  locale,
+  defaultLocale,
   onChange,
 }: {
   schema: FormSchemaV1
+  locale: AppLocale
+  defaultLocale: AppLocale
   onChange: (steps: FormWorkflowStep[]) => void
 }) {
   const steps = schema.workflow.steps
@@ -1371,9 +1431,12 @@ function WorkflowEditor({
                       <Label className="text-[10px]">Title</Label>
                       <Input
                         className="h-7 text-xs"
-                        value={s.title?.en ?? ''}
+                        value={s.title?.[locale] ?? ''}
+                        placeholder={localizeText(s.title, locale, s.key, defaultLocale)}
                         onChange={(e) =>
-                          setStep(i, { title: { ...(s.title ?? {}), en: e.target.value } })
+                          setStep(i, {
+                            title: { ...(s.title ?? {}), [locale]: e.target.value },
+                          })
                         }
                       />
                     </div>
@@ -1474,11 +1537,15 @@ function FieldProperties({
   sectionId,
   field,
   schema,
+  locale,
+  defaultLocale,
   onChange,
 }: {
   sectionId: string
   field: FormField
   schema: FormSchemaV1
+  locale: AppLocale
+  defaultLocale: AppLocale
   onChange: (patch: Partial<FormField>) => void
 }) {
   const [tab, setTab] = useState<FieldPropTab>('basic')
@@ -1492,12 +1559,12 @@ function FieldProperties({
       return section.fields
     })
     .filter((candidate) => candidate.id !== field.id && storesResponseValue(candidate))
-    .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
+    .map((f) => ({ id: f.id, label: localizeText(f.label, locale, f.id, defaultLocale) }))
   const repeatingSections = schema.sections
     .filter((s) => s.repeating)
     .map((s) => ({
       id: s.id,
-      label: s.title?.en ?? s.id,
+      label: localizeText(s.title, locale, s.id, defaultLocale),
       fields: s.fields
         .filter(
           (candidate) =>
@@ -1506,7 +1573,10 @@ function FieldProperties({
               candidate.type === 'formula' &&
               candidate.formula !== undefined),
         )
-        .map((f) => ({ id: f.id, label: f.label?.en ?? f.id })),
+        .map((f) => ({
+          id: f.id,
+          label: localizeText(f.label, locale, f.id, defaultLocale),
+        })),
     }))
   // Single-entity picker fields the formula builder's entity_attr operator
   // can target. Multi-pickers are excluded because entity_attr resolves one
@@ -1517,7 +1587,7 @@ function FieldProperties({
     .filter((f) => entityKindForPicker(f.type) !== null)
     .map((f) => ({
       id: f.id,
-      label: f.label?.en ?? f.id,
+      label: localizeText(f.label, locale, f.id, defaultLocale),
       kind: entityKindForPicker(f.type)!,
     }))
 
@@ -1554,7 +1624,14 @@ function FieldProperties({
       </div>
 
       {tab === 'basic' ? (
-        <FieldBasicTab sectionId={sectionId} field={field} schema={schema} onChange={onChange} />
+        <FieldBasicTab
+          sectionId={sectionId}
+          field={field}
+          schema={schema}
+          locale={locale}
+          defaultLocale={defaultLocale}
+          onChange={onChange}
+        />
       ) : null}
       {tab === 'validation' && storesValue ? (
         <FieldValidationTab field={field} onChange={onChange} />
@@ -1598,11 +1675,15 @@ function FieldBasicTab({
   sectionId,
   field,
   schema,
+  locale,
+  defaultLocale,
   onChange,
 }: {
   sectionId: string
   field: FormField
   schema: FormSchemaV1
+  locale: AppLocale
+  defaultLocale: AppLocale
   onChange: (patch: Partial<FormField>) => void
 }) {
   // Other fields in the app — targets for cascade filters + lookup auto-fill.
@@ -1614,14 +1695,17 @@ function FieldBasicTab({
       return section.fields
     })
     .filter((candidate) => candidate.id !== field.id && storesResponseValue(candidate))
-    .map((f) => ({ id: f.id, label: f.label?.en ?? f.id }))
+    .map((f) => ({ id: f.id, label: localizeText(f.label, locale, f.id, defaultLocale) }))
   const autofillFields = (
     ownerSection?.repeating
       ? ownerSection.fields
       : schema.sections.filter((section) => !section.repeating).flatMap((section) => section.fields)
   )
     .filter((candidate) => candidate.id !== field.id && storesResponseValue(candidate))
-    .map((candidate) => ({ id: candidate.id, label: candidate.label?.en ?? candidate.id }))
+    .map((candidate) => ({
+      id: candidate.id,
+      label: localizeText(candidate.label, locale, candidate.id, defaultLocale),
+    }))
   return (
     <div className="space-y-3">
       <div className="space-y-1">
@@ -1629,24 +1713,25 @@ function FieldBasicTab({
         <Input value={field.id} disabled className="font-mono text-xs" />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Label (EN)</Label>
+        <Label className="text-xs">Label ({locale.toUpperCase()})</Label>
         <Input
-          value={field.label?.en ?? ''}
-          onChange={(e) => onChange({ label: { ...field.label, en: e.target.value } })}
+          value={field.label?.[locale] ?? ''}
+          placeholder={localizeText(field.label, locale, field.id, defaultLocale)}
+          onChange={(e) => onChange({ label: { ...field.label, [locale]: e.target.value } })}
         />
       </div>
       <div className="space-y-1">
         <Label className="text-xs">Help text</Label>
         <Textarea
           rows={2}
-          value={field.helpText?.en ?? ''}
-          onChange={(e) =>
-            onChange({
-              helpText: e.target.value
-                ? { ...(field.helpText ?? {}), en: e.target.value }
-                : undefined,
-            })
-          }
+          value={field.helpText?.[locale] ?? ''}
+          placeholder={localizeText(field.helpText, locale, '', defaultLocale)}
+          onChange={(e) => {
+            const helpText = { ...(field.helpText ?? {}) }
+            if (e.target.value) helpText[locale] = e.target.value
+            else delete helpText[locale]
+            onChange({ helpText: Object.values(helpText).some(Boolean) ? helpText : undefined })
+          }}
         />
       </div>
       {storesResponseValue(field) ? (
@@ -1681,7 +1766,7 @@ function FieldBasicTab({
       field.type === 'multi_select' ||
       field.type === 'checkbox_group' ||
       field.type === 'ranking' ? (
-        <ChoiceOptionsEditor field={field} onChange={onChange} />
+        <ChoiceOptionsEditor field={field} locale={locale} onChange={onChange} />
       ) : null}
       {field.type === 'table' ? <TableConfigEditor field={field} onChange={onChange} /> : null}
       {field.type === 'slider' ? <SliderConfigEditor field={field} onChange={onChange} /> : null}
@@ -2558,9 +2643,11 @@ function FieldDefaultTab({
 
 function ChoiceOptionsEditor({
   field,
+  locale,
   onChange,
 }: {
   field: FormField
+  locale: AppLocale
   onChange: (patch: Partial<FormField>) => void
 }) {
   const options = field.validation?.options ?? []
@@ -2587,11 +2674,14 @@ function ChoiceOptionsEditor({
               />
               <Input
                 className="h-8 flex-1 text-xs"
-                value={opt.label?.en ?? ''}
+                value={opt.label?.[locale] ?? ''}
                 placeholder="label"
                 onChange={(e) => {
                   const next = [...options]
-                  next[i] = { ...opt, label: { ...(opt.label ?? {}), en: e.target.value } }
+                  next[i] = {
+                    ...opt,
+                    label: { ...(opt.label ?? {}), [locale]: e.target.value },
+                  }
                   update(next)
                 }}
               />
@@ -2609,7 +2699,13 @@ function ChoiceOptionsEditor({
         size="sm"
         variant="outline"
         onClick={() =>
-          update([...options, { value: `opt_${options.length + 1}`, label: { en: 'New option' } }])
+          update([
+            ...options,
+            {
+              value: `opt_${options.length + 1}`,
+              label: { [locale]: 'New option' },
+            },
+          ])
         }
       >
         <Plus size={12} />
@@ -2886,17 +2982,24 @@ function TableColumnOptions({
 function SectionProperties({
   section,
   schema,
+  locale,
+  defaultLocale,
   onChange,
 }: {
   section: FormSection
   schema: FormSchemaV1
+  locale: AppLocale
+  defaultLocale: AppLocale
   onChange: (patch: Partial<FormSection>) => void
 }) {
   const allFields = schema.sections
     .filter((candidate) => !candidate.repeating)
     .flatMap((candidate) => candidate.fields)
     .filter(storesResponseValue)
-    .map((field) => ({ id: field.id, label: field.label?.en ?? field.id }))
+    .map((field) => ({
+      id: field.id,
+      label: localizeText(field.label, locale, field.id, defaultLocale),
+    }))
   return (
     <div className="space-y-3 text-sm">
       <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Section</h3>
@@ -2905,10 +3008,13 @@ function SectionProperties({
         <Input value={section.id} disabled className="font-mono text-xs" />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Title (EN)</Label>
+        <Label className="text-xs">Title ({locale.toUpperCase()})</Label>
         <Input
-          value={section.title?.en ?? ''}
-          onChange={(e) => onChange({ title: { ...(section.title ?? {}), en: e.target.value } })}
+          value={section.title?.[locale] ?? ''}
+          placeholder={localizeText(section.title, locale, section.id, defaultLocale)}
+          onChange={(e) =>
+            onChange({ title: { ...(section.title ?? {}), [locale]: e.target.value } })
+          }
         />
       </div>
       {schema.tabs?.length ? (
@@ -2920,7 +3026,7 @@ function SectionProperties({
           >
             {schema.tabs.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.title?.en ?? t.id}
+                {localizeText(t.title, locale, t.id, defaultLocale)}
               </option>
             ))}
           </Select>
@@ -2930,14 +3036,16 @@ function SectionProperties({
         <Label className="text-xs">Description</Label>
         <Textarea
           rows={2}
-          value={section.description?.en ?? ''}
-          onChange={(e) =>
+          value={section.description?.[locale] ?? ''}
+          placeholder={localizeText(section.description, locale, '', defaultLocale)}
+          onChange={(e) => {
+            const description = { ...(section.description ?? {}) }
+            if (e.target.value) description[locale] = e.target.value
+            else delete description[locale]
             onChange({
-              description: e.target.value
-                ? { ...(section.description ?? {}), en: e.target.value }
-                : undefined,
+              description: Object.values(description).some(Boolean) ? description : undefined,
             })
-          }
+          }}
         />
       </div>
       <div className="space-y-1">
@@ -2950,7 +3058,7 @@ function SectionProperties({
           <option value="">— first step (default) —</option>
           {schema.workflow.steps.map((s) => (
             <option key={s.key} value={s.key}>
-              {s.title?.en ?? s.key}
+              {localizeText(s.title, locale, s.key, defaultLocale)}
             </option>
           ))}
         </Select>
@@ -3034,7 +3142,15 @@ function SectionProperties({
 
 // --- Preview pane ----------------------------------------------------------
 
-function Preview({ schema }: { schema: FormSchemaV1 }) {
+function Preview({
+  schema,
+  locale,
+  defaultLocale,
+}: {
+  schema: FormSchemaV1
+  locale: AppLocale
+  defaultLocale: AppLocale
+}) {
   const sections = schema.sections
   const groupedByStep = useMemo(() => {
     const out = new Map<string, FormSection[]>()
@@ -3051,7 +3167,9 @@ function Preview({ schema }: { schema: FormSchemaV1 }) {
   return (
     <Card className="border-2 border-dashed border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
       <CardHeader>
-        <CardTitle className="text-base">Preview · {schema.title?.en}</CardTitle>
+        <CardTitle className="text-base">
+          Preview · {localizeText(schema.title, locale, 'Form', defaultLocale)}
+        </CardTitle>
         <p className="text-xs text-slate-500">
           Live render of how the filler will see the form. Conditional logic is shown as chips; live
           filler runtime resolves them dynamically.
@@ -3067,27 +3185,29 @@ function Preview({ schema }: { schema: FormSchemaV1 }) {
               className="rounded-md border border-slate-200 dark:border-slate-800"
             >
               <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300">
-                Step · {step.title?.en ?? step.key}
+                Step · {localizeText(step.title, locale, step.key, defaultLocale)}
               </div>
               <div className="space-y-3 p-3">
                 {stepSections.map((sec) => (
                   <div key={sec.id}>
                     <h3 className="mb-1 text-sm font-semibold text-slate-700">
-                      {sec.title?.en}{' '}
+                      {localizeText(sec.title, locale, sec.id, defaultLocale)}{' '}
                       {sec.repeating ? (
                         <Badge variant="secondary" className="text-[10px]">
                           repeating
                         </Badge>
                       ) : null}
                     </h3>
-                    {sec.description?.en ? (
-                      <p className="mb-1 text-xs text-slate-500">{sec.description.en}</p>
+                    {localizeText(sec.description, locale, '', defaultLocale) ? (
+                      <p className="mb-1 text-xs text-slate-500">
+                        {localizeText(sec.description, locale, '', defaultLocale)}
+                      </p>
                     ) : null}
                     <div className="space-y-2">
                       {sec.fields.map((f) => (
                         <div key={f.id}>
                           <label className="block text-xs font-medium text-slate-600">
-                            {f.label?.en}{' '}
+                            {localizeText(f.label, locale, f.id, defaultLocale)}{' '}
                             {f.required || f.validation?.required ? (
                               <span className="text-red-600">*</span>
                             ) : null}

@@ -390,7 +390,7 @@ export default async function AssessmentsPage({
                 return (
                   <TableRow key={attempt.id}>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                      {when ? formatDateTime(new Date(when), ctx.timezone) : '—'}
+                      {when ? formatDateTime(new Date(when), ctx.timezone, ctx.locale) : '—'}
                     </TableCell>
                     <TableCell>
                       <Link
@@ -424,7 +424,7 @@ export default async function AssessmentsPage({
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
                       {attempt.startedAt
-                        ? formatDate(new Date(attempt.startedAt), ctx.timezone)
+                        ? formatDate(new Date(attempt.startedAt), ctx.timezone, ctx.locale)
                         : '—'}
                     </TableCell>
                     <TableCell className="text-xs tabular-nums">

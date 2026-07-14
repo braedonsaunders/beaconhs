@@ -15,15 +15,19 @@
 
 import { entityKindForPicker } from './entity-attrs'
 import type { I18nString } from './schema'
+import { DEFAULT_LOCALE, localizeText, type AppLocale } from '@beaconhs/i18n'
 
 /** Content-only field types that carry no mergeable value. */
 export const SKIP_FIELD_TYPES = new Set(['heading', 'paragraph', 'divider', 'metric'])
 
-/** Resolve an i18n label to plain text (en-first), falling back to the id. */
-export function labelText(l: I18nString | undefined, fallback: string): string {
-  if (typeof l === 'string') return l || fallback
-  if (l && typeof l === 'object' && typeof l.en === 'string') return l.en || fallback
-  return fallback
+/** Resolve an i18n label using the active user and tenant fallback locales. */
+export function labelText(
+  l: I18nString | undefined,
+  fallback: string,
+  locale: AppLocale = DEFAULT_LOCALE,
+  tenantDefault: AppLocale = DEFAULT_LOCALE,
+): string {
+  return localizeText(l, locale, fallback, tenantDefault)
 }
 
 // Field types whose raw stored value is unreadable in a document — these get a

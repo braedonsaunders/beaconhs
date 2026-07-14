@@ -31,6 +31,7 @@ import {
   type FieldType,
   type FormSection,
 } from '@beaconhs/forms-core'
+import type { AppLocale } from '@beaconhs/i18n'
 import { ElementPreview } from './_element-preview'
 
 // Curated widget palette with sensible default boxes (in grid units, 12 cols).
@@ -77,6 +78,8 @@ function sameItems(a: CanvasItem[], b: CanvasItem[]): boolean {
 
 export function CanvasEditor({
   section,
+  locale,
+  defaultLocale,
   selectedFieldId,
   dragTypeRef,
   onLayout,
@@ -85,6 +88,8 @@ export function CanvasEditor({
   onDelete,
 }: {
   section: FormSection
+  locale: AppLocale
+  defaultLocale: AppLocale
   selectedFieldId: string | null
   // The element type currently being dragged from the left palette.
   dragTypeRef: RefObject<FieldType | null>
@@ -196,7 +201,7 @@ export function CanvasEditor({
                   </button>
                 </div>
                 <div className="app-scroll min-h-0 flex-1 overflow-auto p-2.5">
-                  <ElementPreview field={f} compact />
+                  <ElementPreview field={f} locale={locale} defaultLocale={defaultLocale} compact />
                 </div>
               </div>
             )

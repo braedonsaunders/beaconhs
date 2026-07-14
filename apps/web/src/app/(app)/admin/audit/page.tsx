@@ -127,7 +127,7 @@ export default async function AuditLogPage({
                 {rows.map(({ log, actor }) => (
                   <TableRow key={log.id}>
                     <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatDateTime(new Date(log.occurredAt), ctx.timezone)}
+                      {formatDateTime(new Date(log.occurredAt), ctx.timezone, ctx.locale)}
                     </TableCell>
                     <TableCell className="text-slate-700 dark:text-slate-200">
                       {actor?.name ?? '—'}

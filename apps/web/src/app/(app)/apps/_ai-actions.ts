@@ -15,6 +15,7 @@ import {
 } from '@beaconhs/db/schema'
 import { lintWorkerTriggerCompatibility, validateFormSchema } from '@beaconhs/forms-core'
 import type { FormSchemaV1 } from '@beaconhs/forms-core'
+import { localizeText } from '@beaconhs/i18n'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
@@ -171,7 +172,7 @@ export async function generateAppDraft(
   if (!gen.ok) return { ok: false, error: gen.error }
 
   const schema = validateFormSchema(gen.value) // defensive re-validate before persisting
-  const name = schema.title?.en?.trim() || 'AI app'
+  const name = localizeText(schema.title, ctx.locale, 'AI app', ctx.defaultLocale)
 
   const templateId = await ctx.db(async (tx) => {
     const key = generatedTemplateKey(name)
@@ -181,7 +182,7 @@ export async function generateAppDraft(
         tenantId: ctx.tenantId,
         key,
         name,
-        description: schema.description?.en ?? null,
+        description: localizeText(schema.description, ctx.locale, '', ctx.defaultLocale) || null,
         status: 'draft',
         createdBy: ctx.userId,
       })

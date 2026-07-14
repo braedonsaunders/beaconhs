@@ -223,7 +223,7 @@ export default async function MyInspectionsPage({
                     </Link>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(rec.occurredAt), ctx.timezone)}
+                    {formatDate(new Date(rec.occurredAt), ctx.timezone, ctx.locale)}
                   </TableCell>
                   <TableCell>{type?.name ?? '—'}</TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">

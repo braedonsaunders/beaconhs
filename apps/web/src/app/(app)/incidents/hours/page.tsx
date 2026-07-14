@@ -237,7 +237,7 @@ export default async function HoursPage({
     today,
     start: lastMonthStart.toISOString().slice(0, 10),
     end: lastMonthEnd.toISOString().slice(0, 10),
-    label: lastMonthStart.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+    label: lastMonthStart.toLocaleString(ctx.locale, { month: 'long', year: 'numeric' }),
   }
 
   const editingRow =

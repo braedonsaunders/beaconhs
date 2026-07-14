@@ -999,8 +999,8 @@ export default async function DocumentDetailPage({
                               </div>
                               <span className="text-xs text-slate-500 dark:text-slate-400">
                                 {v.publishedAt
-                                  ? `published ${formatDate(new Date(v.publishedAt), ctx.timezone)}`
-                                  : `created ${formatDate(new Date(v.createdAt), ctx.timezone)}`}
+                                  ? `published ${formatDate(new Date(v.publishedAt), ctx.timezone, ctx.locale)}`
+                                  : `created ${formatDate(new Date(v.createdAt), ctx.timezone, ctx.locale)}`}
                               </span>
                             </div>
                             {v.changelog ? (
@@ -1178,8 +1178,12 @@ export default async function DocumentDetailPage({
                             </div>
                             <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                               v{row.documentVersion} ·{' '}
-                              {formatDate(new Date(row.review.reviewedAt), ctx.timezone)} ·{' '}
-                              {row.review.status.replace(/_/g, ' ')}
+                              {formatDate(
+                                new Date(row.review.reviewedAt),
+                                ctx.timezone,
+                                ctx.locale,
+                              )}{' '}
+                              · {row.review.status.replace(/_/g, ' ')}
                               {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
                             </div>
                             {row.review.notes ? (
@@ -1253,7 +1257,11 @@ export default async function DocumentDetailPage({
                       ]}
                     />
                   </TableToolbar>
-                  <ActivityFeed entries={activityData.rows} timeZone={ctx.timezone} />
+                  <ActivityFeed
+                    entries={activityData.rows}
+                    timeZone={ctx.timezone}
+                    locale={ctx.locale}
+                  />
                   <Pagination
                     basePath={basePath}
                     currentParams={sp}

@@ -42,6 +42,7 @@ import {
   type FormWorkflowStep,
 } from '@beaconhs/db/schema'
 import { evaluateLogicRule } from '@beaconhs/forms-core'
+import { localizeText } from '@beaconhs/i18n'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { requireRequestContext } from '@/lib/auth'
@@ -663,6 +664,8 @@ export default async function FormResponsePage({
     schema: version.schema,
     values: recordValues,
     failedFieldKeys,
+    locale: ctx.locale,
+    defaultLocale: ctx.defaultLocale,
   })
 
   // Set by finalizeResponse when required-field validation blocks the finalize.
@@ -700,7 +703,7 @@ export default async function FormResponsePage({
     return {
       key: wf.key,
       sequence: i,
-      title: wf.title?.en ?? wf.key,
+      title: localizeText(wf.title, ctx.locale, wf.key, ctx.defaultLocale),
       signatureRequired: !!wf.signatureRequired,
       assigneeKind: wf.assignee.type,
       assigneeLabel,
@@ -923,6 +926,7 @@ export default async function FormResponsePage({
                     params={listState.checkins}
                     data={checkins}
                     timeZone={ctx.timezone}
+                    locale={ctx.locale}
                   />
                 }
               />
@@ -934,8 +938,14 @@ export default async function FormResponsePage({
               >
                 <ul className="space-y-2 text-sm">
                   {failedFieldKeys.map((key) => {
-                    const label = labelForField(version.schema, key)
-                    const displayValue = displayValueForField(version.schema, recordValues, key)
+                    const label = labelForField(version.schema, key, ctx.locale, ctx.defaultLocale)
+                    const displayValue = displayValueForField(
+                      version.schema,
+                      recordValues,
+                      key,
+                      ctx.locale,
+                      ctx.defaultLocale,
+                    )
                     return (
                       <li
                         key={key}
@@ -1063,6 +1073,7 @@ export default async function FormResponsePage({
               params={listState.comments}
               data={comments}
               timeZone={ctx.timezone}
+              locale={ctx.locale}
             />
             {canOperateApp ? (
               <Section title="Add a comment">
@@ -1093,6 +1104,7 @@ export default async function FormResponsePage({
             params={listState.activity}
             data={activityData}
             timeZone={ctx.timezone}
+            locale={ctx.locale}
           />
         ) : null}
       </div>
@@ -1117,6 +1129,8 @@ export default async function FormResponsePage({
                 values: recordValues,
                 failedFieldKeys,
                 singleFailedFieldKey: single,
+                locale: ctx.locale,
+                defaultLocale: ctx.defaultLocale,
               })
             })()
           }

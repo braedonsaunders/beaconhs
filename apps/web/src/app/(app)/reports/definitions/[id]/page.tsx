@@ -295,6 +295,7 @@ export default async function ReportViewerPage({
           editHref={editHref}
           deleteBound={deleteBound}
           timeZone={ctx.timezone}
+          locale={ctx.locale}
         />
       )}
     </div>
@@ -436,6 +437,7 @@ function ActivityTab({
   editHref,
   deleteBound,
   timeZone,
+  locale,
 }: {
   definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
   activityData: {
@@ -467,6 +469,7 @@ function ActivityTab({
   editHref: string
   deleteBound: () => Promise<void>
   timeZone: string
+  locale: Awaited<ReturnType<typeof requireRequestContext>>['locale']
 }) {
   const {
     scheduleRows,
@@ -563,7 +566,9 @@ function ActivityTab({
                             )}
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-300">
-                            {s.nextRunAt ? formatDateTime(new Date(s.nextRunAt), timeZone) : '—'}
+                            {s.nextRunAt
+                              ? formatDateTime(new Date(s.nextRunAt), timeZone, locale)
+                              : '—'}
                           </TableCell>
                           <TableCell>
                             {s.active ? (
@@ -642,7 +647,7 @@ function ActivityTab({
                               href={`/reports/schedules/${r.scheduleId}/runs/${r.id}`}
                               className="text-slate-700 hover:underline dark:text-slate-200"
                             >
-                              {formatDateTime(new Date(r.startedAt), timeZone)}
+                              {formatDateTime(new Date(r.startedAt), timeZone, locale)}
                             </Link>
                           </TableCell>
                           <TableCell>
@@ -694,10 +699,10 @@ function ActivityTab({
                 <span className="font-mono text-xs">{definition.queryKind}</span>
               </MetaItem>
               <MetaItem label="Created">
-                {formatDateTime(new Date(definition.createdAt), timeZone)}
+                {formatDateTime(new Date(definition.createdAt), timeZone, locale)}
               </MetaItem>
               <MetaItem label="Updated">
-                {formatDateTime(new Date(definition.updatedAt), timeZone)}
+                {formatDateTime(new Date(definition.updatedAt), timeZone, locale)}
               </MetaItem>
             </dl>
             {canBuild ? (

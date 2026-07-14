@@ -169,7 +169,13 @@ async function resyncColumns(formData: FormData): Promise<void> {
     if (!ver?.schema) return false
     await tx
       .update(dataSources)
-      .set({ columns: deriveColumnsFromSchema(ver.schema as FormSchemaV1) })
+      .set({
+        columns: deriveColumnsFromSchema(
+          ver.schema as FormSchemaV1,
+          ctx.defaultLocale,
+          ctx.defaultLocale,
+        ),
+      })
       .where(eq(dataSources.id, id))
     return true
   })
@@ -387,7 +393,8 @@ export default async function DataSourceDetailPage({
       .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
       .where(isNull(formTemplates.deletedAt))
       .orderBy(asc(formTemplates.name), desc(formTemplateVersions.version))
-    const allUsage = collectDataSourceUsage(versionRows).get(src.key) ?? []
+    const allUsage =
+      collectDataSourceUsage(versionRows, ctx.locale, ctx.defaultLocale).get(src.key) ?? []
     const matchingUsage = allUsage.filter((entry) => {
       if (!usageParams.q) return true
       const query = usageParams.q.toLowerCase()

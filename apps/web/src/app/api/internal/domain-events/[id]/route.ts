@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { domainEventOutbox } from '@beaconhs/db/schema'
+import { domainEventOutbox, tenants, tenantUsers } from '@beaconhs/db/schema'
 import { verifyDomainEventRequest } from '@beaconhs/events'
+import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { makeTenantContext } from '@beaconhs/tenant'
 import { sendFormResponseRecapEmail } from '@/app/(app)/apps/_lib/recap-email'
 import {
@@ -54,11 +55,42 @@ export async function POST(
   ) {
     return new Response('Invalid command actor', { status: 422 })
   }
+  const localeState = await withSuperAdmin(db, async (tx) => {
+    const [tenant] = await tx
+      .select({
+        defaultLanguage: tenants.defaultLanguage,
+        enabledLanguages: tenants.enabledLanguages,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, event.tenantId))
+      .limit(1)
+    if (!tenant) return null
+    const [membership] = actor.membershipId
+      ? await tx
+          .select({ localeOverride: tenantUsers.localeOverride })
+          .from(tenantUsers)
+          .where(
+            and(
+              eq(tenantUsers.id, actor.membershipId),
+              eq(tenantUsers.tenantId, event.tenantId),
+              eq(tenantUsers.userId, actor.userId),
+            ),
+          )
+          .limit(1)
+      : []
+    return resolveLocalePreferences({
+      defaultLocale: tenant.defaultLanguage,
+      enabledLocales: tenant.enabledLanguages,
+      userLocale: membership?.localeOverride,
+    })
+  })
+  if (!localeState) return new Response('Tenant not found', { status: 404 })
   const ctx = makeTenantContext(db, {
     userId: actor.userId,
     tenantId: event.tenantId,
     isSuperAdmin: true,
     timezone: actor.timezone,
+    ...localeState,
     membership: actor.membershipId
       ? { id: actor.membershipId, displayName: 'Flow automation' }
       : null,

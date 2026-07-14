@@ -410,6 +410,8 @@ Open [Builder](/apps) from the sidebar. People who can build templates see every
 4. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
 5. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
 
+The language picker in the designer toolbar controls which translation you are editing. Add field labels, help text, section titles, option labels, and workflow step titles for each enabled workspace language. The canvas and preview show the selected language. Workers see their own language when a translation exists, then the workspace default when it does not.
+
 Use **Risk matrix** when a response needs a scored likelihood-and-severity rating based on the workspace risk matrix. Use **Rating grid** for an ordinary set of choice rows; it does not add a compliance score.
 
 Under **Data**, a **Lookup** searches its full data source as the worker types. **Results per search** controls the size of each result set. A **Data table** has its own search and pages; **Rows per page** controls each page. For a grouped **Metric**, **Groups shown** limits only the chart. Counts, sums, averages, minimums, and maximums always use every matching record the worker is allowed to see.
@@ -616,6 +618,15 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
 
 On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing.
+
+## Set workspace languages
+
+1. Open **Admin**, then **Tenant settings**.
+2. Under **Languages**, enable every language members may choose.
+3. Choose the **Default language**. The default is always enabled and is used by members who choose **Use tenant default**.
+4. Click **Save settings**.
+
+Members choose their own language under **Account settings**. Their choice applies only to this workspace. If you disable a language, BeaconHS clears member choices for that language and those members return to the workspace default. Tenant-wide generated documents and group recap emails use the workspace default.
 
 ## Build notification groups
 

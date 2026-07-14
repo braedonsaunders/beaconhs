@@ -592,7 +592,7 @@ export default async function TitleTasksPage({
                                       <input type="hidden" name="personId" value={person.id} />
                                       <button
                                         type="submit"
-                                        title={`Acknowledged ${formatDate(new Date(ack.acknowledgedAt), ctx.timezone)} — click to revoke`}
+                                        title={`Acknowledged ${formatDate(new Date(ack.acknowledgedAt), ctx.timezone, ctx.locale)} — click to revoke`}
                                         className="text-emerald-600 hover:text-emerald-800"
                                       >
                                         <CheckSquare size={14} />

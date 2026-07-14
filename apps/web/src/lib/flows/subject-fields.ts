@@ -75,7 +75,7 @@ export async function loadSubjectFields(
     for (const sec of schema.sections ?? []) {
       for (const f of sec.fields ?? []) {
         if (SKIP_FIELD_TYPES.has(f.type)) continue
-        const label = labelText(f.label, f.id)
+        const label = labelText(f.label, f.id, ctx.locale, ctx.defaultLocale)
         out.push({ key: f.id, label })
         // Companion keys mirror the form flow adapter's loadValues():
         // repeating-section rows keep raw values only, so companions apply to
@@ -121,14 +121,21 @@ export async function loadSubjectCollections(
       if (sec.repeating) {
         const fields = (sec.fields ?? [])
           .filter((f) => !SKIP_FIELD_TYPES.has(f.type))
-          .map((f) => ({ key: f.id, label: labelText(f.label, f.id) }))
+          .map((f) => ({
+            key: f.id,
+            label: labelText(f.label, f.id, ctx.locale, ctx.defaultLocale),
+          }))
         if (fields.length > 0) {
-          out.push({ key: sec.id, label: labelText(sec.title, sec.id), fields })
+          out.push({
+            key: sec.id,
+            label: labelText(sec.title, sec.id, ctx.locale, ctx.defaultLocale),
+            fields,
+          })
         }
         continue
       }
       for (const f of sec.fields ?? []) {
-        const label = labelText(f.label, f.id)
+        const label = labelText(f.label, f.id, ctx.locale, ctx.defaultLocale)
         // Photo/file fields: raw AttachedFile rows already carry {url, filename}.
         if (isAttachmentArrayField(f.type)) {
           out.push({ key: f.id, label, fields: photoFields })

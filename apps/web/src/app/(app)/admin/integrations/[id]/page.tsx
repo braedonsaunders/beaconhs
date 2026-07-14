@@ -411,7 +411,9 @@ export default async function ConnectionPage({
                           ) : null}
                         </div>
                         <div className="shrink-0 text-right text-[11px] text-slate-400">
-                          <div>{formatDateTime(new Date(r.startedAt), ctx.timezone)}</div>
+                          <div>
+                            {formatDateTime(new Date(r.startedAt), ctx.timezone, ctx.locale)}
+                          </div>
                           {r.durationMs != null ? (
                             <div>{(r.durationMs / 1000).toFixed(1)}s</div>
                           ) : null}

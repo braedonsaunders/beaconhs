@@ -105,6 +105,8 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 The kiosk searches the current company directory in small groups. If it says more results exist, type more of the name, employee number, job title, site, or crew. It does not hide a valid match just because the company has a large directory.
 
+Because the kiosk is shared and no member is signed in, it uses the workspace's **Default language**.
+
 ## If the kiosk will not unlock
 
 - Check that the PIN has 4–12 digits.

@@ -43,6 +43,7 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
+import type { AppLocale } from '@beaconhs/i18n'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
@@ -472,6 +473,7 @@ export default async function SkillAssignmentPage({
                       attachment={attachment}
                       canManage={canManage}
                       timeZone={ctx.timezone}
+                      locale={ctx.locale}
                     />
                   ))}
                 </div>
@@ -486,7 +488,7 @@ export default async function SkillAssignmentPage({
               <CardTitle>Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+              <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
             </CardContent>
           </Card>
         ) : null}
@@ -548,6 +550,7 @@ function FileCard({
   attachment,
   canManage,
   timeZone,
+  locale,
 }: {
   assignmentId: string
   file: { id: string; label: string; kind: string; uploadedAt: Date | string }
@@ -560,6 +563,7 @@ function FileCard({
   } | null
   canManage: boolean
   timeZone: string
+  locale: AppLocale
 }) {
   const isImage = attachment?.contentType.startsWith('image/') ?? false
   const href = attachment ? attachmentUrl(attachment.id) : null
@@ -620,7 +624,7 @@ function FileCard({
           ) : null}
         </div>
         <div className="mt-auto pt-2 text-[11px] text-slate-400 dark:text-slate-500">
-          {formatDate(new Date(file.uploadedAt), timeZone)}
+          {formatDate(new Date(file.uploadedAt), timeZone, locale)}
           {href ? (
             <a
               href={href}

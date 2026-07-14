@@ -10,8 +10,10 @@
 // flyout embedding the full editable workspace scoped to that author's journals.
 
 import { useMemo, useRef, useState } from 'react'
+import { useLocale } from 'next-intl'
 import { FileDown, Image as ImageIcon, Loader2, PenLine } from 'lucide-react'
 import { Badge, Button, Drawer, cn } from '@beaconhs/ui'
+import type { AppLocale } from '@beaconhs/i18n'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { tagSwatch } from '../_tag-colors'
@@ -44,6 +46,7 @@ export function JournalRecordsTable({
   tagColors: Record<string, string | null>
   sortProps: SortProps
 }) {
+  const locale = useLocale() as AppLocale
   const colorMap = useMemo(() => new Map(Object.entries(tagColors)), [tagColors])
 
   // Read-only flyout state.
@@ -107,7 +110,7 @@ export function JournalRecordsTable({
             reference={it.reference}
             status={<StatusBadge status={it.status} />}
             title={it.snippet || it.title || 'Journal entry'}
-            meta={`${formatLongDate(it.entryDate)}${it.siteName ? ` · ${it.siteName}` : ''}`}
+            meta={`${formatLongDate(it.entryDate, locale)}${it.siteName ? ` · ${it.siteName}` : ''}`}
             footer={
               <>
                 {it.tags.slice(0, 3).map((t) => (
@@ -170,7 +173,7 @@ export function JournalRecordsTable({
                   {it.authorName ?? 'Unassigned'}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-slate-600 tabular-nums dark:text-slate-400">
-                  {formatLongDate(it.entryDate)}
+                  {formatLongDate(it.entryDate, locale)}
                 </td>
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                   {it.siteName ?? '—'}
@@ -207,7 +210,9 @@ export function JournalRecordsTable({
         size="lg"
         title={readEntry ? (readEntry.authorName ?? 'Journal entry') : 'Journal entry'}
         description={
-          readEntry ? `${formatLongDate(readEntry.entryDate)} · ${readEntry.reference}` : undefined
+          readEntry
+            ? `${formatLongDate(readEntry.entryDate, locale)} · ${readEntry.reference}`
+            : undefined
         }
         footer={
           readEntry ? (
@@ -276,7 +281,8 @@ function Unavailable() {
 }
 
 function StatusBadge({ status }: { status: JournalStatus }) {
-  const label = statusMeta(status).label
+  const locale = useLocale() as AppLocale
+  const label = statusMeta(status, locale).label
   const variant =
     status === 'submitted' ? 'success' : status === 'archived' ? 'secondary' : 'warning'
   return <Badge variant={variant}>{label}</Badge>

@@ -290,7 +290,9 @@ export default async function EquipmentInspectionsPage({
                       {r.typeName ?? '—'}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                      {r.occurredAt ? formatDate(new Date(r.occurredAt), ctx.timezone) : '—'}
+                      {r.occurredAt
+                        ? formatDate(new Date(r.occurredAt), ctx.timezone, ctx.locale)
+                        : '—'}
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">
                       {inspector ?? '—'}

@@ -249,7 +249,7 @@ export async function EmailLogListView({
                 return (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                      {formatDateTime(new Date(log.createdAt), ctx.timezone)}
+                      {formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale)}
                     </TableCell>
                     <TableCell className="text-slate-900 dark:text-slate-100">
                       <div className="font-mono text-xs">{log.recipientPrimary ?? '—'}</div>

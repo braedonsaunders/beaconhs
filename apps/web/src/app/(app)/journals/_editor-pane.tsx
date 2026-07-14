@@ -6,6 +6,7 @@
 // Journals have no individual title — the date is the identifier.
 
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { useLocale } from 'next-intl'
 import {
   AlertCircle,
   Check,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
+import type { AppLocale } from '@beaconhs/i18n'
 import { confirmDialog } from '@/lib/confirm'
 import { deleteEntry, emailEntry, submitEntry, updateEntry } from './_actions'
 import { JournalEditor } from './_editor'
@@ -49,6 +51,7 @@ export function EditorPane({
   /** Open the entries drawer (mobile only — desktop shows the tree inline). */
   onBrowse: () => void
 }) {
+  const locale = useLocale() as AppLocale
   const editable = !entry.locked
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [submitting, startSubmit] = useTransition()
@@ -176,7 +179,7 @@ export function EditorPane({
     })
   }
 
-  const status = statusMeta(entry.status)
+  const status = statusMeta(entry.status, locale)
 
   return (
     <div
@@ -213,7 +216,9 @@ export function EditorPane({
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-400 dark:text-slate-500">
             <span className="font-medium whitespace-nowrap text-slate-600 dark:text-slate-300">
-              {isToday(entry.entryDate) ? 'Today' : formatDate(entry.entryDate)}
+              {isToday(entry.entryDate)
+                ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'day')
+                : formatDate(entry.entryDate, locale)}
             </span>
             <span className="hidden font-mono sm:inline">· {entry.reference}</span>
             <SaveBadge state={saveState} onRetry={() => void flush()} />

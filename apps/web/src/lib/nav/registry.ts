@@ -33,6 +33,32 @@ type NavModule = {
   group: (typeof NAV_GROUP_ORDER)[number]
 }
 
+const NAV_MODULE_MESSAGE_KEYS: Record<string, string> = {
+  dashboard: 'Nav.modules.dashboard',
+  assistant: 'Nav.modules.assistant',
+  feed: 'Nav.modules.feed',
+  my: 'Nav.modules.my',
+  notifications: 'Nav.modules.notifications',
+  inspections: 'Nav.modules.inspections',
+  hazid: 'Nav.modules.hazid',
+  journals: 'Nav.modules.journals',
+  incidents: 'Nav.modules.incidents',
+  'corrective-actions': 'Nav.modules.correctiveActions',
+  tools: 'Nav.modules.tools',
+  training: 'Nav.modules.training',
+  documents: 'Nav.modules.documents',
+  help: 'Nav.modules.help',
+  people: 'Nav.modules.people',
+  locations: 'Nav.modules.locations',
+  equipment: 'Nav.modules.equipment',
+  ppe: 'Nav.modules.ppe',
+  compliance: 'Nav.modules.compliance',
+  insights: 'Nav.modules.insights',
+  reports: 'Nav.modules.reports',
+  admin: 'Nav.modules.admin',
+  forms: 'Nav.modules.forms',
+}
+
 // Group order top-to-bottom.
 const NAV_GROUP_ORDER = [
   'Overview',
@@ -43,6 +69,24 @@ const NAV_GROUP_ORDER = [
   'Assurance',
   'Administration',
 ] as const
+
+const NAV_GROUP_MESSAGE_KEYS: Record<(typeof NAV_GROUP_ORDER)[number], string> = {
+  Overview: 'Nav.groups.overview',
+  Frontline: 'Nav.groups.frontline',
+  Knowledge: 'Nav.groups.knowledge',
+  'Assets & people': 'Nav.groups.assetsPeople',
+  Assurance: 'Nav.groups.assurance',
+  Administration: 'Nav.groups.administration',
+}
+
+export function defaultNavGroupMessageKey(id: string, label: string): string | undefined {
+  const defaultLabel = NAV_GROUP_ORDER.find((candidate) => defaultGroupId(candidate) === id)
+  return defaultLabel === label ? NAV_GROUP_MESSAGE_KEYS[defaultLabel] : undefined
+}
+
+export function defaultNavModuleMessageKey(key: string): string | undefined {
+  return NAV_MODULE_MESSAGE_KEYS[key]
+}
 
 // Stable, url-ish ids for the default groups (used as React keys / reorder ids).
 function defaultGroupId(label: string): string {

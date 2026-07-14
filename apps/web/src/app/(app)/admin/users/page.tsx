@@ -283,7 +283,9 @@ export default async function AdminUsersPage({
                         </div>
                       </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {r.joinedAt ? formatDate(new Date(r.joinedAt), ctx.timezone) : '—'}
+                        {r.joinedAt
+                          ? formatDate(new Date(r.joinedAt), ctx.timezone, ctx.locale)
+                          : '—'}
                       </td>
                     </tr>
                   ))}

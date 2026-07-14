@@ -2,6 +2,7 @@
 
 import type { DataSourceColumn, DataSourceColumnType } from '@beaconhs/db/schema'
 import type { FormSchemaV1, I18nString } from '@beaconhs/forms-core'
+import { DEFAULT_LOCALE, localizeText, type AppLocale } from '@beaconhs/i18n'
 
 /** Stable, URL-safe slug used as a data source `key`. */
 export function slugify(input: string): string {
@@ -15,9 +16,13 @@ export function slugify(input: string): string {
   )
 }
 
-function pickLabel(label: I18nString | undefined, fallback: string): string {
-  if (!label) return fallback
-  return label.en ?? Object.values(label)[0] ?? fallback
+function pickLabel(
+  label: I18nString | undefined,
+  fallback: string,
+  locale: AppLocale,
+  defaultLocale: AppLocale,
+): string {
+  return localizeText(label, locale, fallback, defaultLocale)
 }
 
 // Map a form field type to a data-source column value kind.
@@ -42,7 +47,11 @@ const NON_VALUE_TYPES = new Set([
  * per top-level input field, plus meta columns (__status / __submittedAt /
  * __site) that the query layer augments every derived row with.
  */
-export function deriveColumnsFromSchema(schema: FormSchemaV1): DataSourceColumn[] {
+export function deriveColumnsFromSchema(
+  schema: FormSchemaV1,
+  locale: AppLocale = DEFAULT_LOCALE,
+  defaultLocale: AppLocale = DEFAULT_LOCALE,
+): DataSourceColumn[] {
   const cols: DataSourceColumn[] = []
   const seen = new Set<string>()
   for (const sec of schema.sections ?? []) {
@@ -51,11 +60,22 @@ export function deriveColumnsFromSchema(schema: FormSchemaV1): DataSourceColumn[
       if (NON_VALUE_TYPES.has(f.type)) continue
       if (seen.has(f.id)) continue
       seen.add(f.id)
-      cols.push({ key: f.id, label: pickLabel(f.label, f.id), type: columnTypeForField(f.type) })
+      cols.push({
+        key: f.id,
+        label: pickLabel(f.label, f.id, locale, defaultLocale),
+        type: columnTypeForField(f.type),
+      })
     }
   }
-  cols.push({ key: '__status', label: 'Status', type: 'text' })
-  cols.push({ key: '__submittedAt', label: 'Submitted at', type: 'date' })
-  cols.push({ key: '__site', label: 'Site', type: 'text' })
+  const copy = META_COLUMN_COPY[locale]
+  cols.push({ key: '__status', label: copy.status, type: 'text' })
+  cols.push({ key: '__submittedAt', label: copy.submittedAt, type: 'date' })
+  cols.push({ key: '__site', label: copy.site, type: 'text' })
   return cols
+}
+
+const META_COLUMN_COPY: Record<AppLocale, { status: string; submittedAt: string; site: string }> = {
+  en: { status: 'Status', submittedAt: 'Submitted at', site: 'Site' },
+  fr: { status: 'État', submittedAt: 'Soumis le', site: 'Site' },
+  es: { status: 'Estado', submittedAt: 'Enviado el', site: 'Sitio' },
 }

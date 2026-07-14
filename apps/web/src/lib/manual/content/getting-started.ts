@@ -250,8 +250,10 @@ Tap your name in the top right corner, then tap **Account settings**. Or go stra
 
 1. Open [Account](/account).
 2. In the **Profile** card, edit your **Name**.
-3. Pick your **Language** and **Time zone**. The time zone controls how dates and times show across the app, so set it to where you work.
+3. Pick your **Language** and **Time zone**. Choose **Use tenant default** if you want your workspace administrator's language choice. Only languages enabled for this workspace appear.
 4. Tap **Save changes**.
+
+Your language choice applies only to the workspace you are using. If you belong to more than one workspace, you can choose a different language in each one. The time zone controls how dates and times show across the app, so set it to where you work.
 
 Your email address is shown here but cannot be changed yourself. Ask your admin if it needs updating.
 

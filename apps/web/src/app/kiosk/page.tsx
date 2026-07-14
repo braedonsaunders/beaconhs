@@ -4,8 +4,11 @@
 // ?t=<slug> + a tenant-configured kiosk PIN.
 
 import { db, type Database } from '@beaconhs/db'
+import { NextIntlClientProvider } from 'next-intl'
+import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { KioskClient } from './kiosk-client'
 import { resolveActiveTenant } from '@/lib/active-tenant'
+import { getMessagesForLocale } from '@/i18n/messages'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Kiosk · sign in/out' }
@@ -67,5 +70,14 @@ export default async function KioskPage({
     )
   }
 
-  return <KioskClient tenantId={tenant.id} tenantName={tenant.name} />
+  const { locale } = resolveLocalePreferences({
+    defaultLocale: tenant.defaultLanguage,
+    enabledLocales: tenant.enabledLanguages,
+  })
+  const messages = getMessagesForLocale(locale)
+  return (
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone="America/Toronto">
+      <KioskClient tenantId={tenant.id} tenantName={tenant.name} />
+    </NextIntlClientProvider>
+  )
 }

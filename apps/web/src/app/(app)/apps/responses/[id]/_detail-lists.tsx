@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { MapPin, MessageSquare } from 'lucide-react'
 import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@beaconhs/ui'
+import type { AppLocale } from '@beaconhs/i18n'
 import { ActivityFeed } from '@/components/activity-feed'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
@@ -228,12 +229,14 @@ export function CommentsPanel({
   params,
   data,
   timeZone,
+  locale,
 }: {
   basePath: string
   currentParams: Search
   params: ResponseDetailListState['comments']
   data: PageData<CommentRow>
   timeZone: string
+  locale: AppLocale
 }) {
   return (
     <Card>
@@ -278,7 +281,7 @@ export function CommentsPanel({
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium">{comment.authorName ?? 'Someone'}</span>
                   <span className="shrink-0 text-xs text-slate-500">
-                    {formatDateTime(comment.createdAt, timeZone)}
+                    {formatDateTime(comment.createdAt, timeZone, locale)}
                   </span>
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-slate-800 dark:text-slate-200">
@@ -307,12 +310,14 @@ export function CheckinHistory({
   params,
   data,
   timeZone,
+  locale,
 }: {
   basePath: string
   currentParams: Search
   params: ResponseDetailListState['checkins']
   data: PageData<CheckinRow>
   timeZone: string
+  locale: AppLocale
 }) {
   if (data.total === 0) return null
 
@@ -358,7 +363,7 @@ export function CheckinHistory({
               className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600 dark:text-slate-300"
             >
               <span className="font-mono text-slate-400">
-                {formatDateTime(checkin.recordedAt, timeZone)}
+                {formatDateTime(checkin.recordedAt, timeZone, locale)}
               </span>
               <span>{humanize(checkin.kind)}</span>
               {checkin.geoLat != null && checkin.geoLng != null ? (
@@ -396,12 +401,14 @@ export function AuditTrailPanel({
   params,
   data,
   timeZone,
+  locale,
 }: {
   basePath: string
   currentParams: Search
   params: ResponseDetailListState['activity']
   data: PageData<ActivityRow> & { actions: { action: string; count: number }[] }
   timeZone: string
+  locale: AppLocale
 }) {
   return (
     <Card>
@@ -438,7 +445,7 @@ export function AuditTrailPanel({
             options={ORDER_OPTIONS}
           />
         </TableToolbar>
-        <ActivityFeed entries={data.rows} timeZone={timeZone} />
+        <ActivityFeed entries={data.rows} timeZone={timeZone} locale={locale} />
         <Pagination
           basePath={basePath}
           currentParams={currentParams}

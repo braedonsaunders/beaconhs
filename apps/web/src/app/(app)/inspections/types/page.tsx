@@ -254,7 +254,7 @@ export default async function InspectionTypesPage({
                     </Badge>
                   </TableCell>
                   <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(type.createdAt), ctx.timezone)}
+                    {formatDate(new Date(type.createdAt), ctx.timezone, ctx.locale)}
                   </TableCell>
                 </TableRow>
               ))}

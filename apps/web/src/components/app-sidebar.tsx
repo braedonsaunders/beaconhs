@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Badge, cn } from '@beaconhs/ui'
 import { Logo } from './brand-logo'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
@@ -22,6 +23,7 @@ export function AppSidebar({
   defaultCollapsed?: boolean
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  const t = useTranslations('Shell')
   const navGroups = useNavGroups(groups)
 
   const toggle = useCallback(() => {
@@ -54,8 +56,8 @@ export function AppSidebar({
         <button
           type="button"
           onClick={toggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? t('expandSidebar') : t('collapseSidebar')}
+          title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
           className={cn(
             'grid h-8 w-8 place-items-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200',
             collapsed ? '' : 'ml-auto',

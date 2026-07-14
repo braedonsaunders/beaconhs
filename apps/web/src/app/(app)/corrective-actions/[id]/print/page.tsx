@@ -98,8 +98,10 @@ export default async function CorrectiveActionPrintPage({
   })
 
   const ownerLabel = ownerAccount?.name ?? owner?.displayName ?? '—'
-  const closed = ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone) : '—'
-  const verified = ca.verifiedAt ? formatDateTime(new Date(ca.verifiedAt), ctx.timezone) : null
+  const closed = ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale) : '—'
+  const verified = ca.verifiedAt
+    ? formatDateTime(new Date(ca.verifiedAt), ctx.timezone, ctx.locale)
+    : null
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -176,7 +178,7 @@ export default async function CorrectiveActionPrintPage({
           <Field label="Closed on" value={closed} />
           <Field
             label="Cost impact"
-            value={ca.costImpact != null ? formatMoney(Number(ca.costImpact)) : '—'}
+            value={ca.costImpact != null ? formatMoney(Number(ca.costImpact), ctx.locale) : '—'}
           />
         </section>
 
@@ -239,7 +241,8 @@ export default async function CorrectiveActionPrintPage({
                   <div className="head">
                     <strong>{s.step.kind.replace('_', ' ')}</strong>
                     <span>
-                      {formatDateTime(new Date(s.step.completedAt), ctx.timezone)} · {name}
+                      {formatDateTime(new Date(s.step.completedAt), ctx.timezone, ctx.locale)} ·{' '}
+                      {name}
                     </span>
                   </div>
                   {s.step.description ? <div className="desc">{s.step.description}</div> : null}
@@ -270,8 +273,8 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-function formatMoney(n: number): string {
-  return n.toLocaleString('en-US', {
+function formatMoney(n: number, locale: string): string {
+  return n.toLocaleString(locale, {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 2,

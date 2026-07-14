@@ -202,7 +202,8 @@ export default async function SyncRunPage({
             {data.run.dryRun ? <Badge variant="outline">preview</Badge> : null}
           </div>
           <p className="text-sm text-slate-500">
-            {formatDateTime(new Date(data.run.startedAt), ctx.timezone)} · {data.run.trigger} ·{' '}
+            {formatDateTime(new Date(data.run.startedAt), ctx.timezone, ctx.locale)} ·{' '}
+            {data.run.trigger} ·{' '}
             {data.run.durationMs != null
               ? `${(data.run.durationMs / 1000).toFixed(1)}s`
               : 'running'}

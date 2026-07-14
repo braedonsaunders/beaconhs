@@ -222,7 +222,7 @@ export default async function AuthorityDetailPage({
                 { label: 'Skill types', value: skillTypeCount },
                 {
                   label: 'Created',
-                  value: formatDateTime(new Date(authority.createdAt), ctx.timezone),
+                  value: formatDateTime(new Date(authority.createdAt), ctx.timezone, ctx.locale),
                 },
               ]}
             />
@@ -384,7 +384,7 @@ export default async function AuthorityDetailPage({
             <CardTitle>Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
           </CardContent>
         </Card>
       ) : null}

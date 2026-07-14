@@ -13,6 +13,7 @@ import {
   listActiveTenantRoles,
 } from '@/lib/auth'
 import { Suspense } from 'react'
+import { getTranslations } from 'next-intl/server'
 import { AppShell } from '@/components/app-shell'
 import { NavigationProvider } from '@/components/navigation-provider'
 import { RiskMatrixProvider } from '@/components/risk-matrix'
@@ -35,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const sessionUser = await getSessionUser()
     redirect(sessionUser ? '/auth/continue' : '/login')
   }
+  const [shellT, commonT] = await Promise.all([getTranslations('Shell'), getTranslations('Common')])
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 
@@ -69,7 +71,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // The account menu shows the real signed-in account. Prefer the tenant display
   // name (consistent with the rest of the app), then the session name/email.
   const account = {
-    name: ctx.membership?.displayName ?? sessionUser?.name ?? sessionUser?.email ?? 'Account',
+    name:
+      ctx.membership?.displayName ?? sessionUser?.name ?? sessionUser?.email ?? commonT('account'),
     email: sessionUser?.email ?? '',
   }
 
@@ -77,15 +80,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // the union of all of them ("All roles"). The switcher itself hides when the
   // user has one role or fewer.
   const activeRole = ctx.activeRoleId
-    ? { id: ctx.activeRoleId, name: roles.find((r) => r.id === ctx.activeRoleId)?.name ?? 'Role' }
-    : { id: null, name: 'All roles' }
+    ? {
+        id: ctx.activeRoleId,
+        name: roles.find((r) => r.id === ctx.activeRoleId)?.name ?? shellT('actingAsRole'),
+      }
+    : { id: null, name: shellT('allRoles') }
 
   // While impersonating, ctx is already the TARGET (membership = their display
   // name); ctx.impersonation carries the real admin for the banner.
   const impersonation = ctx.impersonation
     ? {
         actorName: ctx.impersonation.actor.name,
-        targetName: ctx.membership?.displayName ?? 'this user',
+        targetName: ctx.membership?.displayName ?? shellT('thisUser'),
         expiresAtMs: ctx.impersonation.expiresAt.getTime(),
       }
     : null

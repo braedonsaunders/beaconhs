@@ -286,7 +286,9 @@ export default async function EquipmentInspectionRecordPage({
             record.occurredAt ? datetimeLocalValue(new Date(record.occurredAt), ctx.timezone) : ''
           }
           occurredAtDisplay={
-            record.occurredAt ? formatDateTime(new Date(record.occurredAt), ctx.timezone) : ''
+            record.occurredAt
+              ? formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)
+              : ''
           }
           hours={record.hours ?? ''}
           notes={record.notes ?? ''}
@@ -358,7 +360,7 @@ export default async function EquipmentInspectionRecordPage({
           ) : null}
         </div>
 
-        <ActivityFeed entries={activity} timeZone={ctx.timezone} />
+        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
       </div>
     </PageContainer>
   )

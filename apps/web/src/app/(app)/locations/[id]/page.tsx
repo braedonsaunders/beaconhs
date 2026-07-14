@@ -41,6 +41,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import type { AppLocale } from '@beaconhs/i18n'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
@@ -708,7 +709,7 @@ async function renderCustomer({
             />
           }
         >
-          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} />
+          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
         </ListTabShell>
       ) : null}
       {active === 'equipment' ? (
@@ -733,7 +734,9 @@ async function renderCustomer({
           <EquipmentTab equipment={equipmentData.rows} />
         </ListTabShell>
       ) : null}
-      {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
+      {active === 'activity' ? (
+        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+      ) : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
@@ -896,7 +899,7 @@ async function renderProject({
             />
           }
         >
-          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} />
+          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
         </ListTabShell>
       ) : null}
       {active === 'equipment' ? (
@@ -921,7 +924,9 @@ async function renderProject({
           <EquipmentTab equipment={equipmentData.rows} />
         </ListTabShell>
       ) : null}
-      {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
+      {active === 'activity' ? (
+        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+      ) : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
@@ -1044,7 +1049,7 @@ async function renderSite({
             />
           }
         >
-          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} />
+          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
         </ListTabShell>
       ) : null}
       {active === 'equipment' ? (
@@ -1069,7 +1074,9 @@ async function renderSite({
           <EquipmentTab equipment={equipmentData.rows} />
         </ListTabShell>
       ) : null}
-      {active === 'activity' ? <ActivityFeed entries={activity} timeZone={ctx.timezone} /> : null}
+      {active === 'activity' ? (
+        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+      ) : null}
       {canManage ? (
         <ContactDrawer
           open={drawer === 'new-contact' || drawer === 'edit-contact'}
@@ -1567,9 +1574,11 @@ function ContactsTab({
 function IncidentsTab({
   rows,
   timeZone,
+  locale,
 }: {
   rows: (typeof incidents.$inferSelect)[]
   timeZone: string
+  locale: AppLocale
 }) {
   if (rows.length === 0) {
     return (
@@ -1606,7 +1615,7 @@ function IncidentsTab({
                 {i.reference}
               </Link>
             </TableCell>
-            <TableCell>{formatDate(new Date(i.occurredAt), timeZone)}</TableCell>
+            <TableCell>{formatDate(new Date(i.occurredAt), timeZone, locale)}</TableCell>
             <TableCell>{i.title}</TableCell>
             <TableCell>
               <Badge variant={severityVariant(i.severity)}>{i.severity}</Badge>

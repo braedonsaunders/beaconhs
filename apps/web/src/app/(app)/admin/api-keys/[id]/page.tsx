@@ -182,7 +182,7 @@ export default async function ApiKeyEditPage({
                       Created
                     </div>
                     <div className="mt-1 text-slate-700 dark:text-slate-200">
-                      {formatDateTime(new Date(apiKey.createdAt), ctx.timezone)}
+                      {formatDateTime(new Date(apiKey.createdAt), ctx.timezone, ctx.locale)}
                     </div>
                   </div>
                   <div>
@@ -191,7 +191,7 @@ export default async function ApiKeyEditPage({
                     </div>
                     <div className="mt-1 text-slate-700 dark:text-slate-200">
                       {apiKey.lastUsedAt
-                        ? formatDateTime(new Date(apiKey.lastUsedAt), ctx.timezone)
+                        ? formatDateTime(new Date(apiKey.lastUsedAt), ctx.timezone, ctx.locale)
                         : 'Never'}
                     </div>
                   </div>

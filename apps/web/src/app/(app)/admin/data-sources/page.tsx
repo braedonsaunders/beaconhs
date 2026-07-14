@@ -87,7 +87,13 @@ async function createDataSource(formData: FormData): Promise<void> {
         .where(eq(formTemplateVersions.templateId, templateId))
         .orderBy(desc(formTemplateVersions.version))
         .limit(1)
-      if (ver?.schema) columns = deriveColumnsFromSchema(ver.schema as FormSchemaV1)
+      if (ver?.schema) {
+        columns = deriveColumnsFromSchema(
+          ver.schema as FormSchemaV1,
+          ctx.defaultLocale,
+          ctx.defaultLocale,
+        )
+      }
       config = { templateId }
     }
 
@@ -209,7 +215,7 @@ export default async function DataSourcesPage({
       .innerJoin(formTemplates, eq(formTemplates.id, formTemplateVersions.templateId))
       .where(isNull(formTemplates.deletedAt))
       .orderBy(asc(formTemplates.name), desc(formTemplateVersions.version))
-    const usageBySource = collectDataSourceUsage(versionRows)
+    const usageBySource = collectDataSourceUsage(versionRows, ctx.locale, ctx.defaultLocale)
 
     const [totalRow, kindRows] = await Promise.all([
       tx.select({ c: count() }).from(dataSources).where(where),

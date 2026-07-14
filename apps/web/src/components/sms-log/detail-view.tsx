@@ -66,7 +66,7 @@ export async function SmsLogDetailView({
         <DetailHeader
           back={back}
           title={log.recipient ?? 'SMS'}
-          subtitle={`Sent ${formatDateTime(new Date(log.createdAt), ctx.timezone)}${
+          subtitle={`Sent ${formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale)}${
             log.provider ? ` · via ${log.provider}` : ''
           }`}
           badge={
@@ -112,11 +112,13 @@ export async function SmsLogDetailView({
               },
               {
                 label: 'Created',
-                value: formatDateTime(new Date(log.createdAt), ctx.timezone),
+                value: formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale),
               },
               {
                 label: 'Sent',
-                value: log.sentAt ? formatDateTime(new Date(log.sentAt), ctx.timezone) : '—',
+                value: log.sentAt
+                  ? formatDateTime(new Date(log.sentAt), ctx.timezone, ctx.locale)
+                  : '—',
               },
               {
                 label: 'Provider message id',

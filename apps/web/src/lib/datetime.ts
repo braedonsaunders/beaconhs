@@ -8,6 +8,8 @@
 // a stored instant with a naked `toLocaleString()` in a server component — that
 // silently uses UTC and shows times hours off for the viewer.
 
+import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
+
 /** Offset (ms) of `timeZone` from UTC at the given instant. */
 function tzOffsetMs(timeZone: string, at: Date): number {
   const dtf = new Intl.DateTimeFormat('en-US', {
@@ -158,8 +160,12 @@ export function parseDatetimeLocal(value: string, timeZone: string): Date | null
 }
 
 /** Human-readable date + time (e.g. `Jun 11, 2026, 2:30 PM`) in the given timezone. */
-export function formatDateTime(d: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+export function formatDateTime(
+  d: Date,
+  timeZone: string,
+  locale: AppLocale = DEFAULT_LOCALE,
+): string {
+  return new Intl.DateTimeFormat(locale, {
     timeZone,
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -167,6 +173,6 @@ export function formatDateTime(d: Date, timeZone: string): string {
 }
 
 /** Human-readable date (e.g. `Jun 11, 2026`) in the given timezone. */
-export function formatDate(d: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone, dateStyle: 'medium' }).format(d)
+export function formatDate(d: Date, timeZone: string, locale: AppLocale = DEFAULT_LOCALE): string {
+  return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'medium' }).format(d)
 }

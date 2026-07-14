@@ -2,7 +2,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { getTranslations } from 'next-intl/server'
+import { and, eq, isNotNull, notInArray } from 'drizzle-orm'
 import {
   Button,
   Card,
@@ -16,7 +17,8 @@ import {
   Select,
 } from '@beaconhs/ui'
 import { db, hashKioskPin, normalizeKioskPin, withSuperAdmin } from '@beaconhs/db'
-import { tenants } from '@beaconhs/db/schema'
+import { tenantUsers, tenants } from '@beaconhs/db/schema'
+import { LOCALE_OPTIONS, normalizeLocalePolicy } from '@beaconhs/i18n'
 import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -28,11 +30,6 @@ import { PageContainer } from '@/components/page-layout'
 export const metadata = { title: 'Tenant settings' }
 export const dynamic = 'force-dynamic'
 
-const KNOWN_LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'fr', label: 'Français' },
-  { value: 'es', label: 'Español' },
-]
 const LEVELS = ['customer', 'project', 'site', 'area'] as const
 
 // Tenant settings is admin configuration. saveSettings bypasses RLS to write
@@ -47,13 +44,18 @@ async function requireSettingsAdmin() {
 async function saveSettings(formData: FormData) {
   'use server'
   const ctx = await requireSettingsAdmin()
+  const t = await getTranslations('TenantSettings')
 
   const name = String(formData.get('name') ?? '').trim()
   const slug = String(formData.get('slug') ?? '').trim()
   const defaultLanguage = String(formData.get('defaultLanguage') ?? 'en')
-  const enabledLanguages = KNOWN_LANGUAGES.map((l) => l.value).filter(
+  const enabledLanguages = LOCALE_OPTIONS.map((l) => l.value).filter(
     (l) => formData.get(`lang_${l}`) === 'on',
   )
+  const languagePolicy = normalizeLocalePolicy({
+    defaultLocale: defaultLanguage,
+    enabledLocales: enabledLanguages,
+  })
   const hierarchy = {
     customer: formData.get('lvl_customer') === 'on',
     project: formData.get('lvl_project') === 'on',
@@ -69,7 +71,7 @@ async function saveSettings(formData: FormData) {
   const clearKioskPin = formData.get('clearKioskPin') === 'on'
   const normalizedKioskPin = kioskPinInput ? normalizeKioskPin(kioskPinInput) : null
   if (kioskPinInput && !normalizedKioskPin) {
-    throw new Error('Kiosk PIN must be 4–12 digits.')
+    throw new Error(t('invalidKioskPin'))
   }
 
   const before = await withSuperAdmin(db, async (tx) => {
@@ -82,19 +84,30 @@ async function saveSettings(formData: FormData) {
       ? await hashKioskPin(normalizedKioskPin)
       : (before?.kioskPin ?? null)
 
-  await withSuperAdmin(db, async (tx) => {
+  const clearedOverrides = await withSuperAdmin(db, async (tx) => {
     await tx
       .update(tenants)
       .set({
         name: name || (before?.name ?? 'Tenant'),
         slug: slug || (before?.slug ?? 'tenant'),
-        defaultLanguage,
-        enabledLanguages: enabledLanguages.length > 0 ? enabledLanguages : ['en'],
+        defaultLanguage: languagePolicy.defaultLocale,
+        enabledLanguages: languagePolicy.enabledLocales,
         hierarchy,
         branding,
         kioskPin,
       })
       .where(eq(tenants.id, ctx.tenantId))
+    return tx
+      .update(tenantUsers)
+      .set({ localeOverride: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tenantUsers.tenantId, ctx.tenantId),
+          isNotNull(tenantUsers.localeOverride),
+          notInArray(tenantUsers.localeOverride, languagePolicy.enabledLocales),
+        ),
+      )
+      .returning({ id: tenantUsers.id })
   })
 
   await recordAudit(ctx, {
@@ -116,12 +129,13 @@ async function saveSettings(formData: FormData) {
     after: {
       name,
       slug,
-      defaultLanguage,
-      enabledLanguages,
+      defaultLanguage: languagePolicy.defaultLocale,
+      enabledLanguages: languagePolicy.enabledLocales,
       hierarchy,
       branding,
       kioskEnabled: Boolean(kioskPin),
     },
+    metadata: { clearedLocaleOverrides: clearedOverrides.length },
   })
 
   revalidatePath('/', 'layout')
@@ -129,6 +143,10 @@ async function saveSettings(formData: FormData) {
 
 export default async function AdminSettingsPage() {
   const ctx = await requireSettingsAdmin()
+  const [t, languages] = await Promise.all([
+    getTranslations('TenantSettings'),
+    getTranslations('Languages'),
+  ])
   const tenant = await withSuperAdmin(db, async (tx) => {
     const [t] = await tx.select().from(tenants).where(eq(tenants.id, ctx.tenantId)).limit(1)
     return t
@@ -147,21 +165,21 @@ export default async function AdminSettingsPage() {
     <PageContainer>
       <div className="space-y-5">
         <DetailHeader
-          back={{ href: '/admin', label: 'Back to admin' }}
-          title="Tenant settings"
-          subtitle="Branding, languages, and hierarchy depth"
+          back={{ href: '/admin', label: t('backToAdmin') }}
+          title={t('title')}
+          subtitle={t('subtitle')}
         />
 
         <form action={saveSettings} className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Identity</CardTitle>
+              <CardTitle>{t('identity')}</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Name">
+              <Field label={t('name')}>
                 <Input name="name" defaultValue={tenant.name} />
               </Field>
-              <Field label="Slug">
+              <Field label={t('slug')}>
                 <Input name="slug" defaultValue={tenant.slug} className="font-mono" />
               </Field>
             </CardContent>
@@ -169,25 +187,23 @@ export default async function AdminSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>People kiosk</CardTitle>
-              <CardDescription>
-                Shared-tablet sign-in/out is gated by a write-only PIN.
-              </CardDescription>
+              <CardTitle>{t('peopleKiosk')}</CardTitle>
+              <CardDescription>{t('peopleKioskDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field label="Kiosk PIN (4–12 digits)" className="max-w-xs">
+              <Field label={t('kioskPin')} className="max-w-xs">
                 <Input
                   name="kioskPin"
                   type="password"
                   inputMode="numeric"
                   pattern="[0-9]{4,12}"
                   maxLength={12}
-                  placeholder={tenant.kioskPin ? 'Leave blank to keep current PIN' : 'e.g. 4821'}
+                  placeholder={tenant.kioskPin ? t('keepKioskPin') : t('kioskPinExample')}
                   className="font-mono tracking-widest"
                 />
                 {tenant.kioskPin ? (
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    A PIN is configured. Enter a new PIN to rotate it.
+                    {t('kioskConfigured')}
                   </p>
                 ) : null}
               </Field>
@@ -198,7 +214,7 @@ export default async function AdminSettingsPage() {
                     name="clearKioskPin"
                     className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                   />
-                  Disable public people kiosk
+                  {t('disableKiosk')}
                 </label>
               ) : null}
               {kioskUrl ? (
@@ -213,25 +229,25 @@ export default async function AdminSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Branding</CardTitle>
-              <CardDescription>Shows in the app shell + on PDF outputs.</CardDescription>
+              <CardTitle>{t('branding')}</CardTitle>
+              <CardDescription>{t('brandingDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Logo URL">
+              <Field label={t('logoUrl')}>
                 <Input
                   name="logoUrl"
                   defaultValue={tenant.branding.logoUrl ?? ''}
                   placeholder="https://…"
                 />
               </Field>
-              <Field label="Primary color (hex)">
+              <Field label={t('primaryColor')}>
                 <Input
                   name="primaryColor"
                   defaultValue={tenant.branding.primaryColor ?? ''}
                   placeholder="#0f766e"
                 />
               </Field>
-              <Field label="PDF letterhead text" className="sm:col-span-2">
+              <Field label={t('pdfLetterhead')} className="sm:col-span-2">
                 <Input
                   name="pdfLetterhead"
                   defaultValue={tenant.branding.pdfLetterhead ?? ''}
@@ -240,7 +256,7 @@ export default async function AdminSettingsPage() {
               </Field>
               {tenantLogoUrl ? (
                 <div className="sm:col-span-2">
-                  <Label className="text-xs">Preview</Label>
+                  <Label className="text-xs">{t('preview')}</Label>
                   <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                     <Image
                       src={tenantLogoUrl}
@@ -264,12 +280,12 @@ export default async function AdminSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Languages</CardTitle>
-              <CardDescription>Which languages users can pick.</CardDescription>
+              <CardTitle>{t('languages')}</CardTitle>
+              <CardDescription>{t('languagesDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
-                {KNOWN_LANGUAGES.map((l) => (
+                {LOCALE_OPTIONS.map((l) => (
                   <label
                     key={l.value}
                     className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
@@ -279,30 +295,33 @@ export default async function AdminSettingsPage() {
                       name={`lang_${l.value}`}
                       defaultChecked={enabled.has(l.value)}
                     />
-                    {l.label}
+                    {languages(l.value)}
                   </label>
                 ))}
               </div>
-              <Field label="Default language">
+              <Field label={t('defaultLanguage')}>
                 <Select
                   name="defaultLanguage"
                   defaultValue={tenant.defaultLanguage}
                   className="h-10 w-32 pl-3 text-sm"
                 >
-                  {KNOWN_LANGUAGES.map((l) => (
+                  {LOCALE_OPTIONS.map((l) => (
                     <option key={l.value} value={l.value}>
-                      {l.label}
+                      {languages(l.value)}
                     </option>
                   ))}
                 </Select>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {t('defaultLanguageHelp')}
+                </p>
               </Field>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Hierarchy depth</CardTitle>
-              <CardDescription>Toggle the levels used in this tenant's org tree.</CardDescription>
+              <CardTitle>{t('hierarchyDepth')}</CardTitle>
+              <CardDescription>{t('hierarchyDescription')}</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {LEVELS.map((lvl) => (
@@ -319,18 +338,17 @@ export default async function AdminSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Risk matrix</CardTitle>
-              <CardDescription>Configured per module.</CardDescription>
+              <CardTitle>{t('riskMatrix')}</CardTitle>
+              <CardDescription>{t('riskMatrixDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                The severity × likelihood scale, risk bands and colours used to score hazard
-                assessments are edited in{' '}
+                {t('riskMatrixBody')}{' '}
                 <Link
                   href="/hazard-assessments/risk-matrix"
                   className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                 >
-                  Hazard Assessments → Manage → Risk matrix
+                  {t('riskMatrixLink')}
                 </Link>
                 .
               </p>
@@ -338,7 +356,7 @@ export default async function AdminSettingsPage() {
           </Card>
 
           <div className="flex justify-end">
-            <Button type="submit">Save settings</Button>
+            <Button type="submit">{t('saveSettings')}</Button>
           </div>
         </form>
       </div>

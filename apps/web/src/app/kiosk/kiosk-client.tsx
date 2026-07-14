@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { ArrowLeft, CheckCircle2, LogIn, LogOut, X } from 'lucide-react'
+import type { AppLocale } from '@beaconhs/i18n'
 import { RemoteSearchSelect, type RemoteSearchLoader } from '@/components/remote-search-select'
 import { loadKioskOptions, recordKioskScan, unlockKiosk } from './actions'
 
@@ -14,6 +16,9 @@ type Stage =
   | { kind: 'done'; pin: string; person: Person; scanKind: 'in' | 'out'; at: Date }
 
 export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  const t = useTranslations('Kiosk')
+  const common = useTranslations('Common')
+  const locale = useLocale() as AppLocale
   const [stage, setStage] = useState<Stage>({ kind: 'pin' })
   const [pinInput, setPinInput] = useState('')
   const [siteId, setSiteId] = useState<string>('')
@@ -25,11 +30,23 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
   // manually, or it fires mid-flow and yanks the next worker back to the roster.
   const doneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
   function clearDoneTimeout() {
     if (doneTimeoutRef.current !== null) {
       clearTimeout(doneTimeoutRef.current)
       doneTimeoutRef.current = null
     }
+  }
+
+  function localizedError(message: string): string {
+    if (message === 'Workspace unavailable') return t('workspaceUnavailable')
+    if (message === 'Kiosk PIN not configured for this tenant') return t('pinNotConfigured')
+    if (message === 'Invalid PIN') return t('invalidPin')
+    if (message === 'Invalid kiosk request') return t('invalidRequest')
+    return message
   }
 
   function returnToPicker(pin: string) {
@@ -66,7 +83,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
     e.preventDefault()
     setError(null)
     if (!pinInput.trim()) {
-      setError('Enter the kiosk PIN to continue')
+      setError(t('enterPinError'))
       return
     }
     const pin = pinInput.trim()
@@ -74,12 +91,12 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
       try {
         const result = await unlockKiosk({ tenantId, pin })
         if (!result.ok) {
-          setError(result.error)
+          setError(localizedError(result.error))
           return
         }
         setStage({ kind: 'pick', pin })
       } catch {
-        setError('The kiosk could not be unlocked. Check the connection and try again.')
+        setError(t('unlockError'))
       }
     })
   }
@@ -106,7 +123,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           pin,
         })
         if (!result.ok) {
-          setError(result.error)
+          setError(localizedError(result.error))
           if (result.error === 'Invalid PIN' || result.error.includes('PIN')) {
             setStage({ kind: 'pin' })
             setPinInput('')
@@ -121,7 +138,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           setStage({ kind: 'pick', pin })
         }, 4000)
       } catch {
-        setError('The scan could not be saved. Check the connection and try again.')
+        setError(t('scanError'))
       }
     })
   }
@@ -139,7 +156,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               <LogIn size={24} />
             </div>
             <h1 className="text-xl font-semibold">{tenantName}</h1>
-            <p className="text-sm text-slate-400">Kiosk · enter PIN to unlock</p>
+            <p className="text-sm text-slate-400">{t('pinPrompt')}</p>
           </header>
           <input
             type="password"
@@ -158,7 +175,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
             disabled={pending}
             className="w-full rounded-lg bg-teal-500 px-4 py-3 text-base font-semibold text-white hover:bg-teal-400 disabled:opacity-50"
           >
-            Unlock kiosk
+            {t('unlock')}
           </button>
         </form>
       </div>
@@ -173,13 +190,13 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
             <div>
               <h1 className="text-lg font-semibold text-slate-900">{tenantName}</h1>
-              <p className="text-xs text-slate-500">Search for your name to sign in or out</p>
+              <p className="text-xs text-slate-500">{t('namePrompt')}</p>
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-3xl p-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Your name</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">{t('yourName')}</label>
             <RemoteSearchSelect
               loadOptions={peopleLoader}
               value=""
@@ -189,18 +206,15 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
                   pickPerson({ id: person.value, name: person.label, detail: person.hint ?? null })
                 }
               }}
-              placeholder="Search your name…"
-              searchPlaceholder="Type your name, employee number, or job title…"
-              sheetTitle="Choose your name"
-              ariaLabel="Search the employee directory"
+              placeholder={t('searchName')}
+              searchPlaceholder={t('searchNameHelp')}
+              sheetTitle={t('chooseName')}
+              ariaLabel={t('directoryLabel')}
               clearable={false}
               className="w-full"
               triggerClassName="h-14 text-base"
             />
-            <p className="mt-3 text-xs text-slate-500">
-              Results load securely as you type. Add more of your name if the list says more results
-              exist.
-            </p>
+            <p className="mt-3 text-xs text-slate-500">{t('resultHelp')}</p>
           </div>
         </main>
       </div>
@@ -218,13 +232,13 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               onClick={() => returnToPicker(stage.pin)}
               className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-teal-700"
             >
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} /> {common('back')}
             </button>
             <button
               type="button"
               onClick={() => returnToPicker(stage.pin)}
               className="text-slate-400 hover:text-slate-700"
-              aria-label="Close"
+              aria-label={common('close')}
             >
               <X size={20} />
             </button>
@@ -237,33 +251,33 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           <div className="mt-4 grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                Site (optional)
+                {t('siteOptional')}
               </label>
               <RemoteSearchSelect
                 loadOptions={siteLoader}
                 value={siteId}
                 onChange={setSiteId}
-                placeholder="No site"
-                emptyLabel="No site"
-                searchPlaceholder="Search sites…"
-                sheetTitle="Choose a site"
-                ariaLabel="Choose an optional site"
+                placeholder={t('noSite')}
+                emptyLabel={t('noSite')}
+                searchPlaceholder={t('searchSites')}
+                sheetTitle={t('chooseSite')}
+                ariaLabel={t('chooseOptionalSite')}
                 className="mt-1 w-full"
               />
             </div>
             <div>
               <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                Crew (optional)
+                {t('crewOptional')}
               </label>
               <RemoteSearchSelect
                 loadOptions={crewLoader}
                 value={crewId}
                 onChange={setCrewId}
-                placeholder="No crew"
-                emptyLabel="No crew"
-                searchPlaceholder="Search crews…"
-                sheetTitle="Choose a crew"
-                ariaLabel="Choose an optional crew"
+                placeholder={t('noCrew')}
+                emptyLabel={t('noCrew')}
+                searchPlaceholder={t('searchCrews')}
+                sheetTitle={t('chooseCrew')}
+                ariaLabel={t('chooseOptionalCrew')}
                 className="mt-1 w-full"
               />
             </div>
@@ -279,7 +293,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               className="flex flex-col items-center justify-center gap-1 rounded-xl bg-emerald-500 px-4 py-6 text-base font-semibold text-white hover:bg-emerald-400 disabled:opacity-50"
             >
               <LogIn size={24} />
-              SIGN IN
+              {t('signIn').toUpperCase()}
             </button>
             <button
               type="button"
@@ -288,7 +302,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               className="flex flex-col items-center justify-center gap-1 rounded-xl bg-amber-500 px-4 py-6 text-base font-semibold text-white hover:bg-amber-400 disabled:opacity-50"
             >
               <LogOut size={24} />
-              SIGN OUT
+              {t('signOut').toUpperCase()}
             </button>
           </div>
         </div>
@@ -304,18 +318,18 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           <CheckCircle2 size={32} />
         </div>
         <h2 className="text-2xl font-semibold text-slate-900">
-          {stage.scanKind === 'in' ? 'Signed in' : 'Signed out'}
+          {stage.scanKind === 'in' ? t('signedIn') : t('signedOut')}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           {stage.person.name} ·{' '}
-          {stage.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {stage.at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
         </p>
         <button
           type="button"
           onClick={() => returnToPicker(stage.pin)}
           className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800"
         >
-          Done
+          {t('done')}
         </button>
       </div>
     </div>

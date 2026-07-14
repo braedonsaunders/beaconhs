@@ -4,8 +4,11 @@
 // server-side on every action). Mirrors the people sign-in/out kiosk at /kiosk.
 
 import { db, type Database } from '@beaconhs/db'
+import { NextIntlClientProvider } from 'next-intl'
+import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { EquipmentKioskClient } from './kiosk-client'
 import { resolveActiveTenant } from '@/lib/active-tenant'
+import { getMessagesForLocale } from '@/i18n/messages'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Equipment kiosk · check in/out' }
@@ -52,5 +55,14 @@ export default async function EquipmentKioskPage({
       </Notice>
     )
   }
-  return <EquipmentKioskClient tenantId={tenant.id} tenantName={tenant.name} />
+  const { locale } = resolveLocalePreferences({
+    defaultLocale: tenant.defaultLanguage,
+    enabledLocales: tenant.enabledLanguages,
+  })
+  const messages = getMessagesForLocale(locale)
+  return (
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone="America/Toronto">
+      <EquipmentKioskClient tenantId={tenant.id} tenantName={tenant.name} />
+    </NextIntlClientProvider>
+  )
 }

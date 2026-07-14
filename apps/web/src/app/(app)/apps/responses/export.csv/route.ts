@@ -137,7 +137,11 @@ export async function GET(req: NextRequest) {
 
     return {
       rows,
-      columns: buildResponseExportColumns(schemas.map((row) => row.schema as FormSchemaV1)),
+      columns: buildResponseExportColumns(
+        schemas.map((row) => row.schema as FormSchemaV1),
+        ctx.locale,
+        ctx.defaultLocale,
+      ),
     }
   })
 

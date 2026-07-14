@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
+import { useLocale } from 'next-intl'
 import {
   AlertTriangle,
   ArrowRight,
@@ -24,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import type { AppLocale } from '@beaconhs/i18n'
 import { RawImage } from '@/components/raw-image'
 import { tagSwatch } from '../journals/_tag-colors'
 import { fetchFeedPage } from './_actions'
@@ -121,6 +123,7 @@ export function FeedTimeline({
   initial: FeedPage
   summary: FeedSummary | null
 }) {
+  const locale = useLocale() as AppLocale
   const [filter, setFilter] = useState<Filter>('all')
   const [events, setEvents] = useState<FeedEvent[]>(initial.events)
   const [cursor, setCursor] = useState<string | null>(initial.nextCursor)
@@ -211,7 +214,7 @@ export function FeedTimeline({
     let lastBucket = ''
     for (const e of events) {
       if (mounted) {
-        const b = dayBucket(e.at)
+        const b = dayBucket(e.at, locale)
         if (b !== lastBucket) {
           out.push(<DaySeparator key={`sep-${b}-${e.id}`} label={b} />)
           lastBucket = b
@@ -221,12 +224,13 @@ export function FeedTimeline({
         <FeedCard
           key={e.id}
           event={e}
+          locale={locale}
           onOpenPhotos={(urls, i) => setLightbox({ urls, index: i })}
         />,
       )
     }
     return out
-  }, [events, mounted])
+  }, [events, locale, mounted])
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -489,9 +493,11 @@ function LegendCard() {
 
 function FeedCard({
   event,
+  locale,
   onOpenPhotos,
 }: {
   event: FeedEvent
+  locale: AppLocale
   onOpenPhotos: (urls: string[], index: number) => void
 }) {
   const k = KIND[event.kind]
@@ -517,7 +523,7 @@ function FeedCard({
                 <k.Icon size={11} /> {k.label}
               </span>
               <time suppressHydrationWarning dateTime={event.at}>
-                {timeAgo(event.at)}
+                {timeAgo(event.at, locale)}
               </time>
               {event.siteName ? (
                 <span className="inline-flex items-center gap-1">
@@ -881,33 +887,34 @@ function EmptyFeed({ filter, onClear }: { filter: Filter; onClear: () => void })
   )
 }
 
-const RTF = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: AppLocale): string {
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
   const sec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
   const abs = Math.abs(sec)
-  if (abs < 45) return 'now'
+  if (abs < 45) return rtf.format(0, 'second')
   const min = Math.round(sec / 60)
-  if (Math.abs(min) < 60) return RTF.format(min, 'minute')
+  if (Math.abs(min) < 60) return rtf.format(min, 'minute')
   const hr = Math.round(min / 60)
-  if (Math.abs(hr) < 24) return RTF.format(hr, 'hour')
+  if (Math.abs(hr) < 24) return rtf.format(hr, 'hour')
   const day = Math.round(hr / 24)
-  if (Math.abs(day) < 7) return RTF.format(day, 'day')
+  if (Math.abs(day) < 7) return rtf.format(day, 'day')
   const wk = Math.round(day / 7)
-  if (Math.abs(wk) < 5) return RTF.format(wk, 'week')
+  if (Math.abs(wk) < 5) return rtf.format(wk, 'week')
   const mo = Math.round(day / 30)
-  if (Math.abs(mo) < 12) return RTF.format(mo, 'month')
-  return RTF.format(Math.round(day / 365), 'year')
+  if (Math.abs(mo) < 12) return rtf.format(mo, 'month')
+  return rtf.format(Math.round(day / 365), 'year')
 }
 
-function dayBucket(iso: string): string {
+function dayBucket(iso: string, locale: AppLocale): string {
   const d = new Date(iso)
   const now = new Date()
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const days = Math.round((startOf(now) - startOf(d)) / 86_400_000)
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return d.toLocaleDateString(undefined, { weekday: 'long' })
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  if (days <= 0) return relative.format(0, 'day')
+  if (days === 1) return relative.format(-1, 'day')
+  if (days < 7) return d.toLocaleDateString(locale, { weekday: 'long' })
   if (d.getFullYear() === now.getFullYear())
-    return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
-  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+    return d.toLocaleDateString(locale, { month: 'long', day: 'numeric' })
+  return d.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' })
 }

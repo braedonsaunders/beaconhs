@@ -116,7 +116,7 @@ export default async function IntegrationsPage() {
       href: `/admin/integrations/${c.id}`,
       badge: c.enabled && c.schedule ? `every ${c.schedule}` : undefined,
       meta: c.lastRunAt
-        ? `last run ${formatDateTime(new Date(c.lastRunAt), ctx.timezone)} · ${c.lastStatus ?? ''}`
+        ? `last run ${formatDateTime(new Date(c.lastRunAt), ctx.timezone, ctx.locale)} · ${c.lastStatus ?? ''}`
         : 'never run',
       iconKey: iconFor(c.connectorKey),
       deleteAction: deleteConnection,
@@ -137,7 +137,7 @@ export default async function IntegrationsPage() {
         meta: o.lastError
           ? `error: ${o.lastError}`
           : o.lastRunAt
-            ? `last run ${formatDateTime(new Date(o.lastRunAt), ctx.timezone)}`
+            ? `last run ${formatDateTime(new Date(o.lastRunAt), ctx.timezone, ctx.locale)}`
             : 'never run',
         iconKey: 'upload',
         deleteAction: deleteOutbound,

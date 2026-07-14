@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Building2, Check, ChevronDown } from 'lucide-react'
 import { Popover } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
@@ -19,6 +20,7 @@ export function TenantSwitcher({
   isSuperAdmin: boolean
 }) {
   const router = useRouter()
+  const t = useTranslations('Shell')
   const [open, setOpen] = useState(false)
   const [pending, start] = useTransition()
 
@@ -33,7 +35,7 @@ export function TenantSwitcher({
         setOpen(false)
         router.refresh()
       } else {
-        toast.error(res.error ?? 'Could not switch tenant')
+        toast.error(res.error ?? t('couldNotSwitchTenant'))
       }
     })
   }
@@ -62,13 +64,13 @@ export function TenantSwitcher({
           className="flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
           <Building2 size={14} className="shrink-0" />
-          <span className="truncate">{pending ? 'Switching…' : current.name}</span>
+          <span className="truncate">{pending ? t('switching') : current.name}</span>
           <ChevronDown size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
         </button>
       }
     >
       <div className="border-b border-slate-100 px-3 py-2 text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-        {isSuperAdmin ? `All tenants (${available.length})` : 'Your tenants'}
+        {isSuperAdmin ? t('allTenants', { count: available.length }) : t('yourTenants')}
       </div>
       <ul className="max-h-72 overflow-y-auto py-1">
         {available.map((t) => (
