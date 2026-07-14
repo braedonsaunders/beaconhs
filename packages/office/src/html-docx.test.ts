@@ -18,6 +18,9 @@ describe('buildDocxFromHtml', () => {
     expect([...first.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04])
 
     const zip = await JSZip.loadAsync(first)
+    const entries = Object.values(zip.files)
+    expect(entries.filter((entry) => entry.dir)).toHaveLength(0)
+    expect(new Set(entries.map((entry) => entry.date.getTime())).size).toBe(1)
     const document = await zip.file('word/document.xml')!.async('string')
     const relationships = await zip.file('word/_rels/document.xml.rels')!.async('string')
     const numbering = await zip.file('word/numbering.xml')!.async('string')

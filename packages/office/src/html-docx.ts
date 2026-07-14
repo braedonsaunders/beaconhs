@@ -322,7 +322,10 @@ function stylesXml(): string {
 }
 
 function addXml(zip: JSZip, path: string, value: string): void {
-  zip.file(path, value, { date: FIXED_ZIP_DATE, createFolders: true })
+  // DOCX readers resolve parts by path and do not require ZIP directory
+  // entries. Avoid JSZip's auto-created directories because their implicit
+  // current timestamps make otherwise identical documents nondeterministic.
+  zip.file(path, value, { date: FIXED_ZIP_DATE, createFolders: false })
 }
 
 /** Build a deterministic, editable DOCX from already-sanitized HTML. */
