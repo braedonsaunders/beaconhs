@@ -6,7 +6,6 @@ import {
   GeneratedValue,
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Skill-assignment detail — one page per per-person skill / certification
 // (training_skill_assignments). Display + edit are unified: managers edit the
 // mutable fields inline (autosave), everyone else sees them read-only. Surfaces

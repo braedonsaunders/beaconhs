@@ -6,7 +6,6 @@ import {
   GeneratedValue,
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'

@@ -1,5 +1,4 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, count, eq, isNull } from 'drizzle-orm'
 import { DetailHeader } from '@beaconhs/ui'

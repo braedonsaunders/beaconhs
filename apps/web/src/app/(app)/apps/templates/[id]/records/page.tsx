@@ -1,7 +1,6 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Per-app records list — the "home" of a Builder app when pinned to the
 // sidebar. Behaves like a native module: a list of entries (form responses)
 // for THIS template, each row opening the entry's record page

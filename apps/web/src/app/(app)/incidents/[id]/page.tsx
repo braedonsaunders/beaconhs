@@ -1,7 +1,6 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { randomUUID } from 'node:crypto'
 import { notFound, redirect } from 'next/navigation'

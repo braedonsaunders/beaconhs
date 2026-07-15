@@ -1,7 +1,6 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'

@@ -1,7 +1,6 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /ppe/[id] — per-item detail with sub-tabs.
 //
 // Tabs:

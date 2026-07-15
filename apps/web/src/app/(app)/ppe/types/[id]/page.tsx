@@ -1,7 +1,6 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /ppe/types/[id] — PPE type detail, hosting the 1/3-2/3 builder.
 //
 // Mirrors the inspections type builder: a settings rail + a build surface with

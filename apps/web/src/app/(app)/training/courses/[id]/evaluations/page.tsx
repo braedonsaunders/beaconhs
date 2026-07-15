@@ -1,7 +1,6 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, asc, count, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 import { Button, DetailHeader, EmptyState } from '@beaconhs/ui'
